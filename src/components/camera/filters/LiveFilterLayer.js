@@ -2,7 +2,8 @@ import React, { useEffect, useRef, useState } from 'react'
 import { Animated, AppState, StyleSheet, View } from 'react-native'
 import * as Location from 'expo-location'
 import {
-  detectBodies, detectFaces, isBodyHitAvailable, isFaceDetectAvailable,
+  addLiveFacesListener, detectBodies, detectFaces, isBodyHitAvailable, isFaceDetectAvailable,
+  isLiveFacesAvailable, startLiveFaces, stopLiveFaces,
 } from '../../../../modules/body-hit'
 import {
   MAX_HEADS, OVERLAY_BOX, fallbackHead, headsFromBodies, headsFromFaces, nameTagText, placeOverlay, selectTargets,
@@ -25,10 +26,22 @@ import { FilterArt } from './FilterArt'
 // sample starts while a real photo / recording start is happening, and
 // `controlRef.current.waitIdle()` resolves once an in-flight sample has finished.
 
+// Real-time tracking (newer binaries): the native module attaches a face-metadata output to
+// the preview's own capture session, so face boxes arrive every camera frame (~30/s) with no
+// photos taken. Then the overlay is placed straight from those boxes (it follows the face
+// closely), and the slower Vision stills only supply head angles (yaw / pitch / roll) and are
+// matched to the live faces by position.
+//
 export const visionAvailable = isBodyHitAvailable
 // Face boxes are cheap: ~7 samples/s. Body pose (older binaries without detectFaces) ~3.7/s.
 const SAMPLE_MS = isFaceDetectAvailable ? 135 : 270
 const SAMPLE_MS_RECORDING = 500 // ~2/s while a video is recording
+const POSE_SAMPLE_MS = 380 // with live tracking, stills are only for head angles
+const LIVE_STALE_MS = 900 // no live event for this long -> live tracking counts as off
+const LIVE_LOST_MS = 300 // live says no face for this long -> hold faded
+const POSE_MAX_AGE_MS = 1500
+const FOLLOW = 0.7 // per live frame: how far the overlay moves toward the face (0..1)
+const FOLLOW_SCALE = 0.45
 const MISSES_BEFORE_FALLBACK = 3
 const SIZE_SMOOTH = 0.6 // weight of a new head size (the springs smooth the rest)
 const LOST_OPACITY = 0.6 // face lost: hold the last spot / pose, slightly faded
@@ -95,6 +108,11 @@ function makeSlot() {
     size: 0,
     cx: 0,
     poseFn: null, // set by the 3D logo: receives { yaw, pitch, roll } or null
+    ax: null, // last values set by the live (per-frame) path
+    ay: null,
+    as: null,
+    lastRoll: null,
+    lastYaw: null,
   }
   slot.register = (fn) => { slot.poseFn = typeof fn === 'function' ? fn : null }
   return slot
@@ -147,6 +165,14 @@ export default function LiveFilterLayer({
   const misses = useRef(0)
   const lostAt = useRef(0)
   const lastHeads = useRef([])
+  const live = useRef({ lastEvent: 0, emptySince: 0, held: false, attached: false })
+  const vision = useRef({ heads: [], at: 0 })
+  // Live tracking is in charge while attached and either delivering frames or reporting
+  // "no face" (it only sends that once, so there is no steady stream to time out on).
+  const liveIsOn = () => {
+    const L = live.current
+    return L.attached && (Date.now() - L.lastEvent < LIVE_STALE_MS || !!L.emptySince)
+  }
   const heading = useHeadingRef()
   const latest = useRef({})
   latest.current = { filter, facing, view, nearby, me, recording }
@@ -158,7 +184,7 @@ export default function LiveFilterLayer({
     return [{ ...fallbackHead(v, fc), pose: null, name: nameTagText({ facing: fc, headCount: 0, nearby: nb, me: m }), key: 'fallback' }]
   }
 
-  const apply = (targets, instant = false) => {
+  const apply = (targets, instant = false, fast = false) => {
     try {
       const f = latest.current.filter
       const list = (targets || []).slice(0, MAX_HEADS)
@@ -192,14 +218,17 @@ export default function LiveFilterLayer({
         const t = assigned[k]
         if (t) {
           const samePerson = slot.shown && slot.key === t.key
-          if (!samePerson) { slot.pose = null; slot.baseDown = null }
+          if (!samePerson) { slot.pose = null; slot.baseDown = null; slot.rawPose = null }
           const size = samePerson && slot.size > 0 ? slot.size * (1 - SIZE_SMOOTH) + t.size * SIZE_SMOOTH : t.size
-          const pose = t.pose ? stablePose(slot, t.pose) : slot.pose // no angles this frame: hold
+          // No angles this frame: hold. The same Vision sample reused across live frames is
+          // only folded in once (the pitch baseline must not speed up with the frame rate).
+          let pose = slot.pose
+          if (t.pose && t.pose !== slot.rawPose) { slot.rawPose = t.pose; pose = stablePose(slot, t.pose) }
           const placed = placeOverlay(f, { ...t, size, pose }, TOP_LIMIT)
           const s = placed.s
           const ax = placed.anchorX - OVERLAY_BOX / 2
           const ay = placed.anchorY - OVERLAY_BOX // box bottom sits on the anchor (transformOrigin bottom)
-          if (t.key !== 'fallback') sendPose(slot, pose)
+          if (t.key !== 'fallback' && pose !== slot.sentPose) { slot.sentPose = pose; sendPose(slot, pose) }
           if (!Number.isFinite(ax) || !Number.isFinite(ay) || !Number.isFinite(s)) return
           const roll = Number.isFinite(pose?.roll) ? pose.roll : 0
           const yaw = Number.isFinite(pose?.yaw) ? pose.yaw : 0
@@ -209,7 +238,21 @@ export default function LiveFilterLayer({
             slot.s.setValue(s)
             slot.r.setValue(roll)
             slot.yaw.setValue(yaw)
+            slot.ax = ax; slot.ay = ay; slot.as = s; slot.lastRoll = roll; slot.lastYaw = yaw
+          } else if (fast && samePerson && slot.ax != null) {
+            // Live frames (~30/s): move most of the way to the face every frame - follows
+            // closely, with just enough smoothing to hide box jitter.
+            slot.ax += (ax - slot.ax) * FOLLOW
+            slot.ay += (ay - slot.ay) * FOLLOW
+            slot.as += (s - slot.as) * FOLLOW_SCALE
+            slot.x.stopAnimation(); slot.y.stopAnimation(); slot.s.stopAnimation()
+            slot.x.setValue(slot.ax)
+            slot.y.setValue(slot.ay)
+            slot.s.setValue(slot.as)
+            if (roll !== slot.lastRoll) { slot.lastRoll = roll; Animated.spring(slot.r, { ...SPRING_FINE, toValue: roll }).start() }
+            if (yaw !== slot.lastYaw) { slot.lastYaw = yaw; Animated.spring(slot.yaw, { ...SPRING_FINE, toValue: yaw }).start() }
           } else {
+            slot.ax = ax; slot.ay = ay; slot.as = s; slot.lastRoll = roll; slot.lastYaw = yaw
             // Critically damped springs: they glide to each new sample without jitter or
             // overshoot, and retarget smoothly when the next sample lands mid-flight.
             Animated.parallel([
@@ -220,7 +263,11 @@ export default function LiveFilterLayer({
               Animated.spring(slot.yaw, { ...SPRING_FINE, toValue: yaw }),
             ]).start()
           }
-          Animated.timing(slot.o, { toValue: t.lost ? LOST_OPACITY : 1, duration: 260, useNativeDriver: true }).start()
+          const targetO = t.lost ? LOST_OPACITY : 1
+          if (!fast || slot.targetO !== targetO || !slot.shown) {
+            slot.targetO = targetO
+            Animated.timing(slot.o, { toValue: targetO, duration: 260, useNativeDriver: true }).start()
+          }
           slot.shown = true
           slot.key = t.key
           slot.size = size
@@ -232,6 +279,9 @@ export default function LiveFilterLayer({
           slot.size = 0
           slot.pose = null
           slot.baseDown = null
+          slot.sentPose = null
+          slot.rawPose = null
+          slot.targetO = 0
           sendPose(slot, null)
           Animated.timing(slot.o, { toValue: 0, duration: 220, useNativeDriver: true }).start()
         }
@@ -264,6 +314,106 @@ export default function LiveFilterLayer({
     return () => { controlRef.current = null }
   }, [controlRef, heading])
 
+  // Live (per-frame) tracking.
+  useEffect(() => {
+    // Takes no photos, so it keeps running through bursts and recordings (`paused` only
+    // stops the stills).
+    if (!isLiveFacesAvailable) return undefined
+    let alive = true
+    const posesFor = (heads) => {
+      const v = vision.current
+      if (!v.heads.length || Date.now() - v.at > POSE_MAX_AGE_MS) return heads
+      return heads.map((h) => {
+        let best = null
+        let bestD = Infinity
+        for (const vh of v.heads) {
+          const d = Math.hypot((vh.fcx ?? vh.cx) - h.fcx, (vh.fcy ?? vh.top) - h.fcy)
+          if (d < bestD) { bestD = d; best = vh }
+        }
+        return best && bestD < Math.max(60, h.size) ? { ...h, pose: best.pose || null } : h
+      })
+    }
+    const sub = addLiveFacesListener((e) => {
+      try {
+        if (!alive) return
+        const v = latest.current.view
+        const lw = Number(e?.layerW)
+        const lh = Number(e?.layerH)
+        if (!v || !(v.width > 0) || !(lw > 0) || !(lh > 0)) return
+        const now = Date.now()
+        live.current.lastEvent = now
+        const sx = v.width / lw
+        const sy = v.height / lh
+        const faces = Array.isArray(e.faces) ? e.faces : []
+        if (!faces.length) {
+          if (!live.current.emptySince) live.current.emptySince = now
+          return
+        }
+        live.current.emptySince = 0
+        live.current.held = false
+        live.current.fellBack = false
+        lostAt.current = 0
+        misses.current = 0
+        const heads = faces.map((f) => {
+          const x = f.x * sx
+          const y = f.y * sy
+          const w = f.w * sx
+          const h = f.h * sy
+          return {
+            cx: x + w / 2, top: y - h * 0.35, size: w * 1.15, fcx: x + w / 2, fcy: y + h / 2,
+            nx: (f.x + f.w / 2) / lw, pxPerNorm: null, pose: null,
+          }
+        }).filter((h) => Number.isFinite(h.cx) && Number.isFinite(h.top) && h.size > 6)
+        if (!heads.length) return
+        lastHeads.current = heads
+        apply(targetsFor(posesFor(heads)), false, true)
+      } catch {
+        // skip this frame
+      }
+    })
+    // Face lost: hold faded, then back to the default spot (same as the stills path).
+    const lostTimer = setInterval(() => {
+      const L = live.current
+      if (!L.attached || !L.emptySince) return
+      const gone = Date.now() - L.emptySince
+      if (!L.held && gone > LIVE_LOST_MS) {
+        L.held = true
+        const held = slots.current.filter((sl) => sl.shown && sl.last && sl.key !== 'fallback').map((sl) => ({ ...sl.last, lost: true }))
+        apply(held.length ? held : targetsFor([]))
+      } else if (L.held && !L.fellBack && gone > LOST_TO_FALLBACK_MS) {
+        L.fellBack = true
+        lastHeads.current = []
+        apply(targetsFor([]))
+      }
+    }, 150)
+    // Attach (and re-attach if the camera rebuilt its session, e.g. after a flip or mode change).
+    const attach = () => {
+      if (!alive) return
+      startLiveFaces()
+        .then((ok) => {
+          if (!alive) return
+          live.current.attached = !!ok
+          if (!ok) { live.current.emptySince = 0; live.current.lastEvent = 0 }
+        })
+        .catch(() => { live.current.attached = false })
+    }
+    live.current = { lastEvent: 0, emptySince: 0, held: false, attached: false }
+    const first = setTimeout(attach, 500)
+    const watchdog = setInterval(() => {
+      if (Date.now() - live.current.lastEvent > 1500) attach()
+    }, 1500)
+    return () => {
+      alive = false
+      clearTimeout(first)
+      clearInterval(watchdog)
+      clearInterval(lostTimer)
+      try { sub.remove() } catch {}
+      live.current = { lastEvent: 0, emptySince: 0, held: false, attached: false }
+      stopLiveFaces().catch(() => {})
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [facing])
+
   useEffect(() => {
     if (paused || !visionAvailable) return undefined
     let alive = true
@@ -281,7 +431,11 @@ export default function LiveFilterLayer({
           const heads = await p
           if (inflight.current === p) inflight.current = null
           if (!alive) break
-          if (heads) {
+          if (heads && liveIsOn()) {
+            // Live tracking places the overlay; this still only refreshes head angles.
+            failures = 0
+            vision.current = { heads, at: Date.now() }
+          } else if (heads) {
             failures = 0
             if (heads.length) {
               misses.current = 0
@@ -315,7 +469,8 @@ export default function LiveFilterLayer({
             }
           }
         }
-        const period = latest.current.recording ? SAMPLE_MS_RECORDING : SAMPLE_MS
+        const liveNow = liveIsOn()
+        const period = latest.current.recording ? (liveNow ? 900 : SAMPLE_MS_RECORDING) : liveNow ? POSE_SAMPLE_MS : SAMPLE_MS
         // eslint-disable-next-line no-await-in-loop
         await sleep(Math.max(80, period - (Date.now() - t0)) + (failures > 2 ? 1000 : 0))
       }

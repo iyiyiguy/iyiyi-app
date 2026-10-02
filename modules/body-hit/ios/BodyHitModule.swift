@@ -1,7 +1,10 @@
+import AVFoundation
 import CoreGraphics
 import ExpoModulesCore
 import Foundation
 import ImageIO
+import QuartzCore
+import UIKit
 import Vision
 
 // Detects people in a still photo with Apple Vision for Laser Tag hit tests.
@@ -17,8 +20,36 @@ import Vision
 // Coordinates are for the upright image (EXIF orientation is applied while
 // decoding), so they match what the user saw in the portrait camera preview.
 public class BodyHitModule: Module {
+  private lazy var liveFaces = LiveFaceTracker { [weak self] payload in
+    self?.sendEvent("onLiveFaces", payload)
+  }
+
   public func definition() -> ModuleDefinition {
     Name("BodyHit")
+
+    Events("onLiveFaces")
+
+    // Real-time face tracking for the camera filters (every camera frame, ~30/s). It attaches an
+    // AVCaptureMetadataOutput (faces) to the session behind the on-screen camera preview, so it
+    // works alongside expo-camera without taking photos. Emits "onLiveFaces":
+    //   { faces: [{ x, y, w, h, id }], layerW, layerH }  in preview-layer points (mirroring and
+    //   aspect-fill already applied). Returns false when no preview / no face support.
+    AsyncFunction("startLiveFaces") { (promise: Promise) in
+      DispatchQueue.main.async {
+        promise.resolve(self.liveFaces.start())
+      }
+    }
+
+    AsyncFunction("stopLiveFaces") { (promise: Promise) in
+      DispatchQueue.main.async {
+        self.liveFaces.stop()
+        promise.resolve(nil)
+      }
+    }
+
+    OnDestroy {
+      DispatchQueue.main.async { self.liveFaces.stop() }
+    }
 
     AsyncFunction("detectBodies") { (uri: String, deleteAfter: Bool, promise: Promise) in
       DispatchQueue.global(qos: .userInitiated).async {
@@ -380,5 +411,119 @@ struct BodyHitDetection {
       out["torso"] = norm(t)
     }
     return out
+  }
+}
+
+
+// MARK: - Live face tracking
+
+final class LiveFaceTracker: NSObject, AVCaptureMetadataOutputObjectsDelegate {
+  private let emit: ([String: Any]) -> Void
+  private let configQueue = DispatchQueue(label: "iyiyi.livefaces.config")
+  private weak var previewLayer: AVCaptureVideoPreviewLayer?
+  private weak var session: AVCaptureSession?
+  private var output: AVCaptureMetadataOutput?
+  private var lastEmptySent = false
+  private var lastSent: CFTimeInterval = 0
+
+  init(emit: @escaping ([String: Any]) -> Void) {
+    self.emit = emit
+  }
+
+  // Main thread. Finds the visible camera preview layer and attaches a faces output to its session.
+  func start() -> Bool {
+    guard let layer = LiveFaceTracker.findPreviewLayer(), let session = layer.session else {
+      return false
+    }
+    if let out = output, self.session === session, session.outputs.contains(out) {
+      previewLayer = layer
+      return true // already running on this session
+    }
+    stop()
+    previewLayer = layer
+    self.session = session
+    let out = AVCaptureMetadataOutput()
+    session.beginConfiguration()
+    let added = session.canAddOutput(out)
+    if added { session.addOutput(out) }
+    session.commitConfiguration()
+    guard added, out.availableMetadataObjectTypes.contains(.face) else {
+      if added {
+        session.beginConfiguration()
+        session.removeOutput(out)
+        session.commitConfiguration()
+      }
+      self.session = nil
+      previewLayer = nil
+      return false
+    }
+    out.setMetadataObjectsDelegate(self, queue: DispatchQueue.main)
+    out.metadataObjectTypes = [.face]
+    output = out
+    lastEmptySent = false
+    return true
+  }
+
+  func stop() {
+    if let out = output, let session = session {
+      out.setMetadataObjectsDelegate(nil, queue: nil)
+      configQueue.async {
+        if session.outputs.contains(out) {
+          session.beginConfiguration()
+          session.removeOutput(out)
+          session.commitConfiguration()
+        }
+      }
+    }
+    output = nil
+    session = nil
+    previewLayer = nil
+  }
+
+  func metadataOutput(_ output: AVCaptureMetadataOutput, didOutput metadataObjects: [AVMetadataObject], from connection: AVCaptureConnection) {
+    guard let layer = previewLayer else { return }
+    let now = CACurrentMediaTime()
+    var faces: [[String: Any]] = []
+    for obj in metadataObjects {
+      guard let face = obj as? AVMetadataFaceObject,
+            let t = layer.transformedMetadataObject(for: face) else { continue }
+      let b = t.bounds
+      guard b.width.isFinite, b.height.isFinite, b.width > 4 else { continue }
+      faces.append([
+        "x": Double(b.origin.x), "y": Double(b.origin.y),
+        "w": Double(b.width), "h": Double(b.height),
+        "id": face.faceID,
+      ])
+    }
+    if faces.isEmpty {
+      if lastEmptySent { return }
+      lastEmptySent = true
+    } else {
+      lastEmptySent = false
+      if now - lastSent < 1.0 / 40.0 { return }
+    }
+    lastSent = now
+    emit([
+      "faces": faces,
+      "layerW": Double(layer.bounds.width),
+      "layerH": Double(layer.bounds.height),
+    ])
+  }
+
+  static func findPreviewLayer() -> AVCaptureVideoPreviewLayer? {
+    let windows = UIApplication.shared.connectedScenes
+      .compactMap { $0 as? UIWindowScene }
+      .flatMap { $0.windows }
+    var best: AVCaptureVideoPreviewLayer?
+    var bestArea: CGFloat = 0
+    func walk(_ layer: CALayer) {
+      if let p = layer as? AVCaptureVideoPreviewLayer, p.session != nil {
+        let area = p.bounds.width * p.bounds.height
+        if area > bestArea { best = p; bestArea = area }
+      }
+      layer.sublayers?.forEach(walk)
+    }
+    for w in windows where !w.isHidden { walk(w.layer) }
+    return best
   }
 }

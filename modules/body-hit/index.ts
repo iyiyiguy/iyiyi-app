@@ -33,6 +33,10 @@ type NativeBodyHit = {
   detectBodies(uri: string, deleteAfter: boolean): Promise<DetectedBody[]>
   // Missing in binaries built before face detection was added.
   detectFaces?: (uri: string, deleteAfter: boolean) => Promise<DetectedFace[]>
+  // Missing in binaries built before live face tracking was added.
+  startLiveFaces?: () => Promise<boolean>
+  stopLiveFaces?: () => Promise<void>
+  addListener?: (event: string, fn: (e: any) => void) => { remove: () => void }
 }
 
 const Native = requireOptionalNativeModule<NativeBodyHit>('BodyHit')
@@ -68,5 +72,36 @@ export async function detectFaces(uri: string, deleteAfter = true): Promise<Dete
     return Array.isArray(res) ? res : []
   } catch {
     return []
+  }
+}
+
+// Real-time faces (every camera frame) from the preview's own capture session.
+export type LiveFace = { x: number; y: number; w: number; h: number; id: number }
+export type LiveFacesEvent = { faces: LiveFace[]; layerW: number; layerH: number }
+
+export const isLiveFacesAvailable = !!(Native && typeof Native.startLiveFaces === 'function' && typeof Native.addListener === 'function')
+
+export async function startLiveFaces(): Promise<boolean> {
+  if (!isLiveFacesAvailable) return false
+  try {
+    return !!(await Native!.startLiveFaces!())
+  } catch {
+    return false
+  }
+}
+
+export async function stopLiveFaces(): Promise<void> {
+  if (!isLiveFacesAvailable) return
+  try {
+    await Native!.stopLiveFaces!()
+  } catch {}
+}
+
+export function addLiveFacesListener(fn: (e: LiveFacesEvent) => void): { remove: () => void } {
+  if (!isLiveFacesAvailable) return { remove: () => {} }
+  try {
+    return Native!.addListener!('onLiveFaces', fn)
+  } catch {
+    return { remove: () => {} }
   }
 }

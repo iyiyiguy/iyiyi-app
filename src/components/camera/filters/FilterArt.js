@@ -218,9 +218,12 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center',
     paddingHorizontal: NAMETAG_H * 0.45,
   },
+  // The glass render is a light, frosted pill, so the name is dark ink with a soft white
+  // glow (white text disappeared into it).
   tagName: {
-    color: '#ffffff', fontSize: 17, fontWeight: '800', textAlign: 'center', alignSelf: 'stretch',
-    textShadowColor: 'rgba(0,0,0,0.45)', textShadowRadius: 3, textShadowOffset: { width: 0, height: 1 },
+    color: '#14102a', fontSize: 20, fontWeight: '900', textAlign: 'center', alignSelf: 'stretch',
+    letterSpacing: 0.2,
+    textShadowColor: 'rgba(255,255,255,0.9)', textShadowRadius: 4, textShadowOffset: { width: 0, height: 0 },
   },
 
   bubbleImg: { width: BUBBLE_W, height: BUBBLE_H, marginBottom: 2 },

@@ -10,6 +10,7 @@ import { apiJson, post, del } from '../lib/api'
 import TaggedInSheet from './TaggedInSheet'
 import Bounce from './Bounce'
 import { removeCameraTag } from '../lib/cameraApi'
+import { shareMedia } from '../lib/shareMedia'
 import { useOpenProfile } from '../lib/profileNav'
 
 // Full-screen viewer for profile photos/videos with like, save, and comments.
@@ -225,6 +226,7 @@ export default function ContentViewer({ visible, items, startIndex = 0, onClose,
               <ActionButton icon={current.liked_by_me ? '♥' : '♡'} label={current.like_count ?? 0} active={current.liked_by_me} onPress={() => toggleLike(current)} accessibilityLabel={`${current.liked_by_me ? 'Unlike' : 'Like'}, ${current.like_count ?? 0} likes`} />
               <ActionButton icon="💬" label={current.comment_count ?? 0} onPress={() => setCommentsFor(current)} accessibilityLabel={`Comments, ${current.comment_count ?? 0}`} />
               <ActionButton icon="🧑‍🤝‍🧑" label="Tagged" onPress={() => setTagsFor(current)} />
+              <ActionButton icon="↗" label="Share" onPress={() => shareMedia(current)} accessibilityLabel="Share to other apps" />
               <ActionButton icon={current.saved_by_me ? '★' : '☆'} label={current.saved_by_me ? 'Saved' : 'Save'} active={current.saved_by_me} onPress={() => toggleSave(current)} />
               {current.kind ? <ActionButton icon="✕" label="Remove tag" onPress={() => removeMyTag(current)} /> : null}
               <ActionButton icon="⚑" label="Report" onPress={() => reportPost(current)} />

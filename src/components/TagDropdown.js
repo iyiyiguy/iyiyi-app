@@ -7,7 +7,7 @@ import { TAGS } from '../lib/tags'
 import GlassPanel from './GlassPanel'
 import { GlassButton } from './GlassButton'
 
-// "Tags" pill button that opens a dropdown of checkable tag rows (multi-select) with
+// "Tags" pill button that opens a grid of tag tiles (multi-select, X to close) with
 // Clear / Apply. The selection only takes effect when Apply is tapped; closing the
 // dropdown any other way discards the draft. A count badge shows how many filters are on.
 //
@@ -73,7 +73,12 @@ export default function TagDropdown({
   }
 
   // Panel geometry: drop down under the button when there's room, otherwise center.
-  const panelW = Math.min(320, screenW - 32)
+  const panelW = Math.min(360, screenW - 32)
+  // Tag grid: 3 columns on most phones, 2 on very narrow ones.
+  const cols = panelW >= 330 ? 3 : 2
+  const GRID_PAD = 12
+  const GAP = 8
+  const cellW = Math.floor((panelW - GRID_PAD * 2 - GAP * (cols - 1)) / cols)
   let panelPos
   if (anchor && screenH - (anchor.y + anchor.h + 8) > 300) {
     const top = anchor.y + anchor.h + 8
@@ -114,10 +119,15 @@ export default function TagDropdown({
         <Pressable style={styles.backdrop} onPress={close} accessibilityLabel="Close tags" />
         <View style={[styles.panel, { width: panelW, top: panelPos.top, left: panelPos.left, maxHeight: panelPos.maxHeight }]}>
           <View style={styles.header}>
-            <Text style={type.headline}>{title}</Text>
-            <Text style={type.caption}>{draft.length ? `${draft.length} selected` : 'Any'}</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={type.headline}>{title}</Text>
+              <Text style={type.caption}>{draft.length ? `${draft.length} selected` : 'Any'}</Text>
+            </View>
+            <Pressable onPress={close} hitSlop={10} style={styles.closeBtn} accessibilityRole="button" accessibilityLabel="Close">
+              <Ionicons name="close" size={18} color={colors.text} />
+            </Pressable>
           </View>
-          <ScrollView style={styles.list} contentContainerStyle={{ paddingVertical: 4 }} showsVerticalScrollIndicator>
+          <ScrollView style={styles.list} contentContainerStyle={styles.grid} showsVerticalScrollIndicator>
             {tags.map((tag) => {
               const on = draft.includes(tag)
               return (
@@ -126,12 +136,12 @@ export default function TagDropdown({
                   onPress={() => toggle(tag)}
                   accessibilityRole="checkbox"
                   accessibilityState={{ checked: on }}
-                  style={({ pressed }) => [styles.row, pressed && { backgroundColor: colors.hairline }]}
+                  style={({ pressed }) => [
+                    styles.cell, { width: cellW }, on && styles.cellOn, pressed && { transform: [{ scale: 0.95 }] },
+                  ]}
                 >
-                  <Text style={[styles.rowText, on && { ...font.semibold }]}>{tag}</Text>
-                  <View style={[styles.check, on && styles.checkOn]}>
-                    {on ? <Ionicons name="checkmark" size={14} color={colors.ink} /> : null}
-                  </View>
+                  {on ? <Ionicons name="checkmark-circle" size={15} color={colors.ink} /> : null}
+                  <Text style={[styles.cellText, on && styles.cellTextOn]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>{tag}</Text>
                 </Pressable>
               )
             })}
@@ -166,18 +176,24 @@ const styles = StyleSheet.create({
     shadowColor: '#000', shadowOpacity: 0.25, shadowRadius: 24, shadowOffset: { width: 0, height: 12 }, elevation: 12,
   },
   header: {
-    flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between',
-    paddingHorizontal: 18, paddingTop: 16, paddingBottom: 10,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: 18, paddingTop: 14, paddingBottom: 10,
     borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.hairline,
   },
-  list: { flexGrow: 0, flexShrink: 1 },
-  row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 18, height: 44 },
-  rowText: { fontSize: 15, ...font.regular, color: colors.text },
-  check: {
-    width: 22, height: 22, borderRadius: 7, borderWidth: 1.5, borderColor: colors.textFaint,
-    alignItems: 'center', justifyContent: 'center',
+  closeBtn: {
+    width: 32, height: 32, borderRadius: 16, marginLeft: 12, alignItems: 'center', justifyContent: 'center',
+    backgroundColor: colors.hairline,
   },
-  checkOn: { backgroundColor: colors.text, borderColor: colors.text },
+  list: { flexGrow: 0, flexShrink: 1 },
+  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, padding: 12 },
+  cell: {
+    height: 42, borderRadius: radii.md ?? 12, paddingHorizontal: 8,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4,
+    borderWidth: 1, borderColor: colors.hairline, backgroundColor: 'rgba(255,255,255,0.05)',
+  },
+  cellOn: { backgroundColor: colors.text, borderColor: colors.text },
+  cellText: { fontSize: 14, ...font.medium, color: colors.text, flexShrink: 1, textAlign: 'center' },
+  cellTextOn: { color: colors.ink, ...font.semibold },
   footer: {
     flexDirection: 'row', gap: 10, padding: 12,
     borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.hairline,
