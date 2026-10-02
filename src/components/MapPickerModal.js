@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { View, Text, Modal, Pressable, StyleSheet, ActivityIndicator, useColorScheme } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import MapView from 'react-native-maps'
+import MapView from './SafeMapView'
 import * as Location from 'expo-location'
 import { Ionicons } from '@expo/vector-icons'
 import Glass from './Glass'

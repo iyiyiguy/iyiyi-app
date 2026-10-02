@@ -6,7 +6,8 @@ import {
   isLiveFacesAvailable, startLiveFaces, stopLiveFaces,
 } from '../../../../modules/body-hit'
 import {
-  MAX_HEADS, OVERLAY_BOX, fallbackHead, headsFromBodies, headsFromFaces, nameTagText, placeOverlay, selectTargets,
+  MAX_HEADS, OVERLAY_BOX, fallbackHead, headPose, headsFromBodies, headsFromFaces, landmarkDown, nameTagText, placeOverlay,
+  selectTargets,
 } from '../../../lib/cameraFilters'
 import { FilterArt } from './FilterArt'
 
@@ -32,7 +33,7 @@ import { FilterArt } from './FilterArt'
 // closely), and the slower Vision stills only supply head angles (yaw / pitch / roll) and are
 // matched to the live faces by position.
 //
-export const visionAvailable = isBodyHitAvailable
+export const visionAvailable = isBodyHitAvailable || isFaceDetectAvailable
 // Face boxes are cheap: ~7 samples/s. Body pose (older binaries without detectFaces) ~3.7/s.
 const SAMPLE_MS = isFaceDetectAvailable ? 135 : 270
 const SAMPLE_MS_RECORDING = 500 // ~2/s while a video is recording
@@ -359,14 +360,22 @@ export default function LiveFilterLayer({
           const y = f.y * sy
           const w = f.w * sx
           const h = f.h * sy
+          // Android sends eye / nose points with every frame: head angles come live too.
+          let pose = null
+          if (f.landmarks) {
+            const toScreen = (px, py) => ({ x: px * sx, y: py * sy })
+            const p = headPose(f.landmarks, toScreen)
+            if (p) pose = { ...p, down: landmarkDown(f.landmarks, toScreen) }
+          }
           return {
             cx: x + w / 2, top: y - h * 0.35, size: w * 1.15, fcx: x + w / 2, fcy: y + h / 2,
-            nx: (f.x + f.w / 2) / lw, pxPerNorm: null, pose: null,
+            nx: (f.x + f.w / 2) / lw, pxPerNorm: null, pose,
           }
         }).filter((h) => Number.isFinite(h.cx) && Number.isFinite(h.top) && h.size > 6)
         if (!heads.length) return
+        if (heads.some((h) => h.pose)) live.current.posed = now
         lastHeads.current = heads
-        apply(targetsFor(posesFor(heads)), false, true)
+        apply(targetsFor(heads.some((h) => h.pose) ? heads : posesFor(heads)), false, true)
       } catch {
         // skip this frame
       }
@@ -423,7 +432,9 @@ export default function LiveFilterLayer({
       while (alive) {
         const t0 = Date.now()
         const cam = cameraRef?.current
-        if (cam && cameraReadyRef?.current && !holdRef?.current && AppState.currentState === 'active') {
+        // Live tracking already brings head angles (Android): no stills needed at all.
+        const livePosed = liveIsOn() && Date.now() - (live.current.posed || 0) < 2000
+        if (!livePosed && cam && cameraReadyRef?.current && !holdRef?.current && AppState.currentState === 'active') {
           const { view: v0, facing: f0 } = latest.current
           const p = sampleOnce(cam, v0, f0 === 'front')
           inflight.current = p

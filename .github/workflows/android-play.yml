@@ -1,0 +1,134 @@
+# Builds iYiYi for Android on a GitHub-hosted Linux runner (free for this public repo) and,
+# once Google Play is connected, uploads it to Play Console. Runs alongside the iOS workflow.
+#
+# Repo secrets:
+#   ANDROID_KEYSTORE_B64        base64 of the upload keystore (secrets/android/ on Colin's Mac)
+#   ANDROID_KEYSTORE_PASSWORD   its password (store and key use the same one, alias "upload")
+#   PLAY_SERVICE_ACCOUNT_JSON   (optional) Google Play service-account key -> auto upload
+#   GOOGLE_MAPS_ANDROID_API_KEY (optional) Google Maps key; without it maps show a placeholder
+# Repo variables (optional): PLAY_TRACK (default internal), PLAY_STATUS (default draft;
+#   set to completed once the app has been reviewed/published on Play).
+# Every run also keeps the signed .aab (for manual upload) and an .apk (to sideload) as artifacts.
+name: Android build → Google Play
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths-ignore: ['**.md', 'iyiyi-rebuild/**']
+
+concurrency:
+  group: android-release
+  cancel-in-progress: true
+
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      EXPO_PUBLIC_SUPABASE_URL: https://sqsjwcsrgcgcpxccxedp.supabase.co
+      EXPO_PUBLIC_SUPABASE_ANON_KEY: sb_publishable_dC1TtQAqZpdQWRMoLAa3-w_xCSbea1x
+      EXPO_PUBLIC_API_URL: https://sqsjwcsrgcgcpxccxedp.supabase.co/functions/v1
+      EXPO_PUBLIC_SENTRY_DSN: https://eb96181c8fd8d89f9a44ea2dec4b1277@o4512105727262720.ingest.us.sentry.io/4512105734864896
+      SENTRY_DISABLE_AUTO_UPLOAD: 'true'
+      GOOGLE_MAPS_ANDROID_API_KEY: ${{ secrets.GOOGLE_MAPS_ANDROID_API_KEY }}
+      HAS_KEYSTORE: ${{ secrets.ANDROID_KEYSTORE_B64 != '' }}
+      HAS_PLAY: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON != '' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch generated game covers
+        run: |
+          B=https://d8j0ntlcm91z4.cloudfront.net/user_3IY98iu8iKHx88wWdcSrcv0jctc/hf_20261002_193716_
+          fetch() { curl -fsSL --retry 3 -o "/tmp/$2" "$B$1.png" && python3 -c "import sys;d=open('/tmp/$2','rb').read(8);sys.exit(0 if d.startswith(b'\x89PNG') else 1)" && mv "/tmp/$2" "assets/game-covers/$2" && echo "cover $2 OK" || echo "::warning::kept placeholder for $2"; }
+          fetch 81413a9a-73d8-4d5e-95ed-a4a8e85315b3 beside-them-penguins.png
+          fetch a80f1f1c-de23-49c0-ad73-a82fc0fd1a5b battle-royale.png
+          fetch 90dd4749-06d8-4ea4-97a8-21f228a48a51 chess.png
+          B=https://d8j0ntlcm91z4.cloudfront.net/user_3IY98iu8iKHx88wWdcSrcv0jctc/
+          art() { curl -fsSL --retry 3 -o "/tmp/$2" "$B$1.png" && python3 -c "import sys;d=open('/tmp/$2','rb').read(8);sys.exit(0 if d.startswith(b'\x89PNG') else 1)" && mv "/tmp/$2" "src/components/camera/filters/art/$2" && echo "art $2 OK" || echo "::warning::kept placeholder for $2"; }
+          art hf_20261002_211815_89224d3b-2986-4b10-ba0d-8fe99be6fc9a nametag-glass.png
+          art hf_20261002_211816_78e46727-d4bd-4b15-8bc1-b6854e77461d bubble-iloveyou.png
+          art hf_20261002_211816_2ae96b90-1276-4850-8209-15643f8da59d iy-logo-render.png
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install packages
+        run: npm ci
+
+      - name: Version code
+        run: |
+          echo "ANDROID_VERSION_CODE=$((100 + GITHUB_RUN_NUMBER))" >> "$GITHUB_ENV"
+          echo "versionCode $((100 + GITHUB_RUN_NUMBER))"
+
+      - name: Generate Android project
+        run: npx expo prebuild --platform android --clean --no-install
+
+      - name: Release signing
+        run: |
+          if [ "$HAS_KEYSTORE" = "true" ]; then
+            printf '%s' "${{ secrets.ANDROID_KEYSTORE_B64 }}" | tr -d ' \r\n' | base64 -d > android/app/upload.jks
+            echo "Upload keystore installed"
+          else
+            echo "::warning::No ANDROID_KEYSTORE_B64 secret: the build is debug-signed and cannot go to Google Play."
+          fi
+          # Point the release build at the upload key (Expo's template signs release with debug).
+          python3 - <<'PY'
+          import os, re
+          p = 'android/app/build.gradle'
+          s = open(p).read()
+          if os.environ.get('HAS_KEYSTORE') == 'true':
+              s = s.replace('signingConfigs {', '''signingConfigs {
+                  upload {
+                      storeFile file('upload.jks')
+                      storePassword System.getenv('ANDROID_KEYSTORE_PASSWORD')
+                      keyAlias 'upload'
+                      keyPassword System.getenv('ANDROID_KEYSTORE_PASSWORD')
+                  }''', 1)
+              rel = s.index('release {', s.index('buildTypes {'))
+              end = s.index('}', rel)
+              block = s[rel:end]
+              block = re.sub(r'signingConfig signingConfigs\.debug', 'signingConfig signingConfigs.upload', block)
+              s = s[:rel] + block + s[end:]
+          open(p, 'w').write(s)
+          PY
+          {
+            echo "org.gradle.jvmargs=-Xmx6g -XX:MaxMetaspaceSize=1g -Dfile.encoding=UTF-8"
+            echo "reactNativeArchitectures=armeabi-v7a,arm64-v8a"
+            echo "openiapStore=play"
+          } >> android/gradle.properties
+          grep -n "signingConfig" android/app/build.gradle
+
+      - name: Build (.aab for Play, .apk to sideload)
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+        run: |
+          cd android
+          ./gradlew --no-daemon bundleRelease assembleRelease -PopeniapStore=play
+          mkdir -p "$RUNNER_TEMP/out"
+          cp app/build/outputs/bundle/release/app-release.aab "$RUNNER_TEMP/out/iyiyi-$ANDROID_VERSION_CODE.aab"
+          cp app/build/outputs/apk/release/app-release.apk "$RUNNER_TEMP/out/iyiyi-$ANDROID_VERSION_CODE.apk"
+          ls -la "$RUNNER_TEMP/out"
+
+      - name: Keep the app files
+        uses: actions/upload-artifact@v4
+        with:
+          name: iyiyi-android-${{ env.ANDROID_VERSION_CODE }}
+          path: ${{ runner.temp }}/out/*
+
+      - name: Upload to Google Play
+        if: env.HAS_PLAY == 'true' && env.HAS_KEYSTORE == 'true'
+        uses: r0adkll/upload-google-play@v1
+        with:
+          serviceAccountJsonPlainText: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+          packageName: com.iyiyi.app
+          releaseFiles: ${{ runner.temp }}/out/iyiyi-${{ env.ANDROID_VERSION_CODE }}.aab
+          track: ${{ vars.PLAY_TRACK || 'internal' }}
+          status: ${{ vars.PLAY_STATUS || 'draft' }}

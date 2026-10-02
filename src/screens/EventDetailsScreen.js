@@ -2,7 +2,8 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   View, Text, Pressable, ScrollView, StyleSheet, Alert, ActivityIndicator, Image, Share, Linking, Platform, useColorScheme,
 } from 'react-native'
-import MapView, { Marker } from 'react-native-maps'
+import MapView from '../components/SafeMapView'
+import { Marker } from 'react-native-maps'
 import * as Haptics from 'expo-haptics'
 import { Ionicons } from '@expo/vector-icons'
 import { LinearGradient } from 'expo-linear-gradient'

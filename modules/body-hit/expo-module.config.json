@@ -1,6 +1,9 @@
 {
-  "platforms": ["apple"],
+  "platforms": ["apple", "android"],
   "apple": {
     "modules": ["BodyHitModule"]
+  },
+  "android": {
+    "modules": ["expo.modules.bodyhit.BodyHitModule"]
   }
 }

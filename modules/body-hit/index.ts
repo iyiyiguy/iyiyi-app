@@ -41,7 +41,8 @@ type NativeBodyHit = {
 
 const Native = requireOptionalNativeModule<NativeBodyHit>('BodyHit')
 
-export const isBodyHitAvailable = !!Native
+// Body pose (Laser Tag) is iOS-only; Android's module only does faces.
+export const isBodyHitAvailable = !!Native && typeof (Native as any).detectBodies === 'function'
 
 export async function detectBodies(uri: string, deleteAfter = true): Promise<DetectedBody[] | null> {
   if (!Native) return null
@@ -76,7 +77,8 @@ export async function detectFaces(uri: string, deleteAfter = true): Promise<Dete
 }
 
 // Real-time faces (every camera frame) from the preview's own capture session.
-export type LiveFace = { x: number; y: number; w: number; h: number; id: number }
+// landmarks (Android): nose / leftEye / rightEye in the same preview-view coordinates.
+export type LiveFace = { x: number; y: number; w: number; h: number; id: number; landmarks?: Record<string, { x: number; y: number }> | null }
 export type LiveFacesEvent = { faces: LiveFace[]; layerW: number; layerH: number }
 
 export const isLiveFacesAvailable = !!(Native && typeof Native.startLiveFaces === 'function' && typeof Native.addListener === 'function')

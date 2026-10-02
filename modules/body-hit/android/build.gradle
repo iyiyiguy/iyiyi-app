@@ -1,0 +1,21 @@
+plugins {
+  id 'com.android.library'
+  id 'expo-module-gradle-plugin'
+}
+
+group = 'expo.modules.bodyhit'
+version = '1.0.0'
+
+android {
+  namespace "expo.modules.bodyhit"
+  defaultConfig {
+    versionCode 1
+    versionName '1.0.0'
+  }
+}
+
+dependencies {
+  // On-device face detection (model bundled in the app, works offline, no Play Services needed).
+  implementation 'com.google.mlkit:face-detection:16.1.7'
+  implementation 'androidx.exifinterface:exifinterface:1.3.7'
+}

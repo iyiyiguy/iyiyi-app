@@ -219,7 +219,7 @@ export function headsFromFaces(faces, view, mirror = false) {
   return out.slice(0, MAX_HEADS).sort((a, b) => a.cx - b.cx)
 }
 
-function landmarkDown(lm, toScreen) {
+export function landmarkDown(lm, toScreen) {
   try {
     const pt = (n) => (lm?.[n] && num(lm[n].x) != null && num(lm[n].y) != null ? toScreen(lm[n].x, lm[n].y) : null)
     const nose = pt('nose')

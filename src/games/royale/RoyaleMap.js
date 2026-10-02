@@ -7,7 +7,8 @@
 // about once a second.
 import React, { memo, useEffect, useMemo, useRef, useState } from 'react'
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native'
-import MapView, { Circle, Marker } from 'react-native-maps'
+import MapView from '../../components/SafeMapView'
+import { Circle, Marker } from 'react-native-maps'
 import { Ionicons } from '@expo/vector-icons'
 import { MAP_MAX_CLUSTERS, MAP_MAX_DOTS, MAP_MAX_LOOT, ROYALE_COLORS } from './constants'
 import { dist, isValidCoord, validPos } from './geo'

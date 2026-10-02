@@ -3,7 +3,8 @@
 // MapView/Marker/Circle a non-finite coordinate.
 import React, { useEffect, useRef, useState } from 'react'
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native'
-import MapView, { Circle, Marker } from 'react-native-maps'
+import MapView from '../components/SafeMapView'
+import { Circle, Marker } from 'react-native-maps'
 import * as Location from 'expo-location'
 import { colors, radii, type } from '../theme'
 
