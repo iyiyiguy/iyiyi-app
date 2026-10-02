@@ -111,7 +111,7 @@ jobs:
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
         run: |
           cd android
-          ./gradlew --no-daemon bundleRelease assembleRelease -PopeniapStore=play
+          ./gradlew --no-daemon --stacktrace bundleRelease assembleRelease -PopeniapStore=play 2>&1 | tee "$RUNNER_TEMP/gradle.log"; test "${PIPESTATUS[0]}" = 0 || { grep -n -A40 "Caused by\|What went wrong" "$RUNNER_TEMP/gradle.log" | head -150; exit 1; }
           mkdir -p "$RUNNER_TEMP/out"
           cp app/build/outputs/bundle/release/app-release.aab "$RUNNER_TEMP/out/iyiyi-$ANDROID_VERSION_CODE.aab"
           cp app/build/outputs/apk/release/app-release.apk "$RUNNER_TEMP/out/iyiyi-$ANDROID_VERSION_CODE.apk"
