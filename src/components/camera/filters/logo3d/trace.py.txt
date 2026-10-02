@@ -1,0 +1,49 @@
+import numpy as np, json, cv2
+from PIL import Image
+from scipy import ndimage as ndi
+im = Image.open('assets/icon.png').convert('RGBA')
+a = np.asarray(im).astype(np.int32)
+mn = a[...,:3].min(axis=2)
+ink = ndi.binary_opening(mn < 232, iterations=1)
+st = ndi.generate_binary_structure(2,1)
+filled = ndi.binary_fill_holes(ndi.binary_closing(ink, structure=st, iterations=18))
+lab, n = ndi.label(filled)
+sizes = ndi.sum(filled, lab, range(1, n+1))
+keep = np.zeros_like(filled)
+for i,s in enumerate(sizes):
+    if s > 5000: keep |= lab == (i+1)
+keep[560:905, 563:732] = True
+keep[448:925, 56:219] = True
+yy, xx = np.mgrid[0:1024, 0:1024]
+dys, dxs = np.nonzero(keep[130:350, 30:250])
+cx, cy = (dxs.min()+dxs.max())/2+30, (dys.min()+dys.max())/2+130; r = (dys.max()-dys.min())/2
+keep |= (xx-cx)**2 + (yy-cy)**2 <= (r-2)**2
+keep = ndi.binary_erosion(keep, iterations=4)
+# smooth edges
+m = (ndi.gaussian_filter(keep.astype(float), 2.0) > 0.5).astype(np.uint8) * 255
+contours, hier = cv2.findContours(m, cv2.RETR_CCOMP, cv2.CHAIN_APPROX_NONE)
+ys, xs = np.nonzero(m)
+x0, x1, y0, y1 = xs.min(), xs.max(), ys.min(), ys.max()
+W = x1 - x0; H = y1 - y0
+ccx, ccy = (x0 + x1) / 2, (y0 + y1) / 2
+S = 2.0 / W
+def norm(c):
+    pts = c.reshape(-1, 2).astype(float)
+    return [[round((p[0] - ccx) * S, 4), round(-(p[1] - ccy) * S, 4)] for p in pts]
+shapes = []
+hier = hier[0]
+for i, c in enumerate(contours):
+    if hier[i][3] != -1: continue  # outer only
+    if cv2.contourArea(c) < 200: continue
+    ap = cv2.approxPolyDP(c, 1.2, True)
+    holes = []
+    ch = hier[i][2]
+    while ch != -1:
+        if cv2.contourArea(contours[ch]) > 200: holes.append(norm(cv2.approxPolyDP(contours[ch], 1.2, True)))
+        ch = hier[ch][0]
+    shapes.append({'outer': norm(ap), 'holes': holes})
+# texture box in normalized units (for UVs of iy-logo.png which is cropped to the ink bbox of an earlier mask)
+out = {'shapes': shapes, 'width': 2.0, 'height': round(H * S, 4)}
+print(len(shapes), [len(s['outer']) for s in shapes], out['height'])
+js = '// Traced from assets/icon.png (OpenCV contours, simplified). Units: logo width = 2, centred, y up.\n// Regenerate with logo3d/trace.py.txt.\nexport default ' + json.dumps(out, separators=(',', ':')) + '\n'
+open('src/components/camera/filters/logo3d/shape.js', 'w').write(js)

@@ -1,0 +1,125 @@
+# Builds iYiYi on a GitHub-hosted Mac (Xcode 26) and uploads it to App Store Connect / TestFlight.
+# No Expo/EAS account needed. Signing is automatic via the App Store Connect API key stored in the
+# repo secrets ASC_KEY_ID, ASC_ISSUER_ID and ASC_KEY_P8.
+name: iOS build → App Store Connect
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths-ignore: ['**.md', 'iyiyi-rebuild/**']
+
+concurrency:
+  group: ios-release
+  cancel-in-progress: true
+
+jobs:
+  ios:
+    runs-on: macos-26
+    timeout-minutes: 100
+    env:
+      # Public client config (ships inside the app; safe to keep here).
+      EXPO_PUBLIC_SUPABASE_URL: https://sqsjwcsrgcgcpxccxedp.supabase.co
+      EXPO_PUBLIC_SUPABASE_ANON_KEY: sb_publishable_dC1TtQAqZpdQWRMoLAa3-w_xCSbea1x
+      EXPO_PUBLIC_API_URL: https://sqsjwcsrgcgcpxccxedp.supabase.co/functions/v1
+      EXPO_PUBLIC_SENTRY_DSN: https://eb96181c8fd8d89f9a44ea2dec4b1277@o4512105727262720.ingest.us.sentry.io/4512105734864896
+      SENTRY_DISABLE_AUTO_UPLOAD: 'true'
+      ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+      ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch generated game covers
+        run: |
+          B=https://d8j0ntlcm91z4.cloudfront.net/user_3IY98iu8iKHx88wWdcSrcv0jctc/hf_20261002_193716_
+          fetch() { curl -fsSL --retry 3 -o "/tmp/$2" "$B$1.png" && python3 -c "import sys;d=open('/tmp/$2','rb').read(8);sys.exit(0 if d.startswith(b'\x89PNG') else 1)" && mv "/tmp/$2" "assets/game-covers/$2" && echo "cover $2 OK" || echo "::warning::kept placeholder for $2"; }
+          fetch 81413a9a-73d8-4d5e-95ed-a4a8e85315b3 beside-them-penguins.png
+          fetch a80f1f1c-de23-49c0-ad73-a82fc0fd1a5b battle-royale.png
+          fetch 90dd4749-06d8-4ea4-97a8-21f228a48a51 chess.png
+          B=https://d8j0ntlcm91z4.cloudfront.net/user_3IY98iu8iKHx88wWdcSrcv0jctc/
+          art() { curl -fsSL --retry 3 -o "/tmp/$2" "$B$1.png" && python3 -c "import sys;d=open('/tmp/$2','rb').read(8);sys.exit(0 if d.startswith(b'\x89PNG') else 1)" && mv "/tmp/$2" "src/components/camera/filters/art/$2" && echo "art $2 OK" || echo "::warning::kept placeholder for $2"; }
+          art hf_20261002_211815_89224d3b-2986-4b10-ba0d-8fe99be6fc9a nametag-glass.png
+          art hf_20261002_211816_78e46727-d4bd-4b15-8bc1-b6854e77461d bubble-iloveyou.png
+          art hf_20261002_211816_2ae96b90-1276-4850-8209-15643f8da59d iy-logo-render.png
+
+      - name: Use the newest Xcode 26
+        run: |
+          X=$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -1)
+          if [ -n "$X" ]; then sudo xcode-select -s "$X"; fi
+          xcodebuild -version
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install packages
+        run: npm ci
+
+      - name: Set build number
+        run: |
+          node -e "
+            const fs = require('fs');
+            const a = JSON.parse(fs.readFileSync('app.json', 'utf8'));
+            a.expo.ios.buildNumber = String(200 + Number(process.env.GITHUB_RUN_NUMBER));
+            fs.writeFileSync('app.json', JSON.stringify(a, null, 2));
+            console.log('version', a.expo.version, 'build', a.expo.ios.buildNumber);
+          "
+
+      - name: Generate iOS project
+        run: npx expo prebuild --platform ios --clean --no-install
+
+      - name: Pod install
+        run: cd ios && pod install
+
+      - name: App Store Connect API key
+        env:
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/asc"
+          # Rebuild a clean PEM no matter how the key was pasted (one line, extra spaces,
+          # Windows line endings, rich-text artifacts): keep only the base64 body and re-wrap it.
+          BODY=$(printf '%s' "$ASC_KEY_P8" | sed -e 's/-----BEGIN PRIVATE KEY-----//' -e 's/-----END PRIVATE KEY-----//' | tr -cd 'A-Za-z0-9+/=')
+          { echo "-----BEGIN PRIVATE KEY-----"; printf '%s' "$BODY" | fold -w 64; echo; echo "-----END PRIVATE KEY-----"; } > "$RUNNER_TEMP/asc/AuthKey.p8"
+          if ! openssl pkey -in "$RUNNER_TEMP/asc/AuthKey.p8" -noout 2>/dev/null; then
+            echo "::error::The ASC_KEY_P8 secret is not a valid App Store Connect private key (body length ${#BODY}). Re-paste the full contents of AuthKey_*.p8 into the secret."
+            exit 1
+          fi
+          echo "Key OK (body length ${#BODY})"
+          echo "ASC_KEY_PATH=$RUNNER_TEMP/asc/AuthKey.p8" >> "$GITHUB_ENV"
+
+      - name: Archive
+        run: |
+          set -o pipefail
+          xcodebuild -workspace ios/iYiYi.xcworkspace -scheme iYiYi -configuration Release \
+            -destination 'generic/platform=iOS' -archivePath "$RUNNER_TEMP/iYiYi.xcarchive" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$ASC_KEY_PATH" -authenticationKeyID "$ASC_KEY_ID" -authenticationKeyIssuerID "$ASC_ISSUER_ID" \
+            archive 2>&1 | tee "$RUNNER_TEMP/archive.log" | grep -E "error:|warning: .*signing|\*\* ARCHIVE" || true
+          test -d "$RUNNER_TEMP/iYiYi.xcarchive" || { tail -80 "$RUNNER_TEMP/archive.log"; exit 1; }
+
+      - name: Upload to App Store Connect
+        run: |
+          cat > "$RUNNER_TEMP/ExportOptions.plist" <<PLIST
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0"><dict>
+            <key>method</key><string>app-store-connect</string>
+            <key>destination</key><string>upload</string>
+            <key>teamID</key><string>Z3FSC2KG69</string>
+            <key>signingStyle</key><string>automatic</string>
+            <key>uploadSymbols</key><true/>
+            <key>manageAppVersionAndBuildNumber</key><false/>
+          </dict></plist>
+          PLIST
+          xcodebuild -exportArchive -archivePath "$RUNNER_TEMP/iYiYi.xcarchive" \
+            -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist" -exportPath "$RUNNER_TEMP/export" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$ASC_KEY_PATH" -authenticationKeyID "$ASC_KEY_ID" -authenticationKeyIssuerID "$ASC_ISSUER_ID"
+
+      - name: Keep build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-logs
+          path: ${{ runner.temp }}/*.log
+          if-no-files-found: ignore

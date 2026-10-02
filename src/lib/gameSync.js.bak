@@ -1,0 +1,96 @@
+import { useEffect, useState, useRef } from 'react'
+import { subscribeToGameState, getGameState, updateGameState } from './gameBackend'
+
+// Hook for real-time game state sync
+export function useGameState(lobbyId) {
+  const [gameState, setGameState] = useState({})
+  const subscriptionRef = useRef(null)
+
+  useEffect(() => {
+    if (!lobbyId) return
+
+    // Initial load
+    getGameState(lobbyId).then(setGameState)
+
+    // Subscribe to updates
+    subscriptionRef.current = subscribeToGameState(lobbyId, (newState) => {
+      setGameState(newState)
+    })
+
+    return () => {
+      if (subscriptionRef.current) {
+        subscriptionRef.current.unsubscribe()
+      }
+    }
+  }, [lobbyId])
+
+  return gameState
+}
+
+// Helper to update specific game state fields
+export async function updateGameField(lobbyId, field, value) {
+  const current = await getGameState(lobbyId)
+  return updateGameState(lobbyId, {
+    ...current,
+    [field]: value,
+  })
+}
+
+// Broadcast player action to lobby
+export async function broadcastAction(lobbyId, action) {
+  const current = await getGameState(lobbyId)
+  const actions = current.actions || []
+  return updateGameState(lobbyId, {
+    ...current,
+    actions: [...actions, { ...action, timestamp: Date.now() }],
+  })
+}
+
+// Get recent actions in game
+export async function getRecentActions(lobbyId, limit = 50) {
+  const state = await getGameState(lobbyId)
+  const actions = state.actions || []
+  return actions.slice(-limit)
+}
+
+// Multiplayer event bus for in-game communications
+class GameEventBus {
+  constructor() {
+    this.listeners = {}
+  }
+
+  on(event, callback) {
+    if (!this.listeners[event]) this.listeners[event] = []
+    this.listeners[event].push(callback)
+    return () => {
+      this.listeners[event] = this.listeners[event].filter(cb => cb !== callback)
+    }
+  }
+
+  emit(event, data) {
+    if (this.listeners[event]) {
+      this.listeners[event].forEach(cb => cb(data))
+    }
+  }
+
+  clear() {
+    this.listeners = {}
+  }
+}
+
+export const gameEventBus = new GameEventBus()
+
+// Game event types
+export const GAME_EVENTS = {
+  PLAYER_JOINED: 'player:joined',
+  PLAYER_LEFT: 'player:left',
+  GAME_STARTED: 'game:started',
+  GAME_STATE_CHANGED: 'game:stateChanged',
+  PLAYER_ACTION: 'player:action',
+  PLAYER_DIED: 'player:died',
+  MEETING_CALLED: 'meeting:called',
+  VOTE_CAST: 'vote:cast',
+  VOTE_RESULT: 'vote:result',
+  GAME_ENDED: 'game:ended',
+  CHAT_MESSAGE: 'chat:message',
+}

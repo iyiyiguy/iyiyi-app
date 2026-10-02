@@ -1,0 +1,99 @@
+{
+  "expo": {
+    "name": "iYiYi",
+    "slug": "iyiyi",
+    "scheme": "iyiyi",
+    "version": "1.3.0",
+    "description": "Meet people within 150ft. Discover nearby users, share content, and connect with your local community in real-time.",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "automatic",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.iYiYi",
+      "config": {
+        "usesNonExemptEncryption": false
+      },
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "iYiYi uses your location to show you people within 150ft.",
+        "NSPhotoLibraryUsageDescription": "iYiYi needs access to your photos to set a profile picture.",
+        "NSCameraUsageDescription": "iYiYi uses the camera so you can capture moments and tag the people around you.",
+        "NSMicrophoneUsageDescription": "iYiYi uses the microphone to record sound in your videos and for voice in video calls.",
+        "NSPhotoLibraryAddUsageDescription": "iYiYi saves the photos and videos you shoot to an iYiYi album."
+      },
+      "buildNumber": "59",
+      "usesAppleSignIn": true,
+      "appleTeamId": "Z3FSC2KG69"
+    },
+    "android": {
+      "package": "com.iyiyi.app",
+      "adaptiveIcon": {
+        "backgroundColor": "#0D0710",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "permissions": [
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION"
+      ],
+      "versionCode": 15
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-video",
+      "expo-font",
+      "@sentry/react-native/expo",
+      "./plugins/withNativeCrashHandler.js",
+      "expo-sharing",
+      "expo-mail-composer",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "iYiYi uses the camera so you can capture moments and tag the people around you.",
+          "microphonePermission": "iYiYi uses the microphone to record sound in your videos and for voice in video calls.",
+          "recordAudioAndroid": true
+        }
+      ],
+      [
+        "expo-media-library",
+        {
+          "photosPermission": "iYiYi needs access to your photos to set a profile picture and add content.",
+          "savePhotosPermission": "iYiYi saves the photos and videos you shoot to an iYiYi album.",
+          "isAccessMediaLocationEnabled": false
+        }
+      ],
+      "expo-audio",
+      "expo-apple-authentication",
+      "expo-notifications",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "iYiYi uses your location to show you people within 150ft."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "iYiYi needs access to your photos to set a profile picture and add content.",
+          "cameraPermission": "iYiYi uses the camera so you can capture moments and tag the people around you."
+        }
+      ],
+      [
+        "expo-calendar",
+        {
+          "calendarPermission": "iYiYi adds events you RSVP to into your calendar.",
+          "remindersPermission": "iYiYi can set reminders for events you're going to."
+        }
+      ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "dcc9c63b-198a-4383-9bc0-5942fd5b3535"
+      }
+    },
+    "owner": "iyiyi"
+  }
+}

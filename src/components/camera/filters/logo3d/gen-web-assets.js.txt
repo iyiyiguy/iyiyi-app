@@ -1,0 +1,14 @@
+// Regenerates the inlined web assets for Logo3D (run from the app root):
+//   node src/components/camera/filters/logo3d/gen-web-assets.js.txt
+const fs = require('fs')
+const path = require('path')
+const dir = path.join('src', 'components', 'camera', 'filters', 'logo3d')
+const three = fs.readFileSync(path.join('node_modules', 'three', 'build', 'three.min.js'), 'utf8').replace(/<\/script/gi, '<\\/script')
+fs.writeFileSync(path.join(dir, 'threeSource.js'),
+  `// GENERATED from node_modules/three/build/three.min.js (r${require('three/package.json').version}) - do not edit.\n` +
+  `// Inlined into Logo3D's WebView so it works offline. Regenerate with gen-web-assets.js.txt.\n` +
+  `export default ${JSON.stringify(three)}\n`)
+const png = fs.readFileSync(path.join('src', 'components', 'camera', 'filters', 'iy-logo.png')).toString('base64')
+fs.writeFileSync(path.join(dir, 'logoTexture.js'),
+  `// GENERATED: iy-logo.png as a data URI for the 3D logo's front face texture.\nexport default ${JSON.stringify('data:image/png;base64,' + png)}\n`)
+console.log('ok')

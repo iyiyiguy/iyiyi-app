@@ -1,0 +1,353 @@
+import { supabase } from './supabase'
+import * as Location from 'expo-location'
+
+// ============================================================================
+// PROXIMITY DETECTION (150ft = ~46 meters)
+// ============================================================================
+const PROXIMITY_RADIUS_METERS = 46
+
+export async function getCurrentLocation() {
+  try {
+    const { status } = await Location.requestForegroundPermissionsAsync()
+    if (status !== 'granted') return null
+
+    const location = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High })
+    return {
+      latitude: location.coords.latitude,
+      longitude: location.coords.longitude,
+      accuracy: location.coords.accuracy,
+    }
+  } catch (err) {
+    console.error('Location error:', err)
+    return null
+  }
+}
+
+function calculateDistance(lat1, lon1, lat2, lon2) {
+  const R = 6371e3 // Earth radius in meters
+  const φ1 = (lat1 * Math.PI) / 180
+  const φ2 = (lat2 * Math.PI) / 180
+  const Δφ = ((lat2 - lat1) * Math.PI) / 180
+  const Δλ = ((lon2 - lon1) * Math.PI) / 180
+
+  const a = Math.sin(Δφ / 2) ** 2 + Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) ** 2
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+  return R * c
+}
+
+// ============================================================================
+// PLAYER LOCATION TRACKING
+// ============================================================================
+export async function updatePlayerLocation(userId) {
+  const location = await getCurrentLocation()
+  if (!location) return null
+
+  const { data, error } = await supabase
+    .from('player_locations')
+    .upsert({
+      user_id: userId,
+      latitude: location.latitude,
+      longitude: location.longitude,
+      accuracy: location.accuracy,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'user_id' })
+    .select()
+
+  if (error) console.error('Location update error:', error)
+  return data?.[0]
+}
+
+// ============================================================================
+// PROXIMITY PLAYER DISCOVERY
+// ============================================================================
+export async function findPlayersNearby(userId, gameId) {
+  try {
+    const userLocation = await getCurrentLocation()
+    if (!userLocation) return []
+
+    const { data, error } = await supabase
+      .from('player_locations')
+      .select('user_id, latitude, longitude, updated_at')
+      .neq('user_id', userId)
+
+    if (error) throw error
+
+    const nearby = data
+      .map(player => {
+        const distance = calculateDistance(
+          userLocation.latitude,
+          userLocation.longitude,
+          player.latitude,
+          player.longitude
+        )
+        return { ...player, distance }
+      })
+      .filter(player => player.distance <= PROXIMITY_RADIUS_METERS)
+      .sort((a, b) => a.distance - b.distance)
+
+    // Get user profiles for nearby players
+    const nearbyUserIds = nearby.map(p => p.user_id)
+    if (nearbyUserIds.length === 0) return []
+
+    const { data: profiles, error: profileError } = await supabase
+      .from('profiles')
+      .select('id, username, avatar_url')
+      .in('id', nearbyUserIds)
+
+    if (profileError) throw profileError
+
+    return nearby.map(player => {
+      const profile = profiles.find(p => p.id === player.user_id)
+      return {
+        id: player.user_id,
+        name: profile?.username || 'Unknown',
+        avatar: profile?.avatar_url,
+        distance: Math.round(player.distance * 3.28084), // Convert to feet
+        lastSeen: player.updated_at,
+      }
+    })
+  } catch (err) {
+    console.error('Proximity discovery error:', err)
+    return []
+  }
+}
+
+// ============================================================================
+// LOBBY MANAGEMENT
+// ============================================================================
+export async function createLobby(userId, gameId, settings = {}) {
+  try {
+    const lobbyId = `lobby_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+
+    const { data, error } = await supabase
+      .from('game_lobbies')
+      .insert({
+        id: lobbyId,
+        game_id: gameId,
+        creator_id: userId,
+        status: 'waiting',
+        max_players: settings.maxPlayers || 4,
+        created_at: new Date().toISOString(),
+      })
+      .select()
+
+    if (error) throw error
+
+    // Add creator to lobby
+    await supabase.from('lobby_players').insert({
+      lobby_id: lobbyId,
+      user_id: userId,
+      joined_at: new Date().toISOString(),
+      ready: false,
+    })
+
+    return data[0]
+  } catch (err) {
+    console.error('Create lobby error:', err)
+    return null
+  }
+}
+
+export async function getActiveLobbies(gameId, limit = 10) {
+  try {
+    const { data, error } = await supabase
+      .from('game_lobbies')
+      .select(`
+        id,
+        game_id,
+        creator_id,
+        status,
+        max_players,
+        created_at,
+        lobby_players(count)
+      `)
+      .eq('game_id', gameId)
+      .eq('status', 'waiting')
+      .order('created_at', { ascending: false })
+      .limit(limit)
+
+    if (error) throw error
+
+    // Get creator info
+    const creatorIds = [...new Set(data.map(l => l.creator_id))]
+    const { data: creators } = await supabase
+      .from('profiles')
+      .select('id, username')
+      .in('id', creatorIds)
+
+    return data.map(lobby => ({
+      id: lobby.id,
+      creatorName: creators.find(c => c.id === lobby.creator_id)?.username || 'Unknown',
+      currentPlayers: lobby.lobby_players[0]?.count || 1,
+      maxPlayers: lobby.max_players,
+      createdAt: new Date(lobby.created_at),
+    }))
+  } catch (err) {
+    console.error('Get lobbies error:', err)
+    return []
+  }
+}
+
+export async function joinLobby(userId, lobbyId) {
+  try {
+    // Check if user already in lobby
+    const { data: existing } = await supabase
+      .from('lobby_players')
+      .select('id')
+      .eq('lobby_id', lobbyId)
+      .eq('user_id', userId)
+
+    if (existing?.length > 0) return true
+
+    const { error } = await supabase.from('lobby_players').insert({
+      lobby_id: lobbyId,
+      user_id: userId,
+      joined_at: new Date().toISOString(),
+      ready: false,
+    })
+
+    if (error) throw error
+    return true
+  } catch (err) {
+    console.error('Join lobby error:', err)
+    return false
+  }
+}
+
+export async function getLobbyPlayers(lobbyId) {
+  try {
+    const { data, error } = await supabase
+      .from('lobby_players')
+      .select(`
+        user_id,
+        ready,
+        profiles(username, avatar_url)
+      `)
+      .eq('lobby_id', lobbyId)
+
+    if (error) throw error
+
+    return data.map(p => ({
+      id: p.user_id,
+      name: p.profiles.username,
+      avatar: p.profiles.avatar_url,
+      ready: p.ready,
+    }))
+  } catch (err) {
+    console.error('Get lobby players error:', err)
+    return []
+  }
+}
+
+// ============================================================================
+// GAME STATE SYNC
+// ============================================================================
+export async function updateGameState(lobbyId, gameState) {
+  try {
+    const { error } = await supabase
+      .from('game_lobbies')
+      .update({
+        game_state: gameState,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', lobbyId)
+
+    if (error) throw error
+    return true
+  } catch (err) {
+    console.error('Update game state error:', err)
+    return false
+  }
+}
+
+export async function getGameState(lobbyId) {
+  try {
+    const { data, error } = await supabase
+      .from('game_lobbies')
+      .select('game_state')
+      .eq('id', lobbyId)
+      .single()
+
+    if (error) throw error
+    return data?.game_state || {}
+  } catch (err) {
+    console.error('Get game state error:', err)
+    return {}
+  }
+}
+
+export function subscribeToGameState(lobbyId, callback) {
+  return supabase
+    .channel(`lobby:${lobbyId}`)
+    .on(
+      'postgres_changes',
+      { event: 'UPDATE', schema: 'public', table: 'game_lobbies', filter: `id=eq.${lobbyId}` },
+      (payload) => callback(payload.new.game_state)
+    )
+    .subscribe()
+}
+
+// ============================================================================
+// PLAYER INVITATIONS
+// ============================================================================
+export async function sendGameInvite(fromUserId, toUserId, gameId, lobbyId) {
+  try {
+    const { error } = await supabase.from('game_invites').insert({
+      from_user_id: fromUserId,
+      to_user_id: toUserId,
+      game_id: gameId,
+      lobby_id: lobbyId,
+      status: 'pending',
+      created_at: new Date().toISOString(),
+    })
+
+    if (error) throw error
+    return true
+  } catch (err) {
+    console.error('Send invite error:', err)
+    return false
+  }
+}
+
+export async function getPendingInvites(userId) {
+  try {
+    const { data, error } = await supabase
+      .from('game_invites')
+      .select(`
+        id,
+        from_user_id,
+        game_id,
+        lobby_id,
+        created_at,
+        profiles:from_user_id(username, avatar_url),
+        games(name, icon)
+      `)
+      .eq('to_user_id', userId)
+      .eq('status', 'pending')
+      .order('created_at', { ascending: false })
+
+    if (error) throw error
+    return data || []
+  } catch (err) {
+    console.error('Get invites error:', err)
+    return []
+  }
+}
+
+export async function respondToInvite(inviteId, accepted) {
+  try {
+    const { error } = await supabase
+      .from('game_invites')
+      .update({
+        status: accepted ? 'accepted' : 'declined',
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', inviteId)
+
+    if (error) throw error
+    return true
+  } catch (err) {
+    console.error('Respond to invite error:', err)
+    return false
+  }
+}

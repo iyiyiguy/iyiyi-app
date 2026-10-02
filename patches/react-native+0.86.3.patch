@@ -1,0 +1,26 @@
+diff --git a/node_modules/react-native/ReactCommon/react/nativemodule/core/platform/ios/ReactCommon/RCTTurboModule.mm b/node_modules/react-native/ReactCommon/react/nativemodule/core/platform/ios/ReactCommon/RCTTurboModule.mm
+index 516ae35..27fcc83 100644
+--- a/node_modules/react-native/ReactCommon/react/nativemodule/core/platform/ios/ReactCommon/RCTTurboModule.mm
++++ b/node_modules/react-native/ReactCommon/react/nativemodule/core/platform/ios/ReactCommon/RCTTurboModule.mm
+@@ -460,9 +460,18 @@ void ObjCTurboModule::performVoidMethodInvocation(
+     @try {
+       [inv invokeWithTarget:strongModule];
+     } @catch (NSException *exception) {
+-      // Void methods are always async, re-throw instead of converting to
+-      // JSError, same as the async branch in performMethodInvocation.
+-      @throw exception;
++      // Void methods are always async and dispatched onto a background
++      // queue - re-throwing here (the upstream default) can never be caught
++      // by anything, since nothing downstream owns this queue's exception
++      // handling, so the process aborts unconditionally
++      // (facebook/react-native#53960). Logging instead of re-throwing loses
++      // native crash-reporter visibility into this exception, but keeps the
++      // app alive, which matters more for a void (fire-and-forget) call.
++      NSLog(
++          @"[RCTTurboModule] Caught NSException in void method %s.%s: %@",
++          moduleName,
++          methodName,
++          exception);
+     } @finally {
+       [retainedObjectsForInvocation removeAllObjects];
+     }

@@ -1,0 +1,7 @@
+{
+  "name": "body-hit",
+  "version": "1.0.0",
+  "private": true,
+  "main": "index.ts",
+  "description": "On-device person / body-pose detection (Apple Vision) for iYiYi Laser Tag hit detection."
+}
