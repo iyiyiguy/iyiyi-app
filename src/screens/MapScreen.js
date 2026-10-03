@@ -4,6 +4,7 @@ import { useFocusEffect } from '@react-navigation/native'
 import MapView from '../components/SafeMapView'
 import { Marker } from 'react-native-maps'
 import * as Location from 'expo-location'
+import AsyncStorage from '@react-native-async-storage/async-storage'
 import * as Haptics from 'expo-haptics'
 import { Ionicons } from '@expo/vector-icons'
 import BrandHeader, { HeaderButton } from '../components/BrandHeader'
@@ -160,6 +161,8 @@ async function lookupProfileCountries(ids) {
   for (const id of ids) out[id] = countryCache.get(id) ?? null
   return out
 }
+
+const MAP_LOOK_KEY = 'iyiyi_map_look_v1'
 
 export default function MapScreen({ navigation }) {
   const scheme = useColorScheme()
@@ -385,6 +388,35 @@ export default function MapScreen({ navigation }) {
     } catch (e) {
       console.warn('animateToRegion failed', e)
     }
+    // Moving by region flattens the camera; tilt back into 3D once the move lands.
+    if (mapLookRef.current !== 'flat') setTimeout(() => applyTilt(mapLookRef.current), duration + 60)
+  }
+
+  // Map look: 3D (tilted, extruded buildings), Realistic (satellite with textured 3D
+  // buildings - Apple Flyover in supported cities), or Flat 2D. Remembered between visits.
+  const [mapLook, setMapLook] = useState('3d')
+  const mapLookRef = useRef('3d')
+  mapLookRef.current = mapLook
+  const applyTilt = (look) => {
+    try {
+      mapRef.current?.animateCamera({ pitch: look === 'flat' ? 0 : look === 'real' ? 60 : 55 }, { duration: 400 })
+    } catch {}
+  }
+  useEffect(() => {
+    AsyncStorage.getItem(MAP_LOOK_KEY).then((v) => {
+      if (v === '3d' || v === 'real' || v === 'flat') setMapLook(v)
+    }).catch(() => {})
+  }, [])
+  useEffect(() => {
+    const t = setTimeout(() => applyTilt(mapLook), 250)
+    return () => clearTimeout(t)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mapLook])
+  const cycleMapLook = () => {
+    Haptics.selectionAsync().catch(() => {})
+    const next = mapLook === '3d' ? 'real' : mapLook === 'real' ? 'flat' : '3d'
+    setMapLook(next)
+    AsyncStorage.setItem(MAP_LOOK_KEY, next).catch(() => {})
   }
 
   const doRefreshLocation = async () => {
@@ -630,6 +662,9 @@ export default function MapScreen({ navigation }) {
             zoomControlEnabled
             pitchEnabled
             rotateEnabled
+            showsBuildings
+            mapType={mapLook === 'real' ? (Platform.OS === 'ios' ? 'hybridFlyover' : 'hybrid') : 'standard'}
+            onMapReady={() => applyTilt(mapLookRef.current)}
           >
             {shownUsers.map((u) => (
               <UserPin
@@ -768,6 +803,13 @@ export default function MapScreen({ navigation }) {
           </MapCircleButton>
           <MapCircleButton onPress={() => setCountryOpen(true)} label="Choose a country">
             <Ionicons name={country ? 'globe' : 'globe-outline'} size={20} color={country ? colors.magenta : colors.text} />
+          </MapCircleButton>
+          <MapCircleButton onPress={cycleMapLook} label={`Map style: ${mapLook === '3d' ? '3D' : mapLook === 'real' ? 'Realistic' : 'Flat'}. Tap to change`}>
+            {mapLook === 'flat' ? (
+              <Text style={styles.lookText}>2D</Text>
+            ) : (
+              <Ionicons name={mapLook === 'real' ? 'earth' : 'cube-outline'} size={20} color={colors.magenta} />
+            )}
           </MapCircleButton>
           <Glass radius={22} style={styles.zoomGroup} shadow={false}>
             <Pressable onPress={() => zoom(0.5)} style={styles.zoomBtn} accessibilityRole="button" accessibilityLabel="Zoom in" hitSlop={4}>
@@ -933,6 +975,7 @@ const styles = StyleSheet.create({
   circleBtn: { width: 44, height: 44 },
   iconCenter: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   zoomGroup: { width: 44 },
+  lookText: { fontSize: 13, fontWeight: '800', color: colors.text, letterSpacing: 0.3 },
   zoomBtn: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   zoomDivider: { height: StyleSheet.hairlineWidth, marginHorizontal: 8, backgroundColor: colors.hairline },
 

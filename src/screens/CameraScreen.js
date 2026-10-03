@@ -1,3 +1,4 @@
+import { cityLabel, loadShowPhotoLocation } from '../lib/photoLocation'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   View, Text, Image, Pressable, ActivityIndicator, Alert, StyleSheet, useWindowDimensions, Animated,
@@ -16,7 +17,6 @@ import * as MediaLibrary from 'expo-media-library/legacy'
 import * as ImagePicker from 'expo-image-picker'
 import { captureRef } from 'react-native-view-shot'
 import { useIsFocused } from '@react-navigation/native'
-import Watermark from '../components/Watermark'
 import PeopleSheet from '../components/PeopleSheet'
 import CaptureCard, { CARD_W } from '../components/camera/CaptureCard'
 import Shutter from '../components/camera/Shutter'
@@ -224,6 +224,11 @@ export default function CameraScreen({ navigation, route }) {
   // Latest location/nearby results, read at post time so tags reflect who is here *now*.
   const coordsRef = useRef(null)
   const locationLabelRef = useRef(null)
+  // Settings > "Show location on my photos" (on by default).
+  const showPhotoLocationRef = useRef(true)
+  useEffect(() => {
+    loadShowPhotoLocation().then((v) => { showPhotoLocationRef.current = v }).catch(() => {})
+  }, [isFocused])
   const nearbyRef = useRef([])
   const queueRef = useRef([])
   const captureIdRef = useRef(0)
@@ -377,7 +382,8 @@ export default function CameraScreen({ navigation, route }) {
       Location.reverseGeocodeAsync({ latitude: c.lat, longitude: c.lng })
         .then(([place]) => {
           if (!place) return
-          locationLabelRef.current = [place.name, place.city ?? place.subregion, place.region].filter(Boolean).join(', ')
+          // City only (never the street), e.g. "Las Vegas, NV" - and only if the person allows it.
+          locationLabelRef.current = cityLabel(place)
         })
         .catch(() => {})
     } catch (e) {
@@ -433,6 +439,8 @@ export default function CameraScreen({ navigation, route }) {
   // With an AR filter (fx = { filter, facing }), the photo itself is run through Vision to find
   // heads, and the still filter art is drawn over them (top-center if nobody is found).
   const bakeWatermark = (uri, fx = null) => {
+    // No name bar on photos any more: only an AR filter needs baking into the image.
+    if (!fx || !fx.filter || fx.filter === 'none') return Promise.resolve(null)
     const run = async () => {
       if (!mounted.current) return null
       const view = cardSizeRef.current || cardSize
@@ -504,7 +512,7 @@ export default function CameraScreen({ navigation, route }) {
       height: size.height ?? null,
       lat: c?.lat ?? null,
       lng: c?.lng ?? null,
-      location_label: locationLabelRef.current,
+      location_label: showPhotoLocationRef.current ? locationLabelRef.current : null,
       tagged_ids: nearbyRef.current.map((u) => u.id),
     })
   }
@@ -1089,7 +1097,6 @@ export default function CameraScreen({ navigation, route }) {
               onReady={() => bakeWaiter.current?.(true)}
             />
           ) : null}
-          <Watermark username={me?.username} />
         </View>
       )}
       <View style={[StyleSheet.absoluteFill, styles.bakeCover]} pointerEvents="none" />

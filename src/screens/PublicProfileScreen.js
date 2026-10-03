@@ -46,7 +46,9 @@ export default function PublicProfileScreen({ route, navigation }) {
   const isGated = profile.visibility === 'private' || profile.visibility === 'ghost'
 
   return (
-    <View style={styles.screen}>
+    <View style={[styles.screen, styles.wideBackdrop]}>
+    {/* Wide screens (web/tablet): the profile sits in a centered phone-width column. */}
+    <View style={styles.column}>
       <Image source={{ uri: profile.avatar_url }} style={styles.photo} />
       <LinearGradient colors={['transparent', 'rgba(13,7,16,0.95)']} style={styles.overlay}>
         <Text style={onImageType.display}>{profile.username} {TIER_LABEL[profile.account_type]}</Text>
@@ -104,11 +106,14 @@ export default function PublicProfileScreen({ route, navigation }) {
         </View>
       )}
     </View>
+    </View>
   )
 }
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: 'transparent' },
+  wideBackdrop: { backgroundColor: '#07080f' },
+  column: { flex: 1, width: '100%', maxWidth: 520, alignSelf: 'center', overflow: 'hidden' },
   photo: { flex: 1, width: '100%', height: '100%', ...(Platform.OS === 'web' ? { resizeMode: 'cover' } : {}) },
   overlay: { position: 'absolute', left: 0, right: 0, bottom: 0, padding: 20, paddingBottom: 110 },
   bio: { ...type.caption, color: colors.onBrandMuted, marginTop: 6 },

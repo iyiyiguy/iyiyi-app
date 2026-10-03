@@ -1,9 +1,8 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import {
-  View, Text, Image, Pressable, StyleSheet, FlatList, ActivityIndicator, Platform, useWindowDimensions, Animated,
+  View, Text, Image, Pressable, StyleSheet, FlatList, ActivityIndicator, Platform, useWindowDimensions,
 } from 'react-native'
 import { LinearGradient } from 'expo-linear-gradient'
-import { Ionicons } from '@expo/vector-icons'
 import * as Location from 'expo-location'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { colors, font, radii } from '../theme'
@@ -11,9 +10,9 @@ import { supabase, API_URL } from '../lib/supabase'
 import ScopeChips from '../components/ScopeChips'
 import GlassPanel from '../components/GlassPanel'
 
-// Logged-out home: look around before signing up. Square panes of public profiles, distance
-// ranges across the top, tap a pane to open that profile, and a floating "Sign up" button in
-// the lower middle. Only public profiles are listed (database function guest_explore), and
+// Logged-out home (the Explore tab of the guest tab bar): look around before signing up.
+// Square panes of public profiles, distance ranges across the top, tap a pane to open that
+// profile. The floating "Sign up free" pill lives in GuestTabs (App.js) above the tab bar. Only public profiles are listed (database function guest_explore), and
 // guests see ranges of 1 mile and up; 150 ft is for members.
 const RANGES = [
   { key: 'mi1', label: '1 mi', m: 1609.34 },
@@ -32,7 +31,6 @@ export default function GuestExploreScreen({ navigation }) {
   const [coords, setCoords] = useState(null)
   const [people, setPeople] = useState(null)
   const [total, setTotal] = useState(null)
-  const pulse = useRef(new Animated.Value(0)).current
 
   const contentW = Math.min(width, MAX_W)
   const cols = contentW >= 900 ? 5 : contentW >= 640 ? 4 : 3
@@ -42,11 +40,7 @@ export default function GuestExploreScreen({ navigation }) {
 
   useEffect(() => {
     fetch(`${API_URL}/api/public/total-users`).then((r) => r.json()).then((d) => setTotal(d.total_users)).catch(() => {})
-    Animated.loop(Animated.sequence([
-      Animated.timing(pulse, { toValue: 1, duration: 1400, useNativeDriver: Platform.OS !== 'web' }),
-      Animated.timing(pulse, { toValue: 0, duration: 1400, useNativeDriver: Platform.OS !== 'web' }),
-    ])).start()
-  }, [pulse])
+  }, [])
 
   // Location is optional: with it, the nearby ranges work; without it, Worldwide.
   const askLocation = useCallback(async () => {
@@ -126,8 +120,6 @@ export default function GuestExploreScreen({ navigation }) {
     </Pressable>
   )
 
-  const scale = pulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.04] })
-
   return (
     <View style={styles.screen}>
       <LinearGradient colors={['#151133', '#0b0d1a', '#07080f']} style={StyleSheet.absoluteFill} />
@@ -154,24 +146,11 @@ export default function GuestExploreScreen({ navigation }) {
               </GlassPanel>
             )
           }
-          contentContainerStyle={{ paddingBottom: 140 }}
+          contentContainerStyle={{ paddingBottom: 96 }}
           showsVerticalScrollIndicator={false}
         />
       </View>
 
-      <Animated.View style={[styles.signupWrap, { bottom: insets.bottom + 28, transform: [{ scale }] }]} pointerEvents="box-none">
-        <Pressable
-          onPress={() => navigation.navigate('SignIn', { mode: 'signup' })}
-          accessibilityRole="button"
-          accessibilityLabel="Sign up"
-          style={({ pressed }) => [pressed && { opacity: 0.9 }]}
-        >
-          <LinearGradient colors={['#ff4fa3', '#8f5bff']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.signup}>
-            <Ionicons name="sparkles" size={16} color="#fff" />
-            <Text style={styles.signupText}>Sign up free</Text>
-          </LinearGradient>
-        </Pressable>
-      </Animated.View>
     </View>
   )
 }
@@ -195,10 +174,4 @@ const styles = StyleSheet.create({
   paneMeta: { color: 'rgba(255,255,255,0.7)', fontSize: 10, marginTop: 1 },
   emptyTitle: { color: colors.text, fontSize: 17, ...font.bold },
   emptySub: { color: colors.textMuted, fontSize: 14, marginTop: 6, textAlign: 'center' },
-  signupWrap: { position: 'absolute', left: 0, right: 0, alignItems: 'center' },
-  signup: {
-    flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 28, height: 54, borderRadius: radii.pill,
-    shadowColor: '#ff4fa3', shadowOpacity: 0.45, shadowRadius: 22, shadowOffset: { width: 0, height: 8 }, elevation: 10,
-  },
-  signupText: { color: '#fff', fontSize: 17, ...font.bold, letterSpacing: 0.2 },
 })

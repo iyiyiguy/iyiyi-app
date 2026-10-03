@@ -11,6 +11,7 @@ import TaggedInSheet from './TaggedInSheet'
 import Bounce from './Bounce'
 import { removeCameraTag } from '../lib/cameraApi'
 import { shareMedia } from '../lib/shareMedia'
+import { displayCity } from '../lib/photoLocation'
 import { useOpenProfile } from '../lib/profileNav'
 
 // Full-screen viewer for profile photos/videos with like, save, and comments.
@@ -217,7 +218,7 @@ export default function ContentViewer({ visible, items, startIndex = 0, onClose,
                 {current.owner_avatar_url ? <Image source={{ uri: current.owner_avatar_url }} style={styles.ownerAvatar} /> : null}
                 <View style={styles.ownerText}>
                   {current.owner_username ? <Text style={styles.ownerName} numberOfLines={1} ellipsizeMode="tail">{current.owner_username}</Text> : null}
-                  {current.location_label ? <Text style={styles.locationLabel} numberOfLines={1} ellipsizeMode="tail">📍 {current.location_label}</Text> : null}
+                  {displayCity(current.location_label) ? <Text style={styles.locationLabel} numberOfLines={1} ellipsizeMode="tail">📍 {displayCity(current.location_label)}</Text> : null}
                 </View>
               </Pressable>
             ) : null}

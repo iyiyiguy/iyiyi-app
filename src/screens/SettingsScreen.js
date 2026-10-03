@@ -1,3 +1,4 @@
+import { loadShowPhotoLocation, saveShowPhotoLocation } from '../lib/photoLocation'
 import { useEffect, useState } from 'react'
 import { loadFlipPref, saveFlipPref } from '../lib/flipToCamera'
 import { loadTrimHandsFreePref, saveTrimHandsFreePref } from '../lib/handsFreePref'
@@ -27,6 +28,8 @@ export default function SettingsScreen({ navigation }) {
   const [statsPublic, setStatsPublic] = useState(false)
   const [notifyNearby, setNotifyNearby] = useState(false)
   const [allowTagging, setAllowTagging] = useState(true)
+  const [showPhotoLocation, setShowPhotoLocation] = useState(true)
+  useEffect(() => { loadShowPhotoLocation().then(setShowPhotoLocation).catch(() => {}) }, [])
   const [flipCamera, setFlipCamera] = useState(true)
   const [trimHandsFree, setTrimHandsFree] = useState(true)
   const [privateViewing, setPrivateViewing] = useState(false)
@@ -147,6 +150,12 @@ export default function SettingsScreen({ navigation }) {
             description="Allow camera posts from people within 150ft to tag you automatically. You can still hide any tag."
             value={allowTagging}
             onChange={(v) => { setAllowTagging(v); save({ allow_tagging: v }, () => setAllowTagging(!v)) }}
+          />
+          <SwitchRow
+            label="Show location on my photos"
+            description="Adds your city (never your street) under photos you post from the iYiYi camera."
+            value={showPhotoLocation}
+            onChange={(v) => { setShowPhotoLocation(v); saveShowPhotoLocation(v) }}
           />
           <LaserTaggableSetting SwitchRow={SwitchRow} />
           <SwitchRow

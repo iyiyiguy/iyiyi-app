@@ -27,6 +27,17 @@ export const SFX = {
   defused: require('../../assets/sounds/defused.wav'),
   explosion: require('../../assets/sounds/explosion.wav'),
   tap: require('../../assets/sounds/tap.wav'),
+  // What's The Word (scripts/gen_word_sounds.py)
+  wordKey: require('../../assets/sounds/word_key.wav'),
+  wordFlip: require('../../assets/sounds/word_flip.wav'),
+  wordCorrect: require('../../assets/sounds/word_correct.wav'),
+  wordWrong: require('../../assets/sounds/word_wrong.wav'),
+  wordFail: require('../../assets/sounds/word_fail.wav'),
+  wordTick: require('../../assets/sounds/word_tick.wav'),
+  wordGo: require('../../assets/sounds/word_go.wav'),
+  wordCount: require('../../assets/sounds/word_count.wav'),
+  wordWin: require('../../assets/sounds/word_win.wav'),
+  wordCombo: require('../../assets/sounds/word_combo.wav'),
 }
 
 // Weapon id → effect (kept here too so this module has no dependency on guns.js).
@@ -35,7 +46,7 @@ const WEAPON_SOUND = {
   assault: 'ar', marksman: 'dmr', minigun: 'minigun', railgun: 'railgun',
 }
 // Rapid-fire effects get more voices.
-const POOL_SIZE = { smg: 5, minigun: 6, ar: 4, rifle: 4, railgun: 3, tap: 3, hit: 3 }
+const POOL_SIZE = { smg: 5, minigun: 6, ar: 4, rifle: 4, railgun: 3, tap: 3, hit: 3, wordKey: 4, wordFlip: 5 }
 
 const pools = {} // name -> { players: AudioPlayer[], next: number }
 

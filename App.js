@@ -3,7 +3,7 @@ import { DarkTheme, DefaultTheme, NavigationContainer, useNavigationContainerRef
 import { createNativeStackNavigator } from '@react-navigation/native-stack'
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs'
 import { StatusBar, useColorScheme } from 'react-native'
-import { SafeAreaProvider, initialWindowMetrics } from 'react-native-safe-area-context'
+import { SafeAreaProvider, initialWindowMetrics, useSafeAreaInsets } from 'react-native-safe-area-context'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 
 import { colors } from './src/theme'
@@ -15,6 +15,7 @@ import { loadThemePref } from './src/lib/themePref'
 import { ensureProfile, linkProviderToProfile } from './src/lib/oauth'
 import { initCrashLogger, setupGlobalErrorHandler } from './src/lib/crashLogger'
 import TabBar from './src/components/TabBar'
+import GuestTabBar, { GuestSignupPill, guestTabBarHeight } from './src/components/GuestTabBar'
 import InviteListener from './src/components/InviteListener'
 import AuraBackground, { withAura } from './src/components/AuraBackground'
 import { View } from 'react-native'
@@ -25,6 +26,9 @@ setupGlobalErrorHandler()
 
 import AuthScreen from './src/screens/AuthScreen'
 import GuestExploreScreen from './src/screens/GuestExploreScreen'
+import GuestRecommendedScreen from './src/screens/GuestRecommendedScreen'
+import GuestFeedScreen from './src/screens/GuestFeedScreen'
+import GuestLockedScreen from './src/screens/GuestLockedScreen'
 import NearbyScreen from './src/screens/NearbyScreen'
 import MyProfileScreen from './src/screens/MyProfileScreen'
 import MapScreen from './src/screens/MapScreen'
@@ -158,6 +162,42 @@ function Tabs() {
   )
 }
 
+// Logged-out visitors (app and app.iyiyi.xyz) get a tab bar that looks like the real one:
+// Explore, Discover (Recommended), Feed with public content, plus Camera and Arcade, which are
+// visible but only show a "Sign up to ..." screen. A floating "Sign up free" pill sits just
+// above the bar on the browsing tabs. Named "Tabs" (like the member navigator) so deep links,
+// whose initial route is Tabs, also work logged out.
+const Guest = {
+  RecommendedScreen: withAura(GuestRecommendedScreen),
+  FeedScreen: withAura(GuestFeedScreen),
+  LockedScreen: withAura(GuestLockedScreen),
+}
+const GUEST_LOCKED_TABS = new Set(['Camera', 'Arcade'])
+
+function GuestTabs({ navigation }) {
+  const insets = useSafeAreaInsets()
+  const [current, setCurrent] = useState('Explore')
+  return (
+    <View style={{ flex: 1 }}>
+      <AuraBackground />
+      <Tab.Navigator
+        screenOptions={tabScreenOptions}
+        tabBar={(props) => <GuestTabBar {...props} />}
+        screenListeners={({ route }) => ({ focus: () => setCurrent(route.name) })}
+      >
+        <Tab.Screen name="Explore" component={GuestExploreScreen} />
+        <Tab.Screen name="Recommended" component={Guest.RecommendedScreen} />
+        <Tab.Screen name="Feed" component={Guest.FeedScreen} />
+        <Tab.Screen name="Arcade" component={Guest.LockedScreen} initialParams={{ kind: 'arcade' }} />
+        <Tab.Screen name="Camera" component={Guest.LockedScreen} initialParams={{ kind: 'camera' }} />
+      </Tab.Navigator>
+      {GUEST_LOCKED_TABS.has(current) ? null : (
+        <GuestSignupPill bottom={guestTabBarHeight(insets) + 12} onPress={() => navigation.navigate('SignIn', { mode: 'signup' })} />
+      )}
+    </View>
+  )
+}
+
 export default function App() {
   const [session, setSession] = useState(undefined)
   const [locationConsent, setLocationConsent] = useState(undefined)
@@ -226,8 +266,9 @@ export default function App() {
       <StatusBar barStyle={scheme === 'light' ? 'dark-content' : 'light-content'} />
       <NavigationContainer ref={navRef} linking={LINKING} theme={scheme === 'light' ? lightNavTheme : darkNavTheme}>
         {!session ? (
-          <Stack.Navigator screenOptions={screenOptions}>
-            <Stack.Screen name="Explore" component={GuestExploreScreen} />
+          // Keyed so signing in/out mounts a fresh navigator (both have a "Tabs" route).
+          <Stack.Navigator key="guest" screenOptions={screenOptions}>
+            <Stack.Screen name="Tabs" component={GuestTabs} />
             <Stack.Screen name="SignIn" component={Aura.AuthScreen} />
             <Stack.Screen name="PublicProfile" component={Aura.PublicProfileScreen} />
           </Stack.Navigator>
@@ -236,7 +277,7 @@ export default function App() {
         ) : showImport ? (
           <Aura.ImportLinksScreen onDone={finishImport} />
         ) : (
-          <Stack.Navigator screenOptions={screenOptions}>
+          <Stack.Navigator key="member" screenOptions={screenOptions}>
             <Stack.Screen name="Tabs" component={Tabs} />
             <Stack.Screen name="UserProfile" component={Aura.UserProfileScreen} />
             <Stack.Screen name="PublicProfile" component={Aura.PublicProfileScreen} />
