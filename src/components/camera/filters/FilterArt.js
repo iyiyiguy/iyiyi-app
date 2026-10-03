@@ -156,7 +156,12 @@ export function NameTag({ name, live = true, onReady }) {
       <View style={styles.tagWrap}>
         <Image source={ART.nametag} style={styles.tagImg} resizeMode="stretch" fadeDuration={0} onLoad={fire} onError={fire} />
         <View style={styles.tagTextWrap}>
-          <Text style={styles.tagName} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.5}>{label}</Text>
+          {/* Name on its own dark glass strip so it reads on any background (the pill art is
+              see-through). Size from the length instead of adjustsFontSizeToFit, which could
+              render nothing inside this absolutely positioned box. */}
+          <View style={styles.tagNameStrip}>
+            <Text style={[styles.tagName, { fontSize: label.length > 16 ? 12 : label.length > 11 ? 14 : 17 }]} numberOfLines={1}>{label}</Text>
+          </View>
         </View>
       </View>
     </Animated.View>
@@ -218,12 +223,13 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center',
     paddingHorizontal: NAMETAG_H * 0.45,
   },
-  // The glass render is a light, frosted pill, so the name is dark ink with a soft white
-  // glow (white text disappeared into it).
+  tagNameStrip: {
+    maxWidth: '100%', paddingHorizontal: 10, paddingVertical: 3, borderRadius: 999,
+    backgroundColor: 'rgba(16,12,36,0.62)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.55)',
+  },
   tagName: {
-    color: '#14102a', fontSize: 20, fontWeight: '900', textAlign: 'center', alignSelf: 'stretch',
-    letterSpacing: 0.2,
-    textShadowColor: 'rgba(255,255,255,0.9)', textShadowRadius: 4, textShadowOffset: { width: 0, height: 0 },
+    color: '#ffffff', fontWeight: '900', textAlign: 'center', letterSpacing: 0.2,
+    textShadowColor: 'rgba(0,0,0,0.6)', textShadowRadius: 3, textShadowOffset: { width: 0, height: 1 },
   },
 
   bubbleImg: { width: BUBBLE_W, height: BUBBLE_H, marginBottom: 2 },

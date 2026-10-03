@@ -1,3 +1,4 @@
+import Watermark from '../components/Watermark'
 import { cityLabel, loadShowPhotoLocation } from '../lib/photoLocation'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
@@ -439,8 +440,6 @@ export default function CameraScreen({ navigation, route }) {
   // With an AR filter (fx = { filter, facing }), the photo itself is run through Vision to find
   // heads, and the still filter art is drawn over them (top-center if nobody is found).
   const bakeWatermark = (uri, fx = null) => {
-    // No name bar on photos any more: only an AR filter needs baking into the image.
-    if (!fx || !fx.filter || fx.filter === 'none') return Promise.resolve(null)
     const run = async () => {
       if (!mounted.current) return null
       const view = cardSizeRef.current || cardSize
@@ -499,6 +498,18 @@ export default function CameraScreen({ navigation, route }) {
     return p
   }
 
+  // Each photo is branded (iY logo + any AR filter) once; the same file goes to the camera
+  // roll and to the post.
+  const brandCache = useRef(new Map())
+  const brandOnce = (uri, fx) => {
+    const hit = brandCache.current.get(uri)
+    if (hit) return hit
+    const p = bakeWatermark(uri, fx).catch(() => null)
+    brandCache.current.set(uri, p)
+    if (brandCache.current.size > 60) brandCache.current.delete(brandCache.current.keys().next().value)
+    return p
+  }
+
   // --- posting -----------------------------------------------------------------------------
   const postOne = async (userId, uri, isPhoto, size) => {
     const mediaUrl = await uploadFile(uri, isPhoto, userId)
@@ -528,8 +539,7 @@ export default function CameraScreen({ navigation, route }) {
       if (item.type === 'video') {
         await postOne(userId, item.postUri || item.uri, false, item)
       } else if (item.type === 'photo') {
-        const wm = await bakeWatermark(item.uri, item.fx)
-        if (wm) saveToAlbum(wm) // keep the watermarked copy too (the original was saved at capture)
+        const wm = await brandOnce(item.uri, item.fx)
         await postOne(userId, wm || item.uri, true, { ...item, watermarked: !!wm })
       } else if (item.type === 'burst') {
         let failed = 0
@@ -537,7 +547,7 @@ export default function CameraScreen({ navigation, route }) {
         for (const shot of item.shots || []) {
           try {
             // eslint-disable-next-line no-await-in-loop
-            const wm = await bakeWatermark(shot.uri, item.fx)
+            const wm = await brandOnce(shot.uri, item.fx)
             // eslint-disable-next-line no-await-in-loop
             await postOne(userId, wm || shot.uri, true, { ...shot, watermarked: !!wm })
           } catch (e) {
@@ -588,7 +598,10 @@ export default function CameraScreen({ navigation, route }) {
     refreshNearby() // freshen tags; publish reads the latest result when it goes out
     lastCaptureAt.current = Date.now()
     if (!item.fromLibrary) {
-      if (item.type === 'burst') item.shots.forEach((s) => saveToAlbum(s.uri))
+      // Photos are saved with the iY logo (and the AR filter) baked in; videos as recorded.
+      const keep = (uri) => brandOnce(uri, item.fx).then((wm) => saveToAlbum(wm || uri))
+      if (item.type === 'burst') item.shots.forEach((s) => { keep(s.uri) })
+      else if (item.type === 'photo') keep(item.uri)
       else saveToAlbum(item.uri)
     }
     if (!mounted.current) {
@@ -1097,6 +1110,7 @@ export default function CameraScreen({ navigation, route }) {
               onReady={() => bakeWaiter.current?.(true)}
             />
           ) : null}
+          <Watermark />
         </View>
       )}
       <View style={[StyleSheet.absoluteFill, styles.bakeCover]} pointerEvents="none" />
