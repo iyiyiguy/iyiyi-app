@@ -1,5 +1,6 @@
 import AVFoundation
 import CoreGraphics
+import CoreImage
 import ExpoCamera
 import ExpoModulesCore
 import Foundation
@@ -45,6 +46,19 @@ public class BodyHitModule: Module {
       DispatchQueue.main.async {
         self.liveFaces.stop()
         promise.resolve(nil)
+      }
+    }
+
+    // Burns the iY corner logo and the AR filter (following the recorded head track) into a
+    // recorded video, so the camera roll copy and the post match what was on screen.
+    // JS: brandVideo(uri, opts) -> Promise<string | null>  (file uri of a new .mov, or null)
+    // opts: viewW, viewH (preview size, points), mirror (front camera), box (overlay box, points),
+    //   logoUri + logoRect [x, y, w, h] (view points), artUri (transparent PNG of the filter art),
+    //   track [[t, x, y, scale, roll, opacity]] (t seconds from start; x/y = box top-left, view
+    //   points), stopT (seconds from start when stop was pressed, aligns the track to the file).
+    AsyncFunction("brandVideo") { (uri: String, opts: [String: Any], promise: Promise) in
+      DispatchQueue.global(qos: .userInitiated).async {
+        VideoBrander.run(uri: uri, opts: opts) { out in promise.resolve(out) }
       }
     }
 
@@ -531,5 +545,139 @@ final class LiveFaceTracker: NSObject, AVCaptureMetadataOutputObjectsDelegate {
     }
     for w in windows where !w.isHidden { walk(w.layer) }
     return best
+  }
+}
+
+
+enum VideoBrander {
+  struct Key {
+    let t: Double, x: Double, y: Double, s: Double, r: Double, o: Double
+  }
+
+  static func num(_ v: Any?) -> Double? {
+    if let d = v as? Double { return d }
+    if let n = v as? NSNumber { return n.doubleValue }
+    if let i = v as? Int { return Double(i) }
+    return nil
+  }
+
+  static func image(_ path: Any?) -> CIImage? {
+    guard let p = path as? String, !p.isEmpty, let url = BodyDetector.fileURL(from: p) else { return nil }
+    return CIImage(contentsOf: url)
+  }
+
+  // Linear interpolation between the recorded samples (held before the first / after the last).
+  static func sample(_ keys: [Key], _ t: Double) -> Key? {
+    guard let first = keys.first, let last = keys.last else { return nil }
+    if t <= first.t { return first }
+    if t >= last.t { return last }
+    var lo = 0
+    var hi = keys.count - 1
+    while hi - lo > 1 {
+      let mid = (lo + hi) / 2
+      if keys[mid].t <= t { lo = mid } else { hi = mid }
+    }
+    let a = keys[lo], b = keys[hi]
+    let span = b.t - a.t
+    let f = span > 0 ? (t - a.t) / span : 0
+    func mix(_ u: Double, _ v: Double) -> Double { u + (v - u) * f }
+    // A jump in visibility (face found / lost) is not blended.
+    return Key(t: t, x: mix(a.x, b.x), y: mix(a.y, b.y), s: mix(a.s, b.s), r: mix(a.r, b.r), o: f < 0.5 ? a.o : b.o)
+  }
+
+  static func run(uri: String, opts: [String: Any], done: @escaping (String?) -> Void) {
+    guard let inURL = BodyDetector.fileURL(from: uri) else { return done(nil) }
+    let asset = AVURLAsset(url: inURL)
+    guard !asset.tracks(withMediaType: .video).isEmpty else { return done(nil) }
+    let viewW = num(opts["viewW"]) ?? 0
+    let viewH = num(opts["viewH"]) ?? 0
+    guard viewW > 1, viewH > 1 else { return done(nil) }
+    let mirror = (opts["mirror"] as? Bool) ?? false
+    let box = num(opts["box"]) ?? 160
+    let logo = image(opts["logoUri"])
+    let logoRect = ((opts["logoRect"] as? [Any]) ?? []).compactMap { num($0) }
+    let art = image(opts["artUri"])
+    let rawKeys: [Key] = ((opts["track"] as? [Any]) ?? []).compactMap { row in
+      guard let a = row as? [Any] else { return nil }
+      let v = a.compactMap { num($0) }
+      guard v.count >= 6, v.allSatisfy({ $0.isFinite }) else { return nil }
+      return Key(t: v[0], x: v[1], y: v[2], s: v[3], r: v[4], o: v[5])
+    }
+    let keys = rawKeys.sorted { $0.t < $1.t }
+    let drawLogo = logo != nil && logoRect.count == 4
+    let drawArt = art != nil && !keys.isEmpty
+    if !drawLogo && !drawArt { return done(nil) }
+
+    // The file usually starts a moment after the track did: line the two up at the end.
+    let duration = CMTimeGetSeconds(asset.duration)
+    let shift: Double = {
+      if let stopT = num(opts["stopT"]), stopT > 0, duration.isFinite, duration > 0 {
+        return max(-0.5, min(2.0, stopT - duration)) // track time = file time + start lag
+      }
+      return 0
+    }()
+
+    let composition = AVMutableVideoComposition(asset: asset) { request in
+      let src = request.sourceImage
+      let ext = src.extent
+      let W = Double(ext.width), H = Double(ext.height)
+      // The preview showed the video aspect-filled into viewW x viewH.
+      let k = max(W / viewW, H / viewH)
+      let offX = (W - viewW * k) / 2
+      let offY = (H - viewH * k) / 2
+      var out = src
+      if drawArt, let art = art, let key = sample(keys, request.compositionTime.seconds + shift), key.o > 0.02 {
+        let ax = key.x + box / 2 // bottom-center of the overlay box = the point above the head
+        let ay = key.y + box
+        let vx = mirror ? viewW - ax : ax
+        let px = Double(ext.minX) + offX + vx * k
+        let py = Double(ext.minY) + H - (offY + ay * k)
+        let aw = Double(art.extent.width)
+        if aw > 0 {
+          let scale = box * key.s * k / aw
+          let roll = mirror ? -key.r : key.r
+          var tr = CGAffineTransform(translationX: -art.extent.midX, y: -art.extent.minY)
+          tr = tr.concatenating(CGAffineTransform(scaleX: CGFloat(scale), y: CGFloat(scale)))
+          tr = tr.concatenating(CGAffineTransform(rotationAngle: CGFloat(roll)))
+          tr = tr.concatenating(CGAffineTransform(translationX: CGFloat(px), y: CGFloat(py)))
+          var a = art.transformed(by: tr)
+          if key.o < 0.98 {
+            a = a.applyingFilter("CIColorMatrix", parameters: ["inputAVector": CIVector(x: 0, y: 0, z: 0, w: CGFloat(key.o))])
+          }
+          out = a.composited(over: out)
+        }
+      }
+      if drawLogo, let logo = logo {
+        let lw = Double(logo.extent.width)
+        if lw > 0 {
+          let scale = logoRect[2] * k / lw
+          let minX = Double(ext.minX) + offX + logoRect[0] * k
+          let minY = Double(ext.minY) + H - (offY + (logoRect[1] + logoRect[3]) * k)
+          var tr = CGAffineTransform(translationX: -logo.extent.minX, y: -logo.extent.minY)
+          tr = tr.concatenating(CGAffineTransform(scaleX: CGFloat(scale), y: CGFloat(scale)))
+          tr = tr.concatenating(CGAffineTransform(translationX: CGFloat(minX), y: CGFloat(minY)))
+          out = logo.transformed(by: tr).composited(over: out)
+        }
+      }
+      request.finish(with: out.cropped(to: ext), context: nil)
+    }
+
+    guard let export = AVAssetExportSession(asset: asset, presetName: AVAssetExportPresetHighestQuality) else {
+      return done(nil)
+    }
+    let outURL = FileManager.default.temporaryDirectory.appendingPathComponent("iyiyi-\(UUID().uuidString).mov")
+    export.outputURL = outURL
+    export.outputFileType = .mov
+    export.videoComposition = composition
+    export.shouldOptimizeForNetworkUse = true
+    export.exportAsynchronously {
+      if export.status == .completed {
+        done(outURL.absoluteString)
+      } else {
+        NSLog("[BodyHit] brandVideo failed: \(String(describing: export.error))")
+        try? FileManager.default.removeItem(at: outURL)
+        done(nil)
+      }
+    }
   }
 }

@@ -306,13 +306,54 @@ export default function LiveFilterLayer({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [nearby, me])
 
+  // Video branding: while recording, the primary overlay's spot is sampled ~30 times a second
+  // so the same filter can be burned into the saved video along the same path.
+  const namesRef = useRef(names)
+  namesRef.current = names
+  const track = useRef(null)
+  const stopTrack = () => {
+    const tr = track.current
+    track.current = null
+    if (!tr) return null
+    clearInterval(tr.timer)
+    return {
+      keys: tr.keys,
+      stopT: (Date.now() - tr.start) / 1000,
+      filter: latest.current.filter,
+      facing: tr.facing,
+      name: namesRef.current?.[0] || '@iyiyi',
+      view: tr.view,
+    }
+  }
+  const startTrack = () => {
+    stopTrack()
+    const start = Date.now()
+    const keys = []
+    const sampleNow = () => {
+      try {
+        const sl = slots.current[0]
+        const t = (Date.now() - start) / 1000
+        const ok = sl.shown && Number.isFinite(sl.ax) && Number.isFinite(sl.ay) && Number.isFinite(sl.as)
+        const o = ok ? (Number.isFinite(sl.targetO) ? sl.targetO : 1) : 0
+        keys.push([t, ok ? sl.ax : 0, ok ? sl.ay : 0, ok ? sl.as : 1, Number.isFinite(sl.lastRoll) ? sl.lastRoll : 0, o])
+        if (keys.length > 30 * 60 * 3) stopTrack() // 3 minutes is plenty
+      } catch {}
+    }
+    sampleNow()
+    track.current = { start, keys, facing: latest.current.facing, view: latest.current.view, timer: setInterval(sampleNow, 33) }
+  }
+  useEffect(() => () => { if (track.current) clearInterval(track.current.timer) }, [])
+
   useEffect(() => {
     if (!controlRef) return undefined
     controlRef.current = {
       waitIdle: () => inflight.current || Promise.resolve(),
       getHeading: () => heading.current,
+      startTrack,
+      stopTrack,
     }
     return () => { controlRef.current = null }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [controlRef, heading])
 
   // Live (per-frame) tracking.

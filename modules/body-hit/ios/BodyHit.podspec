@@ -13,7 +13,7 @@ Pod::Spec.new do |s|
 
   s.dependency 'ExpoModulesCore'
   s.dependency 'ExpoCamera'
-  s.frameworks = 'Vision', 'ImageIO', 'CoreGraphics', 'AVFoundation', 'QuartzCore', 'UIKit'
+  s.frameworks = 'Vision', 'ImageIO', 'CoreGraphics', 'CoreImage', 'AVFoundation', 'QuartzCore', 'UIKit'
 
   s.pod_target_xcconfig = {
     'DEFINES_MODULE' => 'YES',

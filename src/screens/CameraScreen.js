@@ -1,4 +1,5 @@
-import Watermark from '../components/Watermark'
+import Watermark, { WATERMARK_LOGO, WATERMARK_RECT } from '../components/Watermark'
+import { Asset } from 'expo-asset'
 import { cityLabel, loadShowPhotoLocation } from '../lib/photoLocation'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
@@ -28,9 +29,10 @@ import CameraHelpSheet, { HelpButton } from '../components/camera/CameraHelpShee
 import FilterPicker from '../components/camera/filters/FilterPicker'
 import LiveFilterLayer, { visionAvailable } from '../components/camera/filters/LiveFilterLayer'
 import BakeFilterLayer from '../components/camera/filters/BakeFilterLayer'
-import { detectBodies, detectFaces, isFaceDetectAvailable } from '../../modules/body-hit'
+import { brandVideo, detectBodies, detectFaces, isBrandVideoAvailable, isFaceDetectAvailable } from '../../modules/body-hit'
+import { FilterArt } from '../components/camera/filters/FilterArt'
 import {
-  fallbackHead, headsFromBodies, headsFromFaces, nameTagText, normalizeFilter, selectTargets,
+  OVERLAY_BOX, fallbackHead, headsFromBodies, headsFromFaces, nameTagText, normalizeFilter, selectTargets,
 } from '../lib/cameraFilters'
 import { openProfile } from '../lib/profileNav'
 import { colors, radii, type } from '../theme'
@@ -272,6 +274,10 @@ export default function CameraScreen({ navigation, route }) {
   const [posting, setPosting] = useState(0)
   const [peopleOpen, setPeopleOpen] = useState(false)
   const [bakeJob, setBakeJob] = useState(null)
+  const [artJob, setArtJob] = useState(null) // filter art rendered alone (transparent PNG) for videos
+  const artViewRef = useRef(null)
+  const artWaiter = useRef(null)
+  const recordTrackRef = useRef(null)
   const [tip, setTip] = useState(null)
   const [helpOpen, setHelpOpen] = useState(false)
   const [barOpen, setBarOpen] = useState(false) // an option's choices are showing in the bar
@@ -510,6 +516,77 @@ export default function CameraScreen({ navigation, route }) {
     return p
   }
 
+  // Videos: the iY logo and the AR filter (along the head path recorded while filming) are
+  // burned in natively; the branded copy goes to the camera roll and to the post.
+  const logoFile = useRef(null)
+  const logoFileUri = async () => {
+    if (logoFile.current) return logoFile.current
+    try {
+      const a = Asset.fromModule(WATERMARK_LOGO)
+      await a.downloadAsync()
+      logoFile.current = a.localUri || null
+    } catch {
+      logoFile.current = null
+    }
+    return logoFile.current
+  }
+  const renderArtPng = (filter, name) => {
+    const run = async () => {
+      if (!mounted.current) return null
+      const ready = new Promise((resolve) => { artWaiter.current = resolve })
+      setArtJob({ filter, name, key: `${Date.now()}-${Math.random()}` })
+      await Promise.race([ready, wait(2500)])
+      artWaiter.current = null
+      await wait(120)
+      let out = null
+      try {
+        if (mounted.current && artViewRef.current) out = await captureRef(artViewRef.current, { format: 'png', result: 'tmpfile' })
+      } catch (e) {
+        console.warn('Filter art capture failed', e)
+      }
+      if (mounted.current) setArtJob(null)
+      return out
+    }
+    const p = bakeChain.current.then(run, run)
+    bakeChain.current = p.catch(() => null)
+    return p
+  }
+  const videoBrandCache = useRef(new Map())
+  const brandVideoOnce = (item) => {
+    if (!isBrandVideoAvailable || !item?.uri) return Promise.resolve(null)
+    const hit = videoBrandCache.current.get(item.uri)
+    if (hit) return hit
+    const p = (async () => {
+      const tr = item.track
+      const view = tr?.view || cardSizeRef.current || cardSize
+      if (!view?.width || !view?.height) return null
+      const logoUri = await logoFileUri()
+      const hasArt = tr && tr.keys?.length && tr.filter && tr.filter !== 'none'
+      const artUri = hasArt ? await renderArtPng(tr.filter, tr.name) : null
+      if (!logoUri && !artUri) return null
+      const [lx, ly, lw, lh] = WATERMARK_RECT
+      return brandVideo(item.uri, {
+        viewW: view.width,
+        viewH: view.height,
+        mirror: tr?.facing === 'front',
+        box: OVERLAY_BOX,
+        logoUri,
+        logoRect: [view.width - lx - lw, view.height - ly - lh, lw, lh],
+        artUri,
+        track: artUri ? tr.keys : [],
+        stopT: tr?.stopT || 0,
+      })
+    })().catch(() => null)
+    videoBrandCache.current.set(item.uri, p)
+    if (videoBrandCache.current.size > 20) videoBrandCache.current.delete(videoBrandCache.current.keys().next().value)
+    return p
+  }
+  // The hover card shows the branded version once it's ready.
+  const showBranded = (uri, branded) => {
+    if (!branded || !mounted.current) return
+    updateQueue((q) => q.map((x) => (x.uri === uri ? { ...x, previewUri: branded } : x)))
+  }
+
   // --- posting -----------------------------------------------------------------------------
   const postOne = async (userId, uri, isPhoto, size) => {
     const mediaUrl = await uploadFile(uri, isPhoto, userId)
@@ -537,7 +614,8 @@ export default function CameraScreen({ navigation, route }) {
     try {
       const userId = await getUserId()
       if (item.type === 'video') {
-        await postOne(userId, item.postUri || item.uri, false, item)
+        const branded = await brandVideoOnce(item)
+        await postOne(userId, branded || item.postUri || item.uri, false, item)
       } else if (item.type === 'photo') {
         const wm = await brandOnce(item.uri, item.fx)
         await postOne(userId, wm || item.uri, true, { ...item, watermarked: !!wm })
@@ -599,10 +677,10 @@ export default function CameraScreen({ navigation, route }) {
     lastCaptureAt.current = Date.now()
     if (!item.fromLibrary) {
       // Photos are saved with the iY logo (and the AR filter) baked in; videos as recorded.
-      const keep = (uri) => brandOnce(uri, item.fx).then((wm) => saveToAlbum(wm || uri))
+      const keep = (uri) => brandOnce(uri, item.fx).then((wm) => { showBranded(uri, wm); return saveToAlbum(wm || uri) })
       if (item.type === 'burst') item.shots.forEach((s) => { keep(s.uri) })
       else if (item.type === 'photo') keep(item.uri)
-      else saveToAlbum(item.uri)
+      else brandVideoOnce(item).then((b) => { showBranded(item.uri, b); return saveToAlbum(b || item.uri) })
     }
     if (!mounted.current) {
       publish(item) // screen closed mid-capture: still post it
@@ -823,6 +901,8 @@ export default function CameraScreen({ navigation, route }) {
     }
     let video = null
     let error = null
+    recordTrackRef.current = null
+    try { filterCtlRef.current?.startTrack?.() } catch {}
     try {
       video = await record()
     } catch (e) {
@@ -869,13 +949,17 @@ export default function CameraScreen({ navigation, route }) {
         console.warn('Trim failed, posting the full clip instead', e)
       }
     }
-    afterCapture({ type: 'video', uri: video.uri, postUri })
+    let track = recordTrackRef.current
+    recordTrackRef.current = null
+    if (!track) { try { track = filterCtlRef.current?.stopTrack?.() || null } catch { track = null } }
+    afterCapture({ type: 'video', uri: video.uri, postUri, track })
   }
 
   const stopVideo = () => {
     if (!recording.current || stopRequested.current) return
     stopRequested.current = true
     const doStop = () => {
+      try { recordTrackRef.current = filterCtlRef.current?.stopTrack?.() || null } catch {}
       holdFilter.current = true // released by resetRecordingState once the file is delivered
       try { cameraRef.current?.stopRecording() } catch (e) { console.warn('stopRecording failed', e) }
       haptic(Haptics.ImpactFeedbackStyle.Medium)
@@ -1111,6 +1195,17 @@ export default function CameraScreen({ navigation, route }) {
             />
           ) : null}
           <Watermark />
+        </View>
+      )}
+      {artJob && (
+        <View
+          key={artJob.key}
+          ref={artViewRef}
+          collapsable={false}
+          style={[styles.hiddenBake, { width: OVERLAY_BOX, height: OVERLAY_BOX }]}
+          pointerEvents="none"
+        >
+          <FilterArt filter={artJob.filter} name={artJob.name || '@iyiyi'} live={false} onReady={() => artWaiter.current?.()} />
         </View>
       )}
       <View style={[StyleSheet.absoluteFill, styles.bakeCover]} pointerEvents="none" />

@@ -105,8 +105,8 @@ export default function CaptureCard({ item, durationMs = 5000, onExpire, onCance
       )}
       <View style={styles.card}>
         {item.type === 'video'
-          ? <VideoThumb uri={item.uri} />
-          : <Image source={{ uri: item.uri }} style={StyleSheet.absoluteFill} resizeMode="cover" />}
+          ? <VideoThumb key={item.previewUri || item.uri} uri={item.previewUri || item.uri} />
+          : <Image source={{ uri: item.previewUri || item.uri }} style={StyleSheet.absoluteFill} resizeMode="cover" />}
         <View style={styles.shade} pointerEvents="none" />
 
         {item.type === 'video' && (

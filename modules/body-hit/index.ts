@@ -37,6 +37,20 @@ type NativeBodyHit = {
   startLiveFaces?: () => Promise<boolean>
   stopLiveFaces?: () => Promise<void>
   addListener?: (event: string, fn: (e: any) => void) => { remove: () => void }
+  // Missing in binaries built before video branding was added (and on Android).
+  brandVideo?: (uri: string, opts: BrandVideoOptions) => Promise<string | null>
+}
+
+export type BrandVideoOptions = {
+  viewW: number
+  viewH: number
+  mirror: boolean
+  box: number
+  logoUri?: string | null
+  logoRect?: [number, number, number, number]
+  artUri?: string | null
+  track?: number[][] // [t, x, y, scale, roll, opacity]
+  stopT?: number
 }
 
 const Native = requireOptionalNativeModule<NativeBodyHit>('BodyHit')
@@ -105,5 +119,20 @@ export function addLiveFacesListener(fn: (e: LiveFacesEvent) => void): { remove:
     return Native!.addListener!('onLiveFaces', fn)
   } catch {
     return { remove: () => {} }
+  }
+}
+
+
+// Burns the iY logo (and the AR filter, following the recorded head track) into a recorded
+// video. Resolves to a new file uri, or null when unavailable / it failed (use the original).
+export const isBrandVideoAvailable = !!(Native && typeof (Native as any).brandVideo === 'function')
+
+export async function brandVideo(uri: string, opts: BrandVideoOptions): Promise<string | null> {
+  if (!isBrandVideoAvailable) return null
+  try {
+    const out = await Native!.brandVideo!(uri, opts)
+    return typeof out === 'string' && out ? out : null
+  } catch {
+    return null
   }
 }
