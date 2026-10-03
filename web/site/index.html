@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <title>iYiYi: Grow your socials with the people around you</title>
-  <meta name="description" content="iYiYi shows who's within 150 feet: their profile and every social link in one tap. Meet people, grow your followers, find local businesses, and play together." />
+  <title>iYiYi: Get discovered by the people around you</title>
+  <meta name="description" content="iYiYi helps local businesses and content creators get discovered and followed by everyone within 150 feet, plus an arcade of real-world games." />
   <meta property="og:title" content="iYiYi: Grow your socials with the people around you" />
   <meta property="og:description" content="See who's within 150 ft, follow them everywhere in one tap, and grow your following locally." />
   <meta property="og:image" content="https://iyiyi.xyz/apple-touch-icon.png" />
@@ -129,6 +129,14 @@
     .stat span { color: var(--muted); font-size: 14px; }
     .final { text-align: center; padding: 56px 24px; }
     .final .cta { justify-content: center; }
+.split { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; padding-top: 10px; }
+    .aud { padding: 30px; display: block; transition: transform .2s ease, border-color .2s ease; }
+    .aud:hover { transform: translateY(-3px); border-color: rgba(255,255,255,.28); }
+    .aud h3 { font-size: 26px; letter-spacing: -.8px; margin: 8px 0; }
+    .aud p { color: var(--muted); }
+    .aud .more { display: inline-block; margin-top: 16px; font-weight: 700; color: #fff; }
+    .aud.arc .kicker { color: #6fd3ff; }
+    @media (max-width: 760px) { .split { grid-template-columns: 1fr; } }
     footer { padding: 36px 0 50px; color: var(--faint); font-size: 13px; }
     .foot { display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; align-items: center; }
     .foot nav { display: flex; gap: 20px; flex-wrap: wrap; }
@@ -160,9 +168,9 @@
       <div class="bar glass">
         <a class="brand" href="/" aria-label="iYiYi home"><img src="/logo.png" alt="" /><span>iYiYi</span></a>
         <nav class="nav">
+          <a href="#grow">Businesses &amp; Creators</a>
+          <a href="#arcade">Arcade</a>
           <a href="#how">How it works</a>
-          <a href="#features">Features</a>
-          <a href="#download">Get the app</a>
         </nav>
         <div class="actions">
           <a class="btn btn-ghost" href="https://shop.iyiyi.xyz">Shop</a>
@@ -176,11 +184,11 @@
     <div class="hero">
       <div>
         <span class="pill glass"><i></i>Live near you right now</span>
-        <h1>Grow your socials with the <span class="grad">people around you.</span></h1>
-        <p class="lead">iYiYi is a digital name tag. See who's within 150 feet, open their profile, and follow them on Instagram, TikTok, Snapchat and more in one tap. Everyone you meet becomes a follower.</p>
+        <h1>Get discovered by the <span class="grad">people around you.</span></h1>
+        <p class="lead">iYiYi puts local businesses and content creators in front of everyone within 150 feet. People nearby see your profile and follow you on Instagram, TikTok, Snapchat and more in one tap. Plus an arcade of games to play with them.</p>
         <div class="cta">
           <a class="btn btn-launch btn-lg" href="https://app.iyiyi.xyz">Launch App</a>
-          <a class="btn btn-ghost btn-lg" href="#how">How it works</a>
+          <a class="btn btn-ghost btn-lg" href="#grow">For businesses &amp; creators</a>
         </div>
         <div class="stores">
           <span>Also on your phone:</span>
@@ -207,6 +215,49 @@
       </div>
     </div>
 
+    <section class="split">
+      <a class="aud glass" href="#grow">
+        <span class="kicker">For businesses &amp; creators</span>
+        <h3>Turn foot traffic into followers.</h3>
+        <p>Show up for everyone nearby, get followed on every platform at once, and fill your events.</p>
+        <span class="more">See how →</span>
+      </a>
+      <a class="aud glass arc" href="#arcade">
+        <span class="kicker">For players</span>
+        <h3>The iYiYi Arcade.</h3>
+        <p>Real-world Laser Tag, 100-player Battle Royale, online chess and party games with people around you.</p>
+        <span class="more">Explore the arcade →</span>
+      </a>
+    </section>
+
+    <section id="grow">
+      <span class="kicker">Businesses &amp; creators</span>
+      <h2>Your audience is already in the room.</h2>
+      <p class="sub">Every person walking past your shop, your table or your set is a potential follower. iYiYi makes it one tap.</p>
+      <div class="feats">
+        <div class="feat glass"><div class="ico">🏪</div><h3>Local businesses</h3><p>Appear on the map and in Nearby for everyone within 150 ft. Link your menu, booking page and socials in one profile.</p></div>
+        <div class="feat glass"><div class="ico">🎥</div><h3>Content creators</h3><p>Turn meetups and shoots into followers on TikTok, Instagram, YouTube and Snapchat, all from one "Follow everywhere" button.</p></div>
+        <div class="feat glass"><div class="ico">🎟️</div><h3>Events that fill up</h3><p>Create an event, invite people nearby and let them add it to their calendar in one tap.</p></div>
+        <div class="feat glass"><div class="ico">📸</div><h3>Get tagged</h3><p>Customers snap a photo with the iYiYi camera, tag you, and it lands on their profile and the feed.</p><span class="tag">Phone</span></div>
+        <div class="feat glass"><div class="ico">📈</div><h3>See who's checking you out</h3><p>Viewers, follows and activity recaps show what's working.</p></div>
+        <div class="feat glass"><div class="ico">🌎</div><h3>Reach beyond the block</h3><p>Be found by your city, your state or the whole country with wider ranges.</p></div>
+      </div>
+    </section>
+
+    <section id="arcade">
+      <span class="kicker">iYiYi Arcade</span>
+      <h2>Games you play with the world around you.</h2>
+      <p class="sub">Challenge people nearby or online. Real-world games use your phone's camera and GPS.</p>
+      <div class="feats">
+        <div class="feat glass"><div class="ico">🔫</div><h3>Laser Tag</h3><p>Aim with your camera, tag real players on the street, plant the bomb in Search &amp; Destroy.</p><span class="tag">Phone</span></div>
+        <div class="feat glass"><div class="ico">🪂</div><h3>Battle Royale</h3><p>Up to 100 players, a shrinking zone on the real map, loot and voice callouts.</p><span class="tag">Phone</span></div>
+        <div class="feat glass"><div class="ico">♟️</div><h3>Chess</h3><p>Random matchmaking or invite a friend, with chat and video calls.</p><span class="tag">Web + phone</span></div>
+        <div class="feat glass"><div class="ico">🕷️</div><h3>Spider Spider 123</h3><p>A real-world party game for your group.</p><span class="tag">Phone</span></div>
+        <div class="feat glass"><div class="ico">🐧</div><h3>Beside Them</h3><p>Find the imposter hiding among your friends.</p><span class="tag">Phone</span></div>
+        <div class="feat glass"><div class="ico">🔤</div><h3>What's The Word</h3><p>A fast word game to play anywhere.</p><span class="tag">Web + phone</span></div>
+      </div>
+    </section>
+
     <section id="how">
       <span class="kicker">How it works</span>
       <h2>Meet someone. Follow everywhere.</h2>
@@ -218,19 +269,6 @@
       </div>
     </section>
 
-    <section id="features">
-      <span class="kicker">Features</span>
-      <h2>Everything you need to get seen.</h2>
-      <p class="sub">Use it on the web or on your phone. A few camera and GPS games are phone-only.</p>
-      <div class="feats">
-        <div class="feat glass"><div class="ico">📡</div><h3>Nearby</h3><p>Profiles of everyone within 150 ft, with ranges from 5 miles to worldwide.</p></div>
-        <div class="feat glass"><div class="ico">🔗</div><h3>Follow everywhere</h3><p>One profile with every social link. Follow someone on every platform at once.</p></div>
-        <div class="feat glass"><div class="ico">🗺️</div><h3>Live map</h3><p>See who's out, find events and local businesses, and filter by what you're into.</p></div>
-        <div class="feat glass"><div class="ico">📸</div><h3>Camera &amp; tags</h3><p>AR filters, burst and video. Posts land on your profile and the feed instantly.</p><span class="tag">Phone</span></div>
-        <div class="feat glass"><div class="ico">🎟️</div><h3>Events</h3><p>Create events, invite people nearby and add them to your calendar in one tap.</p></div>
-        <div class="feat glass"><div class="ico">🎮</div><h3>Arcade</h3><p>Online chess with chat and video. Laser Tag, Battle Royale and party games on your phone.</p></div>
-      </div>
-    </section>
 
     <section>
       <div class="stats">
