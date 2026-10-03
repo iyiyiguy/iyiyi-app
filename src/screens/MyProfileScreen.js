@@ -186,7 +186,7 @@ export default function MyProfileScreen({ navigation }) {
 
   const shareProfile = () => {
     Share.share({
-      message: `Check out my iYiYi profile: https://iyiyi.iyiyiguy.workers.dev/iyiyi-app/profile/${profile.username}`,
+      message: `Check out my iYiYi profile: https://app.iyiyi.xyz/u/${encodeURIComponent(profile.username)}`,
     }).catch(() => {})
   }
 

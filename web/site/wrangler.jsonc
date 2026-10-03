@@ -1,0 +1,9 @@
+// iyiyi.xyz landing page: a static-assets Worker (Cloudflare Workers Builds, root dir web/site).
+{
+  "name": "iyiyi-site",
+  "compatibility_date": "2026-09-01",
+  "assets": {
+    "directory": "./public",
+    "not_found_handling": "404-page"
+  }
+}

@@ -31,3 +31,4 @@ scratch_*.sql
 preview.html
 3d-*.html
 secrets/
+dist-app/

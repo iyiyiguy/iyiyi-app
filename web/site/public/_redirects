@@ -1,0 +1,13 @@
+# Old links and app deep links now live on the web app.
+/iyiyi-app/profile/:username  https://app.iyiyi.xyz/u/:username  301
+/iyiyi-app                    https://app.iyiyi.xyz/  301
+/iyiyi-app/*                  https://app.iyiyi.xyz/  301
+/u/:username                  https://app.iyiyi.xyz/u/:username  302
+/e/:id                        https://app.iyiyi.xyz/e/:id  302
+/event/:id                    https://app.iyiyi.xyz/event/:id  302
+/j/:code                      https://app.iyiyi.xyz/j/:code  302
+/join/:code                   https://app.iyiyi.xyz/join/:code  302
+/app                          https://app.iyiyi.xyz/  302
+/login                        https://app.iyiyi.xyz/  302
+/shop                         https://shop.iyiyi.xyz  302
+/cart                         https://shop.iyiyi.xyz/cart  302

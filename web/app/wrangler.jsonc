@@ -1,0 +1,11 @@
+// app.iyiyi.xyz: the Expo web build as a static-assets Worker with SPA routing
+// (Cloudflare Workers Builds, root dir = repo root, build: bash scripts/build-web.sh,
+//  deploy: npx wrangler deploy --config web/app/wrangler.jsonc).
+{
+  "name": "iyiyi-web",
+  "compatibility_date": "2026-09-01",
+  "assets": {
+    "directory": "../../dist-app",
+    "not_found_handling": "single-page-application"
+  }
+}

@@ -67,7 +67,7 @@ import WordRaceScreen from './src/screens/WordRaceScreen'
 
 // Shared event links (iyiyi://event/<id>, https://iyiyi.xyz/e/<id>) open the event page.
 const LINKING = {
-  prefixes: ['iyiyi://', 'https://iyiyi.xyz'],
+  prefixes: ['iyiyi://', 'https://iyiyi.xyz', 'https://app.iyiyi.xyz'],
   config: {
     // Deep links land on top of the tab bar, so Back has somewhere to go.
     initialRouteName: 'Tabs',
@@ -75,6 +75,8 @@ const LINKING = {
       EventDetails: { path: 'event/:eventId', alias: ['e/:eventId'] },
       // Text invites: iyiyi://join/LABCD (or /j/LABCD) -> JoinGame auto-joins that lobby.
       JoinGame: { path: 'join/:code', alias: ['j/:code'] },
+      // Shareable profile links: app.iyiyi.xyz/u/<username> (also works logged out).
+      PublicProfile: { path: 'u/:username' },
     },
   },
 }
@@ -237,6 +239,7 @@ export default function App() {
           <Stack.Navigator screenOptions={screenOptions}>
             <Stack.Screen name="Tabs" component={Tabs} />
             <Stack.Screen name="UserProfile" component={Aura.UserProfileScreen} />
+            <Stack.Screen name="PublicProfile" component={Aura.PublicProfileScreen} />
             <Stack.Screen name="BlockedUsers" component={Aura.BlockedUsersScreen} />
             <Stack.Screen name="History" component={Aura.HistoryScreen} />
             <Stack.Screen name="FollowList" component={Aura.FollowListScreen} />
