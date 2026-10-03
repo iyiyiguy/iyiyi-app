@@ -111,5 +111,5 @@ if __name__ == "__main__":
     try:
         main()
     except Exception as e:
-        print(f"ERROR: {e}")
+        print(f"::error::{e}")
         sys.exit(1)

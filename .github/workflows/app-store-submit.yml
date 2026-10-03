@@ -1,7 +1,8 @@
 # Swaps a new build into the App Store version (cancelling a pending review first if needed),
 # pushes the listing text + screenshots from store-assets/, and submits it for review.
-# Run from the Actions tab with the build number (e.g. 216). It waits for Apple to finish
-# processing that build.
+# Run from the Actions tab with the build number (e.g. 216), or let it run on its own: when an
+# iOS build finishes and its number matches store-assets/submit-build.txt, that build is
+# submitted. It waits for Apple to finish processing the build.
 name: App Store submit build
 
 on:
@@ -14,6 +15,9 @@ on:
         description: Also replace the iPhone screenshots
         type: boolean
         default: true
+  workflow_run:
+    workflows: ["iOS build → App Store Connect"]
+    types: [completed]
 
 concurrency:
   group: app-store-submit
@@ -23,16 +27,30 @@ jobs:
   submit:
     runs-on: ubuntu-latest
     timeout-minutes: 120
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - id: pick
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_run" ]; then
+            B=$((200 + ${{ github.event.workflow_run.run_number || 0 }}))
+            WANT=$(tr -d '[:space:]' < store-assets/submit-build.txt 2>/dev/null || true)
+            if [ "$B" != "$WANT" ]; then echo "Build $B is not marked for submission (submit-build.txt: '$WANT')"; echo "skip=1" >> "$GITHUB_OUTPUT"; exit 0; fi
+          else
+            B="${{ inputs.build_number }}"
+          fi
+          echo "build=$B" >> "$GITHUB_OUTPUT"
+      - if: steps.pick.outputs.skip != '1'
+        uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - run: pip install pyjwt cryptography requests
-      - run: python scripts/asc_submit.py
+      - if: steps.pick.outputs.skip != '1'
+        run: pip install pyjwt cryptography requests
+      - if: steps.pick.outputs.skip != '1'
+        run: python -u scripts/asc_submit.py
         env:
           ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
           ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
           ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
-          BUILD_NUMBER: ${{ inputs.build_number }}
-          SCREENSHOTS: ${{ inputs.screenshots }}
+          BUILD_NUMBER: ${{ steps.pick.outputs.build }}
+          SCREENSHOTS: ${{ inputs.screenshots || 'true' }}
