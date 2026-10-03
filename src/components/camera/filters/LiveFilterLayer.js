@@ -180,7 +180,7 @@ export default function LiveFilterLayer({
 
   const targetsFor = (heads) => {
     const { facing: fc, nearby: nb, me: m, view: v } = latest.current
-    const t = selectTargets({ heads, facing: fc, nearby: nb, me: m, myPos: coordsRef?.current, headingDeg: heading.current })
+    const t = selectTargets({ heads, facing: fc, nearby: nb, me: m, myPos: coordsRef?.current, headingDeg: heading.current, everyone: latest.current.filter === 'logo' })
     if (t.length) return t
     return [{ ...fallbackHead(v, fc), pose: null, name: nameTagText({ facing: fc, headCount: 0, nearby: nb, me: m }), key: 'fallback' }]
   }
@@ -540,8 +540,6 @@ export default function LiveFilterLayer({
     <View style={StyleSheet.absoluteFill} pointerEvents="none">
       {slots.current.slice(0, used).map((slot, i) => {
         // Slight perspective: tags left of center turn a little toward the middle, and vice versa.
-        // The photoreal render (art/iy-logo-render.png) is the live emblem too; the three.js
-        // version (Logo3D) is kept but switched off.
         const is3D = false
         const rotateY = yawing
           ? slot.x.interpolate({

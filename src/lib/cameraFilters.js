@@ -12,7 +12,7 @@ export const FILTER_IDS = FILTERS.map((f) => f.id)
 export const normalizeFilter = (v) => (FILTER_IDS.includes(v) ? v : 'none')
 export const filterLabel = (id) => FILTERS.find((f) => f.id === id)?.label ?? ''
 
-export const MAX_HEADS = 3
+export const MAX_HEADS = 5
 // Horizontal field of view of a portrait 4:3 iPhone photo (main wide or front camera).
 export const CAMERA_HFOV_DEG = 55
 const HEAD_M = 0.3 // real-world size of the (padded) head box body-hit reports, metres
@@ -314,7 +314,7 @@ const handle = (u) => {
 // name. Matched people get the filter; with no match, the nearest face (largest head box) does.
 // Size blends the head box with the size the GPS distance predicts.
 // Returns [{ cx, top, size, name, key }] in the heads' screen pixels.
-export function selectTargets({ heads, facing, nearby, me, myPos, headingDeg }) {
+export function selectTargets({ heads, facing, nearby, me, myPos, headingDeg, everyone = false }) {
   try {
     const list = Array.isArray(heads) ? heads.filter(Boolean) : []
     if (!list.length) return []
@@ -356,6 +356,19 @@ export function selectTargets({ heads, facing, nearby, me, myPos, headingDeg }) 
         }
         out.push({ cx: h.cx, top: h.top, size, fcx: h.fcx, fcy: h.fcy, pose: h.pose || null, name: handle(p.u.username) || '@iyiyi', key: `u:${p.u.id ?? p.u.username}` })
       }
+    }
+    // `everyone` (the iY emblem): every face looking at the camera gets one, not just the
+    // matched / nearest person. Biggest faces first, then left to right for stable slots.
+    if (everyone) {
+      const rest = list
+        .map((h, i) => ({ h, i }))
+        .filter(({ i }) => !taken.has(i))
+        .sort((a, b) => b.h.size - a.h.size)
+        .slice(0, Math.max(0, MAX_HEADS - out.length))
+        .sort((a, b) => a.h.cx - b.h.cx)
+      rest.forEach(({ h }, k) => {
+        out.push({ cx: h.cx, top: h.top, size: h.size, fcx: h.fcx, fcy: h.fcy, pose: h.pose || null, name: nameTagText({ facing, headCount: list.length, nearby, me }), key: `face:${k}` })
+      })
     }
     if (out.length) return out.slice(0, MAX_HEADS)
     // Nobody matched: the nearest face (largest head box).

@@ -464,7 +464,7 @@ export default function CameraScreen({ navigation, route }) {
           // Same matching as the live preview: nearby iYiYi users by compass bearing, else
           // the nearest face. Uses the heading/position captured with the photo.
           const targets = selectTargets({
-            heads, facing: fx.facing, nearby: nearbyRef.current, me: meRef.current, myPos: fx.myPos || coordsRef.current, headingDeg: fx.heading,
+            heads, facing: fx.facing, nearby: nearbyRef.current, me: meRef.current, myPos: fx.myPos || coordsRef.current, headingDeg: fx.heading, everyone: fx.filter === 'logo',
           })
           overlay = {
             filter: fx.filter,
