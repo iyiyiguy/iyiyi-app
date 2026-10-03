@@ -1,0 +1,269 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>iYiYi: Grow your socials with the people around you</title>
+  <meta name="description" content="iYiYi shows who's within 150 feet: their profile and every social link in one tap. Meet people, grow your followers, find local businesses, and play together." />
+  <meta property="og:title" content="iYiYi: Grow your socials with the people around you" />
+  <meta property="og:description" content="See who's within 150 ft, follow them everywhere in one tap, and grow your following locally." />
+  <meta property="og:image" content="https://iyiyi.xyz/apple-touch-icon.png" />
+  <meta name="theme-color" content="#07080f" />
+  <link rel="icon" type="image/png" href="/favicon.png" />
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --ink: #07080f;
+      --ink-2: #0d0f1c;
+      --text: #f2f3fa;
+      --muted: rgba(242, 243, 250, 0.66);
+      --faint: rgba(242, 243, 250, 0.42);
+      --glass: rgba(255, 255, 255, 0.06);
+      --glass-strong: rgba(255, 255, 255, 0.10);
+      --edge: rgba(255, 255, 255, 0.14);
+      --pink: #ff4fa3;
+      --violet: #8f5bff;
+      --blue: #6f8cff;
+      --brand: linear-gradient(135deg, var(--pink), var(--violet));
+      --radius: 22px;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: var(--ink); color: var(--text); line-height: 1.5;
+      -webkit-font-smoothing: antialiased; overflow-x: hidden;
+    }
+    a { color: inherit; text-decoration: none; }
+    img { display: block; max-width: 100%; }
+
+    /* Ambient light behind the glass */
+    .aura { position: fixed; inset: 0; z-index: -1; overflow: hidden; pointer-events: none; }
+    .aura span { position: absolute; border-radius: 50%; filter: blur(90px); opacity: .55; animation: drift 22s ease-in-out infinite alternate; }
+    .aura span:nth-child(1) { width: 520px; height: 520px; background: #ff3d9a; top: -160px; left: -120px; }
+    .aura span:nth-child(2) { width: 560px; height: 560px; background: #5b4bff; top: 20%; right: -200px; animation-delay: -6s; }
+    .aura span:nth-child(3) { width: 460px; height: 460px; background: #1fb6ff; bottom: -200px; left: 25%; opacity: .32; animation-delay: -12s; }
+    @keyframes drift { to { transform: translate(60px, 40px) scale(1.08); } }
+
+    .wrap { width: min(1120px, 100% - 40px); margin: 0 auto; }
+    .glass {
+      background: var(--glass); border: 1px solid var(--edge); border-radius: var(--radius);
+      backdrop-filter: blur(22px) saturate(140%); -webkit-backdrop-filter: blur(22px) saturate(140%);
+      box-shadow: 0 1px 0 rgba(255,255,255,.08) inset, 0 20px 50px rgba(0,0,0,.35);
+    }
+
+    /* Top bar */
+    header { position: sticky; top: 0; z-index: 20; padding: 14px 0; }
+    .bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 12px 10px 18px; border-radius: 999px; }
+    .brand { display: flex; align-items: center; gap: 10px; font-weight: 800; font-size: 20px; letter-spacing: -.5px; }
+    .brand img { width: 34px; height: auto; }
+    .nav { display: flex; align-items: center; gap: 26px; font-size: 14px; color: var(--muted); font-weight: 500; }
+    .nav a:hover { color: var(--text); }
+    .actions { display: flex; align-items: center; gap: 8px; }
+    .btn {
+      display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 42px; padding: 0 18px;
+      border-radius: 999px; font-weight: 700; font-size: 14px; white-space: nowrap; cursor: pointer; border: 0;
+      transition: transform .15s ease, box-shadow .2s ease, background .2s ease;
+    }
+    .btn:active { transform: scale(.97); }
+    .btn-ghost { background: var(--glass-strong); border: 1px solid var(--edge); color: var(--text); }
+    .btn-ghost:hover { background: rgba(255,255,255,.16); }
+    .btn-launch { background: var(--brand); color: #fff; box-shadow: 0 8px 26px rgba(255,79,163,.35); }
+    .btn-launch:hover { box-shadow: 0 10px 34px rgba(255,79,163,.55); }
+    .btn-lg { height: 54px; padding: 0 28px; font-size: 16px; }
+
+    /* Hero */
+    .hero { display: grid; grid-template-columns: 1.1fr .9fr; gap: 48px; align-items: center; padding: 70px 0 60px; }
+    .pill { display: inline-flex; align-items: center; gap: 8px; padding: 6px 14px; border-radius: 999px; font-size: 13px; color: var(--muted); }
+    .pill i { width: 8px; height: 8px; border-radius: 50%; background: #3ef08b; box-shadow: 0 0 10px #3ef08b; }
+    h1 { font-size: clamp(40px, 6vw, 70px); line-height: 1.02; letter-spacing: -2.4px; font-weight: 800; margin: 18px 0 18px; }
+    .grad { background: var(--brand); -webkit-background-clip: text; background-clip: text; color: transparent; }
+    .lead { font-size: 18px; color: var(--muted); max-width: 540px; }
+    .cta { display: flex; gap: 12px; margin-top: 30px; flex-wrap: wrap; }
+    .stores { display: flex; gap: 16px; margin-top: 22px; font-size: 13px; color: var(--faint); align-items: center; flex-wrap: wrap; }
+    .stores a { color: var(--muted); border-bottom: 1px solid rgba(255,255,255,.2); }
+
+    /* Phone mock */
+    .phone { position: relative; width: min(340px, 100%); aspect-ratio: 9/19; margin: 0 auto; border-radius: 44px; padding: 14px; }
+    .screen { height: 100%; border-radius: 32px; overflow: hidden; background: linear-gradient(180deg, #17123a, #0b0d1c); padding: 18px 14px; display: flex; flex-direction: column; gap: 10px; }
+    .screen .top { display: flex; justify-content: space-between; align-items: center; font-weight: 800; font-size: 18px; }
+    .chips { display: flex; gap: 6px; }
+    .chip { font-size: 10px; padding: 5px 9px; border-radius: 999px; background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.14); color: var(--muted); }
+    .chip.on { background: #fff; color: #111; border-color: #fff; font-weight: 700; }
+    .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+    .tile { aspect-ratio: 1; border-radius: 12px; position: relative; overflow: hidden; }
+    .tile b { position: absolute; left: 6px; bottom: 5px; font-size: 9px; font-weight: 700; }
+    .t1 { background: linear-gradient(135deg, #ff6fb5, #7a3cff); } .t2 { background: linear-gradient(135deg, #37d0ff, #3b4bff); }
+    .t3 { background: linear-gradient(135deg, #ffb347, #ff4f7b); } .t4 { background: linear-gradient(135deg, #4ff0b0, #1c8cff); }
+    .t5 { background: linear-gradient(135deg, #b46bff, #ff4fa3); } .t6 { background: linear-gradient(135deg, #ffd86f, #ff7a45); }
+    .t7 { background: linear-gradient(135deg, #6f8cff, #b4f); } .t8 { background: linear-gradient(135deg, #ff7b7b, #ffb86f); }
+    .t9 { background: linear-gradient(135deg, #48e1d0, #6f5bff); }
+    .follow { margin-top: auto; padding: 12px; border-radius: 16px; display: flex; align-items: center; gap: 10px; font-size: 12px; }
+    .follow .av { width: 34px; height: 34px; border-radius: 50%; background: linear-gradient(135deg, #ff6fb5, #7a3cff); flex: none; }
+    .follow .go { margin-left: auto; padding: 6px 12px; border-radius: 999px; background: var(--brand); font-weight: 700; font-size: 11px; }
+    .float-card { position: absolute; padding: 12px 14px; border-radius: 16px; font-size: 13px; display: flex; gap: 10px; align-items: center; }
+    .float-card.a { left: -70px; top: 9%; } .float-card.b { right: -30px; bottom: 22%; }
+    .float-card strong { display: block; font-size: 15px; }
+    .dot { width: 32px; height: 32px; border-radius: 10px; display: grid; place-items: center; font-size: 16px; background: var(--glass-strong); }
+
+    /* Sections */
+    section { padding: 70px 0; }
+    .kicker { color: var(--pink); font-weight: 700; font-size: 13px; letter-spacing: 1.6px; text-transform: uppercase; }
+    h2 { font-size: clamp(30px, 4vw, 44px); letter-spacing: -1.4px; line-height: 1.1; font-weight: 800; margin: 10px 0 14px; }
+    .sub { color: var(--muted); max-width: 620px; font-size: 17px; }
+    .steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; margin-top: 36px; }
+    .step { padding: 26px; }
+    .num { width: 38px; height: 38px; border-radius: 12px; display: grid; place-items: center; font-weight: 800; background: var(--brand); margin-bottom: 18px; }
+    .step h3, .feat h3 { font-size: 19px; letter-spacing: -.4px; margin-bottom: 6px; }
+    .step p, .feat p { color: var(--muted); font-size: 15px; }
+    .feats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; margin-top: 36px; }
+    .feat { padding: 24px; position: relative; }
+    .feat .ico { font-size: 24px; width: 46px; height: 46px; border-radius: 14px; display: grid; place-items: center; background: var(--glass-strong); border: 1px solid var(--edge); margin-bottom: 16px; }
+    .tag { position: absolute; top: 18px; right: 18px; font-size: 11px; font-weight: 700; padding: 4px 9px; border-radius: 999px; background: rgba(255,255,255,.08); border: 1px solid var(--edge); color: var(--muted); }
+    .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
+    .stat { padding: 26px; text-align: center; }
+    .stat strong { display: block; font-size: 38px; letter-spacing: -1.2px; font-weight: 800; }
+    .stat span { color: var(--muted); font-size: 14px; }
+    .final { text-align: center; padding: 56px 24px; }
+    .final .cta { justify-content: center; }
+    footer { padding: 36px 0 50px; color: var(--faint); font-size: 13px; }
+    .foot { display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; align-items: center; }
+    .foot nav { display: flex; gap: 20px; flex-wrap: wrap; }
+    .foot a:hover { color: var(--text); }
+
+    @media (max-width: 900px) {
+      .hero { grid-template-columns: 1fr; padding-top: 40px; text-align: left; }
+      .phone { margin-top: 10px; }
+      .float-card.a { left: -6px; } .float-card.b { right: -6px; }
+      .steps, .feats { grid-template-columns: 1fr 1fr; }
+    }
+    @media (max-width: 640px) {
+      .nav { display: none; }
+      .bar { padding-left: 14px; }
+      .brand span { display: none; }
+      .btn { height: 38px; padding: 0 14px; font-size: 13px; }
+      .btn-lg { height: 50px; padding: 0 22px; font-size: 15px; }
+      .steps, .feats, .stats { grid-template-columns: 1fr; }
+      .float-card { display: none; }
+      section { padding: 50px 0; }
+    }
+  </style>
+</head>
+<body>
+  <div class="aura"><span></span><span></span><span></span></div>
+
+  <header>
+    <div class="wrap">
+      <div class="bar glass">
+        <a class="brand" href="/" aria-label="iYiYi home"><img src="/logo.png" alt="" /><span>iYiYi</span></a>
+        <nav class="nav">
+          <a href="#how">How it works</a>
+          <a href="#features">Features</a>
+          <a href="#download">Get the app</a>
+        </nav>
+        <div class="actions">
+          <a class="btn btn-ghost" href="https://shop.iyiyi.xyz">Shop</a>
+          <a class="btn btn-launch" href="https://app.iyiyi.xyz">Launch App ↗</a>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <div class="hero">
+      <div>
+        <span class="pill glass"><i></i>Live near you right now</span>
+        <h1>Grow your socials with the <span class="grad">people around you.</span></h1>
+        <p class="lead">iYiYi is a digital name tag. See who's within 150 feet, open their profile, and follow them on Instagram, TikTok, Snapchat and more in one tap. Everyone you meet becomes a follower.</p>
+        <div class="cta">
+          <a class="btn btn-launch btn-lg" href="https://app.iyiyi.xyz">Launch App</a>
+          <a class="btn btn-ghost btn-lg" href="#how">How it works</a>
+        </div>
+        <div class="stores">
+          <span>Also on your phone:</span>
+          <a href="https://apps.apple.com/app/id6445996160">App Store</a>
+          <span>Google Play coming soon</span>
+        </div>
+      </div>
+
+      <div style="position:relative">
+        <div class="phone glass">
+          <div class="screen">
+            <div class="top"><span>Nearby</span><span style="font-size:12px;color:var(--muted);font-weight:600">12 people</span></div>
+            <div class="chips"><span class="chip on">150 ft</span><span class="chip">5 mi</span><span class="chip">City</span><span class="chip">State</span></div>
+            <div class="grid">
+              <div class="tile t1"><b>@maya</b></div><div class="tile t2"><b>@jordan</b></div><div class="tile t3"><b>@lex</b></div>
+              <div class="tile t4"><b>@sam</b></div><div class="tile t5"><b>@nia</b></div><div class="tile t6"><b>@cafe.luna</b></div>
+              <div class="tile t7"><b>@drew</b></div><div class="tile t8"><b>@kai</b></div><div class="tile t9"><b>@river</b></div>
+            </div>
+            <div class="follow glass"><div class="av"></div><div><b>@maya</b><br /><span style="color:var(--muted)">6 socials linked</span></div><span class="go">Follow all</span></div>
+          </div>
+        </div>
+        <div class="float-card glass a"><span class="dot">📍</span><div><strong>Within 150 ft</strong><span style="color:var(--muted)">See who's here</span></div></div>
+        <div class="float-card glass b"><span class="dot">✨</span><div><strong>+1 follower</strong><span style="color:var(--muted)">on every platform</span></div></div>
+      </div>
+    </div>
+
+    <section id="how">
+      <span class="kicker">How it works</span>
+      <h2>Meet someone. Follow everywhere.</h2>
+      <p class="sub">No more “what's your @?”. iYiYi connects you with everyone nearby in seconds.</p>
+      <div class="steps">
+        <div class="step glass"><div class="num">1</div><h3>Make your profile</h3><p>Add a photo and link your Instagram, TikTok, Snapchat, YouTube, X and your website.</p></div>
+        <div class="step glass"><div class="num">2</div><h3>See who's around</h3><p>Open iYiYi to see people and local businesses within 150 ft, or zoom out to your city, state or the whole country.</p></div>
+        <div class="step glass"><div class="num">3</div><h3>Grow together</h3><p>Follow anyone on all their platforms in one tap, and they can follow you back just as fast.</p></div>
+      </div>
+    </section>
+
+    <section id="features">
+      <span class="kicker">Features</span>
+      <h2>Everything you need to get seen.</h2>
+      <p class="sub">Use it on the web or on your phone. A few camera and GPS games are phone-only.</p>
+      <div class="feats">
+        <div class="feat glass"><div class="ico">📡</div><h3>Nearby</h3><p>Profiles of everyone within 150 ft, with ranges from 5 miles to worldwide.</p></div>
+        <div class="feat glass"><div class="ico">🔗</div><h3>Follow everywhere</h3><p>One profile with every social link. Follow someone on every platform at once.</p></div>
+        <div class="feat glass"><div class="ico">🗺️</div><h3>Live map</h3><p>See who's out, find events and local businesses, and filter by what you're into.</p></div>
+        <div class="feat glass"><div class="ico">📸</div><h3>Camera &amp; tags</h3><p>AR filters, burst and video. Posts land on your profile and the feed instantly.</p><span class="tag">Phone</span></div>
+        <div class="feat glass"><div class="ico">🎟️</div><h3>Events</h3><p>Create events, invite people nearby and add them to your calendar in one tap.</p></div>
+        <div class="feat glass"><div class="ico">🎮</div><h3>Arcade</h3><p>Online chess with chat and video. Laser Tag, Battle Royale and party games on your phone.</p></div>
+      </div>
+    </section>
+
+    <section>
+      <div class="stats">
+        <div class="stat glass"><strong>150 ft</strong><span>see who's in the room</span></div>
+        <div class="stat glass"><strong>1 tap</strong><span>to follow on every platform</span></div>
+        <div class="stat glass"><strong>Free</strong><span>to join, on web and iPhone</span></div>
+      </div>
+    </section>
+
+    <section id="download">
+      <div class="final glass">
+        <span class="kicker">Start now</span>
+        <h2>Your next followers are already nearby.</h2>
+        <p class="sub" style="margin:0 auto">Look around first, no account needed. Sign up when you're ready.</p>
+        <div class="cta">
+          <a class="btn btn-launch btn-lg" href="https://app.iyiyi.xyz">Launch App</a>
+          <a class="btn btn-ghost btn-lg" href="https://apps.apple.com/app/id6445996160">Download for iPhone</a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="wrap foot">
+      <span>© <span id="y"></span> iYiYi</span>
+      <nav>
+        <a href="https://shop.iyiyi.xyz">Shop</a>
+        <a href="https://app.iyiyi.xyz">Launch App</a>
+        <a href="https://sites.google.com/view/iyiyiprivacypolicy/home">Privacy</a>
+        <a href="https://sites.google.com/view/iyiyiuserpolicy/home">Terms</a>
+      </nav>
+    </div>
+  </footer>
+  <script>document.getElementById('y').textContent = new Date().getFullYear()</script>
+</body>
+</html>

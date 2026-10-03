@@ -24,6 +24,7 @@ initCrashLogger()
 setupGlobalErrorHandler()
 
 import AuthScreen from './src/screens/AuthScreen'
+import GuestExploreScreen from './src/screens/GuestExploreScreen'
 import NearbyScreen from './src/screens/NearbyScreen'
 import MyProfileScreen from './src/screens/MyProfileScreen'
 import MapScreen from './src/screens/MapScreen'
@@ -224,6 +225,7 @@ export default function App() {
       <NavigationContainer ref={navRef} linking={LINKING} theme={scheme === 'light' ? lightNavTheme : darkNavTheme}>
         {!session ? (
           <Stack.Navigator screenOptions={screenOptions}>
+            <Stack.Screen name="Explore" component={GuestExploreScreen} />
             <Stack.Screen name="SignIn" component={Aura.AuthScreen} />
             <Stack.Screen name="PublicProfile" component={Aura.PublicProfileScreen} />
           </Stack.Navigator>

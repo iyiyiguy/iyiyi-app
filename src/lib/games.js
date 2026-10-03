@@ -13,6 +13,7 @@ export const ARCADE_CATEGORIES = [
 export const GAMES = [
   {
     id: 'laser-tag',
+    mobileOnly: true, // camera / GPS game: phones only (hidden behind a prompt on the web app)
     mpId: 'lasertag',
     route: 'LaserTagLobby',
     name: 'Laser Tag',
@@ -31,6 +32,7 @@ export const GAMES = [
   },
   {
     id: 'battle-royale',
+    mobileOnly: true, // camera / GPS game: phones only (hidden behind a prompt on the web app)
     mpId: 'royale',
     route: 'LaserTagLobby',
     name: 'Battle Royale',
@@ -48,6 +50,7 @@ export const GAMES = [
   },
   {
     id: 'spider',
+    mobileOnly: true, // camera / GPS game: phones only (hidden behind a prompt on the web app)
     mpId: 'spider-spider',
     route: 'GameLobby',
     name: 'Spider Spider 123',
@@ -66,6 +69,7 @@ export const GAMES = [
   },
   {
     id: 'beside-them',
+    mobileOnly: true, // camera / GPS game: phones only (hidden behind a prompt on the web app)
     mpId: 'beside-them',
     route: 'GameLobby',
     name: 'Beside Them',

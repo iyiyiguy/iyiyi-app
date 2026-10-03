@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { View, Text, Image, StyleSheet, Pressable, ActivityIndicator } from 'react-native'
+import { View, Text, Image, StyleSheet, Pressable, ActivityIndicator, Platform } from 'react-native'
 import { LinearGradient } from 'expo-linear-gradient'
 import { colors, gradients, radii, type, onImageType } from '../theme'
 import { API_URL } from '../lib/supabase'
@@ -64,7 +64,7 @@ export default function PublicProfileScreen({ route, navigation }) {
           </View>
         ) : null}
 
-        <Pressable onPress={() => navigation.goBack()} style={styles.joinButton}>
+        <Pressable onPress={() => navigation.navigate('SignIn', { mode: 'signup' })} style={styles.joinButton}>
           <LinearGradient colors={gradients.brand} style={styles.joinButtonGradient}>
             <Text style={styles.joinButtonText}>Create your own iYiYi profile</Text>
           </LinearGradient>
@@ -109,7 +109,7 @@ export default function PublicProfileScreen({ route, navigation }) {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: 'transparent' },
-  photo: { flex: 1, width: '100%', height: '100%' },
+  photo: { flex: 1, width: '100%', height: '100%', ...(Platform.OS === 'web' ? { resizeMode: 'cover' } : {}) },
   overlay: { position: 'absolute', left: 0, right: 0, bottom: 0, padding: 20, paddingBottom: 110 },
   bio: { ...type.caption, color: colors.onBrandMuted, marginTop: 6 },
   privateNotice: { ...type.caption, color: colors.onBrandMuted, marginTop: 10 },

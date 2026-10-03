@@ -7,7 +7,6 @@ import * as AppleAuthentication from 'expo-apple-authentication'
 import { ensureProfile, neutralUsername, signInWithApple, signInWithProvider } from '../lib/oauth'
 import SocialIcon from '../components/SocialIcon'
 import { logSignup } from '../lib/attribution'
-import PhotoGridBackground from '../components/PhotoGridBackground'
 import GlassPanel from '../components/GlassPanel'
 
 const METHOD = { EMAIL: 'email', PHONE: 'phone' }
@@ -22,10 +21,10 @@ const SOCIAL_PROVIDERS = [
   { key: 'google', label: 'Google' },
 ]
 
-export default function AuthScreen({ navigation }) {
+export default function AuthScreen({ navigation, route }) {
   const pageInk = usePageInk()
   const [method, setMethod] = useState(METHOD.EMAIL)
-  const [mode, setMode] = useState('login') // login | signup
+  const [mode, setMode] = useState(route?.params?.mode === 'signup' ? 'signup' : 'login') // login | signup
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [username, setUsername] = useState('')
@@ -175,12 +174,19 @@ export default function AuthScreen({ navigation }) {
       showsVerticalScrollIndicator={false}
     >
       <View style={styles.hero}>
-        <PhotoGridBackground />
+        {/* Clean glass hero: soft gradient + light orbs (no photo collage). */}
         <LinearGradient
-          colors={['rgba(13,7,16,0.25)', 'rgba(13,7,16,0.5)', pageInk.ink]}
+          colors={['#1b1440', '#10122a', pageInk.ink]}
           style={StyleSheet.absoluteFill}
           pointerEvents="none"
         />
+        <View pointerEvents="none" style={[styles.heroOrb, { backgroundColor: 'rgba(232,62,140,0.28)', top: -60, left: -70 }]} />
+        <View pointerEvents="none" style={[styles.heroOrb, { backgroundColor: 'rgba(120,140,255,0.24)', top: 40, right: -90 }]} />
+        {navigation.canGoBack() ? (
+          <Pressable onPress={() => navigation.goBack()} hitSlop={12} style={styles.backBtn} accessibilityRole="button" accessibilityLabel="Back to explore">
+            <Text style={styles.backText}>‹ Explore</Text>
+          </Pressable>
+        ) : null}
 
         <View style={styles.topBrandWrap}>
           <View style={styles.strokeAnchor}>
@@ -208,20 +214,6 @@ export default function AuthScreen({ navigation }) {
       <View style={styles.overlapWrap}>
         <LinearGradient colors={['transparent', pageInk.inkFade, pageInk.ink]} style={styles.heroFade} />
 
-        {showcase.length > 0 && (
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.wall}>
-            {showcase.map((p) => (
-              <Pressable
-                key={p.id}
-                style={styles.wallItem}
-                onPress={() => navigation.navigate('PublicProfile', { username: p.username })}
-              >
-                <Image source={{ uri: p.avatar_url }} style={styles.wallAvatar} />
-                <Text style={styles.wallName} numberOfLines={1}>{p.username}</Text>
-              </Pressable>
-            ))}
-          </ScrollView>
-        )}
 
       <View style={styles.formWrap}>
       <Text style={styles.tagline}>See who's within 150ft.</Text>
@@ -371,10 +363,16 @@ function MethodTab({ label, active, onPress }) {
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: 'transparent' },
   hero: Platform.select({
-    web: { width: '100%', height: '56vh', maxHeight: 520, position: 'relative' },
-    default: { width: '100%', aspectRatio: 9 / 16, position: 'relative' },
+    web: { width: '100%', height: 340, position: 'relative', overflow: 'hidden' },
+    default: { width: '100%', height: 380, position: 'relative', overflow: 'hidden' },
   }),
-  overlapWrap: Platform.select({ web: { marginTop: -160 }, default: { marginTop: -350 } }),
+  heroOrb: { position: 'absolute', width: 300, height: 300, borderRadius: 150, ...(Platform.OS === 'web' ? { filter: 'blur(60px)' } : {}) },
+  backBtn: {
+    position: 'absolute', top: Platform.OS === 'web' ? 18 : 58, left: 16, zIndex: 5, paddingHorizontal: 14, height: 34, borderRadius: 17,
+    justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.10)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)',
+  },
+  backText: { color: '#fff', fontSize: 14, fontWeight: '600' },
+  overlapWrap: Platform.select({ web: { marginTop: -40 }, default: { marginTop: -60 } }),
   heroFade: { position: 'absolute', left: 0, right: 0, top: 0, height: 420 },
   heroTextWrap: { position: 'absolute', top: '46%', left: 0, right: 0, paddingHorizontal: 24 },
   heroHeadline: {

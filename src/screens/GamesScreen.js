@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { View, Text, ScrollView, Pressable, StyleSheet, TextInput, Image, useWindowDimensions } from 'react-native'
+import { View, Text, ScrollView, Pressable, StyleSheet, TextInput, Image, Platform, useWindowDimensions } from 'react-native'
 import { useFocusEffect, useIsFocused } from '@react-navigation/native'
 import { LinearGradient } from 'expo-linear-gradient'
 import { Ionicons } from '@expo/vector-icons'
@@ -43,6 +43,13 @@ export default function GamesScreen({ navigation }) {
   useEffect(() => subscribeArcadeStats(setStats), [])
 
   const openGame = (game) => {
+    if (Platform.OS === 'web' && game.mobileOnly) {
+      const msg = `${game.name} uses your phone's camera and GPS, so it's only in the iYiYi mobile app.`
+      if (typeof window !== 'undefined' && window.confirm(`${msg}\n\nOpen the App Store?`)) {
+        window.open('https://apps.apple.com/app/id6445996160', '_blank')
+      }
+      return
+    }
     buzz('select')
     if (game.route === 'GameLobby') navigation.navigate('GameLobby', { gameId: game.mpId })
     else navigation.navigate(game.route)
@@ -239,7 +246,7 @@ function HeroCard({ game, width, height, artH, badge, live, onPress }) {
           <Text style={styles.heroCat} numberOfLines={1}>{game.categories.map((c) => c.toUpperCase()).join(' · ')} · {playersLabel(game).toUpperCase()}</Text>
           <Text style={styles.heroTitle} numberOfLines={1}>{game.name}</Text>
           <Text style={styles.heroTag} numberOfLines={2}>{game.tagline}</Text>
-          <PlayButton title={game.id === 'laser-tag' ? 'Play Now' : 'Play'} onPress={onPress} style={{ marginTop: 12 }} small />
+          <PlayButton title={Platform.OS === 'web' && game.mobileOnly ? 'Get the app' : game.id === 'laser-tag' ? 'Play Now' : 'Play'} onPress={onPress} style={{ marginTop: 12 }} small />
         </View>
       </CoverArt>
     </Pressable>
@@ -269,11 +276,22 @@ function ContinueCard({ game, stats, onPress }) {
 }
 
 // Square cover shown whole, name and stats underneath it.
+// Web app: camera / GPS games are phone-only.
+function MobileOnlyBadge() {
+  return (
+    <View style={styles.mobileOnly} pointerEvents="none">
+      <Ionicons name="phone-portrait-outline" size={11} color="#fff" />
+      <Text style={styles.mobileOnlyText}>Mobile app</Text>
+    </View>
+  )
+}
+
 function GridCard({ game, width, live, stats, onPress }) {
   return (
     <Pressable onPress={onPress} style={({ pressed }) => [{ width, marginBottom: 14, transform: [{ scale: pressed ? 0.97 : 1 }] }]} accessibilityRole="button" accessibilityLabel={`Open ${game.name}`}>
       <CoverArt game={game} style={[styles.gridCard, { height: width + GRID_INFO_H }]} artStyle={{ height: width }} glyphSize={72}>
         <LinearGradient pointerEvents="none" colors={['rgba(4,5,13,0.7)', 'rgba(4,5,13,0.95)']} style={[styles.gridShade, { top: width }]} />
+        {Platform.OS === 'web' && game.mobileOnly ? <MobileOnlyBadge /> : null}
         <View style={styles.gridInfo}>
           <Text style={styles.gridName} numberOfLines={1}>{game.name}</Text>
           {live > 0 ? (
@@ -360,4 +378,10 @@ const styles = StyleSheet.create({
   gridName: { fontSize: 16, ...font.heavy, color: '#fff', letterSpacing: -0.3 },
   gridMeta: { fontSize: 12, color: 'rgba(255,255,255,0.72)', marginTop: 3 },
   footer: { fontSize: 12, color: AC.faint, textAlign: 'center', marginTop: 10 },
+  mobileOnly: {
+    position: 'absolute', top: 8, left: 8, flexDirection: 'row', alignItems: 'center', gap: 4,
+    paddingHorizontal: 8, paddingVertical: 4, borderRadius: 999,
+    backgroundColor: 'rgba(10,10,20,0.6)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.25)',
+  },
+  mobileOnlyText: { color: '#fff', fontSize: 10, fontWeight: '700', letterSpacing: 0.3 },
 })
