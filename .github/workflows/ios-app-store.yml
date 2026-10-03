@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
-    paths-ignore: ['**.md', 'iyiyi-rebuild/**', 'web/site/**', 'store-assets/**', 'scripts/asc_metadata.py', '.github/workflows/app-store-metadata.yml']
+    paths-ignore: ['**.md', 'iyiyi-rebuild/**', 'web/site/**', 'store-assets/**', 'scripts/asc_metadata.py', '.github/workflows/app-store-metadata.yml', '.github/workflows/app-store-submit.yml', 'scripts/asc_submit.py']
 
 concurrency:
   group: ios-release
@@ -39,7 +39,6 @@ jobs:
           art() { curl -fsSL --retry 3 -o "/tmp/$2" "$B$1.png" && python3 -c "import sys;d=open('/tmp/$2','rb').read(8);sys.exit(0 if d.startswith(b'\x89PNG') else 1)" && mv "/tmp/$2" "src/components/camera/filters/art/$2" && echo "art $2 OK" || echo "::warning::kept placeholder for $2"; }
           art hf_20261002_211815_89224d3b-2986-4b10-ba0d-8fe99be6fc9a nametag-glass.png
           art hf_20261002_211816_78e46727-d4bd-4b15-8bc1-b6854e77461d bubble-iloveyou.png
-          art hf_20261002_211816_2ae96b90-1276-4850-8209-15643f8da59d iy-logo-render.png
 
       - name: Use the newest Xcode 26
         run: |

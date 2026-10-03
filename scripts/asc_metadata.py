@@ -40,6 +40,7 @@ S.headers["Authorization"] = f"Bearer {token()}"
 
 def call(method, path, **kw):
     url = path if path.startswith("http") else API + path
+    S.headers["Authorization"] = f"Bearer {token()}"  # fresh token: long runs outlive one
     r = S.request(method, url, timeout=60, **kw)
     if r.status_code >= 400:
         raise RuntimeError(f"{method} {path} -> {r.status_code}: {r.text[:800]}")

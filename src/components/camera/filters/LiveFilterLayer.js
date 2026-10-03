@@ -540,7 +540,9 @@ export default function LiveFilterLayer({
     <View style={StyleSheet.absoluteFill} pointerEvents="none">
       {slots.current.slice(0, used).map((slot, i) => {
         // Slight perspective: tags left of center turn a little toward the middle, and vice versa.
-        const is3D = i === 0 && filter === 'logo'
+        // The photoreal render (art/iy-logo-render.png) is the live emblem too; the three.js
+        // version (Logo3D) is kept but switched off.
+        const is3D = false
         const rotateY = yawing
           ? slot.x.interpolate({
             inputRange: [-OVERLAY_BOX / 2, vw - OVERLAY_BOX / 2],

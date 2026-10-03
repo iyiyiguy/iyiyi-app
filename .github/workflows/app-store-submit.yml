@@ -1,0 +1,38 @@
+# Swaps a new build into the App Store version (cancelling a pending review first if needed),
+# pushes the listing text + screenshots from store-assets/, and submits it for review.
+# Run from the Actions tab with the build number (e.g. 216). It waits for Apple to finish
+# processing that build.
+name: App Store submit build
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_number:
+        description: Build number to submit (e.g. 216)
+        required: true
+      screenshots:
+        description: Also replace the iPhone screenshots
+        type: boolean
+        default: true
+
+concurrency:
+  group: app-store-submit
+  cancel-in-progress: false
+
+jobs:
+  submit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install pyjwt cryptography requests
+      - run: python scripts/asc_submit.py
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+          BUILD_NUMBER: ${{ inputs.build_number }}
+          SCREENSHOTS: ${{ inputs.screenshots }}
