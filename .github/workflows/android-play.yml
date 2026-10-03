@@ -15,7 +15,7 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
-    paths-ignore: ['**.md', 'iyiyi-rebuild/**']
+    paths-ignore: ['**.md', 'iyiyi-rebuild/**', 'web/site/**', 'store-assets/**']
 
 concurrency:
   group: android-release
