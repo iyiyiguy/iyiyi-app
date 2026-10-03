@@ -1,0 +1,31 @@
+# Pushes the App Store listing text in store-assets/metadata/en-US (and optionally the screenshots)
+# to App Store Connect. Runs on its own whenever those files change, or by hand from the Actions tab.
+name: App Store listing → App Store Connect
+
+on:
+  workflow_dispatch:
+    inputs:
+      screenshots:
+        description: Also replace the iPhone screenshots on the editable version
+        type: boolean
+        default: false
+  push:
+    branches: [main]
+    paths: ['store-assets/metadata/**']
+
+jobs:
+  listing:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install pyjwt cryptography requests
+      - run: python scripts/asc_metadata.py
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+          UPLOAD_SCREENSHOTS: ${{ inputs.screenshots || 'false' }}

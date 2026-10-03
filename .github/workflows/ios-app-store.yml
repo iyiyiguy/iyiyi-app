@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
-    paths-ignore: ['**.md', 'iyiyi-rebuild/**', 'web/site/**', 'store-assets/**']
+    paths-ignore: ['**.md', 'iyiyi-rebuild/**', 'web/site/**', 'store-assets/**', 'scripts/asc_metadata.py', '.github/workflows/app-store-metadata.yml']
 
 concurrency:
   group: ios-release
