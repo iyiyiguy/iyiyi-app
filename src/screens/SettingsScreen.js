@@ -1,4 +1,5 @@
 import { loadShowPhotoLocation, saveShowPhotoLocation } from '../lib/photoLocation'
+import { clearSafeZone, formatRadius, loadSafeZone, releaseSafeZoneHide, saveSafeZone, subscribeSafeZone } from '../lib/safeZone'
 import { useEffect, useState } from 'react'
 import { loadFlipPref, saveFlipPref } from '../lib/flipToCamera'
 import { loadTrimHandsFreePref, saveTrimHandsFreePref } from '../lib/handsFreePref'
@@ -29,6 +30,12 @@ export default function SettingsScreen({ navigation }) {
   const [notifyNearby, setNotifyNearby] = useState(false)
   const [allowTagging, setAllowTagging] = useState(true)
   const [showPhotoLocation, setShowPhotoLocation] = useState(true)
+  const [safeZone, setSafeZoneState] = useState(null)
+  useEffect(() => {
+    loadSafeZone().then(setSafeZoneState)
+    return subscribeSafeZone(setSafeZoneState)
+  }, [])
+  const openSafeZoneMap = () => navigation.navigate('Tabs', { screen: 'Map', params: { safeZone: Date.now() } })
   useEffect(() => { loadShowPhotoLocation().then(setShowPhotoLocation).catch(() => {}) }, [])
   const [flipCamera, setFlipCamera] = useState(true)
   const [trimHandsFree, setTrimHandsFree] = useState(true)
@@ -118,6 +125,32 @@ export default function SettingsScreen({ navigation }) {
               ))}
             </View>
           </View>
+        </GlassPanel>
+
+        <GlassPanel radius={radii.lg} style={styles.card}>
+          <SwitchRow
+            label="Safe zone"
+            description={safeZone
+              ? `Around your home spot (${formatRadius(safeZone.radiusM)}). While you're inside it your location isn't shared and your profile is hidden from the map and Nearby. Your home spot stays on this phone.`
+              : "Set a home spot. While you're inside it your location isn't shared and your profile is hidden from the map and Nearby."}
+            value={!!safeZone?.enabled}
+            onChange={(v) => {
+              if (!safeZone) { openSafeZoneMap(); return }
+              saveSafeZone({ ...safeZone, enabled: v })
+              if (!v) releaseSafeZoneHide()
+            }}
+          />
+          <Row label={safeZone ? 'Edit safe zone on the map' : 'Set up safe zone on the map'} onPress={openSafeZoneMap} />
+          {safeZone ? (
+            <Row
+              danger
+              label="Remove safe zone"
+              onPress={() => Alert.alert('Remove safe zone?', 'Your profile will show on the map again when you are home (if "visible on the map" is on).', [
+                { text: 'Cancel', style: 'cancel' },
+                { text: 'Remove', style: 'destructive', onPress: async () => { await clearSafeZone(); releaseSafeZoneHide() } },
+              ])}
+            />
+          ) : null}
         </GlassPanel>
 
         <GlassPanel radius={radii.lg} style={styles.card}>

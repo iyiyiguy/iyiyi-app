@@ -16,6 +16,7 @@ import SearchField from '../components/SearchField'
 import { matchesTags, matchesSearch } from '../lib/tags'
 import { API_URL, supabase } from '../lib/supabase'
 import { openProfile } from '../lib/profileNav'
+import { loadSafeZone, updateSafeZonePresence } from '../lib/safeZone'
 
 const REFRESH_INTERVAL_MS = 10000 // re-scan even if the user hasn't moved
 
@@ -31,6 +32,7 @@ export default function NearbyScreen({ navigation }) {
   const { statuses, setStatus } = useFollowStatuses(users)
   const lastCoords = useRef(null)
   const [myName, setMyName] = useState(null)
+  const [inSafeZone, setInSafeZone] = useState(false)
   const scopeRef = useRef(scope)
   scopeRef.current = scope
 
@@ -56,11 +58,17 @@ export default function NearbyScreen({ navigation }) {
     if (!session?.access_token) throw new Error('Please sign in again')
     const headers = { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` }
 
-    await fetch(`${API_URL}/api/locations/update`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({ latitude: coords.latitude, longitude: coords.longitude }),
-    })
+    // Inside the safe zone: don't share this position (and the profile is hidden).
+    await loadSafeZone()
+    const inside = updateSafeZonePresence(coords)
+    setInSafeZone(inside)
+    if (!inside) {
+      await fetch(`${API_URL}/api/locations/update`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ latitude: coords.latitude, longitude: coords.longitude }),
+      })
+    }
 
     const res = await fetch(
       `${API_URL}/api/locations/nearby?latitude=${coords.latitude}&longitude=${coords.longitude}&scope=${scopeRef.current}`,
@@ -182,6 +190,12 @@ export default function NearbyScreen({ navigation }) {
         <TagDropdown selected={activeTags} onApply={setActiveTags} />
       </View>
       <ScopeChips value={scope} onChange={setScope} />
+      {inSafeZone ? (
+        <Pressable onPress={() => navigation.navigate('Map', { safeZone: true })} style={styles.safeBanner} accessibilityRole="button">
+          <Ionicons name="shield-checkmark" size={16} color="#3ef08b" />
+          <Text style={styles.safeText}>You're in your safe zone. Your profile is hidden from the map and Nearby.</Text>
+        </Pressable>
+      ) : null}
       {filtering ? (
         <View style={styles.filterLine}>
           <Text style={styles.filterText} numberOfLines={1}>
@@ -255,6 +269,8 @@ function QuickAction({ icon, label, onPress }) {
 }
 
 const styles = StyleSheet.create({
+  safeBanner: { flexDirection: 'row', alignItems: 'center', gap: 8, marginHorizontal: 16, marginTop: 8, paddingHorizontal: 12, paddingVertical: 9, borderRadius: radii.lg, backgroundColor: 'rgba(62,240,139,0.12)', borderWidth: 1, borderColor: 'rgba(62,240,139,0.45)' },
+  safeText: { ...type.caption, color: colors.text, fontWeight: '600', flexShrink: 1 },
   screen: { flex: 1, backgroundColor: 'transparent' },
   search: { marginHorizontal: 16, marginTop: 4 },
   quickRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 16, paddingTop: 12, paddingBottom: 4 },

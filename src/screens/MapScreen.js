@@ -2,7 +2,7 @@ import { memo, useState, useCallback, useEffect, useMemo, useRef } from 'react'
 import { View, Text, Pressable, StyleSheet, ActivityIndicator, Alert, ScrollView, Image, Platform, useColorScheme } from 'react-native'
 import { useFocusEffect } from '@react-navigation/native'
 import MapView from '../components/SafeMapView'
-import { Marker } from 'react-native-maps'
+import { Circle, Marker } from 'react-native-maps'
 import * as Location from 'expo-location'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import * as Haptics from 'expo-haptics'
@@ -19,6 +19,10 @@ import { openProfile } from '../lib/profileNav'
 import { fetchEvents } from '../lib/events'
 import { countryByCode, countryMatches } from '../lib/countries'
 import { bundledCountryRegion, countryRegion, countryCodeAt } from '../lib/countryRegions'
+import {
+  DEFAULT_RADIUS_M, MILE_M, clampRadius, clearSafeZone, distanceM, formatRadius, loadSafeZone,
+  offsetEast, releaseSafeZoneHide, saveSafeZone, subscribeSafeZone, updateSafeZonePresence,
+} from '../lib/safeZone'
 
 // Fabric (React Native's new architecture, on by default since SDK 52) is far
 // stricter than the old bridge about native view prop types — a marker or
@@ -164,7 +168,7 @@ async function lookupProfileCountries(ids) {
 
 const MAP_LOOK_KEY = 'iyiyi_map_look_v1'
 
-export default function MapScreen({ navigation }) {
+export default function MapScreen({ navigation, route }) {
   const scheme = useColorScheme()
   const mapRef = useRef(null)
   const currentRegionRef = useRef(null)
@@ -176,6 +180,7 @@ export default function MapScreen({ navigation }) {
   // settle so MapKit's aspect-fit doesn't immediately re-show "Search this area".
   const rebaseUntilRef = useRef(0)
   const userCountryRef = useRef(null) // ISO code where the user is, once reverse-geocoded
+  const flyInRef = useRef(null) // first load: region to glide into once the map is ready
 
   const [region, setRegion] = useState(null)
   const [locState, setLocState] = useState('pending') // pending | denied | ready
@@ -197,6 +202,28 @@ export default function MapScreen({ navigation }) {
   const [countryOpen, setCountryOpen] = useState(false)
   // Bumped by every preset/country pick so a slow async lookup can't override a newer pick.
   const pickSeqRef = useRef(0)
+
+  // ---- Safe zone (home spot hidden from the map / Nearby) ----
+  const [safeZone, setSafeZone] = useState(null) // saved zone
+  const [zoneDraft, setZoneDraft] = useState(null) // while editing: { latitude, longitude, radiusM }
+  const [inZone, setInZone] = useState(false)
+  const [zonePulse, setZonePulse] = useState(false)
+  useEffect(() => {
+    loadSafeZone().then((z) => setSafeZone(z))
+    return subscribeSafeZone((z) => setSafeZone(z))
+  }, [])
+  const notePosition = useCallback((coords) => {
+    loadSafeZone().then(() => setInZone(updateSafeZonePresence(coords))).catch(() => {})
+  }, [])
+  useEffect(() => {
+    if (userCoordsRef.current) setInZone(updateSafeZonePresence(userCoordsRef.current))
+  }, [safeZone])
+  // Gentle breathing glow on the zone so it reads as "alive".
+  useEffect(() => {
+    if (!safeZone?.enabled && !zoneDraft) return undefined
+    const t = setInterval(() => setZonePulse((p) => !p), 1100)
+    return () => clearInterval(t)
+  }, [safeZone?.enabled, zoneDraft])
 
   const authedFetch = async (path, options = {}) => {
     const { data } = await supabase.auth.getSession()
@@ -332,20 +359,26 @@ export default function MapScreen({ navigation }) {
           if (cancelled) return
           if (!isValidCoord(loc.coords.latitude, loc.coords.longitude)) return
           userCoordsRef.current = { latitude: loc.coords.latitude, longitude: loc.coords.longitude }
+          notePosition(userCoordsRef.current)
           const initial = {
             latitude: loc.coords.latitude,
             longitude: loc.coords.longitude,
             latitudeDelta: 0.01,
             longitudeDelta: 0.01,
           }
-          // Keep the map where the user left it when coming back to the tab.
-          setRegion((prev) => prev ?? initial)
+          // Keep the map where the user left it when coming back to the tab. The first time,
+          // start zoomed out and glide down into the 3D view.
+          setRegion((prev) => {
+            if (prev) return prev
+            flyInRef.current = initial
+            return { ...initial, latitudeDelta: 0.09, longitudeDelta: 0.09 }
+          })
           if (!currentRegionRef.current) currentRegionRef.current = initial
           // First visit: the area is what's on screen around you. Coming back keeps the last
           // searched area (refreshed).
           if (!areaRef.current) {
             areaRef.current = makeArea(initial, { follow: true })
-            rebaseUntilRef.current = Date.now() + 2500
+            rebaseUntilRef.current = Date.now() + 4500 // covers the first fly-in
           }
           setLocState('ready')
           refresh(loc.coords)
@@ -355,6 +388,7 @@ export default function MapScreen({ navigation }) {
             (update) => {
               if (!cancelled && isValidCoord(update.coords.latitude, update.coords.longitude)) {
                 userCoordsRef.current = { latitude: update.coords.latitude, longitude: update.coords.longitude }
+                notePosition(userCoordsRef.current)
                 refresh(update.coords)
               }
             }
@@ -377,7 +411,7 @@ export default function MapScreen({ navigation }) {
         cancelled = true
         watchSubscription?.remove()
       }
-    }, [refreshArea, loadEvents])
+    }, [refreshArea, loadEvents, notePosition])
   )
 
   const animateTo = (r, duration = 450) => {
@@ -621,6 +655,44 @@ export default function MapScreen({ navigation }) {
     if (selected && !shownUsers.some((u) => u.user_id === selected.user_id)) setSelected(null)
   }, [shownUsers, selected])
 
+  const fitZone = (z) => {
+    if (!z) return
+    animateTo(regionForRadius(z, Math.max(z.radiusM * 1.6, 150)), 700)
+  }
+  const openZoneEditor = () => {
+    Haptics.selectionAsync().catch(() => {})
+    const me = userCoordsRef.current
+    const draft = safeZone
+      ? { latitude: safeZone.latitude, longitude: safeZone.longitude, radiusM: safeZone.radiusM }
+      : me ? { latitude: me.latitude, longitude: me.longitude, radiusM: DEFAULT_RADIUS_M } : null
+    if (!draft) { Alert.alert('Finding your spot', 'Wait a moment for your location, then try again.'); return }
+    setSelected(null)
+    setZoneDraft(draft)
+    fitZone(draft)
+  }
+  const zoneParam = route?.params?.safeZone
+  useEffect(() => {
+    if (!zoneParam) return
+    const t = setTimeout(openZoneEditor, region ? 300 : 1500)
+    navigation.setParams?.({ safeZone: undefined })
+    return () => clearTimeout(t)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [zoneParam])
+  const saveZone = async () => {
+    if (!zoneDraft) return
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {})
+    const { handle, ...z } = zoneDraft
+    await saveSafeZone({ ...z, enabled: true })
+    setZoneDraft(null)
+  }
+  const removeZone = () => {
+    Alert.alert('Remove safe zone?', 'Your profile will show on the map again when you are home (if "visible on the map" is on).', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Remove', style: 'destructive', onPress: async () => { setZoneDraft(null); await clearSafeZone(); releaseSafeZoneHide() } },
+    ])
+  }
+  const zoneShown = zoneDraft || (safeZone?.enabled ? safeZone : null)
+
   const onSelectUser = useCallback((u) => {
     Haptics.selectionAsync().catch(() => {})
     setSelected(u)
@@ -664,7 +736,12 @@ export default function MapScreen({ navigation }) {
             rotateEnabled
             showsBuildings
             mapType={mapLook === 'real' ? (Platform.OS === 'ios' ? 'hybridFlyover' : 'hybrid') : 'standard'}
-            onMapReady={() => applyTilt(mapLookRef.current)}
+            onMapReady={() => {
+              const target = flyInRef.current
+              flyInRef.current = null
+              if (target) setTimeout(() => animateTo(target, 1600), 350)
+              else applyTilt(mapLookRef.current)
+            }}
           >
             {shownUsers.map((u) => (
               <UserPin
@@ -699,6 +776,59 @@ export default function MapScreen({ navigation }) {
                 </View>
               </Marker>
             ))}
+            {zoneShown && isValidCoord(zoneShown.latitude, zoneShown.longitude) ? (
+              <Circle
+                center={{ latitude: zoneShown.latitude, longitude: zoneShown.longitude }}
+                radius={zoneShown.radiusM}
+                strokeWidth={zoneDraft ? 3 : 2}
+                strokeColor={zoneDraft ? 'rgba(62,240,139,0.95)' : zonePulse ? 'rgba(62,240,139,0.85)' : 'rgba(62,240,139,0.5)'}
+                fillColor={zonePulse ? 'rgba(62,240,139,0.20)' : 'rgba(62,240,139,0.11)'}
+                zIndex={0}
+              />
+            ) : null}
+            {zoneShown && isValidCoord(zoneShown.latitude, zoneShown.longitude) ? (
+              <Marker
+                key={zoneDraft ? 'zone-home-edit' : 'zone-home'}
+                coordinate={{ latitude: zoneShown.latitude, longitude: zoneShown.longitude }}
+                anchor={{ x: 0.5, y: 0.5 }}
+                draggable={!!zoneDraft}
+                tracksViewChanges={false}
+                zIndex={5}
+                onPress={() => { if (!zoneDraft) openZoneEditor() }}
+                onDragEnd={(e) => {
+                  const c = e?.nativeEvent?.coordinate
+                  if (c && isValidCoord(c.latitude, c.longitude)) setZoneDraft((d) => (d ? { ...d, latitude: c.latitude, longitude: c.longitude, handle: null } : d))
+                }}
+              >
+                <View style={[styles.homePin, zoneDraft && styles.homePinEdit]}>
+                  <Ionicons name="home" size={16} color="#06140c" />
+                </View>
+              </Marker>
+            ) : null}
+            {zoneDraft ? (
+              <Marker
+                key={`zone-handle-${Math.round(zoneDraft.latitude * 1e5)}-${Math.round(zoneDraft.longitude * 1e5)}`}
+                coordinate={zoneDraft.handle || offsetEast(zoneDraft, zoneDraft.radiusM)}
+                anchor={{ x: 0.5, y: 0.5 }}
+                draggable
+                tracksViewChanges={false}
+                zIndex={6}
+                onDragStart={() => setZoneDraft((d) => (d ? { ...d, handle: offsetEast(d, d.radiusM) } : d))}
+                onDrag={(e) => {
+                  // Only the size follows the finger; the handle itself is left to the map.
+                  const c = e?.nativeEvent?.coordinate
+                  if (c) setZoneDraft((d) => (d ? { ...d, radiusM: clampRadius(distanceM(d, c)), handle: d.handle || offsetEast(d, d.radiusM) } : d))
+                }}
+                onDragEnd={(e) => {
+                  const c = e?.nativeEvent?.coordinate
+                  if (c) setZoneDraft((d) => (d ? { ...d, radiusM: clampRadius(distanceM(d, c)), handle: null } : d))
+                }}
+              >
+                <View style={styles.zoneHandle}>
+                  <Ionicons name="resize" size={14} color="#06140c" />
+                </View>
+              </Marker>
+            ) : null}
           </MapView>
         ) : (
           <View style={styles.center}>
@@ -804,6 +934,9 @@ export default function MapScreen({ navigation }) {
           <MapCircleButton onPress={() => setCountryOpen(true)} label="Choose a country">
             <Ionicons name={country ? 'globe' : 'globe-outline'} size={20} color={country ? colors.magenta : colors.text} />
           </MapCircleButton>
+          <MapCircleButton onPress={openZoneEditor} label={safeZone ? 'Edit safe zone' : 'Set a safe zone'}>
+            <Ionicons name={safeZone?.enabled ? 'shield-checkmark' : 'shield-outline'} size={20} color={safeZone?.enabled ? '#3ef08b' : colors.text} />
+          </MapCircleButton>
           <MapCircleButton onPress={cycleMapLook} label={`Map style: ${mapLook === '3d' ? '3D' : mapLook === 'real' ? 'Realistic' : 'Flat'}. Tap to change`}>
             {mapLook === 'flat' ? (
               <Text style={styles.lookText}>2D</Text>
@@ -831,7 +964,60 @@ export default function MapScreen({ navigation }) {
               onOpen={() => openProfile(navigation, selected.user_id)}
             />
           ) : null}
-          {visible !== null && (
+          {zoneDraft ? (
+            <Glass radius={radii.lg} strong style={styles.zoneCard}>
+              <View style={styles.zoneHead}>
+                <Ionicons name="shield-checkmark" size={18} color="#3ef08b" />
+                <Text style={[type.headline, { flex: 1 }]}>Safe zone</Text>
+                <Text style={styles.zoneSize}>{formatRadius(zoneDraft.radiusM)}</Text>
+              </View>
+              <Text style={styles.zoneHelp}>
+                Drag the house to move it and the round handle to resize. Inside this area your location isn't shared and your profile is hidden from the map and Nearby. It stays on this phone.
+              </Text>
+              <View style={styles.zoneChips}>
+                {[0.1, 0.2, 0.5, 1].map((mi) => {
+                  const on = Math.abs(zoneDraft.radiusM - mi * MILE_M) < 15
+                  return (
+                    <Pressable
+                      key={mi}
+                      onPress={() => { const d = { ...zoneDraft, radiusM: clampRadius(mi * MILE_M), handle: null }; setZoneDraft(d); fitZone(d) }}
+                      style={[styles.zoneChip, on && styles.zoneChipOn]}
+                    >
+                      <Text style={[styles.zoneChipText, on && styles.zoneChipTextOn]}>{mi} mi</Text>
+                    </Pressable>
+                  )
+                })}
+                <Pressable
+                  onPress={() => {
+                    const me = userCoordsRef.current
+                    if (!me) return
+                    const d = { ...zoneDraft, latitude: me.latitude, longitude: me.longitude, handle: null }
+                    setZoneDraft(d)
+                    fitZone(d)
+                  }}
+                  style={styles.zoneChip}
+                >
+                  <Text style={styles.zoneChipText}>Center on me</Text>
+                </Pressable>
+              </View>
+              <View style={styles.zoneButtons}>
+                {safeZone ? (
+                  <GlassButton size="sm" onPress={removeZone} style={{ flex: 1 }}>Remove</GlassButton>
+                ) : null}
+                <GlassButton size="sm" onPress={() => setZoneDraft(null)} style={{ flex: 1 }}>Cancel</GlassButton>
+                <GlassButton size="sm" variant="primary" onPress={saveZone} style={{ flex: 1.3 }}>Save zone</GlassButton>
+              </View>
+            </Glass>
+          ) : inZone ? (
+            <Pressable onPress={openZoneEditor}>
+              <Glass radius={radii.lg} style={[styles.visibilityPill, styles.safePill]} shadow={false}>
+                <Ionicons name="shield-checkmark" size={16} color="#3ef08b" />
+                <Text style={styles.visibilityText}>
+                  You're in your safe zone. Your profile is hidden from the map and Nearby.
+                </Text>
+              </Glass>
+            </Pressable>
+          ) : visible !== null && (
             <Pressable onPress={toggleVisibility} disabled={visibilityBusy || isGhost}>
               <Glass radius={radii.lg} style={[styles.visibilityPill, visible && !isGhost && styles.visibilityPillActive]} shadow={false}>
                 {visibilityBusy ? (
@@ -998,6 +1184,28 @@ const styles = StyleSheet.create({
   visibilityDotOn: { backgroundColor: colors.magenta },
   visibilityDotOff: { backgroundColor: colors.textFaint },
   visibilityText: { ...type.caption, color: colors.text, fontWeight: '600', flexShrink: 1 },
+
+  safePill: { borderWidth: 1, borderColor: 'rgba(62,240,139,0.7)', backgroundColor: 'rgba(62,240,139,0.10)' },
+  homePin: {
+    width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center',
+    backgroundColor: '#3ef08b', borderWidth: 3, borderColor: '#ffffff',
+    shadowColor: '#000', shadowOpacity: 0.35, shadowRadius: 4, shadowOffset: { width: 0, height: 2 },
+  },
+  homePinEdit: { width: 40, height: 40, borderRadius: 20 },
+  zoneHandle: {
+    width: 30, height: 30, borderRadius: 15, alignItems: 'center', justifyContent: 'center',
+    backgroundColor: '#ffffff', borderWidth: 3, borderColor: '#3ef08b',
+  },
+  zoneCard: { padding: 14, gap: 10 },
+  zoneHead: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  zoneSize: { fontSize: 15, fontWeight: '800', color: '#3ef08b' },
+  zoneHelp: { ...type.caption, color: colors.textMuted },
+  zoneChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  zoneChip: { paddingHorizontal: 11, paddingVertical: 6, borderRadius: radii.pill, borderWidth: 1, borderColor: colors.hairline },
+  zoneChipOn: { backgroundColor: '#3ef08b', borderColor: '#3ef08b' },
+  zoneChipText: { fontSize: 12, fontWeight: '700', color: colors.text },
+  zoneChipTextOn: { color: '#06140c' },
+  zoneButtons: { flexDirection: 'row', gap: 8 },
 
   eventPin: {
     width: 30, height: 30, borderRadius: 15, alignItems: 'center', justifyContent: 'center',

@@ -91,18 +91,30 @@ def main():
     M.UPLOAD_SCREENSHOTS = os.environ.get("SCREENSHOTS", "true").lower() == "true"
     M.main()
 
-    # Reuse an unsubmitted submission if Apple kept one, else start a new one.
-    subs = M.call("GET", "/reviewSubmissions", params={"filter[app]": M.APP_ID, "filter[platform]": "IOS", "filter[state]": "READY_FOR_REVIEW", "limit": 5})["data"]
-    if subs:
-        sub = subs[0]
-    else:
+    # Reuse an open (unsubmitted) submission if Apple kept one, else start a new one. Adding the
+    # version can be refused (409) for a few minutes while new screenshots are still processing,
+    # so that step retries.
+    open_states = {"READY_FOR_REVIEW", "UNRESOLVED_ISSUES"}
+    subs = M.call("GET", "/reviewSubmissions", params={"filter[app]": M.APP_ID, "filter[platform]": "IOS", "limit": 20})["data"]
+    sub = next((x for x in subs if x["attributes"].get("state") in open_states), None)
+    if sub is None:
         sub = M.call("POST", "/reviewSubmissions", json={"data": {"type": "reviewSubmissions", "attributes": {"platform": "IOS"},
                       "relationships": {"app": {"data": {"type": "apps", "id": M.APP_ID}}}}})["data"]
-    items = M.call("GET", f"/reviewSubmissions/{sub['id']}/items")["data"]
-    if not items:
-        M.call("POST", "/reviewSubmissionItems", json={"data": {"type": "reviewSubmissionItems", "relationships": {
-            "reviewSubmission": {"data": {"type": "reviewSubmissions", "id": sub["id"]}},
-            "appStoreVersion": {"data": {"type": "appStoreVersions", "id": v["id"]}}}}})
+    print(f"Using review submission {sub['id']} ({sub['attributes'].get('state')})")
+    for attempt in range(12):
+        items = M.call("GET", f"/reviewSubmissions/{sub['id']}/items")["data"]
+        if items:
+            break
+        try:
+            M.call("POST", "/reviewSubmissionItems", json={"data": {"type": "reviewSubmissionItems", "relationships": {
+                "reviewSubmission": {"data": {"type": "reviewSubmissions", "id": sub["id"]}},
+                "appStoreVersion": {"data": {"type": "appStoreVersions", "id": v["id"]}}}}})
+            break
+        except RuntimeError as e:
+            if "409" not in str(e) or attempt == 11:
+                raise
+            print(f"  not accepted yet ({str(e)[:300]}), retrying in 60s")
+            time.sleep(60)
     M.call("PATCH", f"/reviewSubmissions/{sub['id']}", json={"data": {"type": "reviewSubmissions", "id": sub["id"], "attributes": {"submitted": True}}})
     print(f"Submitted version {v['attributes']['versionString']} with build {BUILD} for review")
 
@@ -111,5 +123,5 @@ if __name__ == "__main__":
     try:
         main()
     except Exception as e:
-        print(f"::error::{e}")
+        print("::error::" + " ".join(str(e).split())[:3000])
         sys.exit(1)

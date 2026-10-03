@@ -11,6 +11,7 @@ import { countryMatches } from '../lib/countries'
 import { countryRegion } from '../lib/countryRegions'
 import { colors, type } from '../theme'
 import { API_URL, supabase } from '../lib/supabase'
+import { loadSafeZone, updateSafeZonePresence } from '../lib/safeZone'
 import { openProfile } from '../lib/profileNav'
 
 // react-native-maps has no web implementation, so this screen (Metro picks
@@ -221,11 +222,15 @@ export default function MapScreen({ navigation }) {
     if (!session?.access_token) throw new Error('Please sign in again')
     const headers = { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` }
 
-    await fetch(`${API_URL}/api/locations/update`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({ latitude, longitude }),
-    })
+    // Inside the safe zone (set on the phone app): don't share this position.
+    await loadSafeZone()
+    if (!updateSafeZonePresence({ latitude, longitude })) {
+      await fetch(`${API_URL}/api/locations/update`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ latitude, longitude }),
+      })
+    }
 
     const scopeParam = scopeRef.current ? `&scope=${encodeURIComponent(scopeRef.current)}` : ''
     const res = await fetch(
