@@ -12,6 +12,7 @@ Pod::Spec.new do |s|
   s.swift_version  = '5.9'
 
   s.dependency 'ExpoModulesCore'
+  s.dependency 'ExpoCamera'
   s.frameworks = 'Vision', 'ImageIO', 'CoreGraphics', 'AVFoundation', 'QuartzCore', 'UIKit'
 
   s.pod_target_xcconfig = {

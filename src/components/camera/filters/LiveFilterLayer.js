@@ -407,7 +407,8 @@ export default function LiveFilterLayer({
         .catch(() => { live.current.attached = false })
     }
     live.current = { lastEvent: 0, emptySince: 0, held: false, attached: false }
-    const first = setTimeout(attach, 500)
+    // Give expo-camera time to finish flipping / starting the session before attaching.
+    const first = setTimeout(attach, 1500)
     const watchdog = setInterval(() => {
       if (Date.now() - live.current.lastEvent > 1500) attach()
     }, 1500)

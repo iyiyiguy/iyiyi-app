@@ -1,5 +1,6 @@
 import AVFoundation
 import CoreGraphics
+import ExpoCamera
 import ExpoModulesCore
 import Foundation
 import ImageIO
@@ -36,7 +37,7 @@ public class BodyHitModule: Module {
     //   aspect-fill already applied). Returns false when no preview / no face support.
     AsyncFunction("startLiveFaces") { (promise: Promise) in
       DispatchQueue.main.async {
-        promise.resolve(self.liveFaces.start())
+        self.liveFaces.start { ok in promise.resolve(ok) }
       }
     }
 
@@ -419,7 +420,6 @@ struct BodyHitDetection {
 
 final class LiveFaceTracker: NSObject, AVCaptureMetadataOutputObjectsDelegate {
   private let emit: ([String: Any]) -> Void
-  private let configQueue = DispatchQueue(label: "iyiyi.livefaces.config")
   private weak var previewLayer: AVCaptureVideoPreviewLayer?
   private weak var session: AVCaptureSession?
   private var output: AVCaptureMetadataOutput?
@@ -430,53 +430,59 @@ final class LiveFaceTracker: NSObject, AVCaptureMetadataOutputObjectsDelegate {
     self.emit = emit
   }
 
-  // Main thread. Finds the visible camera preview layer and attaches a faces output to its session.
-  func start() -> Bool {
+  // Main thread. Finds the visible camera preview (expo-camera's CameraView, whose layer is the
+  // AVCaptureVideoPreviewLayer) and attaches a faces output to its session.
+  // expo-camera owns the session and reconfigures it on its own `sessionQueue` (flip, mode
+  // switch, stop/start). We do our session work on that same queue, so it can never interleave
+  // with theirs (an interleaved stopRunning was an uncaught NSException crash when flipping), we
+  // never remove our output (stop just detaches the delegate; the output dies with the session),
+  // and any AVFoundation exception is caught (BHTry) and simply means "no live tracking".
+  func start(completion: @escaping (Bool) -> Void) {
     guard let layer = LiveFaceTracker.findPreviewLayer(), let session = layer.session else {
-      return false
+      completion(false)
+      return
     }
-    if let out = output, self.session === session, session.outputs.contains(out) {
-      previewLayer = layer
-      return true // already running on this session
-    }
-    stop()
     previewLayer = layer
-    self.session = session
-    let out = AVCaptureMetadataOutput()
-    session.beginConfiguration()
-    let added = session.canAddOutput(out)
-    if added { session.addOutput(out) }
-    session.commitConfiguration()
-    guard added, out.availableMetadataObjectTypes.contains(.face) else {
-      if added {
-        session.beginConfiguration()
-        session.removeOutput(out)
-        session.commitConfiguration()
-      }
-      self.session = nil
-      previewLayer = nil
-      return false
+    if let out = output, self.session === session, session.outputs.contains(out) {
+      out.setMetadataObjectsDelegate(self, queue: DispatchQueue.main)
+      completion(true) // already attached to this session
+      return
     }
-    out.setMetadataObjectsDelegate(self, queue: DispatchQueue.main)
-    out.metadataObjectTypes = [.face]
-    output = out
-    lastEmptySent = false
-    return true
+    let queue = (layer.delegate as? CameraView)?.sessionQueue ?? DispatchQueue.main
+    queue.async { [weak self] in
+      guard let self = self else { return }
+      var ok = false
+      var attached: AVCaptureMetadataOutput?
+      let failure = BHTry.run {
+        // Mid-flip / mid-reconfiguration or interrupted: try again on the next attach call.
+        guard session.isRunning, !session.isInterrupted else { return }
+        let out = AVCaptureMetadataOutput()
+        guard session.canAddOutput(out) else { return }
+        session.addOutput(out)
+        attached = out
+        guard out.availableMetadataObjectTypes.contains(.face) else { return }
+        out.metadataObjectTypes = [.face]
+        ok = true
+      }
+      DispatchQueue.main.async {
+        if let out = attached {
+          self.output?.setMetadataObjectsDelegate(nil, queue: nil)
+          self.output = out // remembered even if unusable, so we never stack outputs
+          self.session = session
+          if ok && failure == nil {
+            out.setMetadataObjectsDelegate(self, queue: DispatchQueue.main)
+            self.lastEmptySent = false
+          }
+        }
+        completion(ok && failure == nil)
+      }
+    }
   }
 
+  // Keeps `output` / `session` (weak) so a later start() on the same session re-uses the output
+  // instead of stacking new ones.
   func stop() {
-    if let out = output, let session = session {
-      out.setMetadataObjectsDelegate(nil, queue: nil)
-      configQueue.async {
-        if session.outputs.contains(out) {
-          session.beginConfiguration()
-          session.removeOutput(out)
-          session.commitConfiguration()
-        }
-      }
-    }
-    output = nil
-    session = nil
+    output?.setMetadataObjectsDelegate(nil, queue: nil)
     previewLayer = nil
   }
 
