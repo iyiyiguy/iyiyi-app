@@ -24,10 +24,11 @@ EDITABLE = {"PREPARE_FOR_SUBMISSION", "DEVELOPER_REJECTED", "REJECTED", "METADAT
 
 
 def token():
-    key = os.environ["ASC_KEY_P8"]
-    if "BEGIN PRIVATE KEY" not in key:
-        import base64
-        key = base64.b64decode(key).decode()
+    # Rebuild a clean PEM however the secret was pasted (same as the iOS build workflow).
+    import re, textwrap
+    raw = os.environ["ASC_KEY_P8"].replace("-----BEGIN PRIVATE KEY-----", "").replace("-----END PRIVATE KEY-----", "")
+    body = re.sub(r"[^A-Za-z0-9+/=]", "", raw)
+    key = "-----BEGIN PRIVATE KEY-----\n" + "\n".join(textwrap.wrap(body, 64)) + "\n-----END PRIVATE KEY-----\n"
     now = int(time.time())
     return jwt.encode({"iss": os.environ["ASC_ISSUER_ID"], "iat": now, "exp": now + 1100, "aud": "appstoreconnect-v1"},
                       key, algorithm="ES256", headers={"kid": os.environ["ASC_KEY_ID"], "typ": "JWT"})
