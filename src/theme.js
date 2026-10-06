@@ -93,14 +93,28 @@ export const font = {
   heavy: { fontWeight: '800' },
 }
 
+// Type scale follows Apple's Human Interface Guidelines sizes (Large Title 34, Title 1 28,
+// Title 2 22, Headline 17, Body 17, Subhead 15, Footnote 13, Caption 12) with SF Pro's
+// optical tracking, so screens line up with system UI.
 export const type = {
-  display: { fontSize: 30, fontWeight: '800', letterSpacing: -0.6, color: colors.text },
-  title: { fontSize: 20, fontWeight: '700', letterSpacing: -0.3, color: colors.text },
-  headline: { fontSize: 17, fontWeight: '600', letterSpacing: -0.2, color: colors.text },
-  body: { fontSize: 15, fontWeight: '400', color: colors.text },
+  largeTitle: { fontSize: 34, fontWeight: '800', letterSpacing: -0.8, lineHeight: 40, color: colors.text },
+  display: { fontSize: 28, fontWeight: '800', letterSpacing: -0.6, lineHeight: 34, color: colors.text },
+  title: { fontSize: 22, fontWeight: '700', letterSpacing: -0.4, lineHeight: 28, color: colors.text },
+  title3: { fontSize: 20, fontWeight: '700', letterSpacing: -0.3, lineHeight: 25, color: colors.text },
+  headline: { fontSize: 17, fontWeight: '600', letterSpacing: -0.2, lineHeight: 22, color: colors.text },
+  body: { fontSize: 16, fontWeight: '400', lineHeight: 21, color: colors.text },
+  subhead: { fontSize: 15, fontWeight: '500', lineHeight: 20, color: colors.textMuted },
   label: { fontSize: 12, fontWeight: '600', color: colors.textMuted, letterSpacing: 0.4, textTransform: 'uppercase' },
-  caption: { fontSize: 13, fontWeight: '400', color: colors.textFaint },
+  caption: { fontSize: 13, fontWeight: '400', lineHeight: 18, color: colors.textFaint },
 }
+
+// Soft diffuse shadows (iOS-style lift) for solid elements that aren't glass.
+export const shadows = {
+  soft: { shadowColor: '#1b2340', shadowOpacity: 0.12, shadowRadius: 18, shadowOffset: { width: 0, height: 8 }, elevation: 3 },
+  deep: { shadowColor: '#000', shadowOpacity: 0.28, shadowRadius: 28, shadowOffset: { width: 0, height: 14 }, elevation: 6 },
+}
+
+export const useIsDark = () => useColorScheme() !== 'light'
 
 // Text styles for use over photos / dark image overlays / brand fills.
 export const onImageType = {

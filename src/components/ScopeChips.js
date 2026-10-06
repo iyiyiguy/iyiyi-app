@@ -76,7 +76,7 @@ export default function ScopeChips({ options = SCOPES, value, onChange, style })
                 <ChipLabel option={s} active />
               </View>
             ) : (
-              <GlassPanel radius={radii.pill} animateIn={false}>
+              <GlassPanel radius={radii.pill} animateIn={false} lite>
                 <View style={styles.chip}>
                   <ChipLabel option={s} />
                 </View>

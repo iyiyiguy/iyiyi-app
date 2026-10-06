@@ -15,7 +15,8 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Animated, Pressable, StyleSheet, Text, View } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
-import { CameraView, useCameraPermissions } from 'expo-camera'
+import { CameraView } from 'expo-camera'
+import { CameraOff, useCameraGate } from '../components/CameraGate'
 import { setAudioModeAsync } from 'expo-audio'
 import { Btn, LocationGate, Spectating, formatClock } from './MultiplayerUI'
 import { CountdownOverlay, MatchSummary, RoundBreak, hudShadow } from './laser/Hud'
@@ -127,7 +128,7 @@ export function LaserTagGame({ room, onExit }) {
   const aim = useAim({ enabled: loc.status === 'granted', override: prefs.aimMode })
   const { loadout, weaponId, select: selectWeapon } = useLoadout()
   const gun = useMemo(() => normalizeGun(getWeapon(weaponId)), [weaponId])
-  const [camPerm, requestCamPerm] = useCameraPermissions()
+  const [camPerm] = useCameraGate()
   const [marker, setMarker] = useState(null)
   const [shotsBy, setShotsBy] = useState({})
   const [wheelOpen, setWheelOpen] = useState(false)
@@ -162,9 +163,6 @@ export function LaserTagGame({ room, onExit }) {
     setAudioModeAsync({ playsInSilentMode: true, interruptionMode: 'mixWithOthers' }).catch(() => {})
     return () => releaseWeaponSounds()
   }, [])
-  useEffect(() => {
-    if (camPerm && !camPerm.granted && camPerm.canAskAgain) requestCamPerm().catch(() => {})
-  }, [camPerm, requestCamPerm])
 
   const flash = useCallback((text, good) => {
     setMarker({ text, good })
@@ -658,8 +656,7 @@ export function LaserTagGame({ room, onExit }) {
         <CameraView ref={cameraRef} style={StyleSheet.absoluteFill} facing="back" animateShutter={false} onLayout={(e) => setView(e.nativeEvent.layout)} />
       ) : (
         <View style={[StyleSheet.absoluteFill, styles.noCam]}>
-          <Text style={[type.body, { color: colors.onBrand, textAlign: 'center', marginBottom: 10 }]}>Allow the camera to see where you’re aiming.</Text>
-          <Btn title="Allow camera" size="sm" variant="primary" onPress={() => requestCamPerm().catch(() => {})} />
+          {camPerm && !camPerm.granted && camPerm.status === 'denied' ? <CameraOff what="aiming in Laser Tag" compact /> : null}
         </View>
       )}
 

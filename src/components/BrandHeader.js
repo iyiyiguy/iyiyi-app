@@ -51,7 +51,7 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
   left: { flexDirection: 'row', alignItems: 'center', gap: 12, flexShrink: 1 },
   right: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  title: { ...type.display, fontSize: 30, letterSpacing: -0.6, color: colors.text },
+  title: { ...type.display, fontSize: 30, lineHeight: 36, letterSpacing: -0.6, color: colors.text },
   subtitle: { fontSize: 17, fontWeight: '500', color: colors.textMuted, marginTop: 1 },
   iconCenter: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   badge: { position: 'absolute', top: 4, right: 4, width: 9, height: 9, borderRadius: 5, backgroundColor: colors.danger },

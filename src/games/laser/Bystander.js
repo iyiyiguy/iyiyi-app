@@ -40,8 +40,8 @@ export function useTaggablePrompt(active) {
           'Laser Tag',
           'Let other players tag you when you’re not in a game? You’ll get an alert to join and fight back.',
           [
-            { text: 'Not now', style: 'cancel', onPress: () => { markTaggablePrompted() } },
-            { text: 'Allow', onPress: () => { setTaggable(true).then((ok) => { if (!ok) markTaggablePrompted() }) } },
+            { text: 'Keep off', style: 'cancel', onPress: () => { markTaggablePrompted() } },
+            { text: 'Turn on', onPress: () => { setTaggable(true).then((ok) => { if (!ok) markTaggablePrompted() }) } },
           ],
           { cancelable: true, onDismiss: () => { markTaggablePrompted() } },
         )

@@ -7,6 +7,7 @@ import { SafeAreaProvider, initialWindowMetrics, useSafeAreaInsets } from 'react
 import AsyncStorage from '@react-native-async-storage/async-storage'
 
 import { colors } from './src/theme'
+import { lazyScreen } from './src/lib/lazyScreen'
 import { supabase } from './src/lib/supabase'
 import { apiJson } from './src/lib/api'
 import { initAttribution, logSignup } from './src/lib/attribution'
@@ -39,35 +40,35 @@ import BlockedUsersScreen from './src/screens/BlockedUsersScreen'
 import LocationConsentScreen from './src/screens/LocationConsentScreen'
 import PublicProfileScreen from './src/screens/PublicProfileScreen'
 import HistoryScreen from './src/screens/HistoryScreen'
-import AirdropScreen from './src/screens/AirdropScreen'
+const AirdropScreen = lazyScreen(() => import('./src/screens/AirdropScreen'))
 import RecommendedScreen from './src/screens/RecommendedScreen'
 import FollowListScreen from './src/screens/FollowListScreen'
 import ContentFeedScreen from './src/screens/ContentFeedScreen'
 import SavedContentScreen from './src/screens/SavedContentScreen'
 import ViewersScreen from './src/screens/ViewersScreen'
 import ActivityScreen from './src/screens/ActivityScreen'
-import RecapScreen from './src/screens/RecapScreen'
+const RecapScreen = lazyScreen(() => import('./src/screens/RecapScreen'))
 import { useFlipToCamera, useFlipPref } from './src/lib/flipToCamera'
-import StreamScreen from './src/screens/StreamScreen'
-import ArcadeStoreScreen from './src/screens/ArcadeStoreScreen'
+const StreamScreen = lazyScreen(() => import('./src/screens/StreamScreen'))
+const ArcadeStoreScreen = lazyScreen(() => import('./src/screens/ArcadeStoreScreen'))
 import CameraScreen from './src/screens/CameraScreen'
 import TaggedScreen from './src/screens/TaggedScreen'
 import TopProfilesScreen from './src/screens/TopProfilesScreen'
 import ImportLinksScreen from './src/screens/ImportLinksScreen'
 import PlatformFollowsScreen from './src/screens/PlatformFollowsScreen'
 import EventsScreen from './src/screens/EventsScreen'
-import CreateEventScreen from './src/screens/CreateEventScreen'
-import EventDetailsScreen from './src/screens/EventDetailsScreen'
-import JoinGameScreen from './src/screens/JoinGameScreen'
+const CreateEventScreen = lazyScreen(() => import('./src/screens/CreateEventScreen'))
+const EventDetailsScreen = lazyScreen(() => import('./src/screens/EventDetailsScreen'))
+const JoinGameScreen = lazyScreen(() => import('./src/screens/JoinGameScreen'))
 import GamesScreen from './src/screens/GamesScreen'
-import GamePlayScreen from './src/screens/GamePlayScreen'
-import GameLobbyScreen from './src/screens/GameLobbyScreen'
-import LaserTagLobbyScreen from './src/screens/LaserTagLobbyScreen'
-import GameLeaderboardScreen from './src/screens/GameLeaderboardScreen'
-import PlayerProfileScreen from './src/screens/PlayerProfileScreen'
-import GunShopScreen from './src/screens/GunShopScreen'
-import ChessScreen from './src/screens/ChessScreen'
-import WordRaceScreen from './src/screens/WordRaceScreen'
+const GamePlayScreen = lazyScreen(() => import('./src/screens/GamePlayScreen'))
+const GameLobbyScreen = lazyScreen(() => import('./src/screens/GameLobbyScreen'))
+const LaserTagLobbyScreen = lazyScreen(() => import('./src/screens/LaserTagLobbyScreen'))
+const GameLeaderboardScreen = lazyScreen(() => import('./src/screens/GameLeaderboardScreen'))
+const PlayerProfileScreen = lazyScreen(() => import('./src/screens/PlayerProfileScreen'))
+const GunShopScreen = lazyScreen(() => import('./src/screens/GunShopScreen'))
+const ChessScreen = lazyScreen(() => import('./src/screens/ChessScreen'))
+const WordRaceScreen = lazyScreen(() => import('./src/screens/WordRaceScreen'))
 
 // Shared event links (iyiyi://event/<id>, https://iyiyi.xyz/e/<id>) open the event page.
 const LINKING = {

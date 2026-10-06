@@ -17,7 +17,7 @@ export const GameCard = ({ game, onPress, userStats = null }) => {
     : `${game.minPlayers}–${game.maxPlayers} players`
   return (
     <Pressable onPress={onPress} style={({ pressed }) => [styles.wrap, { transform: [{ scale: pressed ? 0.97 : 1 }] }]} accessibilityRole="button" accessibilityLabel={`Play ${game.name}`}>
-      <GlassPanel style={styles.card} radius={radii.md} animateIn={false}>
+      <GlassPanel style={styles.card} radius={radii.md} animateIn={false} lite>
         {game.cover ? (
           <ImageBackground source={game.cover} style={styles.cover} imageStyle={styles.coverImage}>
             <View style={styles.coverShade} />

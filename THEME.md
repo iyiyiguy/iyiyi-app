@@ -93,3 +93,18 @@ those the same way: swap the container for `GlassPanel`, drop the border,
 add a soft shadow instead. Grep for `colors.inkSurface` /
 `borderColor: colors.hairline` in a screen file as a quick signal that it's
 still due for this pass.
+
+## Motion and lightweight surfaces (Oct 2026)
+
+- `src/lib/motion.js`: iOS-tuned springs (`SPRING`), `Press` (spring press-scale + haptic, use for
+  every tappable), `FadeIn` / `PopIn` entrance wrappers with `index` stagger, `animateLayout()`,
+  `usePulse`, `useDrift`.
+- `src/components/Surface.js`: glass look without a blur view. `GlassPanel lite` renders it. Use
+  `lite` for every cell in a list or grid (UserCard, chips, game cards already do); keep real
+  Glass for bars, hero panels and sheets.
+- `src/components/Avatar.js`: profile photo with an initial-letter gradient fallback (expo-image,
+  memory-disk cache). Use instead of a bare `<Image>` for people.
+- `src/components/CameraGate.js`: camera permission the App Review way - system prompt first,
+  neutral "Camera access is off" + Open Settings when denied. Never add a custom Allow screen.
+- `src/lib/cache.js` + `src/lib/location.js`: screens render their last data instantly and use the
+  last known position before waiting for a fresh GPS fix.

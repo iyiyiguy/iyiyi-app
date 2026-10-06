@@ -1,10 +1,8 @@
 New in this version:
-• Look around before you sign up
-• Live face tracking for camera filters, and the glass name tag now shows your @
-• Every photo keeps the iY logo when saved or posted
-• Choose whether your city shows on your photos
-• Share any post to other apps
-• Tag filters in a quick grid
-• 3D map with building textures
-• Redesigned What's The Word
-• Fixed a crash when flipping to the front camera
+• Safe zone: set your home area and you're hidden from the map while you're there
+• Fresh glass design with light and dark mode, and smoother animations
+• Redesigned sign-up and explore screens
+• iY emblem on everyone facing the camera, in photos and videos
+• Profile Preview now shows exactly what visitors see
+• Screens open faster and remember what they last showed
+• Fixes and polish throughout

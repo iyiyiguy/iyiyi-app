@@ -11,8 +11,11 @@ import ContentViewer from '../components/ContentViewer'
 import FollowEverywhereSheet from '../components/FollowEverywhereSheet'
 import ChallengeSheet from '../components/ChallengeSheet'
 import { Ionicons } from '@expo/vector-icons'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
+import { HeaderButton } from '../components/BrandHeader'
 import { openProfile, useMyUserId } from '../lib/profileNav'
 import ContentGrid from '../components/ContentGrid'
+import Avatar from '../components/Avatar'
 import { mediaArrayFrom, sortMediaNewest } from '../lib/myContent'
 
 const TIER_LABEL = { premium: '👑 Premium', pro: '⭐ Pro', creator: '★ Creator', normal: '' }
@@ -26,7 +29,7 @@ const REPORT_REASONS = [
 ]
 
 export default function UserProfileScreen({ route, navigation }) {
-  const { userId } = route.params
+  const { userId, preview = false } = route.params
   const [profile, setProfile] = useState(null)
   const [media, setMedia] = useState([])
   const [menuOpen, setMenuOpen] = useState(false)
@@ -38,6 +41,7 @@ export default function UserProfileScreen({ route, navigation }) {
   const [challengeOpen, setChallengeOpen] = useState(false)
   const myId = useMyUserId()
   const { width: winW } = useWindowDimensions()
+  const insets = useSafeAreaInsets()
   const loadedOnce = useRef(false)
 
   const authedFetch = async (path, options = {}) => {
@@ -174,7 +178,7 @@ export default function UserProfileScreen({ route, navigation }) {
     <View style={styles.screen}>
       <ScrollView>
         <View style={[styles.heroWrap, { height: Math.max(340, Math.min(440, Math.round((winW || 390) * 1.0))) }]}>
-          <Image source={{ uri: profile.avatar_url }} style={styles.photo} />
+          <Avatar uri={profile.avatar_url} name={profile.username} fill radius={0} transition={250} />
           <LinearGradient colors={['transparent', 'rgba(13,7,16,0.95)']} style={styles.overlay}>
             <Text style={onImageType.display}>{profile.username} {TIER_LABEL[profile.account_type]}</Text>
             <View style={styles.followRow}>
@@ -186,7 +190,7 @@ export default function UserProfileScreen({ route, navigation }) {
                 {profile.view_count} profile views{profile.like_count != null ? ` · ${profile.like_count} likes` : ''}
               </Text>
             )}
-            <View style={styles.actionRow}>
+            {preview ? null : <View style={styles.actionRow}>
               <Pressable onPress={toggleFollow} disabled={followBusy} style={[styles.followButton, (profile.is_following || isPending) && styles.followButtonActive]}>
                 <Text style={[styles.followButtonText, (profile.is_following || isPending) && styles.followButtonTextActive]}>
                   {profile.is_following ? 'Following' : isPending ? 'Requested' : 'Follow'}
@@ -203,7 +207,7 @@ export default function UserProfileScreen({ route, navigation }) {
                   <Text style={styles.followButtonText}>Challenge</Text>
                 </Pressable>
               )}
-            </View>
+            </View>}
             {profile.visibility === 'private' && !profile.is_following && (
               <Text style={styles.privateNotice}>
                 {isPending
@@ -222,16 +226,21 @@ export default function UserProfileScreen({ route, navigation }) {
             )}
           </LinearGradient>
 
-          <Pressable onPress={() => navigation.goBack()} style={styles.back}>
-            <Text style={{ color: colors.onBrand, fontSize: 26 }}>‹</Text>
-          </Pressable>
-          <Pressable onPress={shareProfile} style={styles.shareButton}>
-            <Text style={{ color: colors.onBrand, fontSize: 20 }}>↗</Text>
-          </Pressable>
-          <Pressable onPress={() => setMenuOpen(true)} style={styles.menuButton}>
-            <Text style={{ color: colors.onBrand, fontSize: 26 }}>⋯</Text>
-          </Pressable>
+          <View style={[styles.headerBar, { top: insets.top + 6 }]} pointerEvents="box-none">
+            <HeaderButton icon="chevron-back" onPress={() => navigation.goBack()} label="Back" />
+            <View style={{ flexDirection: 'row', gap: 10 }}>
+              <HeaderButton icon="share-outline" onPress={shareProfile} label="Share profile" />
+              {preview ? null : <HeaderButton icon="ellipsis-horizontal" onPress={() => setMenuOpen(true)} label="More" />}
+            </View>
+          </View>
         </View>
+
+        {preview ? (
+          <View style={styles.previewBanner}>
+            <Ionicons name="eye-outline" size={16} color={colors.accent} />
+            <Text style={styles.previewText}>This is how your profile looks to other people.</Text>
+          </View>
+        ) : null}
 
         {profile.bio ? <Text style={styles.bio}>{profile.bio}</Text> : null}
 
@@ -366,6 +375,9 @@ function SheetOption({ label, onPress, danger }) {
 }
 
 const styles = StyleSheet.create({
+  headerBar: { position: 'absolute', left: 16, right: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  previewBanner: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginHorizontal: 16, marginTop: 12, paddingVertical: 10, paddingHorizontal: 14, borderRadius: 14, backgroundColor: 'rgba(91,108,240,0.12)' },
+  previewText: { ...type.caption, color: colors.text, fontWeight: '600' },
   screen: { flex: 1, backgroundColor: 'transparent' },
   heroWrap: { height: 480 },
   photo: { width: '100%', height: '100%' },

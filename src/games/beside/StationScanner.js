@@ -3,7 +3,8 @@
 import React, { useRef, useState } from 'react'
 import { ActivityIndicator, Modal, StyleSheet, Text, TextInput, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
-import { CameraView, useCameraPermissions } from 'expo-camera'
+import { CameraView } from 'expo-camera'
+import { CameraOff, useCameraGate } from '../../components/CameraGate'
 import * as Location from 'expo-location'
 import { Btn } from '../MultiplayerUI'
 import { hudShadow } from '../laser/Hud'
@@ -13,7 +14,7 @@ import { colors, radii, type } from '../../theme'
 
 // onSave({ station, thumb }) — station: { id, name, lat, lng, url, by }
 export function StationScanner({ visible, onClose, onSave, area, meId }) {
-  const [perm, requestPerm] = useCameraPermissions()
+  const [perm] = useCameraGate(visible)
   const cam = useRef(null)
   const [name, setName] = useState('')
   const [busy, setBusy] = useState(false)
@@ -61,8 +62,7 @@ export function StationScanner({ visible, onClose, onSave, area, meId }) {
           <CameraView ref={cam} style={StyleSheet.absoluteFill} facing="back" />
         ) : (
           <View style={[StyleSheet.absoluteFill, styles.center]}>
-            <Text style={[type.body, { color: colors.onBrand, textAlign: 'center', marginBottom: 12 }]}>The camera is needed to scan task stations.</Text>
-            <Btn title="Allow camera" variant="primary" onPress={() => requestPerm().catch(() => {})} />
+            {perm && !perm.granted && perm.status === 'denied' ? <CameraOff what="scanning task stations" compact /> : null}
           </View>
         )}
         <SafeAreaView style={styles.overlay} edges={['top', 'bottom']} pointerEvents="box-none">

@@ -1,7 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
-import { View, Text, TextInput, Pressable, StyleSheet, Image, ScrollView, Alert, Platform, KeyboardAvoidingView } from 'react-native'
+import { View, Text, TextInput, Pressable, StyleSheet, Image, ScrollView, Alert, Platform, KeyboardAvoidingView, Animated, useWindowDimensions } from 'react-native'
 import { LinearGradient } from 'expo-linear-gradient'
-import { colors, gradients, radii, type, usePageInk } from '../theme'
+import { Ionicons } from '@expo/vector-icons'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
+import { colors, radii, type, useIsDark } from '../theme'
+import { FadeIn, Press, SPRING } from '../lib/motion'
+import Surface from '../components/Surface'
+import { HeaderButton } from '../components/BrandHeader'
 import { API_URL, supabase } from '../lib/supabase'
 import * as AppleAuthentication from 'expo-apple-authentication'
 import { ensureProfile, neutralUsername, signInWithApple, signInWithProvider } from '../lib/oauth'
@@ -11,18 +16,16 @@ import GlassPanel from '../components/GlassPanel'
 
 const METHOD = { EMAIL: 'email', PHONE: 'phone' }
 
-const STROKE_OFFSETS = [
-  [-2, -2], [0, -2], [2, -2],
-  [-2, 0], [2, 0],
-  [-2, 2], [0, 2], [2, 2],
-]
+const ICON = require('../../assets/icon.png')
 
 const SOCIAL_PROVIDERS = [
   { key: 'google', label: 'Google' },
 ]
 
 export default function AuthScreen({ navigation, route }) {
-  const pageInk = usePageInk()
+  const insets = useSafeAreaInsets()
+  const isDark = useIsDark()
+  const { width } = useWindowDimensions()
   const [method, setMethod] = useState(METHOD.EMAIL)
   const [mode, setMode] = useState(route?.params?.mode === 'signup' ? 'signup' : 'login') // login | signup
   const [email, setEmail] = useState('')
@@ -37,7 +40,6 @@ export default function AuthScreen({ navigation, route }) {
   const [qrToken, setQrToken] = useState(null)
   const [qrExpired, setQrExpired] = useState(false)
   const [totalUsers, setTotalUsers] = useState(null)
-  const [showcase, setShowcase] = useState([])
   const pollRef = useRef(null)
   const [appleAvailable, setAppleAvailable] = useState(false)
 
@@ -48,7 +50,6 @@ export default function AuthScreen({ navigation, route }) {
 
   useEffect(() => {
     fetch(`${API_URL}/api/public/total-users`).then((r) => r.json()).then((d) => setTotalUsers(d.total_users)).catch(() => {})
-    fetch(`${API_URL}/api/public/showcase`).then((r) => r.json()).then((d) => setShowcase(d.profiles ?? [])).catch(() => {})
   }, [])
 
   useEffect(() => {
@@ -166,264 +167,225 @@ export default function AuthScreen({ navigation, route }) {
     withGuard(() => signInWithApple())
   }
 
+  const signup = mode === 'signup'
+  const formW = Math.min(width - 40, 440)
+
   return (
     <KeyboardAvoidingView style={styles.screen} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-    <ScrollView
-      contentContainerStyle={{ paddingBottom: 40 }}
-      keyboardShouldPersistTaps="handled"
-      showsVerticalScrollIndicator={false}
-    >
-      <View style={styles.hero}>
-        {/* Clean glass hero: soft gradient + light orbs (no photo collage). */}
-        <LinearGradient
-          colors={['#1b1440', '#10122a', pageInk.ink]}
-          style={StyleSheet.absoluteFill}
-          pointerEvents="none"
-        />
-        <View pointerEvents="none" style={[styles.heroOrb, { backgroundColor: 'rgba(232,62,140,0.28)', top: -60, left: -70 }]} />
-        <View pointerEvents="none" style={[styles.heroOrb, { backgroundColor: 'rgba(120,140,255,0.24)', top: 40, right: -90 }]} />
-        {navigation.canGoBack() ? (
-          <Pressable onPress={() => navigation.goBack()} hitSlop={12} style={styles.backBtn} accessibilityRole="button" accessibilityLabel="Back to explore">
-            <Text style={styles.backText}>‹ Explore</Text>
-          </Pressable>
-        ) : null}
+      <ScrollView
+        contentContainerStyle={[styles.scroll, { paddingTop: insets.top + 8, paddingBottom: insets.bottom + 32 }]}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.topRow}>
+          {navigation.canGoBack() ? <HeaderButton icon="chevron-back" onPress={() => navigation.goBack()} label="Back to explore" /> : <View />}
+        </View>
 
-        <View style={styles.topBrandWrap}>
-          <View style={styles.strokeAnchor}>
-            {STROKE_OFFSETS.map(([dx, dy], i) => (
-              <Text
-                key={i}
-                style={[styles.topLogoText, styles.topLogoStroke, { transform: [{ translateX: dx }, { translateY: dy }] }]}
-                pointerEvents="none"
-              >
-                iYiYi
-              </Text>
-            ))}
-            <Text style={styles.topLogoText}>iYiYi</Text>
+        {/* Hero: wordmark + headline. Nothing is absolutely positioned, so it can't overlap the form. */}
+        <FadeIn style={styles.hero}>
+          <View style={styles.brandRow}>
+            <Image source={ICON} style={styles.brandIcon} />
+            <Text style={styles.brandWord}>iYiYi</Text>
           </View>
-        </View>
+          <Text style={styles.headline}>Grow your profile.{'\n'}Become a local celebrity.</Text>
+          <Text style={styles.subhead}>See who's within 150 ft, and get followed on every platform in one tap.</Text>
+          {totalUsers != null ? (
+            <Surface style={styles.counter} radius={999} shadow={false}>
+              <Ionicons name="people" size={14} color={colors.accent} />
+              <Text style={styles.counterText}>{Number(totalUsers).toLocaleString()} people on iYiYi</Text>
+            </Surface>
+          ) : null}
+        </FadeIn>
 
-        <View style={styles.heroTextWrap}>
-          <Text style={styles.heroHeadline}>Grow your profile.{'\n'}Become a local celebrity.</Text>
-          {totalUsers != null && (
-            <Text style={styles.heroCounter}>{totalUsers.toLocaleString()} people already on iYiYi</Text>
-          )}
-        </View>
-      </View>
+        <FadeIn index={2} style={{ alignSelf: 'center', width: formW }}>
+          <GlassPanel radius={30} strong animateIn={false}>
+            <View style={styles.form}>
+              {qrMode ? (
+                <View style={styles.qrWrap}>
+                  <Text style={styles.formTitle}>Sign in with QR code</Text>
+                  {qrImageUrl && !qrExpired ? (
+                    <Image source={{ uri: qrImageUrl }} style={styles.qrImage} />
+                  ) : (
+                    <Text style={type.body}>{qrExpired ? 'This code expired.' : 'Loading code…'}</Text>
+                  )}
+                  <Text style={[type.caption, styles.qrHint]}>
+                    Open iYiYi on your phone, go to Settings → "Sign in on another device", and scan this code.
+                  </Text>
+                  {qrExpired && (
+                    <TextLink onPress={() => { setQrToken(null); setQrExpired(false); setQrMode(false); setTimeout(() => setQrMode(true), 0) }}>Get a new code</TextLink>
+                  )}
+                  {error ? <Text style={styles.error}>{error}</Text> : null}
+                  <TextLink onPress={() => setQrMode(false)}>Use email or phone instead</TextLink>
+                </View>
+              ) : (
+                <>
+                  <Text style={styles.formTitle}>{signup ? 'Create your account' : 'Welcome back'}</Text>
+                  <Segmented
+                    options={[{ key: METHOD.EMAIL, label: 'Email' }, { key: METHOD.PHONE, label: 'Phone' }]}
+                    value={method}
+                    onChange={(k) => { setMethod(k); setError('') }}
+                    isDark={isDark}
+                  />
 
-      <View style={styles.overlapWrap}>
-        <LinearGradient colors={['transparent', pageInk.inkFade, pageInk.ink]} style={styles.heroFade} />
+                  {method === METHOD.EMAIL ? (
+                    <>
+                      {signup && (
+                        <Field icon="at" placeholder="Username" autoCapitalize="none" value={username} onChangeText={setUsername} />
+                      )}
+                      <Field icon="mail" placeholder="Email" autoCapitalize="none" keyboardType="email-address" textContentType="emailAddress" value={email} onChangeText={setEmail} />
+                      <Field icon="lock-closed" placeholder="Password" secureTextEntry textContentType={signup ? 'newPassword' : 'password'} value={password} onChangeText={setPassword} />
+                      {error ? <Text style={styles.error}>{error}</Text> : null}
+                      <PrimaryButton onPress={submitEmail} loading={loading} label={signup ? 'Create account' : 'Log in'} />
+                      <TextLink onPress={() => { setMode((m) => (m === 'signup' ? 'login' : 'signup')); setError('') }}>
+                        {signup ? 'Already have an account? Log in' : 'New here? Create an account'}
+                      </TextLink>
+                    </>
+                  ) : (
+                    <>
+                      <Field icon="call" placeholder="+1 555 555 5555" keyboardType="phone-pad" textContentType="telephoneNumber" editable={!otpSent} value={phone} onChangeText={setPhone} />
+                      {otpSent && (
+                        <Field icon="keypad" placeholder="6-digit code" keyboardType="number-pad" textContentType="oneTimeCode" value={otp} onChangeText={setOtp} />
+                      )}
+                      {error ? <Text style={styles.error}>{error}</Text> : null}
+                      <PrimaryButton onPress={otpSent ? verifyOtp : sendOtp} loading={loading} label={otpSent ? 'Verify code' : 'Send code'} />
+                      {otpSent ? <TextLink onPress={() => { setOtpSent(false); setOtp('') }}>Use a different number</TextLink> : null}
+                    </>
+                  )}
 
+                  <View style={styles.divider}>
+                    <View style={styles.dividerLine} />
+                    <Text style={styles.dividerText}>or continue with</Text>
+                    <View style={styles.dividerLine} />
+                  </View>
 
-      <View style={styles.formWrap}>
-      <Text style={styles.tagline}>See who's within 150ft.</Text>
+                  {appleAvailable && (
+                    <AppleAuthentication.AppleAuthenticationButton
+                      buttonType={AppleAuthentication.AppleAuthenticationButtonType.CONTINUE}
+                      buttonStyle={isDark ? AppleAuthentication.AppleAuthenticationButtonStyle.WHITE : AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
+                      cornerRadius={26}
+                      style={styles.appleButton}
+                      onPress={appleSignIn}
+                    />
+                  )}
+                  {SOCIAL_PROVIDERS.map((p) => (
+                    <Press key={p.key} onPress={() => socialSignIn(p.key)} disabled={loading} scaleTo={0.97} accessibilityLabel={`Continue with ${p.label}`}>
+                      <Surface style={styles.socialButton} radius={26} shadow={false} strong>
+                        <SocialIcon platform={p.key} size={18} color={colors.text} />
+                        <Text style={styles.socialText}>Continue with {p.label}</Text>
+                      </Surface>
+                    </Press>
+                  ))}
 
-      {qrMode ? (
-        <View style={styles.qrWrap}>
-          {qrImageUrl && !qrExpired ? (
-            <Image source={{ uri: qrImageUrl }} style={styles.qrImage} />
-          ) : (
-            <Text style={type.body}>{qrExpired ? 'This code expired.' : 'Loading code…'}</Text>
-          )}
-          <Text style={[type.caption, styles.qrHint]}>
-            Open iYiYi on your phone, go to Settings → "Sign in on another device", and scan this code.
+                  <TextLink onPress={() => setQrMode(true)} muted>Sign in with a QR code</TextLink>
+                </>
+              )}
+            </View>
+          </GlassPanel>
+        </FadeIn>
+
+        <FadeIn index={4}>
+          <Text style={styles.appBrief}>
+            iYiYi is your digital ID: it shows people within 150 ft who you are and how to follow you, so there's no more "what's your @?".
           </Text>
-          {qrExpired && (
-            <Pressable onPress={() => { setQrToken(null); setQrExpired(false); setQrMode(false); setTimeout(() => setQrMode(true), 0) }}>
-              <Text style={styles.switchText}>Get a new code</Text>
-            </Pressable>
-          )}
-          {error ? <Text style={styles.error}>{error}</Text> : null}
-          <Pressable onPress={() => setQrMode(false)}>
-            <Text style={styles.switchText}>Use email or phone instead</Text>
-          </Pressable>
-        </View>
-      ) : (
-        <>
-      <GlassPanel radius={radii.pill} style={styles.methodSwitch}>
-        <View style={{ flexDirection: 'row' }}>
-          <MethodTab label="Email" active={method === METHOD.EMAIL} onPress={() => setMethod(METHOD.EMAIL)} />
-          <MethodTab label="Phone" active={method === METHOD.PHONE} onPress={() => setMethod(METHOD.PHONE)} />
-        </View>
-      </GlassPanel>
-
-      {method === METHOD.EMAIL ? (
-        <>
-          {mode === 'signup' && (
-            <GlassPanel radius={radii.md} style={styles.inputWrap}>
-              <TextInput
-                placeholder="Username" placeholderTextColor={colors.textFaint}
-                value={username} onChangeText={setUsername} style={styles.input}
-              />
-            </GlassPanel>
-          )}
-          <GlassPanel radius={radii.md} style={styles.inputWrap}>
-            <TextInput
-              placeholder="Email" placeholderTextColor={colors.textFaint}
-              autoCapitalize="none" keyboardType="email-address"
-              value={email} onChangeText={setEmail} style={styles.input}
-            />
-          </GlassPanel>
-          <GlassPanel radius={radii.md} style={styles.inputWrap}>
-            <TextInput
-              placeholder="Password" placeholderTextColor={colors.textFaint}
-              secureTextEntry value={password} onChangeText={setPassword} style={styles.input}
-            />
-          </GlassPanel>
-          {error ? <Text style={styles.error}>{error}</Text> : null}
-          <Pressable onPress={submitEmail} disabled={loading}>
-            <LinearGradient colors={gradients.brand} style={styles.button}>
-              <Text style={styles.buttonText}>{loading ? '…' : mode === 'signup' ? 'Create Account' : 'Log In'}</Text>
-            </LinearGradient>
-          </Pressable>
-          <Pressable onPress={() => setMode(m => (m === 'signup' ? 'login' : 'signup'))}>
-            <Text style={styles.switchText}>
-              {mode === 'signup' ? 'Already have an account? Log in' : "New here? Create an account"}
-            </Text>
-          </Pressable>
-        </>
-      ) : (
-        <>
-          <GlassPanel radius={radii.md} style={styles.inputWrap}>
-            <TextInput
-              placeholder="+1 555 555 5555" placeholderTextColor={colors.textFaint}
-              keyboardType="phone-pad" editable={!otpSent}
-              value={phone} onChangeText={setPhone} style={styles.input}
-            />
-          </GlassPanel>
-          {otpSent && (
-            <GlassPanel radius={radii.md} style={styles.inputWrap}>
-              <TextInput
-                placeholder="6-digit code" placeholderTextColor={colors.textFaint}
-                keyboardType="number-pad" value={otp} onChangeText={setOtp} style={styles.input}
-              />
-            </GlassPanel>
-          )}
-          {error ? <Text style={styles.error}>{error}</Text> : null}
-          <Pressable onPress={otpSent ? verifyOtp : sendOtp} disabled={loading}>
-            <LinearGradient colors={gradients.brand} style={styles.button}>
-              <Text style={styles.buttonText}>{loading ? '…' : otpSent ? 'Verify Code' : 'Send Code'}</Text>
-            </LinearGradient>
-          </Pressable>
-        </>
-      )}
-
-      <View style={styles.divider}>
-        <View style={styles.dividerLine} />
-        <Text style={styles.dividerText}>or continue with</Text>
-        <View style={styles.dividerLine} />
-      </View>
-
-      {appleAvailable && (
-        <AppleAuthentication.AppleAuthenticationButton
-          buttonType={AppleAuthentication.AppleAuthenticationButtonType.CONTINUE}
-          buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.WHITE_OUTLINE}
-          cornerRadius={24}
-          style={styles.appleButton}
-          onPress={appleSignIn}
-        />
-      )}
-
-      <View style={styles.socialRow}>
-        {SOCIAL_PROVIDERS.map((p) => (
-          <Pressable key={p.key} onPress={() => socialSignIn(p.key)} disabled={loading}>
-            <GlassPanel radius={26}>
-              <View style={styles.socialButton}>
-                <SocialIcon platform={p.key} size={20} color={colors.text} />
-              </View>
-            </GlassPanel>
-          </Pressable>
-        ))}
-      </View>
-
-      <Text style={styles.appBrief}>
-        iYiYi is a digital ID — it shows people within 150ft who you are and how to connect, no more awkward "what's your @".
-      </Text>
-
-      <Pressable onPress={() => setQrMode(true)}>
-        <Text style={styles.switchText}>Sign in with QR code</Text>
-      </Pressable>
-        </>
-      )}
-      </View>
-      </View>
-    </ScrollView>
+        </FadeIn>
+      </ScrollView>
     </KeyboardAvoidingView>
   )
 }
 
-function MethodTab({ label, active, onPress }) {
+// iOS-style segmented control with a sliding glass thumb.
+function Segmented({ options, value, onChange, isDark }) {
+  const idx = Math.max(0, options.findIndex((o) => o.key === value))
+  const pos = useRef(new Animated.Value(idx)).current
+  const [w, setW] = useState(0)
+  useEffect(() => { Animated.spring(pos, { toValue: idx, ...SPRING.snappy }).start() }, [idx, pos])
+  const thumbW = w > 0 ? (w - 8) / options.length : 0
   return (
-    <Pressable onPress={onPress} style={[styles.tab, active && styles.tabActive]}>
-      <Text style={[styles.tabText, active && styles.tabTextActive]}>{label}</Text>
+    <View style={[styles.segment, { backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(20,30,60,0.07)' }]} onLayout={(e) => setW(e.nativeEvent.layout.width)}>
+      {thumbW > 0 ? (
+        <Animated.View
+          pointerEvents="none"
+          style={[styles.segmentThumb, { width: thumbW, backgroundColor: isDark ? 'rgba(255,255,255,0.16)' : '#ffffff', transform: [{ translateX: pos.interpolate({ inputRange: [0, Math.max(1, options.length - 1)], outputRange: [0, thumbW * Math.max(1, options.length - 1)] }) }] }]}
+        />
+      ) : null}
+      {options.map((o) => (
+        <Pressable key={o.key} onPress={() => onChange(o.key)} style={styles.segmentTab} accessibilityRole="tab" accessibilityState={{ selected: o.key === value }}>
+          <Text style={[styles.segmentText, o.key === value && styles.segmentTextActive]}>{o.label}</Text>
+        </Pressable>
+      ))}
+    </View>
+  )
+}
+
+function Field({ icon, style, ...props }) {
+  const [focused, setFocused] = useState(false)
+  return (
+    <Surface style={[styles.field, focused && styles.fieldFocused, style]} radius={18} shadow={false}>
+      <Ionicons name={`${icon}-outline`} size={18} color={focused ? colors.accent : colors.textFaint} />
+      <TextInput
+        placeholderTextColor={colors.textFaint}
+        style={styles.input}
+        onFocus={() => setFocused(true)}
+        onBlur={() => setFocused(false)}
+        {...props}
+      />
+    </Surface>
+  )
+}
+
+function PrimaryButton({ onPress, label, loading }) {
+  return (
+    <Press onPress={onPress} disabled={loading} scaleTo={0.97} haptic="light" accessibilityLabel={label}>
+      <LinearGradient colors={['#6b7cff', '#8f5bff']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.button}>
+        <Text style={styles.buttonText}>{loading ? 'One moment…' : label}</Text>
+      </LinearGradient>
+    </Press>
+  )
+}
+
+function TextLink({ onPress, children, muted }) {
+  return (
+    <Pressable onPress={onPress} style={({ pressed }) => [styles.link, pressed && { opacity: 0.6 }]} accessibilityRole="link">
+      <Text style={[styles.linkText, muted && { color: colors.textFaint }]}>{children}</Text>
     </Pressable>
   )
 }
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: 'transparent' },
-  hero: Platform.select({
-    web: { width: '100%', height: 340, position: 'relative', overflow: 'hidden' },
-    default: { width: '100%', height: 380, position: 'relative', overflow: 'hidden' },
-  }),
-  heroOrb: { position: 'absolute', width: 300, height: 300, borderRadius: 150, ...(Platform.OS === 'web' ? { filter: 'blur(60px)' } : {}) },
-  backBtn: {
-    position: 'absolute', top: Platform.OS === 'web' ? 18 : 58, left: 16, zIndex: 5, paddingHorizontal: 14, height: 34, borderRadius: 17,
-    justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.10)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)',
-  },
-  backText: { color: '#fff', fontSize: 14, fontWeight: '600' },
-  overlapWrap: Platform.select({ web: { marginTop: -40 }, default: { marginTop: -60 } }),
-  heroFade: { position: 'absolute', left: 0, right: 0, top: 0, height: 420 },
-  heroTextWrap: { position: 'absolute', top: '46%', left: 0, right: 0, paddingHorizontal: 24 },
-  heroHeadline: {
-    ...type.display, color: colors.onBrand, fontSize: 32, lineHeight: 38, fontWeight: '800', textAlign: 'center',
-    textShadowColor: 'rgba(0,0,0,0.9)', textShadowOffset: { width: 0, height: 0 }, textShadowRadius: 10,
-  },
-  heroCounter: {
-    ...type.caption, fontSize: 17, textAlign: 'center', marginTop: 10, color: colors.gold, fontWeight: '700',
-    textShadowColor: 'rgba(0,0,0,0.9)', textShadowOffset: { width: 0, height: 0 }, textShadowRadius: 8,
-  },
-  wall: { paddingHorizontal: 16, paddingVertical: 16, gap: 14 },
-  wallItem: { alignItems: 'center', width: 68 },
-  wallAvatar: {
-    width: 56, height: 56, borderRadius: 28, borderWidth: 2, borderColor: colors.magenta,
-    backgroundColor: colors.inkSurface,
-  },
-  wallName: { ...type.caption, marginTop: 6, textAlign: 'center' },
-  formWrap: { padding: 24, backgroundColor: 'transparent' },
-  topBrandWrap: { position: 'absolute', top: 8, left: 0, right: 0, alignItems: 'center', zIndex: 2 },
-  strokeAnchor: { position: 'relative', alignItems: 'center' },
-  topLogoText: {
-    fontSize: 72, fontWeight: '800', color: colors.magenta, letterSpacing: 0.5,
-    textShadowColor: 'rgba(0,0,0,0.9)', textShadowOffset: { width: 0, height: 0 }, textShadowRadius: 10,
-  },
-  topLogoStroke: {
-    position: 'absolute', top: 0, left: 0, right: 0, textAlign: 'center',
-    color: colors.onBrand, textShadowColor: 'transparent', textShadowRadius: 0,
-  },
-  appBrief: {
-    ...type.caption, textAlign: 'center', color: colors.textMuted, marginTop: 18,
-    paddingHorizontal: 12, lineHeight: 18,
-  },
-  tagline: { ...type.caption, fontSize: 18, fontWeight: '600', color: colors.text, textAlign: 'center', marginBottom: 24 },
-  methodSwitch: { padding: 4, marginBottom: 20 },
-  tab: { flex: 1, paddingVertical: 10, borderRadius: radii.pill, alignItems: 'center' },
-  tabActive: { backgroundColor: colors.magenta },
-  tabText: { color: colors.textMuted, fontWeight: '600' },
-  tabTextActive: { color: colors.onBrand },
-  inputWrap: { marginBottom: 12 },
-  input: { padding: 14, color: colors.text },
-  error: { color: colors.danger, marginBottom: 12, textAlign: 'center' },
-  button: { paddingVertical: 16, borderRadius: radii.pill, alignItems: 'center', marginTop: 8 },
-  buttonText: { color: colors.onBrand, fontWeight: '700', fontSize: 16 },
-  switchText: { color: colors.textMuted, textAlign: 'center', marginTop: 18 },
-  divider: { flexDirection: 'row', alignItems: 'center', marginTop: 28, marginBottom: 16, gap: 10 },
-  dividerLine: { flex: 1, height: 1, backgroundColor: colors.hairline },
-  dividerText: { color: colors.textFaint, fontSize: 12 },
-  appleButton: { width: '100%', height: 48, marginBottom: 14 },
-  socialRow: { flexDirection: 'row', justifyContent: 'center', gap: 14 },
-  socialButton: { width: 52, height: 52, alignItems: 'center', justifyContent: 'center' },
-  qrWrap: { alignItems: 'center', gap: 16, paddingVertical: 12 },
+  scroll: { paddingHorizontal: 20 },
+  topRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', minHeight: 42 },
+  hero: { alignItems: 'center', paddingTop: 18, paddingBottom: 22, paddingHorizontal: 8 },
+  brandRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 20 },
+  brandIcon: { width: 44, height: 44, borderRadius: 12 },
+  brandWord: { fontSize: 30, fontWeight: '800', letterSpacing: -1, color: colors.text },
+  headline: { ...type.largeTitle, textAlign: 'center' },
+  subhead: { ...type.subhead, fontSize: 16, lineHeight: 22, textAlign: 'center', marginTop: 12, maxWidth: 340 },
+  counter: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingVertical: 7, marginTop: 16 },
+  counterText: { ...type.caption, color: colors.text, fontWeight: '600' },
+  form: { padding: 18, gap: 12 },
+  formTitle: { ...type.title3, textAlign: 'center', marginBottom: 2 },
+  segment: { flexDirection: 'row', borderRadius: 999, padding: 4, position: 'relative' },
+  segmentThumb: { position: 'absolute', top: 4, bottom: 4, left: 4, borderRadius: 999, shadowColor: '#000', shadowOpacity: 0.08, shadowRadius: 6, shadowOffset: { width: 0, height: 2 } },
+  segmentTab: { flex: 1, paddingVertical: 9, alignItems: 'center', borderRadius: 999 },
+  segmentText: { ...type.subhead, fontWeight: '600', color: colors.textMuted },
+  segmentTextActive: { color: colors.text },
+  field: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 14, minHeight: 50 },
+  fieldFocused: { borderColor: colors.accent },
+  input: { flex: 1, paddingVertical: 13, fontSize: 16, color: colors.text },
+  error: { ...type.caption, color: colors.danger, textAlign: 'center' },
+  button: { paddingVertical: 15, borderRadius: 999, alignItems: 'center', marginTop: 2, shadowColor: '#6b7cff', shadowOpacity: 0.35, shadowRadius: 14, shadowOffset: { width: 0, height: 8 } },
+  buttonText: { color: '#fff', fontWeight: '700', fontSize: 16 },
+  link: { alignSelf: 'center', paddingVertical: 6, paddingHorizontal: 8 },
+  linkText: { ...type.subhead, color: colors.accent, fontWeight: '600', textAlign: 'center' },
+  divider: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 4 },
+  dividerLine: { flex: 1, height: StyleSheet.hairlineWidth * 2, backgroundColor: colors.hairline },
+  dividerText: { ...type.caption },
+  appleButton: { width: '100%', height: 50 },
+  socialButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, height: 50 },
+  socialText: { ...type.headline },
+  appBrief: { ...type.caption, textAlign: 'center', marginTop: 22, paddingHorizontal: 20, maxWidth: 420, alignSelf: 'center' },
+  qrWrap: { alignItems: 'center', gap: 14, paddingVertical: 6 },
   qrImage: { width: 220, height: 220, borderRadius: radii.md, backgroundColor: '#ffffff' },
   qrHint: { textAlign: 'center', maxWidth: 260 },
 })

@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { View, Text, ScrollView, StyleSheet, RefreshControl } from 'react-native'
 import { useFocusEffect } from '@react-navigation/native'
+import { getPositionFast } from '../lib/location'
+import { getCached, setCached } from '../lib/cache'
 import * as Location from 'expo-location'
 import BrandHeader, { HeaderButton } from '../components/BrandHeader'
 import ScopeChips, { SCOPES, Segmented, scopeLabel } from '../components/ScopeChips'
@@ -45,7 +47,8 @@ export default function ContentFeedScreen({ navigation }) {
   const [scope, setScope] = useState('local')
   const [sort, setSort] = useState('blend')
   const [layout, setLayout] = useState('grid') // grid | scroll
-  const [items, setItems] = useState([])
+  const [items, setItemsState] = useState(() => getCached('feed') ?? [])
+  const setItems = useCallback((v) => { setItemsState((prev) => { const next = typeof v === 'function' ? v(prev) : v; setCached('feed', next); return next }) }, [])
   const [loading, setLoading] = useState(false)
   const [permissionDenied, setPermissionDenied] = useState(false)
   const [viewer, setViewer] = useState({ open: false, index: 0 })
@@ -117,8 +120,7 @@ export default function ContentFeedScreen({ navigation }) {
           if (current()) setPermissionDenied(s !== 'country')
         } else {
           if (current()) setPermissionDenied(false)
-          const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced })
-            .catch(() => Location.getLastKnownPositionAsync())
+          const loc = await getPositionFast().catch(() => null)
           if (loc?.coords && Number.isFinite(loc.coords.latitude) && Number.isFinite(loc.coords.longitude)) coords = loc.coords
         }
       } catch (e) {

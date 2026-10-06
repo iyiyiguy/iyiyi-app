@@ -6,7 +6,8 @@ import {
   View, Text, Image, Pressable, ActivityIndicator, Alert, StyleSheet, useWindowDimensions, Animated,
   PanResponder, Easing,
 } from 'react-native'
-import { CameraView, useCameraPermissions, useMicrophonePermissions } from 'expo-camera'
+import { CameraView, useMicrophonePermissions } from 'expo-camera'
+import { CameraOff, useCameraGate } from '../components/CameraGate'
 import { Ionicons } from '@expo/vector-icons'
 import * as Haptics from 'expo-haptics'
 import { GlassCard } from '../components/GlassCard'
@@ -249,7 +250,7 @@ export default function CameraScreen({ navigation, route }) {
   const cardSizeRef = useRef(null)
   const shutterFlash = useRef(new Animated.Value(0)).current
 
-  const [camPerm, requestCam] = useCameraPermissions()
+  const [camPerm] = useCameraGate(isFocused)
   const [micPerm, requestMic] = useMicrophonePermissions()
   const [facing, setFacing] = useState('back')
   const [camKey, setCamKey] = useState(0)
@@ -1129,22 +1130,12 @@ export default function CameraScreen({ navigation, route }) {
 
   if (!camPerm) return <Backdrop isInline={isInline} cardSize={cardSize} onDismiss={dismiss} />
   if (!camPerm.granted) {
+    // Still undetermined: the system prompt is up (useCameraGate asked for it); show the backdrop
+    // underneath. Denied: say so neutrally and point at Settings, never a custom "Allow" nudge.
+    if (camPerm.status === 'undetermined') return <Backdrop isInline={isInline} cardSize={cardSize} onDismiss={dismiss} />
     return (
       <GlassBackground isDark={true}>
-        <View style={[StyleSheet.absoluteFill, styles.center]}>
-          <GlassCard intensity={90} tint="dark" radius={28} padding={28} style={{ width: '85%' }}>
-            <Text style={[type.title, { textAlign: 'center', color: '#fff', marginBottom: 12 }]}>Camera access</Text>
-            <Text style={[type.caption, styles.permText, { color: 'rgba(255,255,255,0.8)' }]}>
-              The iYiYi camera tags the people around you in what you shoot. Allow the camera to get started.
-            </Text>
-            <GlassButton onPress={requestCam} size="lg" tint="dark" style={{ marginTop: 20 }}>
-              Allow camera
-            </GlassButton>
-            <Pressable onPress={dismiss} style={{ padding: 14, marginTop: 8 }}>
-              <Text style={[type.caption, { color: 'rgba(255,255,255,0.6)', textAlign: 'center' }]}>Not now</Text>
-            </Pressable>
-          </GlassCard>
-        </View>
+        <CameraOff what="photos, videos and the AR filters" onBack={dismiss} backLabel="Back" />
       </GlassBackground>
     )
   }

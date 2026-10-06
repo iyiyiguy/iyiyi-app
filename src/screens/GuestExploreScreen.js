@@ -1,19 +1,24 @@
-import { useCallback, useEffect, useState } from 'react'
-import {
-  View, Text, Image, Pressable, StyleSheet, FlatList, ActivityIndicator, Platform, useWindowDimensions,
-} from 'react-native'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { View, Text, Image, StyleSheet, FlatList, ActivityIndicator, useWindowDimensions } from 'react-native'
 import { LinearGradient } from 'expo-linear-gradient'
 import * as Location from 'expo-location'
+import { Ionicons } from '@expo/vector-icons'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { colors, font, radii } from '../theme'
+import { colors, radii, type } from '../theme'
 import { supabase, API_URL } from '../lib/supabase'
+import { FadeIn, Press, animateLayout } from '../lib/motion'
 import ScopeChips from '../components/ScopeChips'
 import GlassPanel from '../components/GlassPanel'
+import Surface from '../components/Surface'
+import Avatar from '../components/Avatar'
+import { HeaderButton } from '../components/BrandHeader'
 
 // Logged-out home (the Explore tab of the guest tab bar): look around before signing up.
 // Square panes of public profiles, distance ranges across the top, tap a pane to open that
-// profile. The floating "Sign up free" pill lives in GuestTabs (App.js) above the tab bar. Only public profiles are listed (database function guest_explore), and
-// guests see ranges of 1 mile and up; 150 ft is for members.
+// profile. The floating "Sign up free" pill lives in GuestTabs (App.js) above the tab bar.
+// Only public profiles are listed (database function guest_explore); guests see ranges of
+// 1 mile and up - 150 ft is for members. Under the grid, three cards say what the app does,
+// so the screen never looks empty where few people have joined yet.
 const RANGES = [
   { key: 'mi1', label: '1 mi', m: 1609.34 },
   { key: 'mi5', label: '5 mi', m: 8046.7 },
@@ -23,19 +28,32 @@ const RANGES = [
   { key: 'world', label: 'Worldwide', m: null },
 ]
 const MAX_W = 1100
+const ICON = require('../../assets/icon.png')
+
+const FEATURES = [
+  { icon: 'map', colors: ['#6b7cff', '#9b8cff'], title: 'Live map', text: 'See people, spots and events around you in real time.' },
+  { icon: 'camera', colors: ['#ff6fb5', '#ff9fd0'], title: 'AR camera', text: 'Shoot photos and videos that tag everyone within 150 ft.' },
+  { icon: 'game-controller', colors: ['#4fd1c5', '#7fb3ff'], title: 'The Arcade', text: 'Real-life laser tag, battle royale and party games nearby.' },
+  { icon: 'link', colors: ['#ffb16b', '#ff7e9d'], title: 'Follow everywhere', text: 'One tap follows someone on every platform at once.' },
+]
+
+// Cache so switching tabs and coming back is instant.
+let lastPeople = null
+let lastRange = 'world'
 
 export default function GuestExploreScreen({ navigation }) {
   const { width } = useWindowDimensions()
   const insets = useSafeAreaInsets()
-  const [range, setRange] = useState('world')
+  const [range, setRange] = useState(lastRange)
   const [coords, setCoords] = useState(null)
-  const [people, setPeople] = useState(null)
+  const [people, setPeople] = useState(lastPeople)
   const [total, setTotal] = useState(null)
+  const reqId = useRef(0)
 
   const contentW = Math.min(width, MAX_W)
   const cols = contentW >= 900 ? 5 : contentW >= 640 ? 4 : 3
-  const GAP = 6
-  const pad = 12
+  const GAP = 8
+  const pad = 16
   const cell = Math.floor((contentW - pad * 2 - GAP * (cols - 1)) / cols)
 
   useEffect(() => {
@@ -47,7 +65,8 @@ export default function GuestExploreScreen({ navigation }) {
     try {
       const perm = await Location.requestForegroundPermissionsAsync()
       if (perm.status !== 'granted') return null
-      const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced })
+      const last = await Location.getLastKnownPositionAsync().catch(() => null)
+      const pos = last ?? (await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }))
       const c = { lat: pos.coords.latitude, lng: pos.coords.longitude }
       setCoords(c)
       return c
@@ -57,21 +76,26 @@ export default function GuestExploreScreen({ navigation }) {
   }, [])
 
   const load = useCallback(async (key, c) => {
-    setPeople(null)
+    const id = ++reqId.current
     const r = RANGES.find((x) => x.key === key)
     const args = r?.m && c ? { lat: c.lat, lng: c.lng, radius_m: r.m, lim: 90 } : { lim: 90 }
+    let list = null
     const { data, error } = await supabase.rpc('guest_explore', args)
-    if (!error && Array.isArray(data)) {
-      setPeople(data)
-      return
+    if (!error && Array.isArray(data)) list = data
+    else {
+      // Older database without guest_explore: fall back to the public showcase.
+      try {
+        const d = await fetch(`${API_URL}/api/public/showcase`).then((x) => x.json())
+        list = (d.profiles ?? []).map((p) => ({ ...p, range_label: null }))
+      } catch {
+        list = []
+      }
     }
-    // Older database without guest_explore: fall back to the public showcase.
-    try {
-      const d = await fetch(`${API_URL}/api/public/showcase`).then((x) => x.json())
-      setPeople((d.profiles ?? []).map((p) => ({ ...p, range_label: null })))
-    } catch {
-      setPeople([])
-    }
+    if (id !== reqId.current) return
+    lastPeople = list
+    lastRange = key
+    animateLayout()
+    setPeople(list)
   }, [])
 
   useEffect(() => { load(range, coords) }, [range, coords, load])
@@ -90,41 +114,70 @@ export default function GuestExploreScreen({ navigation }) {
 
   const header = (
     <View style={{ paddingHorizontal: pad }}>
-      <View style={[styles.topBar, { paddingTop: insets.top + 10 }]}>
-        <Text style={styles.logo}>iYiYi</Text>
-        <Pressable onPress={() => navigation.navigate('SignIn')} hitSlop={10} accessibilityRole="button" style={styles.loginBtn}>
-          <Text style={styles.loginText}>Log in</Text>
-        </Pressable>
-      </View>
-      <Text style={styles.headline}>See who's around.</Text>
-      <Text style={styles.sub}>
-        {total != null ? `${Number(total).toLocaleString()} people on iYiYi · ` : ''}tap anyone to see their profile and socials
-      </Text>
-      <ScopeChips options={RANGES} value={range} onChange={pickRange} style={{ marginTop: 14, marginBottom: 12 }} />
+      <FadeIn style={[styles.topBar, { paddingTop: insets.top + 8 }]}>
+        <View style={styles.brandRow}>
+          <Image source={ICON} style={styles.brandIcon} />
+          <Text style={styles.logo}>iYiYi</Text>
+        </View>
+        <Press onPress={() => navigation.navigate('SignIn')} accessibilityLabel="Log in" scaleTo={0.95}>
+          <GlassPanel radius={999} animateIn={false} interactive>
+            <View style={styles.loginBtn}><Text style={styles.loginText}>Log in</Text></View>
+          </GlassPanel>
+        </Press>
+      </FadeIn>
+      <FadeIn index={1}>
+        <Text style={styles.headline}>See who's around.</Text>
+        <Text style={styles.sub}>
+          {total != null ? `${Number(total).toLocaleString()} people on iYiYi. ` : ''}Tap anyone to see their profile and socials.
+        </Text>
+      </FadeIn>
+      <FadeIn index={2}>
+        <ScopeChips options={RANGES} value={range} onChange={pickRange} style={{ marginTop: 16, marginBottom: 14 }} />
+      </FadeIn>
     </View>
   )
 
-  const renderItem = ({ item }) => (
-    <Pressable
+  const footer = (
+    <View style={{ paddingHorizontal: pad, paddingTop: people?.length ? 10 : 0 }}>
+      <Text style={styles.sectionTitle}>What you can do on iYiYi</Text>
+      {FEATURES.map((f, i) => (
+        <FadeIn key={f.title} index={i + 1} enabled={!lastPeople}>
+          <GlassPanel radius={radii.lg} style={{ marginBottom: 10 }} lite animateIn={false}>
+            <View style={styles.feature}>
+              <LinearGradient colors={f.colors} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.featureIcon}>
+                <Ionicons name={f.icon} size={20} color="#fff" />
+              </LinearGradient>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.featureTitle}>{f.title}</Text>
+                <Text style={styles.featureText}>{f.text}</Text>
+              </View>
+            </View>
+          </GlassPanel>
+        </FadeIn>
+      ))}
+    </View>
+  )
+
+  const renderItem = ({ item, index }) => (
+    <Press
       onPress={() => navigation.navigate('PublicProfile', { username: item.username })}
-      style={({ pressed }) => [{ width: cell, height: cell, marginBottom: GAP }, pressed && { opacity: 0.85, transform: [{ scale: 0.98 }] }]}
-      accessibilityRole="button"
+      style={{ width: cell, height: cell, marginBottom: GAP }}
+      scaleTo={0.96}
       accessibilityLabel={`Open ${item.username}'s profile`}
     >
-      <Image source={{ uri: item.avatar_url }} style={styles.paneImg} />
-      <LinearGradient colors={['transparent', 'rgba(5,6,14,0.85)']} style={styles.paneShade} pointerEvents="none" />
-      <View style={styles.paneInfo} pointerEvents="none">
-        <Text style={styles.paneName} numberOfLines={1}>@{item.username}</Text>
-        {item.range_label ? <Text style={styles.paneMeta} numberOfLines={1}>{item.range_label}</Text> : null}
-      </View>
-    </Pressable>
+      <Surface radius={18} style={StyleSheet.absoluteFill} shadow={false}>
+        <Avatar uri={item.avatar_url} name={item.username} fill radius={0} recyclingKey={String(item.id ?? item.username)} />
+        <LinearGradient colors={['transparent', 'rgba(5,6,14,0.78)']} style={styles.paneShade} pointerEvents="none" />
+        <View style={styles.paneInfo} pointerEvents="none">
+          <Text style={styles.paneName} numberOfLines={1}>@{item.username}</Text>
+          {item.range_label ? <Text style={styles.paneMeta} numberOfLines={1}>{item.range_label}</Text> : null}
+        </View>
+      </Surface>
+    </Press>
   )
 
   return (
     <View style={styles.screen}>
-      <LinearGradient colors={['#151133', '#0b0d1a', '#07080f']} style={StyleSheet.absoluteFill} />
-      <View style={[styles.orb, { backgroundColor: 'rgba(232,62,140,0.22)', top: -80, left: -60 }]} />
-      <View style={[styles.orb, { backgroundColor: 'rgba(110,130,255,0.20)', top: 120, right: -90 }]} />
       <View style={{ flex: 1, width: '100%', maxWidth: MAX_W, alignSelf: 'center' }}>
         <FlatList
           key={cols}
@@ -134,44 +187,49 @@ export default function GuestExploreScreen({ navigation }) {
           columnWrapperStyle={{ gap: GAP, paddingHorizontal: pad }}
           renderItem={renderItem}
           ListHeaderComponent={header}
+          ListFooterComponent={footer}
           ListEmptyComponent={
             people == null ? (
-              <ActivityIndicator color="#fff" style={{ marginTop: 40 }} />
+              <ActivityIndicator color={colors.textMuted} style={{ marginVertical: 28 }} />
             ) : (
-              <GlassPanel style={{ marginHorizontal: pad, marginTop: 12 }} animateIn={false} scheme="dark">
-                <View style={{ padding: 22, alignItems: 'center' }}>
+              <GlassPanel style={{ marginHorizontal: pad, marginBottom: 18 }} animateIn={false} lite>
+                <View style={{ padding: 20, alignItems: 'center' }}>
                   <Text style={styles.emptyTitle}>No one here yet</Text>
                   <Text style={styles.emptySub}>Try a bigger range, or sign up and be the first one in your area.</Text>
                 </View>
               </GlassPanel>
             )
           }
-          contentContainerStyle={{ paddingBottom: 96 }}
+          contentContainerStyle={{ paddingBottom: 150 }}
           showsVerticalScrollIndicator={false}
+          initialNumToRender={12}
+          windowSize={5}
+          removeClippedSubviews
         />
       </View>
-
     </View>
   )
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: '#07080f', overflow: 'hidden' },
-  orb: { position: 'absolute', width: 320, height: 320, borderRadius: 160, opacity: 0.9, ...(Platform.OS === 'web' ? { filter: 'blur(60px)' } : {}) },
-  topBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingBottom: 6 },
-  logo: { fontSize: 28, ...font.heavy, color: '#fff', letterSpacing: -0.8 },
-  loginBtn: {
-    paddingHorizontal: 16, height: 36, borderRadius: radii.pill, justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.08)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.18)',
-  },
-  loginText: { color: '#fff', fontSize: 14, ...font.semibold },
-  headline: { marginTop: 18, fontSize: 30, ...font.heavy, color: '#fff', letterSpacing: -0.8 },
-  sub: { marginTop: 6, fontSize: 14, color: 'rgba(255,255,255,0.65)' },
-  paneImg: { ...StyleSheet.absoluteFillObject, borderRadius: 14, backgroundColor: '#1a1d2e' },
-  paneShade: { position: 'absolute', left: 0, right: 0, bottom: 0, height: '55%', borderBottomLeftRadius: 14, borderBottomRightRadius: 14 },
-  paneInfo: { position: 'absolute', left: 8, right: 8, bottom: 7 },
-  paneName: { color: '#fff', fontSize: 12, ...font.bold },
-  paneMeta: { color: 'rgba(255,255,255,0.7)', fontSize: 10, marginTop: 1 },
-  emptyTitle: { color: colors.text, fontSize: 17, ...font.bold },
-  emptySub: { color: colors.textMuted, fontSize: 14, marginTop: 6, textAlign: 'center' },
+  screen: { flex: 1, backgroundColor: 'transparent' },
+  topBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingBottom: 8 },
+  brandRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  brandIcon: { width: 34, height: 34, borderRadius: 9 },
+  logo: { fontSize: 24, fontWeight: '800', color: colors.text, letterSpacing: -0.8 },
+  loginBtn: { paddingHorizontal: 18, height: 38, justifyContent: 'center' },
+  loginText: { ...type.subhead, fontWeight: '600', color: colors.text },
+  headline: { ...type.largeTitle, marginTop: 14 },
+  sub: { ...type.subhead, marginTop: 6 },
+  sectionTitle: { ...type.title3, marginBottom: 10 },
+  feature: { flexDirection: 'row', alignItems: 'center', gap: 14, padding: 14 },
+  featureIcon: { width: 44, height: 44, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
+  featureTitle: { ...type.headline },
+  featureText: { ...type.caption, marginTop: 2 },
+  paneShade: { position: 'absolute', left: 0, right: 0, bottom: 0, height: '55%' },
+  paneInfo: { position: 'absolute', left: 9, right: 9, bottom: 8 },
+  paneName: { color: '#fff', fontSize: 12, fontWeight: '700' },
+  paneMeta: { color: 'rgba(255,255,255,0.75)', fontSize: 10, marginTop: 1 },
+  emptyTitle: { ...type.headline },
+  emptySub: { ...type.caption, marginTop: 6, textAlign: 'center' },
 })

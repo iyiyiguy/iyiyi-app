@@ -501,7 +501,7 @@ const styles = StyleSheet.create({
   heroStatLabel: { fontSize: 10, ...font.bold, color: 'rgba(255,255,255,0.65)', letterSpacing: 1, textTransform: 'uppercase', marginTop: 1 },
   codeHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   codeRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginVertical: 8 },
-  code: { ...type.display, fontSize: 36, letterSpacing: 8 },
+  code: { ...type.display, fontSize: 36, lineHeight: 44, letterSpacing: 8 },
   optRow: { flexDirection: 'row', gap: 8, flexWrap: 'wrap' },
   prefRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 8 },
   howHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },

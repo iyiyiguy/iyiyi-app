@@ -6,6 +6,7 @@ import { Ionicons } from '@expo/vector-icons'
 import * as Haptics from 'expo-haptics'
 import { colors, font, radii } from '../theme'
 import Glass from './Glass'
+import Bounce from './Bounce'
 
 // The logged-out version of the app's floating glass tab bar (see TabBar.js): same pill, same
 // round camera button beside it. Camera and Arcade are visible but carry a small lock - their
@@ -45,22 +46,19 @@ export default function GuestTabBar({ state, navigation }) {
           {TABS.filter((t) => state.routes.some((r) => r.name === t.name)).map((t) => {
             const focused = current === t.name
             return (
-              <Pressable
+              <Bounce
                 key={t.name}
+                scaleTo={0.86}
                 accessibilityRole="tab"
                 accessibilityLabel={t.locked ? `${t.label} (sign up to use)` : t.label}
                 accessibilityState={{ selected: focused }}
                 hitSlop={4}
                 onPress={() => go(t.name)}
-                style={({ pressed }) => [
-                  styles.tab,
-                  focused && (dark ? styles.tabActiveDark : styles.tabActiveLight),
-                  pressed && { transform: [{ scale: 0.9 }] },
-                ]}
+                style={[styles.tab, focused && (dark ? styles.tabActiveDark : styles.tabActiveLight)]}
               >
                 <Ionicons name={focused ? t.icon : `${t.icon}-outline`} size={22} color={focused ? colors.text : colors.textMuted} />
                 {t.locked ? <Lock /> : null}
-              </Pressable>
+              </Bounce>
             )
           })}
         </View>

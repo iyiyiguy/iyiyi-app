@@ -17,24 +17,27 @@ import { matchesTags, matchesSearch } from '../lib/tags'
 import { API_URL, supabase } from '../lib/supabase'
 import { openProfile } from '../lib/profileNav'
 import { loadSafeZone, updateSafeZonePresence } from '../lib/safeZone'
+import { getPositionFast } from '../lib/location'
+import { getCached, setCached } from '../lib/cache'
 
 const REFRESH_INTERVAL_MS = 10000 // re-scan even if the user hasn't moved
 
 export default function NearbyScreen({ navigation }) {
   const [layout, setLayout] = useState('grid')
   const [scope, setScope] = useState('local')
-  const [users, setUsers] = useState([])
+  const scopeRef = useRef(scope)
+  scopeRef.current = scope
+  const [users, setUsersState] = useState(() => getCached('nearby:local') ?? [])
+  const setUsers = useCallback((list) => { setCached(`nearby:${scopeRef.current}`, list); setUsersState(list) }, [])
   const [activeTags, setActiveTags] = useState([])
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(false)
   const [permissionDenied, setPermissionDenied] = useState(false)
-  const [hasLoadedOnce, setHasLoadedOnce] = useState(false)
+  const [hasLoadedOnce, setHasLoadedOnce] = useState(() => !!getCached('nearby:local'))
   const { statuses, setStatus } = useFollowStatuses(users)
   const lastCoords = useRef(null)
   const [myName, setMyName] = useState(null)
   const [inSafeZone, setInSafeZone] = useState(false)
-  const scopeRef = useRef(scope)
-  scopeRef.current = scope
 
   // First name / username for the greeting.
   useEffect(() => {
@@ -89,7 +92,7 @@ export default function NearbyScreen({ navigation }) {
         return
       }
       setPermissionDenied(false)
-      const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High })
+      const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced })
       await pushLocationAndFetch(loc.coords)
     } catch (e) {
       console.warn('Manual refresh failed', e)
@@ -116,7 +119,8 @@ export default function NearbyScreen({ navigation }) {
           }
           setPermissionDenied(false)
 
-          const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High })
+          // Last known position first (instant), then a fresh fix refines the list.
+          const loc = await getPositionFast({ onFresh: (pos) => { if (!cancelled) refresh(pos.coords) } })
           if (cancelled) return
           await refresh(loc.coords)
           if (cancelled) return
@@ -149,6 +153,11 @@ export default function NearbyScreen({ navigation }) {
       }
     }, [pushLocationAndFetch])
   )
+
+  useEffect(() => {
+    const cached = getCached(`nearby:${scope}`)
+    if (cached) setUsersState(cached)
+  }, [scope])
 
   useFocusEffect(
     useCallback(() => {

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import TagLinks from '../components/TagLinks'
 import BusinessLocationCard from '../components/BusinessLocationCard'
 import GlassPanel from '../components/GlassPanel'
@@ -6,13 +6,13 @@ import GlowBackdrop from '../components/GlowBackdrop'
 import { View, Text, Image, TextInput, StyleSheet, Pressable, ScrollView, Share, ActivityIndicator, Modal, Linking, Alert } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import * as ImagePicker from 'expo-image-picker'
-import { VideoView, useVideoPlayer } from 'expo-video'
 import { LinearGradient } from 'expo-linear-gradient'
 import { colors, gradients, radii, type } from '../theme'
 import { API_URL, supabase } from '../lib/supabase'
 import { apiJson } from '../lib/api'
+import { getCached, setCached } from '../lib/cache'
 import { TAGS } from '../lib/tags'
-import { socialUrl, openLink } from '../lib/socialLinks'
+
 import SocialIcon from '../components/SocialIcon'
 import ContentViewer from '../components/ContentViewer'
 import ImportLinksPanel from '../components/ImportLinksPanel'
@@ -61,16 +61,18 @@ const PROFILE_LABELS = [
 ]
 
 export default function MyProfileScreen({ navigation }) {
-  const [profile, setProfile] = useState(null)
-  const [stats, setStats] = useState(null)
+  const [profile, setProfileState] = useState(() => getCached('me:profile') ?? null)
+  const setProfile = useCallback((v) => { setProfileState((prev) => { const next = typeof v === 'function' ? v(prev) : v; setCached('me:profile', next); return next }) }, [])
+  const [stats, setStatsState] = useState(() => getCached('me:stats') ?? null)
+  const setStats = useCallback((v) => { setCached('me:stats', v); setStatsState(v) }, [])
   const [totalUsers, setTotalUsers] = useState(null)
   const [requestCount, setRequestCount] = useState(0)
-  const [media, setMedia] = useState([])
+  const [media, setMediaState] = useState(() => getCached('me:media') ?? [])
+  const setMedia = useCallback((v) => { setMediaState((prev) => { const next = typeof v === 'function' ? v(prev) : v; setCached('me:media', next); return next }) }, [])
   const [uploading, setUploading] = useState(false)
   const [uploadingMedia, setUploadingMedia] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
-  const [previewOpen, setPreviewOpen] = useState(false)
   const [importOpen, setImportOpen] = useState(false)
   const [platformFollowCount, setPlatformFollowCount] = useState(0)
   const [viewer, setViewer] = useState({ open: false, index: 0 })
@@ -384,7 +386,7 @@ export default function MyProfileScreen({ navigation }) {
           <Ionicons name="share-outline" size={16} color={colors.text} />
           <Text style={styles.headerBtnText}>Share</Text>
         </Pressable>
-        <Pressable onPress={() => setPreviewOpen(true)} style={styles.headerBtn} accessibilityRole="button" accessibilityLabel="Preview profile">
+        <Pressable onPress={() => profile?.id && navigation.navigate('UserProfile', { userId: profile.id, preview: true })} style={styles.headerBtn} accessibilityRole="button" accessibilityLabel="Preview profile">
           <Ionicons name="eye-outline" size={16} color={colors.text} />
           <Text style={styles.headerBtnText}>Preview</Text>
         </Pressable>
@@ -682,93 +684,9 @@ export default function MyProfileScreen({ navigation }) {
         onClose={() => setViewer({ open: false, index: 0 })}
       />
 
-      <ProfilePreviewModal
-        visible={previewOpen}
-        onClose={() => setPreviewOpen(false)}
-        profile={profile}
-        media={media}
-        stats={stats}
-      />
       </ScrollView>
     </View>
   )
-}
-
-// Shows the profile exactly as visitors would see it, driven off the current
-// (possibly unsaved) edit state instead of a server fetch - so you can check
-// how a change looks before hitting Save.
-function ProfilePreviewModal({ visible, onClose, profile, media, stats }) {
-  const socialLinks = profile?.social_links ?? []
-  const websites = profile?.websites?.length ? profile.websites : profile?.website ? [profile.website] : []
-
-  return (
-    <Modal
-      visible={visible}
-      animationType="slide"
-      presentationStyle="pageSheet"
-      onRequestClose={onClose}
-      onDismiss={onClose}
-    >
-      <ScrollView style={styles.screen} contentContainerStyle={{ paddingBottom: 40 }}>
-        <View style={previewStyles.closeBar}>
-          <Pressable onPress={onClose} hitSlop={12}>
-            <Text style={{ color: colors.text, fontSize: 20 }}>‹ Close Preview</Text>
-          </Pressable>
-        </View>
-        <LinearGradient colors={gradients.brandSubtle} style={styles.hero}>
-          <Image source={{ uri: profile?.avatar_url }} style={styles.heroAvatar} />
-        </LinearGradient>
-        <View style={styles.avatarWrap}>
-          <Image source={{ uri: profile?.avatar_url }} style={styles.avatar} />
-        </View>
-        <Text style={styles.name}>{profile?.username}</Text>
-        {profile?.bio ? <Text style={previewStyles.bio}>{profile.bio}</Text> : null}
-        {stats && (
-          <Text style={previewStyles.viewCount}>
-            {stats.total_views ?? 0} profile view{stats.total_views === 1 ? '' : 's'}
-          </Text>
-        )}
-
-        <View style={previewStyles.socialBar}>
-          {socialLinks.map((link, i) => {
-            const url = socialUrl(link.platform, link.value)
-            return (
-              <Pressable key={i} style={previewStyles.socialPill} onPress={() => url && openLink(url)}>
-                <SocialIcon platform={link.platform} size={32} color={colors.text} />
-              </Pressable>
-            )
-          })}
-          {websites.map((site, i) => (
-            <Pressable
-              key={`w${i}`}
-              style={previewStyles.socialPill}
-              onPress={() => openLink(site.startsWith('http') ? site : `https://${site}`)}
-            >
-              <Text style={{ fontSize: 24 }}>🔗</Text>
-            </Pressable>
-          ))}
-        </View>
-
-        <Text style={[styles.section, { marginLeft: 20 }]}>Content</Text>
-        <View style={styles.mediaGrid}>
-          {media.map((m) => (
-            <View key={m.id} style={styles.mediaTile}>
-              {m.media_type === 'video' ? (
-                <PreviewVideoThumb uri={m.media_url} />
-              ) : (
-                <Image source={{ uri: m.media_url }} style={styles.mediaThumbImg} />
-              )}
-            </View>
-          ))}
-        </View>
-      </ScrollView>
-    </Modal>
-  )
-}
-
-function PreviewVideoThumb({ uri }) {
-  const player = useVideoPlayer(uri, (p) => { p.loop = false })
-  return <VideoView player={player} style={styles.mediaThumbImg} contentFit="cover" nativeControls={false} />
 }
 
 function Field({ label, ...props }) {
@@ -905,20 +823,3 @@ const styles = StyleSheet.create({
   },
 })
 
-const previewStyles = StyleSheet.create({
-  // pageSheet presentation on iOS already inherits its own safe area, but the
-  // sheet's drag handle sits right at the very top - a close button placed
-  // there is unreachable/gets swallowed by the handle's own touch area, so
-  // this pushes it down clear of that.
-  closeBar: { paddingHorizontal: 16, paddingTop: 24, paddingBottom: 8 },
-  bio: { ...type.body, textAlign: 'center', marginHorizontal: 24, marginTop: 8, color: colors.textMuted },
-  viewCount: { ...type.caption, textAlign: 'center', marginTop: 4, color: colors.textMuted },
-  socialBar: {
-    flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center',
-    paddingVertical: 16, paddingHorizontal: 16, gap: 12, marginTop: 16,
-  },
-  socialPill: {
-    flexGrow: 1, flexBasis: 68, maxWidth: 96, height: 68, borderRadius: 20, backgroundColor: 'rgba(224,21,139,0.25)',
-    alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: colors.magenta,
-  },
-})

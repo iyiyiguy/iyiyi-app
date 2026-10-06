@@ -1,5 +1,5 @@
-import { Pressable, StyleSheet, View, Text } from 'react-native'
-import * as Haptics from 'expo-haptics'
+import { StyleSheet, View, Text } from 'react-native'
+import { Press } from '../lib/motion'
 import Glass from './Glass'
 import { colors } from '../theme'
 
@@ -14,10 +14,6 @@ const SIZES = {
 export const GlassButton = ({ onPress, children, style, tint, size = 'md', icon = null, disabled = false, variant = 'glass', textStyle }) => {
   const s = SIZES[size] ?? SIZES.md
   const primary = variant === 'primary'
-  const press = () => {
-    Haptics.selectionAsync().catch(() => {})
-    onPress?.()
-  }
   const content = (
     <View style={[styles.content, { paddingHorizontal: s.paddingHorizontal, paddingVertical: s.paddingVertical }]}>
       {icon ? <View style={{ marginRight: 8 }}>{icon}</View> : null}
@@ -27,11 +23,7 @@ export const GlassButton = ({ onPress, children, style, tint, size = 'md', icon 
     </View>
   )
   return (
-    <Pressable
-      onPress={press}
-      disabled={disabled}
-      style={({ pressed }) => [{ opacity: disabled ? 0.45 : 1, transform: [{ scale: pressed ? 0.96 : 1 }] }, style]}
-    >
+    <Press onPress={onPress} disabled={disabled} style={style} scaleTo={0.96}>
       {primary ? (
         <View style={[styles.primary, { borderRadius: s.radius }]}>{content}</View>
       ) : (
@@ -39,7 +31,7 @@ export const GlassButton = ({ onPress, children, style, tint, size = 'md', icon 
           {content}
         </Glass>
       )}
-    </Pressable>
+    </Press>
   )
 }
 

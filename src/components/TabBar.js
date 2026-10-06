@@ -4,6 +4,7 @@ import { Ionicons } from '@expo/vector-icons'
 import * as Haptics from 'expo-haptics'
 import { colors } from '../theme'
 import Glass from './Glass'
+import Bounce from './Bounce'
 
 // Tabs shown in the floating glass pill. Subscription is still a tab route (reachable from
 // Settings → iYiYi Pro) but isn't in the bar. Settings lives under Profile (Edit Profile), to keep it uncluttered.
@@ -34,8 +35,9 @@ export default function TabBar({ state, navigation }) {
           {TABS.filter((t) => state.routes.some((r) => r.name === t.name)).map((t) => {
             const focused = current === t.name
             return (
-              <Pressable
+              <Bounce
                 key={t.name}
+                scaleTo={0.86}
                 accessibilityRole="tab"
                 accessibilityLabel={t.label}
                 accessibilityState={{ selected: focused }}
@@ -44,18 +46,14 @@ export default function TabBar({ state, navigation }) {
                   if (!focused) Haptics.selectionAsync().catch(() => {})
                   navigation.navigate(t.name)
                 }}
-                style={({ pressed }) => [
-                  styles.tab,
-                  focused && (dark ? styles.tabActiveDark : styles.tabActiveLight),
-                  pressed && { transform: [{ scale: 0.9 }] },
-                ]}
+                style={[styles.tab, focused && (dark ? styles.tabActiveDark : styles.tabActiveLight)]}
               >
                 <Ionicons
                   name={focused ? t.icon : `${t.icon}-outline`}
                   size={22}
                   color={focused ? colors.text : colors.textMuted}
                 />
-              </Pressable>
+              </Bounce>
             )
           })}
         </View>

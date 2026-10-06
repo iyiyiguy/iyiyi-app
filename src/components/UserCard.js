@@ -1,4 +1,6 @@
-import { View, Text, Image, StyleSheet, Pressable } from 'react-native'
+import { View, Text, StyleSheet } from 'react-native'
+import { Image } from 'expo-image'
+import { Press } from '../lib/motion'
 import { colors, radii, type } from '../theme'
 import GlassPanel from './GlassPanel'
 import FollowButton from './FollowButton'
@@ -28,12 +30,12 @@ export default function UserCard({ user, onPress, layout = 'grid', followStatus,
 
   if (layout === 'list') {
     return (
-      <Pressable onPress={onPress}>
-        <GlassPanel radius={radii.lg} style={styles.listRow}>
+      <Press onPress={onPress} scaleTo={0.98}>
+        <GlassPanel radius={radii.lg} style={styles.listRow} lite animateIn={false}>
           <View style={styles.listRowInner}>
             {rank != null && <Text style={styles.rank}>{rank}</Text>}
             <View>
-              <Image source={{ uri: user.avatar_url }} style={styles.avatarSm} />
+              <Image source={{ uri: user.avatar_url }} style={styles.avatarSm} contentFit="cover" transition={150} cachePolicy="memory-disk" recyclingKey={String(userId)} />
               {isSelf ? <View style={styles.youDot}><Text style={styles.youDotText}>You</Text></View> : null}
             </View>
             <View style={{ flex: 1 }}>
@@ -44,7 +46,7 @@ export default function UserCard({ user, onPress, layout = 'grid', followStatus,
             {showFollow && <FollowButton userId={userId} status={followStatus} onChange={onFollowChange} />}
           </View>
         </GlassPanel>
-      </Pressable>
+      </Press>
     )
   }
 
@@ -52,11 +54,11 @@ export default function UserCard({ user, onPress, layout = 'grid', followStatus,
   // matches the clear-glass redesign (photo stays a normal solid image, only the
   // surrounding panel is glass).
   return (
-    <Pressable onPress={onPress} style={({ pressed }) => [{ flex: 1 }, pressed && { transform: [{ scale: 0.97 }] }]}>
-      <GlassPanel radius={28} style={styles.card}>
+    <Press onPress={onPress} style={{ flex: 1 }} scaleTo={0.97}>
+      <GlassPanel radius={28} style={styles.card} lite animateIn={false}>
         <View style={styles.cardInner}>
           <View>
-            <Image source={{ uri: user.avatar_url }} style={styles.avatar} />
+            <Image source={{ uri: user.avatar_url }} style={styles.avatar} contentFit="cover" transition={150} cachePolicy="memory-disk" recyclingKey={String(userId)} />
             {isSelf ? (
               <View style={styles.youBadge}><Text style={styles.youText}>You</Text></View>
             ) : null}
@@ -75,7 +77,7 @@ export default function UserCard({ user, onPress, layout = 'grid', followStatus,
           </View>
         </View>
       </GlassPanel>
-    </Pressable>
+    </Press>
   )
 }
 

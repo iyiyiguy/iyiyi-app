@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { Animated, StyleSheet } from 'react-native'
 import Glass from './Glass'
+import Surface from './Surface'
 import { radii } from '../theme'
 
 // Props that size/position the panel itself go on the animated wrapper; the rest (padding,
@@ -14,7 +15,9 @@ const LAYOUT_KEYS = new Set([
 // The app-wide glass surface (cards, bars, pills). Liquid Glass on iOS 26+, a matched
 // frosted fallback elsewhere (see Glass.js). Rises in gently on mount - animated with
 // transform only, since fading a Liquid Glass view's opacity breaks the effect.
-export default function GlassPanel({ children, style, radius = radii.lg, strong = false, intensity, animateIn = true, scheme = 'auto', interactive = false, contentStyle }) {
+// `lite` swaps the blurred glass for Surface (same look, no blur) - the right choice for every
+// cell inside a FlatList/grid.
+export default function GlassPanel({ children, style, radius = radii.lg, strong = false, intensity, animateIn = true, scheme = 'auto', interactive = false, contentStyle, lite = false }) {
   const rise = useRef(new Animated.Value(animateIn ? 1 : 0)).current
 
   useEffect(() => {
@@ -35,9 +38,15 @@ export default function GlassPanel({ children, style, radius = radii.lg, strong 
 
   return (
     <Animated.View style={[layout, { transform }]}>
-      <Glass style={[rest, sized && { flex: 1 }]} radius={flat.borderRadius ?? radius} strong={strong} scheme={scheme} interactive={interactive} contentStyle={contentStyle}>
-        {children}
-      </Glass>
+      {lite ? (
+        <Surface style={[rest, sized && { flex: 1 }, contentStyle]} radius={flat.borderRadius ?? radius} strong={strong} scheme={scheme}>
+          {children}
+        </Surface>
+      ) : (
+        <Glass style={[rest, sized && { flex: 1 }]} radius={flat.borderRadius ?? radius} strong={strong} scheme={scheme} interactive={interactive} contentStyle={contentStyle}>
+          {children}
+        </Glass>
+      )}
     </Animated.View>
   )
 }

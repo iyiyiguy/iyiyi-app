@@ -5,6 +5,7 @@ import { colors, gradients, radii, type, onImageType } from '../theme'
 import { API_URL } from '../lib/supabase'
 import { socialUrl, openLink } from '../lib/socialLinks'
 import SocialIcon from '../components/SocialIcon'
+import Avatar from '../components/Avatar'
 
 const TIER_LABEL = { premium: '👑 Premium', pro: '⭐ Pro', creator: '★ Creator', normal: '' }
 
@@ -49,7 +50,7 @@ export default function PublicProfileScreen({ route, navigation }) {
     <View style={[styles.screen, styles.wideBackdrop]}>
     {/* Wide screens (web/tablet): the profile sits in a centered phone-width column. */}
     <View style={styles.column}>
-      <Image source={{ uri: profile.avatar_url }} style={styles.photo} />
+      <Avatar uri={profile.avatar_url} name={profile.username} fill radius={0} transition={250} />
       <LinearGradient colors={['transparent', 'rgba(13,7,16,0.95)']} style={styles.overlay}>
         <Text style={onImageType.display}>{profile.username} {TIER_LABEL[profile.account_type]}</Text>
         {!isGated && profile.bio ? <Text style={styles.bio}>{profile.bio}</Text> : null}

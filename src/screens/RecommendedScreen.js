@@ -17,11 +17,14 @@ import { API_URL, supabase } from '../lib/supabase'
 import { openProfile } from '../lib/profileNav'
 import { matchesTags, matchesSearch } from '../lib/tags'
 import { fetchMyProfileCard } from '../lib/myContent'
+import { getPositionFast } from '../lib/location'
+import { getCached, setCached } from '../lib/cache'
 
 export default function RecommendedScreen({ navigation }) {
   const [scope, setScope] = useState('local')
   const [layout, setLayout] = useState('grid')
-  const [users, setUsers] = useState([])
+  const [users, setUsersState] = useState(() => getCached('recommended') ?? [])
+  const setUsers = useCallback((list) => { setCached('recommended', list); setUsersState(list) }, [])
   const [me, setMe] = useState(null)
   const [loading, setLoading] = useState(false)
   const [permissionDenied, setPermissionDenied] = useState(false)
@@ -66,7 +69,7 @@ export default function RecommendedScreen({ navigation }) {
         return
       }
       setPermissionDenied(false)
-      const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High })
+      const loc = await getPositionFast({ onFresh: (pos) => loadAt(currentScope, pos.coords) })
       await loadAt(currentScope, loc.coords)
     } catch (e) {
       console.warn('Recommended load failed', e)
