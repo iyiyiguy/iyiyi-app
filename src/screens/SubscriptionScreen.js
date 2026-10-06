@@ -9,7 +9,7 @@ import { purchaseSubscription, restorePurchases, isUserCancelled, fetchSubscript
 import { logSubscriptionPurchase } from '../lib/attribution'
 import { openLink } from '../lib/socialLinks'
 
-const TERMS_URL = 'https://shop.iyiyi.xyz/policies/terms-of-service'
+const TERMS_URL = 'https://iyiyi.xyz/terms'
 const PRIVACY_URL = 'https://shop.iyiyi.xyz/policies/privacy-policy'
 
 const TIER_LABELS = { pro: 'Pro', pro_local: 'Pro', pro_national: 'Pro', pro_all: 'Pro', premium: 'Premium', creator: 'Creator' }
@@ -17,7 +17,7 @@ const TIER_LABELS = { pro: 'Pro', pro_local: 'Pro', pro_national: 'Pro', pro_all
 const PRICE_USD = { pro: 1 }
 const APPLE_SUBSCRIPTIONS_URL = 'https://apps.apple.com/account/subscriptions'
 
-export default function SubscriptionScreen() {
+export default function SubscriptionScreen({ navigation }) {
   const [purchasing, setPurchasing] = useState(false)
   const [restoring, setRestoring] = useState(false)
   const [cancelling, setCancelling] = useState(false)
@@ -112,7 +112,7 @@ export default function SubscriptionScreen() {
     <View style={styles.screen}>
       <GlowBackdrop preset="profile" />
       <ScrollView>
-      <BrandHeader title="Subscription" />
+      <BrandHeader title="iYiYi Pro" onBack={navigation?.canGoBack?.() ? () => navigation.goBack() : undefined} />
 
       {current?.status === 'active' && (
         <GlassPanel radius={radii.lg} style={styles.currentCard}>

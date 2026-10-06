@@ -68,11 +68,17 @@ def patch(kind, obj_id, attrs, label):
 
 
 def upload_screenshots(version_loc_id):
-    sets = {"APP_IPHONE_67": SHOTS / "6.9in-1290x2796", "APP_IPHONE_65": SHOTS / "6.5in-1242x2688"}
+    sets = {
+        "APP_IPHONE_67": SHOTS / "6.9in-1290x2796",
+        "APP_IPHONE_65": SHOTS / "6.5in-1242x2688",
+        "APP_IPHONE_55": SHOTS / "5.5in-1242x2208",
+        "APP_IPAD_PRO_129": SHOTS / "ipad-12.9-2048x2732",
+        "APP_IPAD_PRO_3GEN_129": SHOTS / "ipad-13-2064x2752",
+    }
     existing = {s["attributes"]["screenshotDisplayType"]: s for s in
                 call("GET", f"/appStoreVersionLocalizations/{version_loc_id}/appScreenshotSets")["data"]}
     for display, folder in sets.items():
-        files = sorted(folder.glob("*.png"))
+        files = sorted([*folder.glob("*.png"), *folder.glob("*.jpg")])
         if not files:
             continue
         sset = existing.get(display)
@@ -135,6 +141,16 @@ def main():
         if loc:
             patch("appInfoLocalizations", loc["id"], {"name": read("name.txt"), "subtitle": read("subtitle.txt")}, "name and subtitle")
             changed = True
+        # Age rating: the app has chat/video calls and user posts, so these capabilities must be
+        # declared (App Review 2.3.6). Best effort - an older API without the fields just logs.
+        try:
+            decl = call("GET", f"/appInfos/{info['id']}/ageRatingDeclaration")["data"]
+            want = {"messagingAndChat": True, "userGeneratedContent": True}
+            todo = {k: v for k, v in want.items() if decl["attributes"].get(k) is not v}
+            if todo:
+                patch("ageRatingDeclarations", decl["id"], todo, "age rating capabilities")
+        except Exception as e:  # noqa: BLE001
+            print(f"  age rating not updated (set Messaging and Chat = Yes in App Information): {e}")
     if not changed:
         print("Name and subtitle are locked until a new version is created (they change together with the next version).")
     if editable_version is None:

@@ -17,7 +17,7 @@ import { THEME_OPTIONS, loadThemePref, saveThemePref } from '../lib/themePref'
 import { LaserTaggableSetting } from '../games/laser/Bystander'
 
 const PRIVACY_URL = 'https://shop.iyiyi.xyz/policies/privacy-policy'
-const TERMS_URL = 'https://shop.iyiyi.xyz/policies/terms-of-service'
+const TERMS_URL = 'https://iyiyi.xyz/terms'
 
 const FOLLOW_US = [
   { platform: 'instagram', label: 'Instagram', handle: '@iyiyiapp', url: 'https://instagram.com/iyiyiapp' },

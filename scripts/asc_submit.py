@@ -87,6 +87,15 @@ def main():
     M.call("PATCH", f"/appStoreVersions/{v['id']}/relationships/build", json={"data": {"type": "builds", "id": b["id"]}})
     print(f"Attached build {BUILD}")
 
+    # Notes for the reviewer (demo account hints, answers to the previous rejection).
+    notes = M.read("review_notes.txt")
+    if notes:
+        try:
+            detail = M.call("GET", f"/appStoreVersions/{v['id']}/appStoreReviewDetail")["data"]
+            M.patch("appStoreReviewDetails", detail["id"], {"notes": notes}, "review notes")
+        except Exception as e:  # noqa: BLE001
+            print(f"  review notes not updated: {e}")
+
     os.environ["UPLOAD_SCREENSHOTS"] = "true"
     M.UPLOAD_SCREENSHOTS = os.environ.get("SCREENSHOTS", "true").lower() == "true"
     M.main()
@@ -115,7 +124,17 @@ def main():
                 raise
             print(f"  not accepted yet ({str(e)[:300]}), retrying in 60s")
             time.sleep(60)
-    M.call("PATCH", f"/reviewSubmissions/{sub['id']}", json={"data": {"type": "reviewSubmissions", "id": sub["id"], "attributes": {"submitted": True}}})
+    # After a rejection the version can stay "not ready to be submitted yet" for a while once the
+    # new build is attached; the final submit retries too.
+    for attempt in range(15):
+        try:
+            M.call("PATCH", f"/reviewSubmissions/{sub['id']}", json={"data": {"type": "reviewSubmissions", "id": sub["id"], "attributes": {"submitted": True}}})
+            break
+        except RuntimeError as e:
+            if "409" not in str(e) or attempt == 14:
+                raise
+            print(f"  version not ready to submit yet ({str(e)[:200]}), retrying in 60s")
+            time.sleep(60)
     print(f"Submitted version {v['attributes']['versionString']} with build {BUILD} for review")
 
 

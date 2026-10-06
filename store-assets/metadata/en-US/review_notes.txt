@@ -1,0 +1,17 @@
+Demo account: appreview@iyiyi.xyz (password in Sign-in information). Sign in with "Email".
+
+Location for testing: use lat 37.3521, long -122.0415. Test user Nancy appears within 150 ft of this account (she is a free user, so only one close user shows next to Mark).
+
+Responses to the previous review (1.3.0 build 219):
+
+5.1.1(iv) Camera: the custom "Allow camera / Not now" screen has been removed. Opening the camera triggers only the iOS permission prompt. If access is off, the app shows a neutral "Camera access is off" note with an Open Settings link.
+
+1.2 User-generated content: before registering or logging in, users must tick "I agree to the Terms of Use" (https://iyiyi.xyz/terms). The Terms state zero tolerance for objectionable content and abusive users. Flagging: open any post and tap Report. Blocking: open a profile, tap the "..." button, then "Block user". Reports are reviewed within 24 hours and offending users are banned.
+
+2.1(a) iYiYi Pro: the Settings > "iYiYi Pro" button opened nothing because of a navigation bug. Fixed; it now opens the subscription screen on iPhone and iPad.
+
+2.3.3 Screenshots: the 5.5-inch iPhone, 12.9-inch iPad and 13-inch iPad screenshots have been replaced with the current version.
+
+2.3.6 Age rating: "Messaging and Chat" is now set to Yes.
+
+2.5.4 Background audio: the "audio" UIBackgroundModes entry has been removed from the app.

@@ -157,7 +157,6 @@ function Tabs() {
       <Tab.Screen name="Map" component={Aura.MapScreen} />
       <Tab.Screen name="Feed" component={Aura.ContentFeedScreen} />
       <Tab.Screen name="Games" component={Aura.GamesScreen} />
-      <Tab.Screen name="Subscription" component={Aura.SubscriptionScreen} />
     </Tab.Navigator>
     </View>
   )
@@ -299,6 +298,7 @@ export default function App() {
             <Stack.Screen name="EventDetails" component={Aura.EventDetailsScreen} />
             <Stack.Screen name="JoinGame" component={Aura.JoinGameScreen} />
             <Stack.Screen name="Settings" component={Aura.SettingsScreen} />
+            <Stack.Screen name="Subscription" component={Aura.SubscriptionScreen} />
             <Stack.Screen name="Stream" component={Aura.StreamScreen} />
             <Stack.Screen name="ArcadeStore" component={ArcadeStoreScreen} />
             <Stack.Screen name="GamePlayScreen" component={GamePlayScreen} options={{ gestureEnabled: false }} />

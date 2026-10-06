@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { View, Text, TextInput, Pressable, StyleSheet, Image, ScrollView, Alert, Platform, KeyboardAvoidingView, Animated, useWindowDimensions } from 'react-native'
+import { View, Text, TextInput, Pressable, StyleSheet, Image, ScrollView, Alert, Platform, KeyboardAvoidingView, Animated, useWindowDimensions, Linking } from 'react-native'
 import { LinearGradient } from 'expo-linear-gradient'
 import { Ionicons } from '@expo/vector-icons'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -17,6 +17,8 @@ import GlassPanel from '../components/GlassPanel'
 const METHOD = { EMAIL: 'email', PHONE: 'phone' }
 
 const ICON = require('../../assets/icon.png')
+export const TERMS_URL = 'https://iyiyi.xyz/terms'
+export const PRIVACY_URL = 'https://shop.iyiyi.xyz/policies/privacy-policy'
 
 const SOCIAL_PROVIDERS = [
   { key: 'google', label: 'Google' },
@@ -42,6 +44,7 @@ export default function AuthScreen({ navigation, route }) {
   const [totalUsers, setTotalUsers] = useState(null)
   const pollRef = useRef(null)
   const [appleAvailable, setAppleAvailable] = useState(false)
+  const [agreed, setAgreed] = useState(false)
 
   useEffect(() => {
     if (Platform.OS !== 'ios') return
@@ -105,6 +108,10 @@ export default function AuthScreen({ navigation, route }) {
 
   const withGuard = async (fn) => {
     setError('')
+    if (!agreed) {
+      setError('Please agree to the Terms of Use to continue.')
+      return
+    }
     setLoading(true)
     try {
       await fn()
@@ -234,6 +241,7 @@ export default function AuthScreen({ navigation, route }) {
                       )}
                       <Field icon="mail" placeholder="Email" autoCapitalize="none" keyboardType="email-address" textContentType="emailAddress" value={email} onChangeText={setEmail} />
                       <Field icon="lock-closed" placeholder="Password" secureTextEntry textContentType={signup ? 'newPassword' : 'password'} value={password} onChangeText={setPassword} />
+                      <TermsRow agreed={agreed} onToggle={() => { setAgreed((a) => !a); setError('') }} />
                       {error ? <Text style={styles.error}>{error}</Text> : null}
                       <PrimaryButton onPress={submitEmail} loading={loading} label={signup ? 'Create account' : 'Log in'} />
                       <TextLink onPress={() => { setMode((m) => (m === 'signup' ? 'login' : 'signup')); setError('') }}>
@@ -246,6 +254,7 @@ export default function AuthScreen({ navigation, route }) {
                       {otpSent && (
                         <Field icon="keypad" placeholder="6-digit code" keyboardType="number-pad" textContentType="oneTimeCode" value={otp} onChangeText={setOtp} />
                       )}
+                      <TermsRow agreed={agreed} onToggle={() => { setAgreed((a) => !a); setError('') }} />
                       {error ? <Text style={styles.error}>{error}</Text> : null}
                       <PrimaryButton onPress={otpSent ? verifyOtp : sendOtp} loading={loading} label={otpSent ? 'Verify code' : 'Send code'} />
                       {otpSent ? <TextLink onPress={() => { setOtpSent(false); setOtp('') }}>Use a different number</TextLink> : null}
@@ -317,6 +326,27 @@ function Segmented({ options, value, onChange, isDark }) {
   )
 }
 
+// Agreement to the Terms of Use (which spell out zero tolerance for objectionable content and
+// abusive users) before registering or logging in, as App Review requires for user content.
+function TermsRow({ agreed, onToggle }) {
+  return (
+    <View style={styles.termsRow}>
+      <Pressable onPress={onToggle} hitSlop={8} accessibilityRole="checkbox" accessibilityState={{ checked: agreed }} accessibilityLabel="Agree to the Terms of Use and Privacy Policy">
+        <View style={[styles.checkbox, agreed && styles.checkboxOn]}>
+          {agreed ? <Ionicons name="checkmark" size={14} color="#fff" /> : null}
+        </View>
+      </Pressable>
+      <Text style={styles.termsText}>
+        I agree to the{' '}
+        <Text style={styles.termsLink} onPress={() => Linking.openURL(TERMS_URL).catch(() => {})}>Terms of Use</Text>
+        {' '}and{' '}
+        <Text style={styles.termsLink} onPress={() => Linking.openURL(PRIVACY_URL).catch(() => {})}>Privacy Policy</Text>
+        . No objectionable content or abusive behavior is tolerated.
+      </Text>
+    </View>
+  )
+}
+
 function Field({ icon, style, ...props }) {
   const [focused, setFocused] = useState(false)
   return (
@@ -374,6 +404,11 @@ const styles = StyleSheet.create({
   fieldFocused: { borderColor: colors.accent },
   input: { flex: 1, paddingVertical: 13, fontSize: 16, color: colors.text },
   error: { ...type.caption, color: colors.danger, textAlign: 'center' },
+  termsRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, paddingHorizontal: 2, paddingTop: 2 },
+  checkbox: { width: 22, height: 22, borderRadius: 7, borderWidth: 1.5, borderColor: colors.textFaint, alignItems: 'center', justifyContent: 'center', marginTop: 1 },
+  checkboxOn: { backgroundColor: colors.accent, borderColor: colors.accent },
+  termsText: { ...type.caption, flex: 1, color: colors.textMuted },
+  termsLink: { color: colors.accent, fontWeight: '600' },
   button: { paddingVertical: 15, borderRadius: 999, alignItems: 'center', marginTop: 2, shadowColor: '#6b7cff', shadowOpacity: 0.35, shadowRadius: 14, shadowOffset: { width: 0, height: 8 } },
   buttonText: { color: '#fff', fontWeight: '700', fontSize: 16 },
   link: { alignSelf: 'center', paddingVertical: 6, paddingHorizontal: 8 },

@@ -71,7 +71,12 @@
           "isAccessMediaLocationEnabled": false
         }
       ],
-      "expo-audio",
+      [
+        "expo-audio",
+        {
+          "enableBackgroundPlayback": false
+        }
+      ],
       "expo-apple-authentication",
       "expo-notifications",
       [
