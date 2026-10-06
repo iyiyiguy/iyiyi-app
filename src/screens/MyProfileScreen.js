@@ -386,7 +386,7 @@ export default function MyProfileScreen({ navigation }) {
           <Ionicons name="share-outline" size={16} color={colors.text} />
           <Text style={styles.headerBtnText}>Share</Text>
         </Pressable>
-        <Pressable onPress={() => profile?.id && navigation.navigate('UserProfile', { userId: profile.id, preview: true })} style={styles.headerBtn} accessibilityRole="button" accessibilityLabel="Preview profile">
+        <Pressable onPress={() => profile?.id && navigation.navigate('UserProfile', { userId: profile.id, preview: true, avatarUrl: profile.avatar_url ?? null })} style={styles.headerBtn} accessibilityRole="button" accessibilityLabel="Preview profile">
           <Ionicons name="eye-outline" size={16} color={colors.text} />
           <Text style={styles.headerBtnText}>Preview</Text>
         </Pressable>

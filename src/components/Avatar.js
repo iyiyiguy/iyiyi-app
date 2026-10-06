@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { StyleSheet, Text, View } from 'react-native'
+import { Image as RNImage, StyleSheet, Text, View } from 'react-native'
 import { Image } from 'expo-image'
 import { LinearGradient } from 'expo-linear-gradient'
 
@@ -20,11 +20,17 @@ export function paletteFor(seed = '') {
 }
 
 export default function Avatar({ uri, name = '', size = 48, radius, style, fill = false, recyclingKey, contentFit = 'cover', transition = 180 }) {
-  const [failed, setFailed] = useState(false)
+  // 0 = expo-image, 1 = plain React Native Image (retry), 2 = give up and show the initial.
+  const [stage, setStage] = useState(0)
+  const [lastUri, setLastUri] = useState(uri)
+  if (uri !== lastUri) {
+    setLastUri(uri)
+    setStage(0)
+  }
   const r = radius ?? size / 2
   const box = fill ? StyleSheet.absoluteFillObject : { width: size, height: size }
   const letter = (name || '?').replace(/^@/, '').trim().charAt(0).toUpperCase() || '?'
-  const showImage = !!uri && !failed
+  const showImage = !!uri && stage < 2
   return (
     <View style={[box, { borderRadius: r, overflow: 'hidden', backgroundColor: 'rgba(127,140,180,0.18)' }, style]}>
       {!showImage ? (
@@ -32,7 +38,10 @@ export default function Avatar({ uri, name = '', size = 48, radius, style, fill 
           <Text style={[styles.letter, { fontSize: fill ? 40 : Math.max(12, size * 0.42) }]}>{letter}</Text>
         </LinearGradient>
       ) : null}
-      {showImage ? (
+      {showImage && stage === 1 ? (
+        <RNImage source={{ uri }} style={StyleSheet.absoluteFill} resizeMode={contentFit === 'contain' ? 'contain' : 'cover'} onError={() => setStage(2)} />
+      ) : null}
+      {showImage && stage === 0 ? (
         <Image
           source={{ uri }}
           style={StyleSheet.absoluteFill}
@@ -40,7 +49,7 @@ export default function Avatar({ uri, name = '', size = 48, radius, style, fill 
           transition={transition}
           cachePolicy="memory-disk"
           recyclingKey={recyclingKey ?? uri}
-          onError={() => setFailed(true)}
+          onError={() => setStage(1)}
         />
       ) : null}
     </View>

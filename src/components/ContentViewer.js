@@ -6,7 +6,7 @@ import {
 import { VideoView, useVideoPlayer } from 'expo-video'
 import { SafeAreaInsetsContext, initialWindowMetrics } from 'react-native-safe-area-context'
 import { colors, radii } from '../theme'
-import { apiJson, post, del } from '../lib/api'
+import { apiJson, apiFetch, post, del } from '../lib/api'
 import TaggedInSheet from './TaggedInSheet'
 import Bounce from './Bounce'
 import { removeCameraTag } from '../lib/cameraApi'
@@ -104,12 +104,37 @@ export default function ContentViewer({ visible, items, startIndex = 0, onClose,
 
   const reportPost = (m) => {
     const send = async (reason) => {
+      let ok = false
+      let blockedOwner = false
       try {
         await post(`/api/content/${m.id}/report`, { reason })
+        ok = true
+      } catch (e) {
+        // Already reported counts as reported.
+        if (/already/i.test(e?.message ?? '')) ok = true
+      }
+      if (!ok && m.owner_id) {
+        // Fallback: report the post's author (this also blocks them for you), with the post id
+        // in the reason so the review still points at the post.
+        try {
+          const res = await apiFetch(`/api/profiles/report/${m.owner_id}`, {
+            method: 'POST',
+            body: JSON.stringify({ reason: `${reason} (post ${m.id})`, media_id: m.id }),
+          })
+          ok = res.ok
+          blockedOwner = res.ok
+        } catch {}
+      }
+      if (ok) {
         dropItem(m.id)
-        Alert.alert('Report sent', "Thanks. We hid this post for you and we'll review it.")
-      } catch {
-        Alert.alert("Couldn't send the report", 'Please try again.')
+        Alert.alert(
+          'Report sent',
+          blockedOwner
+            ? "Thanks. We hid this post, blocked its author for you and we'll review it."
+            : "Thanks. We hid this post for you and we'll review it.",
+        )
+      } else {
+        Alert.alert("Couldn't send the report", 'Please check your connection and try again.')
       }
     }
     Alert.alert('Report this post', 'Why are you reporting it?', [

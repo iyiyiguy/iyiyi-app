@@ -29,7 +29,7 @@ const REPORT_REASONS = [
 ]
 
 export default function UserProfileScreen({ route, navigation }) {
-  const { userId, preview = false } = route.params
+  const { userId, preview = false, avatarUrl: avatarHint = null } = route.params
   const [profile, setProfile] = useState(null)
   const [media, setMedia] = useState([])
   const [menuOpen, setMenuOpen] = useState(false)
@@ -63,7 +63,9 @@ export default function UserProfileScreen({ route, navigation }) {
     if (!profileRes.ok || !profileJson || profileJson.error) {
       throw new Error(profileJson?.error || "This profile isn't available.")
     }
-    setProfile(profileJson)
+    // Some API responses leave the photo out (your own profile in Preview, for one); fall back
+    // to the photo the caller already had so the hero never comes up blank.
+    setProfile({ ...profileJson, avatar_url: profileJson.avatar_url || profileJson.avatar || profileJson.photo_url || avatarHint })
     const mediaJson = mediaRes.ok ? await mediaRes.json().catch(() => null) : null
     // The route orders by `position`, which camera posts never set - newest first instead.
     setMedia(sortMediaNewest(mediaArrayFrom(mediaJson)))
