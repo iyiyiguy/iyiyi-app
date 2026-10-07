@@ -218,6 +218,12 @@ export function LaserTagGame({ room, onExit }) {
         else flash(`✕ ${d?.zone === 'limb' ? 'Limb' : 'Hit'}${dmg}`, true)
       }),
       room.onMessage('notice', (d) => flash(String(d?.text || ''), false)),
+      room.onMessage('got_hit', (d) => {
+        const by = String(d?.by || 'Someone').slice(0, 24)
+        const dmg = d?.damage ? ` −${d.damage}` : ''
+        if (d?.killed) flash(`💀 Tagged out by ${by}`, false)
+        else flash(`${d?.zone === 'head' ? '🎯 Headshot' : 'Hit'} by ${by}${dmg}`, false)
+      }),
       room.onMessage('bystander_ok', (d) => {
         try {
           const userId = typeof d?.userId === 'string' ? d.userId : null
@@ -349,6 +355,12 @@ export function LaserTagGame({ room, onExit }) {
       }
       const { state: next, reply } = engine.applyAction(s, action, from, { now: t, posOf })
       if (next !== s) room.publishState(next)
+      // Tell the person who got hit who shot them (their phone already rumbles from the HP drop).
+      if (action?.type === 'hit' && reply?.type === 'hit_ok' && action.target) {
+        const victimMsg = { by: s.players?.[from]?.name || 'Someone', zone: reply.data.zone, damage: reply.data.damage, killed: reply.data.killed }
+        if (action.target === meId) room.emitter.emit('msg:got_hit', victimMsg, from)
+        else room.send('got_hit', victimMsg, { to: action.target })
+      }
       if (reply) {
         if (from === meId) room.emitter.emit(`msg:${reply.type}`, reply.data, meId)
         else room.send(reply.type, reply.data, { to: from })
@@ -508,10 +520,10 @@ export function LaserTagGame({ room, onExit }) {
   // the in-flight camera frame instead of queueing more captures.
   const fireVision = async (shots) => {
     const frame = await vision.capture()
-    if (!frame) return
+    if (!frame) { flash('Camera not ready — try again', false); return }
     setBodies(frame.bodies)
     const hit = classifyHit(frame.bodies)
-    if (!hit) return
+    if (!hit) { flash('Miss', false); return }
     const h = aimRef.current
     let by = null
     try {

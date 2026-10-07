@@ -87,6 +87,7 @@ const LINKING = {
 }
 
 const LOCATION_CONSENT_KEY = 'iyiyi_location_consent_seen'
+const paywallSeenKey = (uid) => `iyiyi_paywall_seen_${uid}`
 const importSeenKey = (userId) => `iyiyi_import_prompt_seen_${userId}`
 
 const Tab = createBottomTabNavigator()
@@ -203,6 +204,7 @@ export default function App() {
   const [locationConsent, setLocationConsent] = useState(undefined)
   const [themeReady, setThemeReady] = useState(false)
   const [showImport, setShowImport] = useState(false)
+  const [showPaywall, setShowPaywall] = useState(false)
   const scheme = useColorScheme()
   const navRef = useNavigationContainerRef()
   const flipOn = useFlipPref()
@@ -248,6 +250,22 @@ export default function App() {
     return () => { cancelled = true }
   }, [userId, locationConsent])
 
+  // One-time Pro offer at the end of onboarding (after the social-links step). Dismissible with
+  // "Not now" or the close button, and skipped for people who are already Pro.
+  useEffect(() => {
+    if (!userId || !locationConsent || showImport) return
+    let cancelled = false
+    AsyncStorage.getItem(paywallSeenKey(userId))
+      .then((v) => { if (!cancelled && !v) setShowPaywall(true) })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [userId, locationConsent, showImport])
+
+  const finishPaywall = () => {
+    if (userId) AsyncStorage.setItem(paywallSeenKey(userId), 'true').catch(() => {})
+    setShowPaywall(false)
+  }
+
   const finishImport = () => {
     if (userId) AsyncStorage.setItem(importSeenKey(userId), 'true')
     setShowImport(false)
@@ -276,6 +294,8 @@ export default function App() {
           <Aura.LocationConsentScreen onContinue={acceptLocationConsent} />
         ) : showImport ? (
           <Aura.ImportLinksScreen onDone={finishImport} />
+        ) : showPaywall ? (
+          <Aura.SubscriptionScreen onClose={finishPaywall} />
         ) : (
           <Stack.Navigator key="member" screenOptions={screenOptions}>
             <Stack.Screen name="Tabs" component={Tabs} />

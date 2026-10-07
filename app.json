@@ -15,11 +15,11 @@
         "usesNonExemptEncryption": false
       },
       "infoPlist": {
-        "NSLocationWhenInUseUsageDescription": "iYiYi uses your location to show you people within 150ft.",
-        "NSPhotoLibraryUsageDescription": "iYiYi needs access to your photos to set a profile picture.",
-        "NSCameraUsageDescription": "iYiYi uses the camera so you can capture moments and tag the people around you.",
-        "NSMicrophoneUsageDescription": "iYiYi uses the microphone to record sound in your videos and for voice in video calls.",
-        "NSPhotoLibraryAddUsageDescription": "iYiYi saves the photos and videos you shoot to an iYiYi album."
+        "NSLocationWhenInUseUsageDescription": "iYiYi uses your location to show your profile to people within your chosen range and to show you who is nearby. For example, when you open Nearby, you see people within 150 ft of you, and in laser tag you see how far away other players are. Other people only see an approximate distance, never your exact location.",
+        "NSPhotoLibraryUsageDescription": "iYiYi uses your photo library so you can choose pictures and videos to post or use as your profile photo. For example, you can pick a photo from your library to set as your profile picture.",
+        "NSCameraUsageDescription": "iYiYi uses the camera to take photos and videos you can post, and to aim in camera games. For example, you can take a photo that tags people around you, or aim at another player in laser tag.",
+        "NSMicrophoneUsageDescription": "iYiYi uses the microphone to record sound in videos you shoot and for your voice in video calls. For example, when you record a video with the iYiYi camera, your voice is included in the clip.",
+        "NSPhotoLibraryAddUsageDescription": "iYiYi saves the photos and videos you take in the app to your photo library. For example, after you shoot a photo with the iYiYi camera, it is saved to an iYiYi album."
       },
       "buildNumber": "59",
       "usesAppleSignIn": true,
@@ -58,16 +58,16 @@
       [
         "expo-camera",
         {
-          "cameraPermission": "iYiYi uses the camera so you can capture moments and tag the people around you.",
-          "microphonePermission": "iYiYi uses the microphone to record sound in your videos and for voice in video calls.",
+          "cameraPermission": "iYiYi uses the camera to take photos and videos you can post, and to aim in camera games. For example, you can take a photo that tags people around you, or aim at another player in laser tag.",
+          "microphonePermission": "iYiYi uses the microphone to record sound in videos you shoot and for your voice in video calls. For example, when you record a video with the iYiYi camera, your voice is included in the clip.",
           "recordAudioAndroid": true
         }
       ],
       [
         "expo-media-library",
         {
-          "photosPermission": "iYiYi needs access to your photos to set a profile picture and add content.",
-          "savePhotosPermission": "iYiYi saves the photos and videos you shoot to an iYiYi album.",
+          "photosPermission": "iYiYi uses your photo library so you can choose pictures and videos to post or use as your profile photo. For example, you can pick a photo from your library to set as your profile picture.",
+          "savePhotosPermission": "iYiYi saves the photos and videos you take in the app to your photo library. For example, after you shoot a photo with the iYiYi camera, it is saved to an iYiYi album.",
           "isAccessMediaLocationEnabled": false
         }
       ],
@@ -82,21 +82,21 @@
       [
         "expo-location",
         {
-          "locationWhenInUsePermission": "iYiYi uses your location to show you people within 150ft."
+          "locationWhenInUsePermission": "iYiYi uses your location to show your profile to people within your chosen range and to show you who is nearby. For example, when you open Nearby, you see people within 150 ft of you, and in laser tag you see how far away other players are. Other people only see an approximate distance, never your exact location."
         }
       ],
       [
         "expo-image-picker",
         {
-          "photosPermission": "iYiYi needs access to your photos to set a profile picture and add content.",
-          "cameraPermission": "iYiYi uses the camera so you can capture moments and tag the people around you."
+          "photosPermission": "iYiYi uses your photo library so you can choose pictures and videos to post or use as your profile photo. For example, you can pick a photo from your library to set as your profile picture.",
+          "cameraPermission": "iYiYi uses the camera to take photos and videos you can post, and to aim in camera games. For example, you can take a photo that tags people around you, or aim at another player in laser tag."
         }
       ],
       [
         "expo-calendar",
         {
-          "calendarPermission": "iYiYi adds events you RSVP to into your calendar.",
-          "remindersPermission": "iYiYi can set reminders for events you're going to."
+          "calendarPermission": "iYiYi adds events you RSVP to into your calendar. For example, when you tap Going on a local event, it appears in your Calendar app.",
+          "remindersPermission": "iYiYi creates reminders for events you are going to. For example, you can get a reminder an hour before a meetup you RSVP'd to."
         }
       ]
     ],

@@ -361,7 +361,7 @@ function applyBystander(state, action, from, now) {
 function applyHit(state, action, from, now, posOf) {
   const shooter = state.players[from]
   const target = state.players[action.target]
-  if (!target || action.target === from || !shooter.alive || !target.alive) return { state }
+  if (!shooter || !target || action.target === from || !shooter.alive || !target.alive) return { state }
   if (state.mode !== 'ffa' && shooter.team === target.team) return { state }
   if ((target.protectedUntil || 0) > now) return { state, reply: notice(`${target.name} just respawned — protected for a moment.`) }
   const a = posOf(from)
