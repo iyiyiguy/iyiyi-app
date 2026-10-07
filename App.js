@@ -51,7 +51,7 @@ const RecapScreen = lazyScreen(() => import('./src/screens/RecapScreen'))
 import { useFlipToCamera, useFlipPref } from './src/lib/flipToCamera'
 const StreamScreen = lazyScreen(() => import('./src/screens/StreamScreen'))
 const ArcadeStoreScreen = lazyScreen(() => import('./src/screens/ArcadeStoreScreen'))
-import CameraScreen from './src/screens/CameraScreen'
+const CameraScreen = lazyScreen(() => import('./src/screens/CameraScreen'))
 import TaggedScreen from './src/screens/TaggedScreen'
 import TopProfilesScreen from './src/screens/TopProfilesScreen'
 import ImportLinksScreen from './src/screens/ImportLinksScreen'

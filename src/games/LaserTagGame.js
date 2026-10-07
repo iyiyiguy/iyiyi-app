@@ -45,6 +45,7 @@ import { BystanderMarkers, useTaggablePrompt } from './laser/Bystander'
 import { colors, radii, type } from '../theme'
 import { useArcadeInsets } from './arcadeUI'
 import { DOCK_GAP, TOP_BUTTONS_W, useHudMetrics, useMeasuredHeight } from './laser/hudLayout'
+import { formatZoom, maxZoomFor, useScopeZoom } from './laser/useScopeZoom'
 
 function normalizeGun(g) {
   const gun = g || getWeapon('pistol')
@@ -144,6 +145,8 @@ export function LaserTagGame({ room, onExit }) {
   const vision = useVisionCapture(cameraRef)
   const [bodies, setBodies] = useState(null) // latest target-lock detections
   const [view, setView] = useState({ width: 0, height: 0 })
+  // Scope zoom (pinch or the zoom button). Precision guns (sniper, DMR, railgun) go to 4×.
+  const scope = useScopeZoom(maxZoomFor(getWeapon(weaponId)), { enabled: !!camPerm?.granted, onChange: () => buzz('select') })
   const vignette = useRef(new Animated.Value(0)).current
 
   const meId = snap?.me?.id
@@ -455,7 +458,7 @@ export function LaserTagGame({ room, onExit }) {
         if (by) {
           if (seen.has(by.user.id)) continue
           seen.add(by.user.id)
-          const r = photoRectToScreen(b.head || b.box, b, view)
+          const r = scope.zoomRect(photoRectToScreen(b.head || b.box, b, view), view)
           if (Number.isFinite(r.left + r.width / 2) && Number.isFinite(r.top)) bys.push({ id: by.user.id, x: r.left + r.width / 2, y: r.top, username: by.user.username })
           continue
         }
@@ -473,13 +476,13 @@ export function LaserTagGame({ room, onExit }) {
       const t = picked?.target
       if (!t || seen.has(t.id)) continue
       seen.add(t.id)
-      const r = photoRectToScreen(b.head || b.box, b, view)
+      const r = scope.zoomRect(photoRectToScreen(b.head || b.box, b, view), view)
       if (!Number.isFinite(r.left + r.width / 2) || !Number.isFinite(r.top)) continue // NaN in a native-driven spring
       const color = state?.mode === 'ffa' ? colors.danger : TEAMS[t.team]?.color || colors.danger
       out.push({ id: t.id, x: r.left + r.width / 2, y: r.top, color, label: t.name })
     }
     return { enemyMarkers: out, bystanderMarkers: bys }
-  }, [bodies, view, visionAim, bystanders]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [bodies, view, visionAim, bystanders, scope.zoom]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ---- firing ----
   // Tell the room I fired (throttled) so enemies get a red ping where I am.
@@ -663,9 +666,13 @@ export function LaserTagGame({ room, onExit }) {
   }
 
   return (
-    <View style={styles.fill}>
+    <View style={styles.fill} {...scope.panHandlers}>
       {camPerm?.granted ? (
-        <CameraView ref={cameraRef} style={StyleSheet.absoluteFill} facing="back" animateShutter={false} onLayout={(e) => setView(e.nativeEvent.layout)} />
+        <View style={[StyleSheet.absoluteFill, { overflow: 'hidden' }]} onLayout={(e) => setView(e.nativeEvent.layout)}>
+          <View style={[StyleSheet.absoluteFill, scope.zoom !== 1 && { transform: [{ scale: scope.zoom }] }]}>
+            <CameraView ref={cameraRef} style={StyleSheet.absoluteFill} facing="back" animateShutter={false} />
+          </View>
+        </View>
       ) : (
         <View style={[StyleSheet.absoluteFill, styles.noCam]}>
           {camPerm && !camPerm.granted && camPerm.status === 'denied' ? <CameraOff what="aiming in Laser Tag" compact /> : null}
@@ -686,7 +693,7 @@ export function LaserTagGame({ room, onExit }) {
 
       {/* Target-lock brackets around people the camera sees */}
       {visionAim && bodies && view.width > 0 && bodies.map((b, i) => {
-        const r = photoRectToScreen(b.box, b, view)
+        const r = scope.zoomRect(photoRectToScreen(b.box, b, view), view)
         const locked = !!classifyHit([b])
         return (
           <View key={i} pointerEvents="none" style={[styles.bracket, { left: r.left, top: r.top, width: r.width, height: r.height, borderColor: locked ? colors.danger : 'rgba(255,255,255,0.4)' }]} />
@@ -828,6 +835,18 @@ export function LaserTagGame({ room, onExit }) {
         ) : <View />}
         <View style={[styles.fireCol, hud.landscape && { flexDirection: leftHanded ? 'row-reverse' : 'row', alignItems: 'flex-end' }, !hud.landscape && { alignItems: leftHanded ? 'flex-start' : 'flex-end' }, { maxWidth: hud.landscape ? hud.width - hud.side * 2 - hud.mapSize - DOCK_GAP : hud.chipMaxW }]} pointerEvents="box-none">
           <UavButton count={uav.count} activeMsLeft={uav.myMs} disabled={!playing && !uav.empty} onPress={uav.callUav} size={hud.compact ? 48 : 54} />
+          {camPerm?.granted && !topMode ? (
+            <Pressable
+              onPress={scope.cycle}
+              hitSlop={6}
+              style={({ pressed }) => [styles.zoomBtn, scope.zoom > 1 && styles.zoomBtnOn, pressed && { opacity: 0.75 }]}
+              accessibilityRole="button"
+              accessibilityLabel={`Scope zoom ${formatZoom(scope.zoom)}. Tap to change, or pinch the screen.`}
+            >
+              <Ionicons name="scan" size={14} color={scope.zoom > 1 ? colors.onGold : '#fff'} />
+              <Text style={[styles.zoomText, scope.zoom > 1 && { color: colors.onGold }]}>{formatZoom(scope.zoom)}</Text>
+            </Pressable>
+          ) : null}
           <WeaponChip weapon={gun} count={loadout.length} onWheel={openWheel} maxWidth={hud.landscape ? 240 : hud.chipMaxW} />
           {aim.mode === 'camera' && (
             <Pressable
@@ -954,6 +973,9 @@ const styles = StyleSheet.create({
   aboveDock: { position: 'absolute', gap: 8 },
   dock: { position: 'absolute', alignItems: 'flex-end', justifyContent: 'space-between' },
   fireCol: { gap: DOCK_GAP },
+  zoomBtn: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 12, height: 36, borderRadius: 18, backgroundColor: 'rgba(0,0,0,0.45)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.35)' },
+  zoomBtnOn: { backgroundColor: colors.gold, borderColor: colors.gold },
+  zoomText: { color: '#fff', fontWeight: '800', fontSize: 13 },
   fireCompact: { width: 88, height: 88, borderRadius: 44 },
   hpTrack: { height: 10, borderRadius: 5, backgroundColor: 'rgba(255,255,255,0.25)', overflow: 'hidden' },
   hpFill: { height: 10, borderRadius: 5 },

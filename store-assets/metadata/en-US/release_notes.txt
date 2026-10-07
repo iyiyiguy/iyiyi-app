@@ -4,7 +4,7 @@ New in this version:
 • Redesigned sign-up and explore screens
 • iY emblem on everyone facing the camera, in photos and videos
 • Profile Preview now shows exactly what visitors see
-• Screens open faster and remember what they last showed
+• Faster app launch; screens open faster and remember what they last showed
 • New iYiYi Pro screen, with a Go Pro button on your profile and in Nearby
-• Laser tag: see who hit you, plus clearer miss feedback
+• Laser tag: pinch or tap to zoom your scope (up to 4× on the sniper), see who hit you, clearer miss feedback
 • Fixes and polish throughout
