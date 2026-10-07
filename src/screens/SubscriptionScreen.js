@@ -11,6 +11,7 @@ import { API_URL, supabase } from '../lib/supabase'
 import { purchaseSubscription, restorePurchases, isUserCancelled, fetchSubscriptionInfo } from '../lib/iap'
 import { logSubscriptionPurchase } from '../lib/attribution'
 import { openLink } from '../lib/socialLinks'
+import { markPro } from '../lib/useIsPro'
 
 // iYiYi Pro paywall. Used two ways:
 //  - as a screen (Settings → iYiYi Pro, the Pro button), with a back button;
@@ -88,6 +89,7 @@ export default function SubscriptionScreen({ navigation, onClose }) {
     setPurchasing(true)
     try {
       await purchaseSubscription('pro', verifyWithBackend)
+      markPro()
       if (onboarding) onClose()
       else Alert.alert('Welcome to iYiYi Pro', 'Your profile now gets seen first.')
     } catch (e) {

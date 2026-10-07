@@ -5,6 +5,6 @@ New in this version:
 • iY emblem on everyone facing the camera, in photos and videos
 • Profile Preview now shows exactly what visitors see
 • Screens open faster and remember what they last showed
-• New iYiYi Pro screen
+• New iYiYi Pro screen, with a Go Pro button on your profile and in Nearby
 • Laser tag: see who hit you, plus clearer miss feedback
 • Fixes and polish throughout

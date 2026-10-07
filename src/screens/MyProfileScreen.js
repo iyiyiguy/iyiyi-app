@@ -7,6 +7,7 @@ import { View, Text, Image, TextInput, StyleSheet, Pressable, ScrollView, Share,
 import { Ionicons } from '@expo/vector-icons'
 import * as ImagePicker from 'expo-image-picker'
 import { LinearGradient } from 'expo-linear-gradient'
+import GoProBanner from '../components/GoProBanner'
 import { colors, gradients, radii, type } from '../theme'
 import { API_URL, supabase } from '../lib/supabase'
 import { apiJson } from '../lib/api'
@@ -391,6 +392,7 @@ export default function MyProfileScreen({ navigation }) {
           <Text style={styles.headerBtnText}>Preview</Text>
         </Pressable>
       </View>
+      <GoProBanner navigation={navigation} compact style={{ marginBottom: 14 }} />
 
       {error ? <Text style={styles.error}>{error}</Text> : null}
 
