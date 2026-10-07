@@ -212,7 +212,7 @@ export default function SubscriptionScreen({ navigation, onClose }) {
             <GlassPanel radius={radii.lg} strong animateIn={false}>
               <View style={styles.planInner}>
                 <View style={styles.planHeader}>
-                  <Text style={type.headline}>iYiYi Pro · Monthly</Text>
+                  <Text style={type.headline}>⭐ iYiYi Pro · Monthly</Text>
                   <Ionicons name="checkmark-circle" size={22} color={colors.magenta} />
                 </View>
                 {info ? (

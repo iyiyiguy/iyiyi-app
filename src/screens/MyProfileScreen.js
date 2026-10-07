@@ -487,6 +487,7 @@ export default function MyProfileScreen({ navigation }) {
             }
           }}
         >
+        <GoProBanner navigation={navigation} showWhenPro style={{ marginTop: 6, marginBottom: 6 }} />
         <Text onPress={pickAvatar} style={[styles.changePhotoText, { marginLeft: 20, marginTop: 4 }]}>Change Photo</Text>
         <Text style={styles.section}>Personal Info</Text>
         <Field label="Username" value={profile.username} onChangeText={(v) => set('username', v)} />

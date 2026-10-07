@@ -200,7 +200,7 @@ export default function SettingsScreen({ navigation }) {
         </GlassPanel>
 
         <GlassPanel radius={radii.lg} style={styles.card}>
-          <Row label="iYiYi Pro" onPress={() => navigation.navigate('Subscription')} />
+          <Row label="⭐ iYiYi Pro" onPress={() => navigation.navigate('Subscription')} />
           <Row label="Arcade" onPress={() => navigation.popTo('Tabs', { screen: 'Games' })} />
           <Row label="Who viewed my profile" onPress={() => navigation.navigate('Viewers')} />
           <Row label="Saved & liked content" onPress={() => navigation.navigate('SavedContent')} />
