@@ -20,7 +20,8 @@ export function paletteFor(seed = '') {
 }
 
 export default function Avatar({ uri, name = '', size = 48, radius, style, fill = false, recyclingKey, contentFit = 'cover', transition = 180 }) {
-  // 0 = expo-image, 1 = plain React Native Image (retry), 2 = give up and show the initial.
+  // 0 = plain React Native Image (the loader that reliably shows these photos), 1 = expo-image
+  // (retry), 2 = give up and show the default picture.
   const [stage, setStage] = useState(0)
   const [lastUri, setLastUri] = useState(uri)
   if (uri !== lastUri) {
@@ -36,10 +37,10 @@ export default function Avatar({ uri, name = '', size = 48, radius, style, fill 
       {!showImage ? (
         <RNImage source={DEFAULT_AVATAR} style={StyleSheet.absoluteFill} resizeMode="cover" accessibilityLabel={letter} />
       ) : null}
-      {showImage && stage === 1 ? (
-        <RNImage source={{ uri }} style={StyleSheet.absoluteFill} resizeMode={contentFit === 'contain' ? 'contain' : 'cover'} onError={() => setStage(2)} />
-      ) : null}
       {showImage && stage === 0 ? (
+        <RNImage source={{ uri }} style={StyleSheet.absoluteFill} resizeMode={contentFit === 'contain' ? 'contain' : 'cover'} onError={() => setStage(1)} />
+      ) : null}
+      {showImage && stage === 1 ? (
         <Image
           source={{ uri }}
           style={StyleSheet.absoluteFill}
@@ -47,7 +48,7 @@ export default function Avatar({ uri, name = '', size = 48, radius, style, fill 
           transition={transition}
           cachePolicy="memory-disk"
           recyclingKey={recyclingKey ?? uri}
-          onError={() => setStage(1)}
+          onError={() => setStage(2)}
         />
       ) : null}
     </View>
