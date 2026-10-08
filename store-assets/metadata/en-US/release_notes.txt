@@ -7,5 +7,5 @@ New in this version:
 • Faster app launch; screens open faster and remember what they last showed
 • iYiYi in 11 languages: pick yours when you first open the app, or any time in Settings → Language
 • New iYiYi Pro screen, with a Go Pro button on your profile and in Nearby
-• Laser tag: brand-new Armory shop with realistic weapons you can spin 360° to inspect, grenades (hold to power up or make a throwing motion), your gun shown on screen in first person, 🔭 binoculars (up to 8×) that tag enemy names and distance, sniper scope up to 6×, UAV packs, see who hit you, clearer miss feedback
+• Laser tag: brand-new Armory shop with realistic weapons you can spin 360° to inspect, grenades (hold to power up or make a throwing motion), your gun shown on screen in first person, binoculars (up to 8×) that tag enemy names and distance, sniper scope up to 6×, UAV packs, see who hit you, clearer miss feedback
 • Fixes and polish throughout
