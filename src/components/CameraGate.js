@@ -4,6 +4,8 @@ import { Ionicons } from '@expo/vector-icons'
 import { useCameraPermissions } from 'expo-camera'
 import { colors, type } from '../theme'
 import Glass from './Glass'
+import { useT } from '../i18n'
+import strings from '../i18n/strings/cameraGate'
 
 // Camera permission the way App Review wants it (guideline 5.1.1): no custom "Allow / Not now"
 // screen nudging people toward Allow. The system prompt is shown straight away the first time a
@@ -25,7 +27,8 @@ export function useCameraGate(active = true) {
 }
 
 // What to render while the camera can't be used. Neutral copy, Settings link, and a way out.
-export function CameraOff({ what = 'this feature', onBack, backLabel = 'Back', dark = true, compact = false }) {
+export function CameraOff({ what, onBack, backLabel, dark = true, compact = false }) {
+  const t = useT(strings)
   const fg = dark ? '#fff' : colors.text
   const muted = dark ? 'rgba(255,255,255,0.72)' : colors.textMuted
   const body = (
@@ -33,20 +36,20 @@ export function CameraOff({ what = 'this feature', onBack, backLabel = 'Back', d
       <View style={[styles.iconWrap, { backgroundColor: dark ? 'rgba(255,255,255,0.12)' : 'rgba(79,99,232,0.12)' }]}>
         <Ionicons name="camera-outline" size={26} color={fg} />
       </View>
-      <Text style={[type.title, { color: fg, textAlign: 'center', marginTop: 12 }]}>Camera access is off</Text>
+      <Text style={[type.title, { color: fg, textAlign: 'center', marginTop: 12 }]}>{t('title')}</Text>
       <Text style={[type.body, { color: muted, textAlign: 'center', marginTop: 8, lineHeight: 21 }]}>
-        iYiYi uses the camera for {what}. You can turn camera access on or off any time in Settings.
+        {t('body', { what: what ?? t('thisFeature') })}
       </Text>
       <Pressable
         onPress={() => Linking.openSettings().catch(() => {})}
         accessibilityRole="button"
         style={({ pressed }) => [styles.settingsBtn, { backgroundColor: dark ? '#fff' : colors.text }, pressed && styles.pressed]}
       >
-        <Text style={[styles.settingsText, { color: dark ? '#111' : colors.ink }]}>Open Settings</Text>
+        <Text style={[styles.settingsText, { color: dark ? '#111' : colors.ink }]}>{t('openSettings')}</Text>
       </Pressable>
       {onBack ? (
         <Pressable onPress={onBack} accessibilityRole="button" style={({ pressed }) => [styles.backBtn, pressed && styles.pressed]}>
-          <Text style={[type.body, { color: muted, fontWeight: '600' }]}>{backLabel}</Text>
+          <Text style={[type.body, { color: muted, fontWeight: '600' }]}>{backLabel ?? t('back')}</Text>
         </Pressable>
       ) : null}
     </View>

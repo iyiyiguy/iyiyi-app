@@ -15,6 +15,8 @@ import { openLink } from '../lib/socialLinks'
 import { registerForPush } from '../lib/push'
 import { THEME_OPTIONS, loadThemePref, saveThemePref } from '../lib/themePref'
 import { LaserTaggableSetting } from '../games/laser/Bystander'
+import { languageName, useLanguage, useT } from '../i18n'
+import strings from '../i18n/strings/settings'
 
 const PRIVACY_URL = 'https://shop.iyiyi.xyz/policies/privacy-policy'
 const TERMS_URL = 'https://iyiyi.xyz/terms'
@@ -22,10 +24,12 @@ const TERMS_URL = 'https://iyiyi.xyz/terms'
 const FOLLOW_US = [
   { platform: 'instagram', label: 'Instagram', handle: '@iyiyiapp', url: 'https://instagram.com/iyiyiapp' },
   { platform: 'youtube', label: 'YouTube', handle: '@iYiYiapp', url: 'https://www.youtube.com/@iYiYiapp' },
-  { platform: 'instagram', label: 'Founder on Instagram', handle: '@iyiyiguy', url: 'https://instagram.com/iyiyiguy' },
+  { platform: 'instagram', label: 'Founder on Instagram', labelKey: 'follow_founder', handle: '@iyiyiguy', url: 'https://instagram.com/iyiyiguy' },
 ]
 
 export default function SettingsScreen({ navigation }) {
+  const t = useT(strings)
+  const lang = useLanguage()
   const [statsPublic, setStatsPublic] = useState(false)
   const [notifyNearby, setNotifyNearby] = useState(false)
   const [allowTagging, setAllowTagging] = useState(true)
@@ -59,7 +63,7 @@ export default function SettingsScreen({ navigation }) {
   const save = (body, revert) =>
     patchMe('/api/profiles/me', body).catch(() => {
       revert?.()
-      Alert.alert("Couldn't save", 'Check your connection and try again.')
+      Alert.alert(t('save_failed_title'), t('try_again_msg'))
     })
 
   const toggleNotify = async (on) => {
@@ -70,7 +74,7 @@ export default function SettingsScreen({ navigation }) {
     }
     const token = await registerForPush()
     if (!token) {
-      Alert.alert('Notifications are off', 'Allow notifications for iYiYi in your phone settings to get nearby alerts.')
+      Alert.alert(t('notif_off_title'), t('notif_off_msg'))
       return
     }
     setNotifyNearby(true)
@@ -86,12 +90,12 @@ export default function SettingsScreen({ navigation }) {
   const deleteAccount = () => {
     if (deleting) return
     Alert.alert(
-      'Delete account?',
-      'This permanently deletes your iYiYi account, profile and content. This cannot be undone.',
+      t('delete_title'),
+      t('delete_msg'),
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: t('cancel'), style: 'cancel' },
         {
-          text: 'Delete',
+          text: t('delete'),
           style: 'destructive',
           onPress: async () => {
             setDeleting(true)
@@ -99,7 +103,7 @@ export default function SettingsScreen({ navigation }) {
               await apiJson('/api/profiles/me', { method: 'DELETE' })
             } catch (e) {
               setDeleting(false)
-              Alert.alert("Couldn't delete account", e?.message ?? 'Check your connection and try again.')
+              Alert.alert(t('delete_failed'), e?.message ?? t('try_again_msg'))
               return
             }
             await supabase.auth.signOut().catch(() => {})
@@ -112,15 +116,15 @@ export default function SettingsScreen({ navigation }) {
   return (
     <View style={styles.screen}>
       <GlowBackdrop preset="quiet" />
-      <BrandHeader title="Settings" onBack={() => navigation.goBack()} />
+      <BrandHeader title={t('title')} onBack={() => navigation.goBack()} />
       <ScrollView contentContainerStyle={{ paddingBottom: 40 }}>
         <GlassPanel radius={radii.lg} style={styles.card}>
           <View style={styles.themeBlock}>
-            <Text style={type.body}>Appearance</Text>
+            <Text style={type.body}>{t('appearance')}</Text>
             <View style={styles.segment}>
               {THEME_OPTIONS.map((o) => (
                 <Pressable key={o.key} onPress={() => chooseTheme(o.key)} style={[styles.segmentItem, themePref === o.key && styles.segmentItemActive]}>
-                  <Text style={[styles.segmentText, themePref === o.key && styles.segmentTextActive]}>{o.label}</Text>
+                  <Text style={[styles.segmentText, themePref === o.key && styles.segmentTextActive]}>{t(`theme_${o.key}`) === `theme_${o.key}` ? o.label : t(`theme_${o.key}`)}</Text>
                 </Pressable>
               ))}
             </View>
@@ -129,10 +133,10 @@ export default function SettingsScreen({ navigation }) {
 
         <GlassPanel radius={radii.lg} style={styles.card}>
           <SwitchRow
-            label="Safe zone"
+            label={t('safe_zone')}
             description={safeZone
-              ? `Around your home spot (${formatRadius(safeZone.radiusM)}). While you're inside it your location isn't shared and your profile is hidden from the map and Nearby. Your home spot stays on this phone.`
-              : "Set a home spot. While you're inside it your location isn't shared and your profile is hidden from the map and Nearby."}
+              ? t('safe_zone_desc_set', { radius: formatRadius(safeZone.radiusM) })
+              : t('safe_zone_desc_unset')}
             value={!!safeZone?.enabled}
             onChange={(v) => {
               if (!safeZone) { openSafeZoneMap(); return }
@@ -140,14 +144,14 @@ export default function SettingsScreen({ navigation }) {
               if (!v) releaseSafeZoneHide()
             }}
           />
-          <Row label={safeZone ? 'Edit safe zone on the map' : 'Set up safe zone on the map'} onPress={openSafeZoneMap} />
+          <Row label={safeZone ? t('safe_zone_edit') : t('safe_zone_setup')} onPress={openSafeZoneMap} />
           {safeZone ? (
             <Row
               danger
-              label="Remove safe zone"
-              onPress={() => Alert.alert('Remove safe zone?', 'Your profile will show on the map again when you are home (if "visible on the map" is on).', [
-                { text: 'Cancel', style: 'cancel' },
-                { text: 'Remove', style: 'destructive', onPress: async () => { await clearSafeZone(); releaseSafeZoneHide() } },
+              label={t('safe_zone_remove')}
+              onPress={() => Alert.alert(t('safe_zone_remove_title'), t('safe_zone_remove_msg'), [
+                { text: t('cancel'), style: 'cancel' },
+                { text: t('remove'), style: 'destructive', onPress: async () => { await clearSafeZone(); releaseSafeZoneHide() } },
               ])}
             />
           ) : null}
@@ -155,65 +159,66 @@ export default function SettingsScreen({ navigation }) {
 
         <GlassPanel radius={radii.lg} style={styles.card}>
           <SwitchRow
-            label="Show my profile view count"
-            description="Let others see how many people have viewed your profile."
+            label={t('stats_public')}
+            description={t('stats_public_desc')}
             value={statsPublic}
             onChange={(v) => { setStatsPublic(v); save({ stats_public: v }, () => setStatsPublic(!v)) }}
           />
           <SwitchRow
-            label="Private viewing"
-            description="Browse profiles without showing up in their 'who viewed you' list or their view count."
+            label={t('private_viewing')}
+            description={t('private_viewing_desc')}
             value={privateViewing}
             onChange={(v) => { setPrivateViewing(v); save({ private_viewing: v }, () => setPrivateViewing(!v)) }}
           />
           <SwitchRow
-            label="Flip to open camera"
-            description="With iYiYi open, turn your phone face down and back up quickly to jump straight to the camera."
+            label={t('flip_camera')}
+            description={t('flip_camera_desc')}
             value={flipCamera}
             onChange={(v) => { setFlipCamera(v); saveFlipPref(v) }}
           />
           <SwitchRow
-            label="Trim hands-free videos"
-            description="Cut the last 5 seconds off a hands-free (tripod) video before it posts, so you don't have to edit yourself out walking up to stop it. The full clip always still saves to your phone."
+            label={t('trim_hands_free')}
+            description={t('trim_hands_free_desc')}
             value={trimHandsFree}
             onChange={(v) => { setTrimHandsFree(v); saveTrimHandsFreePref(v) }}
           />
           <SwitchRow
-            label="Let people tag me"
-            description="Allow camera posts from people within 150ft to tag you automatically. You can still hide any tag."
+            label={t('allow_tagging')}
+            description={t('allow_tagging_desc')}
             value={allowTagging}
             onChange={(v) => { setAllowTagging(v); save({ allow_tagging: v }, () => setAllowTagging(!v)) }}
           />
           <SwitchRow
-            label="Show location on my photos"
-            description="Adds your city (never your street) under photos you post from the iYiYi camera."
+            label={t('photo_location')}
+            description={t('photo_location_desc')}
             value={showPhotoLocation}
             onChange={(v) => { setShowPhotoLocation(v); saveShowPhotoLocation(v) }}
           />
           <LaserTaggableSetting SwitchRow={SwitchRow} />
           <SwitchRow
-            label="Notify me when someone is nearby"
-            description="Get a notification when another iYiYi user comes within 150ft."
+            label={t('notify_nearby')}
+            description={t('notify_nearby_desc')}
             value={notifyNearby}
             onChange={toggleNotify}
           />
         </GlassPanel>
 
         <GlassPanel radius={radii.lg} style={styles.card}>
+          <Row label={t('language')} value={languageName(lang)} onPress={() => navigation.navigate('Language')} />
           <Row label="⭐ iYiYi Pro" onPress={() => navigation.navigate('Subscription')} />
-          <Row label="Arcade" onPress={() => navigation.popTo('Tabs', { screen: 'Games' })} />
-          <Row label="Who viewed my profile" onPress={() => navigation.navigate('Viewers')} />
-          <Row label="Saved & liked content" onPress={() => navigation.navigate('SavedContent')} />
-          <Row label="Blocked Users" onPress={() => navigation.navigate('BlockedUsers')} />
+          <Row label={t('arcade')} onPress={() => navigation.popTo('Tabs', { screen: 'Games' })} />
+          <Row label={t('viewers')} onPress={() => navigation.navigate('Viewers')} />
+          <Row label={t('saved')} onPress={() => navigation.navigate('SavedContent')} />
+          <Row label={t('blocked')} onPress={() => navigation.navigate('BlockedUsers')} />
         </GlassPanel>
 
         <GlassPanel radius={radii.lg} style={styles.card}>
-          <Text style={styles.cardTitle}>Follow iYiYi</Text>
+          <Text style={styles.cardTitle}>{t('follow_title')}</Text>
           {FOLLOW_US.map((f) => (
             <Pressable key={f.url} onPress={() => openLink(f.url)} style={styles.followRow}>
               <SocialIcon platform={f.platform} size={20} color={colors.text} />
               <View style={{ flex: 1 }}>
-                <Text style={type.body}>{f.label}</Text>
+                <Text style={type.body}>{f.labelKey ? t(f.labelKey) : f.label}</Text>
                 <Text style={type.caption}>{f.handle}</Text>
               </View>
             </Pressable>
@@ -221,27 +226,28 @@ export default function SettingsScreen({ navigation }) {
         </GlassPanel>
 
         <GlassPanel radius={radii.lg} style={styles.card}>
-          <Row label="Shop" onPress={() => openLink('https://shop.iyiyi.xyz')} />
+          <Row label={t('shop')} onPress={() => openLink('https://shop.iyiyi.xyz')} />
         </GlassPanel>
 
         <GlassPanel radius={radii.lg} style={styles.card}>
-          <Row label="Privacy Policy" onPress={() => openLink(PRIVACY_URL)} />
-          <Row label="Terms of Service" onPress={() => openLink(TERMS_URL)} />
-          <Row label="Sign out" onPress={() => supabase.auth.signOut()} />
+          <Row label={t('privacy')} onPress={() => openLink(PRIVACY_URL)} />
+          <Row label={t('terms')} onPress={() => openLink(TERMS_URL)} />
+          <Row label={t('sign_out')} onPress={() => supabase.auth.signOut()} />
         </GlassPanel>
 
         <GlassPanel radius={radii.lg} style={styles.card}>
-          <Row label="Delete my account" danger onPress={deleteAccount} />
+          <Row label={t('delete_account')} danger onPress={deleteAccount} />
         </GlassPanel>
       </ScrollView>
     </View>
   )
 }
 
-function Row({ label, onPress, danger }) {
+function Row({ label, value, onPress, danger }) {
   return (
     <Pressable onPress={onPress} style={styles.row}>
       <Text style={[type.body, danger && { color: colors.danger }]}>{label}</Text>
+      {value ? <Text style={[type.body, { color: colors.textMuted }]}>{value}</Text> : null}
     </Pressable>
   )
 }

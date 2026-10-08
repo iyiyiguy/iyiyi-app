@@ -7,15 +7,17 @@ import * as Haptics from 'expo-haptics'
 import { colors, font, radii } from '../theme'
 import Glass from './Glass'
 import Bounce from './Bounce'
+import { useT } from '../i18n'
+import strings from '../i18n/strings/tabs'
 
 // The logged-out version of the app's floating glass tab bar (see TabBar.js): same pill, same
 // round camera button beside it. Camera and Arcade are visible but carry a small lock - their
-// tabs only show a "Sign up to ..." screen.
+// tabs only show a "Sign up to ..." screen. (label = key in strings/tabs.js)
 const TABS = [
-  { name: 'Explore', icon: 'compass', label: 'Explore' },
-  { name: 'Recommended', icon: 'sparkles', label: 'Discover' },
-  { name: 'Feed', icon: 'albums', label: 'Feed' },
-  { name: 'Arcade', icon: 'game-controller', label: 'Arcade', locked: true },
+  { name: 'Explore', icon: 'compass', label: 'explore' },
+  { name: 'Recommended', icon: 'sparkles', label: 'discover' },
+  { name: 'Feed', icon: 'albums', label: 'feed' },
+  { name: 'Arcade', icon: 'game-controller', label: 'arcade', locked: true },
 ]
 
 // Height of the bar (incl. its safe-area padding), so overlays can sit just above it.
@@ -31,6 +33,7 @@ function Lock({ style }) {
 }
 
 export default function GuestTabBar({ state, navigation }) {
+  const t = useT(strings)
   const insets = useSafeAreaInsets()
   const dark = useColorScheme() === 'dark'
   const current = state.routes[state.index]?.name
@@ -43,21 +46,21 @@ export default function GuestTabBar({ state, navigation }) {
     <View style={[styles.wrap, { paddingBottom: Math.max(insets.bottom - 6, 12) }]} pointerEvents="box-none">
       <Glass radius={32} style={styles.bar} interactive>
         <View style={styles.row}>
-          {TABS.filter((t) => state.routes.some((r) => r.name === t.name)).map((t) => {
-            const focused = current === t.name
+          {TABS.filter((tab) => state.routes.some((r) => r.name === tab.name)).map((tab) => {
+            const focused = current === tab.name
             return (
               <Bounce
-                key={t.name}
+                key={tab.name}
                 scaleTo={0.86}
                 accessibilityRole="tab"
-                accessibilityLabel={t.locked ? `${t.label} (sign up to use)` : t.label}
+                accessibilityLabel={tab.locked ? t('lockedTab', { label: t(tab.label) }) : t(tab.label)}
                 accessibilityState={{ selected: focused }}
                 hitSlop={4}
-                onPress={() => go(t.name)}
+                onPress={() => go(tab.name)}
                 style={[styles.tab, focused && (dark ? styles.tabActiveDark : styles.tabActiveLight)]}
               >
-                <Ionicons name={focused ? t.icon : `${t.icon}-outline`} size={22} color={focused ? colors.text : colors.textMuted} />
-                {t.locked ? <Lock /> : null}
+                <Ionicons name={focused ? tab.icon : `${tab.icon}-outline`} size={22} color={focused ? colors.text : colors.textMuted} />
+                {tab.locked ? <Lock /> : null}
               </Bounce>
             )
           })}
@@ -69,7 +72,7 @@ export default function GuestTabBar({ state, navigation }) {
           navigation.navigate('Camera')
         }}
         accessibilityRole="tab"
-        accessibilityLabel="Camera (sign up to use)"
+        accessibilityLabel={t('cameraLocked')}
         accessibilityState={{ selected: current === 'Camera' }}
         style={({ pressed }) => [pressed && { transform: [{ scale: 0.92 }] }]}
       >
@@ -86,6 +89,7 @@ export default function GuestTabBar({ state, navigation }) {
 
 // The floating, gently pulsing "Sign up free" pill shown over the guest tabs.
 export function GuestSignupPill({ bottom, onPress }) {
+  const t = useT(strings)
   const pulse = useRef(new Animated.Value(0)).current
   useEffect(() => {
     const loop = Animated.loop(Animated.sequence([
@@ -98,10 +102,10 @@ export function GuestSignupPill({ bottom, onPress }) {
   const scale = pulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.04] })
   return (
     <Animated.View style={[styles.pillWrap, { bottom, transform: [{ scale }] }]} pointerEvents="box-none">
-      <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel="Sign up" style={({ pressed }) => [pressed && { opacity: 0.9 }]}>
+      <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={t('signUp')} style={({ pressed }) => [pressed && { opacity: 0.9 }]}>
         <LinearGradient colors={['#ff4fa3', '#8f5bff']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.pill}>
           <Ionicons name="sparkles" size={16} color="#fff" />
-          <Text style={styles.pillText}>Sign up free</Text>
+          <Text style={styles.pillText}>{t('signUpFree')}</Text>
         </LinearGradient>
       </Pressable>
     </Animated.View>

@@ -13,6 +13,8 @@ import { apiJson } from './src/lib/api'
 import { initAttribution, logSignup } from './src/lib/attribution'
 import { installWebPhoneFrame } from './src/lib/webPhoneFrame'
 import { loadThemePref } from './src/lib/themePref'
+import { loadLanguage, useLanguage } from './src/i18n'
+import LanguageScreen from './src/screens/LanguageScreen'
 import { ensureProfile, linkProviderToProfile } from './src/lib/oauth'
 import { initCrashLogger, setupGlobalErrorHandler } from './src/lib/crashLogger'
 import TabBar from './src/components/TabBar'
@@ -116,6 +118,7 @@ const Aura = {
   ContentFeedScreen: withAura(ContentFeedScreen),
   SettingsScreen: withAura(SettingsScreen),
   SubscriptionScreen: withAura(SubscriptionScreen),
+  LanguageScreen: withAura(LanguageScreen),
   ActivityScreen: withAura(ActivityScreen),
   AirdropScreen: withAura(AirdropScreen),
   AuthScreen: withAura(AuthScreen),
@@ -203,6 +206,8 @@ export default function App() {
   const [session, setSession] = useState(undefined)
   const [locationConsent, setLocationConsent] = useState(undefined)
   const [themeReady, setThemeReady] = useState(false)
+  const [langState, setLangState] = useState(null) // { chosen } once loaded
+  const language = useLanguage()
   const [showImport, setShowImport] = useState(false)
   const [showPaywall, setShowPaywall] = useState(false)
   const scheme = useColorScheme()
@@ -211,6 +216,7 @@ export default function App() {
 
   useEffect(() => {
     loadThemePref().then(() => setThemeReady(true))
+    loadLanguage().then(({ chosen }) => setLangState({ chosen })).catch(() => setLangState({ chosen: true }))
     initAttribution()
     supabase.auth.getSession().then(({ data }) => setSession(data.session))
     const { data: sub } = supabase.auth.onAuthStateChange((event, session) => {
@@ -276,14 +282,17 @@ export default function App() {
     setLocationConsent(true)
   }
 
-  if (!themeReady || session === undefined) return null
+  if (!themeReady || session === undefined || !langState) return null
   if (session && locationConsent === undefined) return null
 
   return (
     <SafeAreaProvider initialMetrics={initialWindowMetrics}>
       <StatusBar barStyle={scheme === 'light' ? 'dark-content' : 'light-content'} />
       <NavigationContainer ref={navRef} linking={LINKING} theme={scheme === 'light' ? lightNavTheme : darkNavTheme}>
-        {!session ? (
+        {!langState.chosen ? (
+          // First launch: pick a language before anything else.
+          <Aura.LanguageScreen onDone={() => setLangState({ chosen: true })} />
+        ) : !session ? (
           // Keyed so signing in/out mounts a fresh navigator (both have a "Tabs" route).
           <Stack.Navigator key="guest" screenOptions={screenOptions}>
             <Stack.Screen name="Tabs" component={GuestTabs} />
@@ -319,6 +328,7 @@ export default function App() {
             <Stack.Screen name="JoinGame" component={Aura.JoinGameScreen} />
             <Stack.Screen name="Settings" component={Aura.SettingsScreen} />
             <Stack.Screen name="Subscription" component={Aura.SubscriptionScreen} />
+            <Stack.Screen name="Language" component={Aura.LanguageScreen} />
             <Stack.Screen name="Stream" component={Aura.StreamScreen} />
             <Stack.Screen name="ArcadeStore" component={ArcadeStoreScreen} />
             <Stack.Screen name="GamePlayScreen" component={GamePlayScreen} options={{ gestureEnabled: false }} />

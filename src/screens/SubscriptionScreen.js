@@ -12,6 +12,8 @@ import { purchaseSubscription, restorePurchases, isUserCancelled, fetchSubscript
 import { logSubscriptionPurchase } from '../lib/attribution'
 import { openLink } from '../lib/socialLinks'
 import { markPro } from '../lib/useIsPro'
+import { translate, useT } from '../i18n'
+import strings from '../i18n/strings/subscription'
 
 // iYiYi Pro paywall. Used two ways:
 //  - as a screen (Settings → iYiYi Pro, the Pro button), with a back button;
@@ -30,15 +32,17 @@ const ICON = require('../../assets/icon.png')
 const TIER_LABELS = { pro: 'Pro', pro_local: 'Pro', pro_national: 'Pro', pro_all: 'Pro', premium: 'Premium', creator: 'Creator' }
 const PRICE_USD = { pro: 10 }
 
+// title/text are keys into strings/subscription.js, translated at render.
 const BENEFITS = [
-  { icon: 'rocket', colors: ['#6b7cff', '#9b8cff'], title: 'Get seen first', text: 'Your profile is shown ahead of free profiles in Nearby and Discover.' },
-  { icon: 'globe', colors: ['#4fd1c5', '#7fb3ff'], title: 'Reach beyond your block', text: 'We match your reach to your profile, from local all the way to international.' },
-  { icon: 'star', colors: ['#ffb16b', '#ff7e9d'], title: 'Pro badge', text: 'A ⭐ next to your name everywhere people see you.' },
-  { icon: 'heart', colors: ['#ff6fb5', '#ff9fd0'], title: 'Support iYiYi', text: 'Help an independent team keep building new features and games.' },
+  { icon: 'rocket', colors: ['#6b7cff', '#9b8cff'], title: 'benefit_seen_title', text: 'benefit_seen_text' },
+  { icon: 'globe', colors: ['#4fd1c5', '#7fb3ff'], title: 'benefit_reach_title', text: 'benefit_reach_text' },
+  { icon: 'star', colors: ['#ffb16b', '#ff7e9d'], title: 'benefit_badge_title', text: 'benefit_badge_text' },
+  { icon: 'heart', colors: ['#ff6fb5', '#ff9fd0'], title: 'benefit_support_title', text: 'benefit_support_text' },
 ]
 
 export default function SubscriptionScreen({ navigation, onClose }) {
   const insets = useSafeAreaInsets()
+  const t = useT(strings)
   const onboarding = typeof onClose === 'function'
   const [purchasing, setPurchasing] = useState(false)
   const [restoring, setRestoring] = useState(false)
@@ -51,7 +55,7 @@ export default function SubscriptionScreen({ navigation, onClose }) {
   const authedFetch = async (path, options = {}) => {
     const { data } = await supabase.auth.getSession()
     const session = data?.session
-    if (!session?.access_token) throw new Error('Please sign in again')
+    if (!session?.access_token) throw new Error(translate(strings, 'err_sign_in'))
     return fetch(`${API_URL}${path}`, {
       ...options,
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}`, ...options.headers },
@@ -60,7 +64,7 @@ export default function SubscriptionScreen({ navigation, onClose }) {
 
   const loadCurrent = useCallback(async () => {
     const res = await authedFetch('/api/subscription/me')
-    if (!res.ok) throw new Error('Could not load your subscription')
+    if (!res.ok) throw new Error(translate(strings, 'err_load'))
     const json = await res.json()
     setCurrent(json)
     return json
@@ -79,7 +83,7 @@ export default function SubscriptionScreen({ navigation, onClose }) {
 
   const verifyWithBackend = async (payload) => {
     const res = await authedFetch('/api/subscription/activate', { method: 'POST', body: JSON.stringify(payload) })
-    if (!res.ok) throw new Error('Purchase could not be verified')
+    if (!res.ok) throw new Error(translate(strings, 'err_verify'))
     await loadCurrent()
     logSubscriptionPurchase(payload.tier, PRICE_USD[payload.tier] ?? 0)
   }
@@ -91,7 +95,7 @@ export default function SubscriptionScreen({ navigation, onClose }) {
       await purchaseSubscription('pro', verifyWithBackend)
       markPro()
       if (onboarding) onClose()
-      else Alert.alert('Welcome to iYiYi Pro', 'Your profile now gets seen first.')
+      else Alert.alert(t('welcome_title'), t('welcome_msg'))
     } catch (e) {
       if (!isUserCancelled(e)) setError(e.message)
     } finally {
@@ -103,17 +107,19 @@ export default function SubscriptionScreen({ navigation, onClose }) {
     // Apple subscriptions can only be cancelled by the user in their Apple ID settings.
     if (Platform.OS === 'ios') {
       Linking.openURL(APPLE_SUBSCRIPTIONS_URL).catch(() =>
-        Alert.alert('Manage subscription', 'Open Settings → your name → Subscriptions to cancel.'))
+        Alert.alert(t('manage_title'), t('manage_msg')))
       return
     }
     setCancelling(true)
     try {
       const res = await authedFetch('/api/subscription/cancel', { method: 'POST' })
-      if (!res.ok) throw new Error('Could not cancel your subscription. Please try again.')
+      if (!res.ok) throw new Error(t('err_cancel'))
       await loadCurrent()
       Alert.alert(
-        'Subscription cancelled',
-        `You'll keep your perks until ${current?.renews_at ? new Date(current.renews_at).toLocaleDateString() : 'the end of your billing period'}. Don't forget to also cancel it in your Google Play account to stop future charges.`
+        t('cancelled_title'),
+        current?.renews_at
+          ? t('cancelled_msg_date', { date: new Date(current.renews_at).toLocaleDateString() })
+          : t('cancelled_msg_period')
       )
     } catch (e) {
       setError(e.message)
@@ -128,8 +134,8 @@ export default function SubscriptionScreen({ navigation, onClose }) {
     try {
       const restored = await restorePurchases(verifyWithBackend)
       Alert.alert(
-        restored.length ? 'Purchases restored' : 'Nothing to restore',
-        restored.length ? `Restored: ${restored.join(', ')}` : "We couldn't find any previous purchases for this account."
+        restored.length ? t('restored_title') : t('nothing_title'),
+        restored.length ? t('restored_msg', { items: restored.join(', ') }) : t('nothing_msg')
       )
       if (restored.length && onboarding) onClose()
     } catch (e) {
@@ -141,7 +147,9 @@ export default function SubscriptionScreen({ navigation, onClose }) {
 
   const active = current?.status === 'active'
   const busy = purchasing || restoring
-  const billed = info ? `${info.displayPrice}/${info.period}` : null
+  // info.period is an English unit from the store helper ('month', 'year', ...): translate the word.
+  const period = info ? (t(`period_${info.period}`) === `period_${info.period}` ? info.period : t(`period_${info.period}`)) : null
+  const billed = info ? `${info.displayPrice}/${period}` : null
   const store = Platform.OS === 'ios' ? 'App Store' : 'Google Play'
   const account = Platform.OS === 'ios' ? 'Apple ID' : 'Google Play'
   const goBack = !onboarding && navigation?.canGoBack?.() ? () => navigation.goBack() : null
@@ -153,8 +161,8 @@ export default function SubscriptionScreen({ navigation, onClose }) {
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.topBar}>
-          {goBack ? <HeaderButton icon="chevron-back" onPress={goBack} label="Back" /> : <View style={{ width: 42 }} />}
-          {onboarding ? <HeaderButton icon="close" onPress={onClose} label="Close" /> : null}
+          {goBack ? <HeaderButton icon="chevron-back" onPress={goBack} label={t('back')} /> : <View style={{ width: 42 }} />}
+          {onboarding ? <HeaderButton icon="close" onPress={onClose} label={t('close')} /> : null}
         </View>
 
         {/* ---- hero ---- */}
@@ -165,11 +173,11 @@ export default function SubscriptionScreen({ navigation, onClose }) {
               <Text style={styles.proPillText}>PRO</Text>
             </LinearGradient>
           </View>
-          <Text style={styles.title}>{active ? "You're on iYiYi Pro" : 'Get seen by more people'}</Text>
+          <Text style={styles.title}>{active ? t('title_active') : t('title')}</Text>
           <Text style={styles.subtitle}>
             {active
-              ? `Thanks for supporting iYiYi. ${current?.renews_at ? `Renews ${new Date(current.renews_at).toLocaleDateString()}.` : ''}`
-              : 'iYiYi Pro puts your profile in front of more people nearby and beyond.'}
+              ? `${t('thanks')} ${current?.renews_at ? t('renews_on', { date: new Date(current.renews_at).toLocaleDateString() }) : ''}`
+              : t('subtitle')}
           </Text>
         </FadeIn>
 
@@ -183,8 +191,8 @@ export default function SubscriptionScreen({ navigation, onClose }) {
                     <Ionicons name={b.icon} size={19} color="#fff" />
                   </LinearGradient>
                   <View style={{ flex: 1 }}>
-                    <Text style={type.headline}>{b.title}</Text>
-                    <Text style={[type.caption, { marginTop: 2 }]}>{b.text}</Text>
+                    <Text style={type.headline}>{t(b.title)}</Text>
+                    <Text style={[type.caption, { marginTop: 2 }]}>{t(b.text)}</Text>
                   </View>
                 </View>
               </GlassPanel>
@@ -197,13 +205,13 @@ export default function SubscriptionScreen({ navigation, onClose }) {
           {active ? (
             <GlassPanel radius={radii.lg} strong animateIn={false}>
               <View style={styles.planInner}>
-                <Text style={type.headline}>Your plan: {TIER_LABELS[current.tier] ?? current.tier}</Text>
+                <Text style={type.headline}>{t('your_plan', { tier: TIER_LABELS[current.tier] ?? current.tier })}</Text>
                 <Text style={[type.caption, { marginTop: 4 }]}>
-                  Renews {current.renews_at ? new Date(current.renews_at).toLocaleDateString() : 'automatically'}.
+                  {current.renews_at ? t('renews_on', { date: new Date(current.renews_at).toLocaleDateString() }) : t('renews_auto')}
                 </Text>
-                <Press onPress={cancel} disabled={cancelling} style={styles.secondaryBtn} accessibilityLabel="Manage subscription">
+                <Press onPress={cancel} disabled={cancelling} style={styles.secondaryBtn} accessibilityLabel={t('manage_a11y')}>
                   {cancelling ? <ActivityIndicator color={colors.danger} /> : (
-                    <Text style={styles.manageText}>{Platform.OS === 'ios' ? 'Manage / Cancel Subscription' : 'Cancel Subscription'}</Text>
+                    <Text style={styles.manageText}>{Platform.OS === 'ios' ? t('manage_cancel') : t('cancel_sub')}</Text>
                   )}
                 </Press>
               </View>
@@ -212,26 +220,26 @@ export default function SubscriptionScreen({ navigation, onClose }) {
             <GlassPanel radius={radii.lg} strong animateIn={false}>
               <View style={styles.planInner}>
                 <View style={styles.planHeader}>
-                  <Text style={type.headline}>⭐ iYiYi Pro · Monthly</Text>
+                  <Text style={type.headline}>{t('plan_name')}</Text>
                   <Ionicons name="checkmark-circle" size={22} color={colors.magenta} />
                 </View>
                 {info ? (
                   <>
                     {/* The billed amount: biggest price on the screen. */}
-                    <Text style={styles.price} accessibilityLabel={`${info.displayPrice} per ${info.period}`}>
+                    <Text style={styles.price} accessibilityLabel={t('price_a11y', { price: info.displayPrice, period })}>
                       {info.displayPrice}
-                      <Text style={styles.pricePer}> / {info.period}</Text>
+                      <Text style={styles.pricePer}> / {period}</Text>
                     </Text>
-                    <Text style={styles.billedLine}>Billed {info.displayPrice} every {info.period}. Renews automatically. Cancel anytime.</Text>
+                    <Text style={styles.billedLine}>{t('billed_line', { price: info.displayPrice, period })}</Text>
                     {info.introText ? (
                       <Text style={styles.introLine}>
-                        Introductory offer for new subscribers: {info.introText}, then {info.displayPrice}/{info.period}.
+                        {t('intro_line', { intro: info.introText, price: info.displayPrice, period })}
                       </Text>
                     ) : null}
                   </>
                 ) : infoFailed ? (
                   <Text style={[type.caption, { marginTop: 8 }]}>
-                    Pricing couldn't load right now. Check your connection, then come back. The price for your region is always shown by the {store} before you confirm.
+                    {t('pricing_failed', { store })}
                   </Text>
                 ) : (
                   <ActivityIndicator color={colors.textMuted} style={{ marginVertical: 18 }} />
@@ -241,7 +249,7 @@ export default function SubscriptionScreen({ navigation, onClose }) {
           )}
 
           {!active ? (
-            <Press onPress={purchase} disabled={busy || !info} scaleTo={0.97} haptic="light" accessibilityLabel={billed ? `Subscribe for ${billed}` : 'Subscribe'} style={{ marginTop: 16 }}>
+            <Press onPress={purchase} disabled={busy || !info} scaleTo={0.97} haptic="light" accessibilityLabel={billed ? t('subscribe_a11y', { billed }) : t('subscribe')} style={{ marginTop: 16 }}>
               <LinearGradient
                 colors={['#6b7cff', '#8f5bff']}
                 start={{ x: 0, y: 0 }}
@@ -249,7 +257,7 @@ export default function SubscriptionScreen({ navigation, onClose }) {
                 style={[styles.cta, (busy || !info) && { opacity: 0.6 }]}
               >
                 {purchasing ? <ActivityIndicator color="#fff" /> : (
-                  <Text style={styles.ctaText}>{billed ? `Subscribe · ${billed}` : 'Subscribe'}</Text>
+                  <Text style={styles.ctaText}>{billed ? t('subscribe_price', { billed }) : t('subscribe')}</Text>
                 )}
               </LinearGradient>
             </Press>
@@ -258,27 +266,28 @@ export default function SubscriptionScreen({ navigation, onClose }) {
           {error ? <Text style={styles.error}>{error}</Text> : null}
 
           <View style={styles.linksRow}>
-            <Press onPress={restore} disabled={busy} accessibilityLabel="Restore purchases" haptic="selection">
-              {restoring ? <ActivityIndicator color={colors.textMuted} /> : <Text style={styles.linkStrong}>Restore Purchases</Text>}
+            <Press onPress={restore} disabled={busy} accessibilityLabel={t('restore_a11y')} haptic="selection">
+              {restoring ? <ActivityIndicator color={colors.textMuted} /> : <Text style={styles.linkStrong}>{t('restore')}</Text>}
             </Press>
             {onboarding && !active ? (
-              <Press onPress={onClose} accessibilityLabel="Not now" haptic="selection">
-                <Text style={styles.linkStrong}>Not now</Text>
+              <Press onPress={onClose} accessibilityLabel={t('not_now')} haptic="selection">
+                <Text style={styles.linkStrong}>{t('not_now')}</Text>
               </Press>
             ) : null}
           </View>
 
           <Text style={styles.disclosure}>
             {info
-              ? `iYiYi Pro is an auto-renewing monthly subscription at ${billed}${info.introText ? ` after the introductory offer (${info.introText})` : ''}. `
-              : 'iYiYi Pro is an auto-renewing monthly subscription. '}
-            Payment is charged to your {account} account when you confirm the purchase. The subscription renews
-            automatically unless it is cancelled at least 24 hours before the end of the current period, and your
-            account is charged for renewal within 24 hours before the end of the current period. You can manage or
-            cancel it any time in your {store} account settings. See our{' '}
-            <Text style={styles.link} onPress={() => openLink(TERMS_URL)}>Terms of Use (EULA)</Text>
-            {' '}and{' '}
-            <Text style={styles.link} onPress={() => openLink(PRIVACY_URL)}>Privacy Policy</Text>.
+              ? (info.introText
+                ? t('disclosure_lead_price_intro', { billed, intro: info.introText })
+                : t('disclosure_lead_price', { billed }))
+              : t('disclosure_lead')}
+            {t('disclosure_body', { account, store })}
+            {t('disclosure_see')}
+            <Text style={styles.link} onPress={() => openLink(TERMS_URL)}>{t('link_terms')}</Text>
+            {t('disclosure_and')}
+            <Text style={styles.link} onPress={() => openLink(PRIVACY_URL)}>{t('link_privacy')}</Text>
+            {t('disclosure_end')}
           </Text>
         </FadeIn>
       </ScrollView>

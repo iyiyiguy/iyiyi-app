@@ -12,6 +12,8 @@ import GlassPanel from '../components/GlassPanel'
 import Surface from '../components/Surface'
 import Avatar from '../components/Avatar'
 import { HeaderButton } from '../components/BrandHeader'
+import { useT } from '../i18n'
+import strings from '../i18n/strings/guestExplore'
 
 // Logged-out home (the Explore tab of the guest tab bar): look around before signing up.
 // Square panes of public profiles, distance ranges across the top, tap a pane to open that
@@ -19,6 +21,7 @@ import { HeaderButton } from '../components/BrandHeader'
 // Only public profiles are listed (database function guest_explore); guests see ranges of
 // 1 mile and up - 150 ft is for members. Under the grid, three cards say what the app does,
 // so the screen never looks empty where few people have joined yet.
+// Word labels (City, State, ...) are translated inside ScopeChips; distances stay as-is.
 const RANGES = [
   { key: 'mi1', label: '1 mi', m: 1609.34 },
   { key: 'mi5', label: '5 mi', m: 8046.7 },
@@ -31,10 +34,11 @@ const MAX_W = 1100
 const ICON = require('../../assets/icon.png')
 
 const FEATURES = [
-  { icon: 'map', colors: ['#6b7cff', '#9b8cff'], title: 'Live map', text: 'See people, spots and events around you in real time.' },
-  { icon: 'camera', colors: ['#ff6fb5', '#ff9fd0'], title: 'AR camera', text: 'Shoot photos and videos that tag everyone within 150 ft.' },
-  { icon: 'game-controller', colors: ['#4fd1c5', '#7fb3ff'], title: 'The Arcade', text: 'Real-life laser tag, battle royale and party games nearby.' },
-  { icon: 'link', colors: ['#ffb16b', '#ff7e9d'], title: 'Follow everywhere', text: 'One tap follows someone on every platform at once.' },
+  // title / text are keys in strings/guestExplore.js.
+  { icon: 'map', colors: ['#6b7cff', '#9b8cff'], title: 'featMapTitle', text: 'featMapText' },
+  { icon: 'camera', colors: ['#ff6fb5', '#ff9fd0'], title: 'featCameraTitle', text: 'featCameraText' },
+  { icon: 'game-controller', colors: ['#4fd1c5', '#7fb3ff'], title: 'featArcadeTitle', text: 'featArcadeText' },
+  { icon: 'link', colors: ['#ffb16b', '#ff7e9d'], title: 'featFollowTitle', text: 'featFollowText' },
 ]
 
 // Cache so switching tabs and coming back is instant.
@@ -42,6 +46,7 @@ let lastPeople = null
 let lastRange = 'world'
 
 export default function GuestExploreScreen({ navigation }) {
+  const t = useT(strings)
   const { width } = useWindowDimensions()
   const insets = useSafeAreaInsets()
   const [range, setRange] = useState(lastRange)
@@ -119,16 +124,16 @@ export default function GuestExploreScreen({ navigation }) {
           <Image source={ICON} style={styles.brandIcon} />
           <Text style={styles.logo}>iYiYi</Text>
         </View>
-        <Press onPress={() => navigation.navigate('SignIn')} accessibilityLabel="Log in" scaleTo={0.95}>
+        <Press onPress={() => navigation.navigate('SignIn')} accessibilityLabel={t('logIn')} scaleTo={0.95}>
           <GlassPanel radius={999} animateIn={false} interactive>
-            <View style={styles.loginBtn}><Text style={styles.loginText}>Log in</Text></View>
+            <View style={styles.loginBtn}><Text style={styles.loginText}>{t('logIn')}</Text></View>
           </GlassPanel>
         </Press>
       </FadeIn>
       <FadeIn index={1}>
-        <Text style={styles.headline}>See who's around.</Text>
+        <Text style={styles.headline}>{t('headline')}</Text>
         <Text style={styles.sub}>
-          {total != null ? `${Number(total).toLocaleString()} people on iYiYi. ` : ''}Tap anyone to see their profile and socials.
+          {total != null ? `${t('peopleOn', { n: Number(total).toLocaleString() })} ` : ''}{t('tapAnyone')}
         </Text>
       </FadeIn>
       <FadeIn index={2}>
@@ -139,7 +144,7 @@ export default function GuestExploreScreen({ navigation }) {
 
   const footer = (
     <View style={{ paddingHorizontal: pad, paddingTop: people?.length ? 10 : 0 }}>
-      <Text style={styles.sectionTitle}>What you can do on iYiYi</Text>
+      <Text style={styles.sectionTitle}>{t('sectionTitle')}</Text>
       {FEATURES.map((f, i) => (
         <FadeIn key={f.title} index={i + 1} enabled={!lastPeople}>
           <GlassPanel radius={radii.lg} style={{ marginBottom: 10 }} lite animateIn={false}>
@@ -148,8 +153,8 @@ export default function GuestExploreScreen({ navigation }) {
                 <Ionicons name={f.icon} size={20} color="#fff" />
               </LinearGradient>
               <View style={{ flex: 1 }}>
-                <Text style={styles.featureTitle}>{f.title}</Text>
-                <Text style={styles.featureText}>{f.text}</Text>
+                <Text style={styles.featureTitle}>{t(f.title)}</Text>
+                <Text style={styles.featureText}>{t(f.text)}</Text>
               </View>
             </View>
           </GlassPanel>
@@ -163,7 +168,7 @@ export default function GuestExploreScreen({ navigation }) {
       onPress={() => navigation.navigate('PublicProfile', { username: item.username })}
       style={{ width: cell, height: cell, marginBottom: GAP }}
       scaleTo={0.96}
-      accessibilityLabel={`Open ${item.username}'s profile`}
+      accessibilityLabel={t('openProfile', { name: item.username })}
     >
       <Surface radius={18} style={StyleSheet.absoluteFill} shadow={false}>
         <Avatar uri={item.avatar_url} name={item.username} fill radius={0} recyclingKey={String(item.id ?? item.username)} />
@@ -194,8 +199,8 @@ export default function GuestExploreScreen({ navigation }) {
             ) : (
               <GlassPanel style={{ marginHorizontal: pad, marginBottom: 18 }} animateIn={false} lite>
                 <View style={{ padding: 20, alignItems: 'center' }}>
-                  <Text style={styles.emptyTitle}>No one here yet</Text>
-                  <Text style={styles.emptySub}>Try a bigger range, or sign up and be the first one in your area.</Text>
+                  <Text style={styles.emptyTitle}>{t('emptyTitle')}</Text>
+                  <Text style={styles.emptySub}>{t('emptySub')}</Text>
                 </View>
               </GlassPanel>
             )

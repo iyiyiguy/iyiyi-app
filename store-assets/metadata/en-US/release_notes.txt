@@ -5,6 +5,7 @@ New in this version:
 • iY emblem on everyone facing the camera, in photos and videos
 • Profile Preview now shows exactly what visitors see
 • Faster app launch; screens open faster and remember what they last showed
+• iYiYi in 11 languages: pick yours when you first open the app, or any time in Settings → Language
 • New iYiYi Pro screen, with a Go Pro button on your profile and in Nearby
 • Laser tag: pinch or tap to zoom your scope (up to 4× on the sniper), see who hit you, clearer miss feedback
 • Fixes and polish throughout

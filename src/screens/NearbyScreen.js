@@ -20,10 +20,13 @@ import { openProfile } from '../lib/profileNav'
 import { loadSafeZone, updateSafeZonePresence } from '../lib/safeZone'
 import { getPositionFast } from '../lib/location'
 import { getCached, setCached } from '../lib/cache'
+import { useT } from '../i18n'
+import strings from '../i18n/strings/nearby'
 
 const REFRESH_INTERVAL_MS = 10000 // re-scan even if the user hasn't moved
 
 export default function NearbyScreen({ navigation }) {
+  const t = useT(strings)
   const [layout, setLayout] = useState('grid')
   const [scope, setScope] = useState('local')
   const scopeRef = useRef(scope)
@@ -171,30 +174,32 @@ export default function NearbyScreen({ navigation }) {
   const filtered = users.filter((u) => matchesTags(u, activeTags) && matchesSearch(u, query))
   const filtering = !!query || activeTags.length > 0
   const subtitle = permissionDenied
-    ? 'Location is off'
+    ? t('locationOff')
     : users.length
-      ? `${users.length} ${users.length === 1 ? 'person' : 'people'} ${scope === 'local' ? 'within 150 ft' : `· ${scopeText}`}`
-      : 'Who\'s around you today'
+      ? scope === 'local'
+        ? t(users.length === 1 ? 'countOne150' : 'countMany150', { n: users.length })
+        : t(users.length === 1 ? 'countOneScope' : 'countManyScope', { n: users.length, scope: scopeText })
+      : t('tagline')
 
   return (
     <View style={styles.screen}>
       <GlowBackdrop preset="social" />
       <BrandHeader
-        title={myName ? `Hello, ${myName}` : 'Hello'}
+        title={myName ? t('helloName', { name: myName }) : t('hello')}
         subtitle={subtitle}
-        right={<HeaderButton icon="notifications-outline" label="Activity" onPress={() => navigation.navigate('Activity')} />}
+        right={<HeaderButton icon="notifications-outline" label={t('activity')} onPress={() => navigation.navigate('Activity')} />}
       />
       <SearchField
         style={styles.search}
         value={search}
         onChangeText={setSearch}
-        placeholder="Search people or tags"
+        placeholder={t('searchPlaceholder')}
       />
       <View style={styles.quickRow}>
-        <QuickAction icon="time-outline" label="History" onPress={() => navigation.navigate('History')} />
+        <QuickAction icon="time-outline" label={t('history')} onPress={() => navigation.navigate('History')} />
         <QuickAction
           icon={layout === 'grid' ? 'list-outline' : 'grid-outline'}
-          label={layout === 'grid' ? 'List' : 'Grid'}
+          label={layout === 'grid' ? t('list') : t('grid')}
           onPress={() => setLayout((l) => (l === 'grid' ? 'list' : 'grid'))}
         />
         <TagDropdown selected={activeTags} onApply={setActiveTags} />
@@ -204,17 +209,17 @@ export default function NearbyScreen({ navigation }) {
       {inSafeZone ? (
         <Pressable onPress={() => navigation.navigate('Map', { safeZone: true })} style={styles.safeBanner} accessibilityRole="button">
           <Ionicons name="shield-checkmark" size={16} color="#3ef08b" />
-          <Text style={styles.safeText}>You're in your safe zone. Your profile is hidden from the map and Nearby.</Text>
+          <Text style={styles.safeText}>{t('safeZone')}</Text>
         </Pressable>
       ) : null}
       {filtering ? (
         <View style={styles.filterLine}>
           <Text style={styles.filterText} numberOfLines={1}>
-            {filtered.length} {filtered.length === 1 ? 'match' : 'matches'}
+            {t(filtered.length === 1 ? 'matchOne' : 'matchMany', { n: filtered.length })}
             {activeTags.length ? ` · ${activeTags.join(', ')}` : ''}
           </Text>
           <Pressable onPress={() => { setSearch(''); setActiveTags([]) }} hitSlop={8} accessibilityRole="button">
-            <Text style={styles.filterClear}>Clear</Text>
+            <Text style={styles.filterClear}>{t('clear')}</Text>
           </Pressable>
         </View>
       ) : null}
@@ -248,12 +253,12 @@ export default function NearbyScreen({ navigation }) {
         ListEmptyComponent={
           <Text style={styles.empty}>
             {permissionDenied
-              ? 'Location access is off. Enable it in Settings to see who\'s nearby.'
+              ? t('emptyLocationOff')
               : filtering && users.length
-                ? 'No one matches that search or those tags.'
+                ? t('emptyNoMatch')
                 : hasLoadedOnce
-                  ? 'No one nearby right now — check back in a bit.'
-                  : `Scanning ${scope === 'local' ? 'within 150 ft' : scopeText}…`}
+                  ? t('emptyNoOne')
+                  : scope === 'local' ? t('scanning150') : t('scanningScope', { scope: scopeText })}
           </Text>
         }
       />

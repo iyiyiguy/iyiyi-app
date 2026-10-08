@@ -20,6 +20,8 @@ import ImportLinksPanel from '../components/ImportLinksPanel'
 import { mergeLinks } from '../lib/importLinks'
 import ContentGrid from '../components/ContentGrid'
 import { fetchMyMedia, normalizeMediaItem, sortMediaNewest } from '../lib/myContent'
+import { useT } from '../i18n'
+import strings from '../i18n/strings/myProfile'
 
 const RECOMMENDED_TIERS = ['pro', 'premium', 'creator']
 
@@ -62,6 +64,7 @@ const PROFILE_LABELS = [
 ]
 
 export default function MyProfileScreen({ navigation }) {
+  const t = useT(strings)
   const [profile, setProfileState] = useState(() => getCached('me:profile') ?? null)
   const setProfile = useCallback((v) => { setProfileState((prev) => { const next = typeof v === 'function' ? v(prev) : v; setCached('me:profile', next); return next }) }, [])
   const [stats, setStatsState] = useState(() => getCached('me:stats') ?? null)
@@ -89,7 +92,7 @@ export default function MyProfileScreen({ navigation }) {
   const getSessionOrThrow = async () => {
     const { data } = await supabase.auth.getSession()
     const session = data?.session
-    if (!session?.access_token) throw new Error('Please sign in again')
+    if (!session?.access_token) throw new Error(t('signInAgain'))
     return session
   }
 
@@ -175,8 +178,8 @@ export default function MyProfileScreen({ navigation }) {
       <View style={styles.screen}>
         {loadError ? (
           <Pressable onPress={() => { setLoadError(false); setReloadKey((k) => k + 1) }} style={{ marginTop: 120, alignItems: 'center' }}>
-            <Text style={type.body}>Couldn't load your profile.</Text>
-            <Text style={[type.caption, { marginTop: 6 }]}>Tap to try again</Text>
+            <Text style={type.body}>{t('couldNotLoad')}</Text>
+            <Text style={[type.caption, { marginTop: 6 }]}>{t('tapToRetry')}</Text>
           </Pressable>
         ) : null}
       </View>
@@ -189,7 +192,7 @@ export default function MyProfileScreen({ navigation }) {
 
   const shareProfile = () => {
     Share.share({
-      message: `Check out my iYiYi profile: https://app.iyiyi.xyz/u/${encodeURIComponent(profile.username)}`,
+      message: t('shareMessage', { url: `https://app.iyiyi.xyz/u/${encodeURIComponent(profile.username)}` }),
     }).catch(() => {})
   }
 
@@ -269,7 +272,7 @@ export default function MyProfileScreen({ navigation }) {
         body: JSON.stringify({ media_url: publicUrl, media_type: isVideo ? 'video' : 'photo', width: asset.width, height: asset.height }),
       })
       const created = await res.json().catch(() => null)
-      if (!res.ok || !created || created.error) throw new Error(created?.error || 'Could not add this to your profile')
+      if (!res.ok || !created || created.error) throw new Error(created?.error || t('addFailed'))
       const item = normalizeMediaItem({
         ...created,
         created_at: created.created_at ?? new Date().toISOString(),
@@ -286,9 +289,9 @@ export default function MyProfileScreen({ navigation }) {
 
   const confirmDelete = (item) => {
     if (!item?.id) return
-    Alert.alert('Delete this post?', 'It will be removed from your profile, the feed and Live.', [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Delete', style: 'destructive', onPress: () => deleteMedia(item.id) },
+    Alert.alert(t('deleteTitle'), t('deleteMessage'), [
+      { text: t('cancel'), style: 'cancel' },
+      { text: t('delete'), style: 'destructive', onPress: () => deleteMedia(item.id) },
     ])
   }
 
@@ -306,10 +309,10 @@ export default function MyProfileScreen({ navigation }) {
     setMedia((m) => m.filter((item) => item.id !== id))
     try {
       const res = await authedFetch(`/api/profiles/me/media/${id}`, { method: 'DELETE' })
-      if (!res.ok) throw new Error('Could not delete this item')
+      if (!res.ok) throw new Error(t('deleteFailed'))
     } catch (e) {
       setMedia(before)
-      setError(e?.message ?? 'Could not delete this item')
+      setError(e?.message ?? t('deleteFailed'))
     }
   }
 
@@ -325,7 +328,7 @@ export default function MyProfileScreen({ navigation }) {
       })
       if (!res.ok) {
         const body = await res.json().catch(() => null)
-        throw new Error(body?.error || `Save failed (${res.status})`)
+        throw new Error(body?.error || t('saveFailed', { status: res.status }))
       }
     } catch (e) {
       setError(e.message)
@@ -344,7 +347,7 @@ export default function MyProfileScreen({ navigation }) {
       </LinearGradient>
 
       <View style={styles.avatarWrap}>
-        <Pressable onPress={pickAvatar} disabled={uploading} accessibilityRole="button" accessibilityLabel="Change profile photo">
+        <Pressable onPress={pickAvatar} disabled={uploading} accessibilityRole="button" accessibilityLabel={t('changePhotoA11y')}>
           <Image source={{ uri: profile.avatar_url }} style={styles.avatar} />
           <View style={styles.editBadge}>
             {uploading ? <ActivityIndicator size="small" color={colors.onBrand} /> : <Text style={{ fontSize: 16 }}>📷</Text>}
@@ -357,19 +360,19 @@ export default function MyProfileScreen({ navigation }) {
       <View style={[styles.followRow, { marginTop: 14, gap: 18, flexWrap: 'wrap', paddingHorizontal: 12 }]}>
         <Pressable onPress={() => navigation.navigate('FollowList', { userId: profile.id, mode: 'followers' })} style={styles.followStatWrap}>
           <Text style={styles.followStatNum}>{profile.follower_count ?? 0}</Text>
-          <Text style={type.caption}>Followers</Text>
+          <Text style={type.caption}>{t('followers')}</Text>
         </Pressable>
         <Pressable onPress={() => navigation.navigate('FollowList', { userId: profile.id, mode: 'following' })} style={styles.followStatWrap}>
           <Text style={styles.followStatNum}>{profile.following_count ?? 0}</Text>
-          <Text style={type.caption}>Following</Text>
+          <Text style={type.caption}>{t('following')}</Text>
         </Pressable>
         <Pressable onPress={() => navigation.navigate('PlatformFollows')} style={styles.followStatWrap}>
           <Text style={styles.followStatNum}>{platformFollowCount}</Text>
-          <Text style={type.caption}>Profiles followed</Text>
+          <Text style={type.caption}>{t('profilesFollowed')}</Text>
         </Pressable>
         <View style={styles.followStatWrap}>
           <Text style={styles.followStatNum}>{media.length}</Text>
-          <Text style={type.caption}>Posts</Text>
+          <Text style={type.caption}>{t('posts')}</Text>
         </View>
       </View>
 
@@ -381,15 +384,15 @@ export default function MyProfileScreen({ navigation }) {
           accessibilityState={{ expanded: editOpen }}
         >
           <Ionicons name={editOpen ? 'chevron-up' : 'create-outline'} size={16} color={editOpen ? colors.ink : colors.text} />
-          <Text style={[styles.headerBtnText, editOpen && { color: colors.ink }]}>{editOpen ? 'Done editing' : 'Edit profile'}</Text>
+          <Text style={[styles.headerBtnText, editOpen && { color: colors.ink }]}>{editOpen ? t('doneEditing') : t('editProfile')}</Text>
         </Pressable>
         <Pressable onPress={shareProfile} style={styles.headerBtn} accessibilityRole="button">
           <Ionicons name="share-outline" size={16} color={colors.text} />
-          <Text style={styles.headerBtnText}>Share</Text>
+          <Text style={styles.headerBtnText}>{t('share')}</Text>
         </Pressable>
-        <Pressable onPress={() => profile?.id && navigation.navigate('UserProfile', { userId: profile.id, preview: true, avatarUrl: profile.avatar_url ?? null })} style={styles.headerBtn} accessibilityRole="button" accessibilityLabel="Preview profile">
+        <Pressable onPress={() => profile?.id && navigation.navigate('UserProfile', { userId: profile.id, preview: true, avatarUrl: profile.avatar_url ?? null })} style={styles.headerBtn} accessibilityRole="button" accessibilityLabel={t('previewA11y')}>
           <Ionicons name="eye-outline" size={16} color={colors.text} />
-          <Text style={styles.headerBtnText}>Preview</Text>
+          <Text style={styles.headerBtnText}>{t('preview')}</Text>
         </Pressable>
       </View>
       <GoProBanner navigation={navigation} compact style={{ marginBottom: 14 }} />
@@ -398,10 +401,10 @@ export default function MyProfileScreen({ navigation }) {
 
       {/* ---- Your posts, right under the header ---- */}
       <View style={styles.postsHead}>
-        <Text style={type.label}>Your posts</Text>
+        <Text style={type.label}>{t('yourPosts')}</Text>
         <Pressable onPress={() => navigation.navigate('Camera')} hitSlop={8} accessibilityRole="button" style={styles.postsCamera}>
           <Ionicons name="camera-outline" size={16} color={colors.magenta} />
-          <Text style={styles.postsCameraText}>Camera</Text>
+          <Text style={styles.postsCameraText}>{t('camera')}</Text>
         </Pressable>
       </View>
       <ContentGrid
@@ -409,11 +412,11 @@ export default function MyProfileScreen({ navigation }) {
         autoplay
         onOpen={(i) => setViewer({ open: true, index: i })}
         onDelete={confirmDelete}
-        addTile={{ onPress: uploadContent, busy: uploadingMedia, label: 'Upload' }}
+        addTile={{ onPress: uploadContent, busy: uploadingMedia, label: t('upload') }}
       />
       {media.length === 0 ? (
         <Text style={[type.caption, { marginHorizontal: 20, marginTop: 10 }]}>
-          No posts yet. Snap one with the camera or upload from your library — it shows here, in the feed and on Live.
+          {t('noPosts')}
         </Text>
       ) : null}
       <View style={{ height: 20 }} />
@@ -421,37 +424,37 @@ export default function MyProfileScreen({ navigation }) {
       {/* ---- Account, stats, settings ---- */}
       {RECOMMENDED_TIERS.includes(profile.account_type) && (
         <View style={styles.recommendedBadge}>
-          <Text style={styles.recommendedBadgeText}>⭐ Your account is being displayed on the recommended tab</Text>
+          <Text style={styles.recommendedBadgeText}>{t('recommendedBadge')}</Text>
         </View>
       )}
 
       <View style={styles.card}>
         <Row
-          label="Follow requests"
+          label={t('followRequests')}
           value={requestCount > 0 ? String(requestCount) : null}
           onPress={() => navigation.navigate('FollowList', { userId: profile.id, mode: 'requests' })}
         />
-        <Row label="Share my profile" onPress={shareProfile} />
-        <Row label="Settings" onPress={() => navigation.navigate('Settings')} />
+        <Row label={t('shareMyProfile')} onPress={shareProfile} />
+        <Row label={t('settings')} onPress={() => navigation.navigate('Settings')} />
       </View>
 
       {stats && (
         <GlassPanel radius={radii.lg} style={styles.statsCard}>
           <View style={styles.statsRow}>
-            <Stat label="Profile Views" value={stats.total_views} />
-            <Stat label="This Week" value={stats.views_last_7_days} />
-            <Stat label="Likes" value={stats.total_likes ?? 0} />
+            <Stat label={t('profileViews')} value={stats.total_views} />
+            <Stat label={t('thisWeek')} value={stats.views_last_7_days} />
+            <Stat label={t('likes')} value={stats.total_likes ?? 0} />
           </View>
           <Pressable onPress={() => navigation.navigate('Recap')} style={styles.viewersLink}>
-            <Text style={styles.viewersLinkText}>Share my growth recap ›</Text>
+            <Text style={styles.viewersLinkText}>{t('growthRecap')}</Text>
           </Pressable>
           <TagLinks navigation={navigation} />
           <Pressable onPress={() => navigation.navigate('Viewers')} style={styles.viewersLink}>
-            <Text style={styles.viewersLinkText}>See who viewed your profile ›</Text>
+            <Text style={styles.viewersLinkText}>{t('whoViewed')}</Text>
           </Pressable>
           {!profile.stats_public && (
             <Text style={styles.statsHint}>
-              Only visible to you — turn on "Show my profile view count" in Settings to display it publicly.
+              {t('statsHint')}
             </Text>
           )}
         </GlassPanel>
@@ -469,8 +472,8 @@ export default function MyProfileScreen({ navigation }) {
         accessibilityState={{ expanded: editOpen }}
       >
         <View style={{ flex: 1 }}>
-          <Text style={type.body}>Edit profile</Text>
-          <Text style={type.caption}>Name, bio, type, privacy, websites, socials, tags</Text>
+          <Text style={type.body}>{t('editProfile')}</Text>
+          <Text style={type.caption}>{t('editProfileSub')}</Text>
         </View>
         <Ionicons name={editOpen ? 'chevron-up' : 'chevron-down'} size={18} color={colors.textMuted} />
       </Pressable>
@@ -488,20 +491,20 @@ export default function MyProfileScreen({ navigation }) {
           }}
         >
         <GoProBanner navigation={navigation} showWhenPro style={{ marginTop: 6, marginBottom: 6 }} />
-        <Text onPress={pickAvatar} style={[styles.changePhotoText, { marginLeft: 20, marginTop: 4 }]}>Change Photo</Text>
-        <Text style={styles.section}>Personal Info</Text>
-        <Field label="Username" value={profile.username} onChangeText={(v) => set('username', v)} />
-        <Field label="Email" value={profile.email} editable={false} />
-        <Field label="Country" placeholder="e.g. United States" value={profile.country} onChangeText={(v) => set('country', v)} />
+        <Text onPress={pickAvatar} style={[styles.changePhotoText, { marginLeft: 20, marginTop: 4 }]}>{t('changePhoto')}</Text>
+        <Text style={styles.section}>{t('personalInfo')}</Text>
+        <Field label={t('username')} value={profile.username} onChangeText={(v) => set('username', v)} />
+        <Field label={t('email')} value={profile.email} editable={false} />
+        <Field label={t('country')} placeholder={t('countryPlaceholder')} value={profile.country} onChangeText={(v) => set('country', v)} />
         <View style={styles.field}>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-            <Text style={type.label}>Bio</Text>
+            <Text style={type.label}>{t('bio')}</Text>
             <Text style={type.caption}>{(profile.bio ?? '').length}/200</Text>
           </View>
           <TextInput
             placeholderTextColor={colors.textFaint}
             style={[styles.input, { minHeight: 60 }]}
-            placeholder="A short line about yourself"
+            placeholder={t('bioPlaceholder')}
             multiline
             maxLength={200}
             value={profile.bio ?? ''}
@@ -509,9 +512,9 @@ export default function MyProfileScreen({ navigation }) {
           />
         </View>
 
-        <Text style={styles.section}>Profile Type</Text>
+        <Text style={styles.section}>{t('profileType')}</Text>
         <Text style={[type.caption, { marginHorizontal: 20, marginBottom: 12 }]}>
-          This helps others find you, and with Pro we use it along with your tags to choose the best reach for you, from local to international.
+          {t('profileTypeHint')}
         </Text>
         <View style={styles.tagWrap}>
           {PROFILE_LABELS.map((opt) => {
@@ -519,14 +522,14 @@ export default function MyProfileScreen({ navigation }) {
             if (active) {
               return (
                 <Pressable key={opt.key} onPress={() => set('profile_label', opt.key)} style={styles.tagChipActive}>
-                  <Text style={styles.tagTextActive}>{opt.label}</Text>
+                  <Text style={styles.tagTextActive}>{t(`label_${opt.key}`)}</Text>
                 </Pressable>
               )
             }
             return (
               <Pressable key={opt.key} onPress={() => set('profile_label', opt.key)}>
                 <GlassPanel radius={radii.pill}>
-                  <View style={styles.tagChip}><Text style={styles.tagText}>{opt.label}</Text></View>
+                  <View style={styles.tagChip}><Text style={styles.tagText}>{t(`label_${opt.key}`)}</Text></View>
                 </GlassPanel>
               </Pressable>
             )
@@ -535,23 +538,23 @@ export default function MyProfileScreen({ navigation }) {
 
         {(profile.profile_label === 'business' || (profile.tags ?? []).includes('Business')) && <BusinessLocationCard />}
 
-        <Text style={styles.section}>Profile Privacy</Text>
+        <Text style={styles.section}>{t('privacy')}</Text>
         <View style={styles.privacyOptions}>
           {[
             {
               key: 'public',
-              title: 'Public',
-              desc: 'Anyone nearby can open your profile and see your photos, tags, and socials right away.',
+              title: t('public'),
+              desc: t('publicDesc'),
             },
             {
               key: 'private',
-              title: 'Private',
-              desc: 'You still show up in Nearby, Recommended, and Map. But people have to send a follow request — once you accept, they can see your photos, tags, and socials.',
+              title: t('private'),
+              desc: t('privateDesc'),
             },
             {
               key: 'ghost',
-              title: 'Ghost',
-              desc: 'You never show up in Nearby, Recommended, or Map, no matter what — but you can still see and browse everyone else normally.',
+              title: t('ghost'),
+              desc: t('ghostDesc'),
             },
           ].map((opt) => {
             const active = (profile.visibility ?? 'public') === opt.key
@@ -572,11 +575,11 @@ export default function MyProfileScreen({ navigation }) {
           })}
         </View>
 
-        <Text style={styles.section}>Websites</Text>
+        <Text style={styles.section}>{t('websites')}</Text>
         {websites.map((site, i) => (
           <View key={i} style={styles.socialRow}>
             <View style={[styles.field, { flex: 1, marginBottom: 0 }]}>
-              <Text style={type.label}>Website {i + 1}</Text>
+              <Text style={type.label}>{t('websiteN', { n: i + 1 })}</Text>
               <TextInput
                 placeholderTextColor={colors.textFaint}
                 style={styles.input}
@@ -593,15 +596,15 @@ export default function MyProfileScreen({ navigation }) {
           </View>
         ))}
         <Pressable onPress={addWebsite} style={[styles.addSocialChip, { marginHorizontal: 20, marginBottom: 24, alignSelf: 'flex-start' }]}>
-          <Text style={styles.addSocialChipText}>+ Add website</Text>
+          <Text style={styles.addSocialChipText}>{t('addWebsite')}</Text>
         </Pressable>
 
-        <Text style={styles.section}>Social Media</Text>
+        <Text style={styles.section}>{t('socialMedia')}</Text>
         <Text style={[type.caption, { marginHorizontal: 20, marginBottom: 12 }]}>
-          Add your @ or URL — either will do.
+          {t('socialHint')}
         </Text>
         <Pressable onPress={() => setImportOpen(true)} style={[styles.addSocialChip, { marginHorizontal: 20, marginBottom: 16, alignSelf: 'flex-start' }]}>
-          <Text style={styles.addSocialChipText}>Import from Linktree or similar</Text>
+          <Text style={styles.addSocialChipText}>{t('importLinks')}</Text>
         </Pressable>
         {socialLinks.map((link, i) => {
           const platform = SOCIAL_PLATFORMS.find((p) => p.key === link.platform)
@@ -631,9 +634,9 @@ export default function MyProfileScreen({ navigation }) {
           ))}
         </View>
 
-        <Text style={styles.section}>Tags</Text>
+        <Text style={styles.section}>{t('tags')}</Text>
         <Text style={[type.caption, { marginHorizontal: 20, marginBottom: 12 }]}>
-          Pick what describes you — others can filter by these nearby.
+          {t('tagsHint')}
         </Text>
         <View style={styles.tagWrap}>
           {TAGS.map((tag) => {
@@ -648,7 +651,7 @@ export default function MyProfileScreen({ navigation }) {
 
         <Pressable onPress={save} disabled={saving || uploading}>
           <LinearGradient colors={gradients.brand} style={styles.button}>
-            <Text style={styles.buttonText}>{saving ? 'Saving…' : 'Save Changes'}</Text>
+            <Text style={styles.buttonText}>{saving ? t('saving') : t('saveChanges')}</Text>
           </LinearGradient>
         </Pressable>
 
@@ -656,20 +659,20 @@ export default function MyProfileScreen({ navigation }) {
       ) : null}
 
       {totalUsers != null && (
-        <Text style={styles.totalUsers}>{totalUsers.toLocaleString()} people on iYiYi</Text>
+        <Text style={styles.totalUsers}>{t('totalUsers', { n: totalUsers.toLocaleString() })}</Text>
       )}
 
       <Modal visible={importOpen} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setImportOpen(false)} onDismiss={() => setImportOpen(false)}>
         <View style={styles.screen}>
           <View style={{ paddingTop: 24, paddingHorizontal: 20, paddingBottom: 12, flexDirection: 'row', justifyContent: 'space-between' }}>
-            <Text style={type.title}>Import your links</Text>
+            <Text style={type.title}>{t('importTitle')}</Text>
             <Pressable onPress={() => setImportOpen(false)} hitSlop={12}>
-              <Text style={{ color: colors.textMuted, fontSize: 16 }}>Close</Text>
+              <Text style={{ color: colors.textMuted, fontSize: 16 }}>{t('close')}</Text>
             </Pressable>
           </View>
           <ImportLinksPanel
-            intro="Paste your Linktree or similar page. Nothing is saved until you tap Save Changes below."
-            importLabel="Add to profile"
+            intro={t('importIntro')}
+            importLabel={t('addToProfile')}
             onImport={async (imported) => {
               const merged = mergeLinks(profile, imported)
               set('social_links', merged.social_links)

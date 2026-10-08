@@ -5,18 +5,22 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { colors, radii, type } from '../theme'
 import { FadeIn, Press } from '../lib/motion'
 import GlassPanel from '../components/GlassPanel'
+import { useT } from '../i18n'
+import strings from '../i18n/strings/locationConsent'
 
 // First screen after sign-up: what location is used for, in plain words, before the system
 // prompt ever appears. Informational only - the OS asks for the actual permission later, when
 // the Nearby tab opens.
+// title/text are keys into strings/locationConsent, translated at render.
 const POINTS = [
-  { icon: 'people', colors: ['#6b7cff', '#9b8cff'], title: 'Find people near you', text: 'Your location is used to show who is within your range (150 ft by default) and to show your nametag to them.' },
-  { icon: 'eye-off', colors: ['#4fd1c5', '#7fb3ff'], title: 'Never your exact spot', text: 'Other people only ever see your profile and an approximate distance, never your coordinates.' },
-  { icon: 'shield-checkmark', colors: ['#ff6fb5', '#ff9fd0'], title: 'You stay in control', text: 'Go ghost, set a safe zone around home, or turn visibility off any time in Settings.' },
+  { icon: 'people', colors: ['#6b7cff', '#9b8cff'], title: 'p1Title', text: 'p1Text' },
+  { icon: 'eye-off', colors: ['#4fd1c5', '#7fb3ff'], title: 'p2Title', text: 'p2Text' },
+  { icon: 'shield-checkmark', colors: ['#ff6fb5', '#ff9fd0'], title: 'p3Title', text: 'p3Text' },
 ]
 
 export default function LocationConsentScreen({ onContinue }) {
   const insets = useSafeAreaInsets()
+  const t = useT(strings)
   return (
     <View style={styles.screen}>
       <ScrollView contentContainerStyle={[styles.scroll, { paddingTop: insets.top + 40, paddingBottom: insets.bottom + 24 }]} showsVerticalScrollIndicator={false}>
@@ -24,8 +28,8 @@ export default function LocationConsentScreen({ onContinue }) {
           <LinearGradient colors={['#6b7cff', '#8f5bff']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.pin}>
             <Ionicons name="location" size={34} color="#fff" />
           </LinearGradient>
-          <Text style={styles.title}>Your location, used carefully</Text>
-          <Text style={styles.sub}>Here's exactly how iYiYi uses it.</Text>
+          <Text style={styles.title}>{t('title')}</Text>
+          <Text style={styles.sub}>{t('sub')}</Text>
         </FadeIn>
 
         <View style={{ marginTop: 26, gap: 10 }}>
@@ -37,8 +41,8 @@ export default function LocationConsentScreen({ onContinue }) {
                     <Ionicons name={p.icon} size={20} color="#fff" />
                   </LinearGradient>
                   <View style={{ flex: 1 }}>
-                    <Text style={type.headline}>{p.title}</Text>
-                    <Text style={[type.caption, { marginTop: 3 }]}>{p.text}</Text>
+                    <Text style={type.headline}>{t(p.title)}</Text>
+                    <Text style={[type.caption, { marginTop: 3 }]}>{t(p.text)}</Text>
                   </View>
                 </View>
               </GlassPanel>
@@ -47,12 +51,12 @@ export default function LocationConsentScreen({ onContinue }) {
         </View>
 
         <FadeIn index={5} style={{ marginTop: 28 }}>
-          <Press onPress={onContinue} scaleTo={0.97} haptic="light" accessibilityLabel="Continue">
+          <Press onPress={onContinue} scaleTo={0.97} haptic="light" accessibilityLabel={t('continue')}>
             <LinearGradient colors={['#6b7cff', '#8f5bff']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.button}>
-              <Text style={styles.buttonText}>Continue</Text>
+              <Text style={styles.buttonText}>{t('continue')}</Text>
             </LinearGradient>
           </Press>
-          <Text style={styles.fine}>You'll be asked by your phone before any location is shared.</Text>
+          <Text style={styles.fine}>{t('fine')}</Text>
         </FadeIn>
       </ScrollView>
     </View>

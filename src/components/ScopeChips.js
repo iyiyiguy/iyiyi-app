@@ -5,6 +5,8 @@ import { Ionicons } from '@expo/vector-icons'
 import { colors, font, radii } from '../theme'
 import GlassPanel from './GlassPanel'
 import ScrollArrows from './ScrollArrows'
+import { useT, translate } from '../i18n'
+import strings from '../i18n/strings/scope'
 
 // Distance ranges shared by Nearby / Recommended / Feed. Keys are what the API expects;
 // 'global' is shown as "International".
@@ -17,7 +19,17 @@ export const SCOPES = [
   { key: 'global', label: 'International' },
 ]
 
-export const scopeLabel = (key) => SCOPES.find((s) => s.key === key)?.label ?? ''
+// English chip/segment labels (from SCOPES or passed in by callers) -> dictionary key. Labels
+// not listed here (distances like "150 ft", country names) are shown unchanged.
+const LABEL_KEYS = {
+  City: 'city', State: 'state', Nationwide: 'national', International: 'global', Nation: 'nation', Worldwide: 'world',
+  You: 'you', Country: 'country', 'Your posts': 'yourPosts', 'For You': 'forYou', Recent: 'recent', Popular: 'popular',
+  Newest: 'newest', 'Most liked': 'mostLiked',
+}
+const labelText = (t, label) => (LABEL_KEYS[label] ? t(LABEL_KEYS[label]) : label)
+
+// Translated with the current language (callers re-render via their own useT on a change).
+export const scopeLabel = (key) => labelText((k) => translate(strings, k), SCOPES.find((s) => s.key === key)?.label ?? '')
 
 // Horizontally scrolling chip row with left/right arrows when chips are offscreen. The
 // selected chip is scrolled into view automatically.
@@ -28,11 +40,12 @@ export const scopeLabel = (key) => SCOPES.find((s) => s.key === key)?.label ?? '
 // (a small down-arrow after it, for chips that open a menu) and `onPress` (runs instead of
 // onChange, also when already selected).
 function ChipLabel({ option, active }) {
+  const t = useT(strings)
   const color = active ? colors.ink : colors.textMuted
   return (
     <View style={styles.chipLabel}>
       {option.icon ? <Ionicons name={option.icon} size={14} color={color} /> : null}
-      <Text style={[styles.text, active && styles.textActive]} numberOfLines={1}>{option.label}</Text>
+      <Text style={[styles.text, active && styles.textActive]} numberOfLines={1}>{labelText(t, option.label)}</Text>
       {option.chevron ? <Ionicons name="chevron-down" size={12} color={color} /> : null}
     </View>
   )
@@ -91,6 +104,7 @@ export default function ScopeChips({ options = SCOPES, value, onChange, style })
 
 // Compact segmented control (e.g. For You / Recent / Popular).
 export function Segmented({ options, value, onChange, style }) {
+  const t = useT(strings)
   return (
     <GlassPanel radius={radii.pill} animateIn={false} style={style}>
       <View style={styles.segTrack}>
@@ -108,7 +122,7 @@ export function Segmented({ options, value, onChange, style }) {
               accessibilityState={{ selected: active }}
               style={[styles.seg, active && styles.segActive]}
             >
-              <Text style={[styles.segText, active && styles.segTextActive]} numberOfLines={1}>{o.label}</Text>
+              <Text style={[styles.segText, active && styles.segTextActive]} numberOfLines={1}>{labelText(t, o.label)}</Text>
             </Pressable>
           )
         })}

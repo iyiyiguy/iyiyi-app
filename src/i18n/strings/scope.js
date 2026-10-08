@@ -1,0 +1,15 @@
+// Range chips (ScopeChips) and the sort control beside them. Distances like "150 ft" / "5 mi"
+// are shown as-is in every language; only the word labels are translated.
+export default {
+  en: { city: 'City', state: 'State', national: 'Nationwide', global: 'International', nation: 'Nation', world: 'Worldwide', you: 'You', country: 'Country', yourPosts: 'Your posts', forYou: 'For You', recent: 'Recent', popular: 'Popular', newest: 'Newest', mostLiked: 'Most liked' },
+  es: { city: 'Ciudad', state: 'Estado', national: 'Nacional', global: 'Internacional', nation: 'País', world: 'Mundial', you: 'Tú', country: 'País', yourPosts: 'Tus publicaciones', forYou: 'Para ti', recent: 'Recientes', popular: 'Populares', newest: 'Más nuevos', mostLiked: 'Más me gusta' },
+  zh: { city: '城市', state: '州/省', national: '全国', global: '国际', nation: '国家', world: '全球', you: '我', country: '国家', yourPosts: '我的帖子', forYou: '为你推荐', recent: '最近', popular: '热门', newest: '最新', mostLiked: '最多赞' },
+  ja: { city: '市内', state: '州・県', national: '全国', global: '国際', nation: '国内', world: '世界中', you: 'あなた', country: '国', yourPosts: 'あなたの投稿', forYou: 'おすすめ', recent: '新着', popular: '人気', newest: '新しい順', mostLiked: 'いいね順' },
+  ko: { city: '도시', state: '주', national: '전국', global: '국제', nation: '국가', world: '전 세계', you: '나', country: '국가', yourPosts: '내 게시물', forYou: '추천', recent: '최근', popular: '인기', newest: '최신순', mostLiked: '좋아요순' },
+  fr: { city: 'Ville', state: 'État', national: 'National', global: 'International', nation: 'Pays', world: 'Monde', you: 'Vous', country: 'Pays', yourPosts: 'Vos publications', forYou: 'Pour vous', recent: 'Récents', popular: 'Populaires', newest: 'Plus récents', mostLiked: 'Plus aimés' },
+  de: { city: 'Stadt', state: 'Bundesland', national: 'Landesweit', global: 'International', nation: 'Land', world: 'Weltweit', you: 'Du', country: 'Land', yourPosts: 'Deine Beiträge', forYou: 'Für dich', recent: 'Neu', popular: 'Beliebt', newest: 'Neueste', mostLiked: 'Meiste Likes' },
+  pt: { city: 'Cidade', state: 'Estado', national: 'Nacional', global: 'Internacional', nation: 'País', world: 'Mundo todo', you: 'Você', country: 'País', yourPosts: 'Seus posts', forYou: 'Para você', recent: 'Recentes', popular: 'Populares', newest: 'Mais novos', mostLiked: 'Mais curtidos' },
+  ar: { city: 'المدينة', state: 'الولاية', national: 'كل البلد', global: 'دولي', nation: 'البلد', world: 'العالم', you: 'أنت', country: 'الدولة', yourPosts: 'منشوراتك', forYou: 'لك', recent: 'حديثة', popular: 'رائجة', newest: 'الأحدث', mostLiked: 'الأكثر إعجابًا' },
+  hi: { city: 'शहर', state: 'राज्य', national: 'देशभर', global: 'अंतरराष्ट्रीय', nation: 'देश', world: 'दुनियाभर', you: 'आप', country: 'देश', yourPosts: 'आपकी पोस्ट', forYou: 'आपके लिए', recent: 'हाल के', popular: 'लोकप्रिय', newest: 'नवीनतम', mostLiked: 'सबसे पसंदीदा' },
+  tl: { city: 'Lungsod', state: 'Estado', national: 'Buong bansa', global: 'Internasyonal', nation: 'Bansa', world: 'Buong mundo', you: 'Ikaw', country: 'Bansa', yourPosts: 'Mga post mo', forYou: 'Para sa iyo', recent: 'Bago', popular: 'Sikat', newest: 'Pinakabago', mostLiked: 'Pinakagusto' },
+}

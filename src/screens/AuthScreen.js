@@ -13,6 +13,8 @@ import { ensureProfile, neutralUsername, signInWithApple, signInWithProvider } f
 import SocialIcon from '../components/SocialIcon'
 import { logSignup } from '../lib/attribution'
 import GlassPanel from '../components/GlassPanel'
+import { useT } from '../i18n'
+import strings from '../i18n/strings/auth'
 
 const METHOD = { EMAIL: 'email', PHONE: 'phone' }
 
@@ -27,6 +29,7 @@ const SOCIAL_PROVIDERS = [
 export default function AuthScreen({ navigation, route }) {
   const insets = useSafeAreaInsets()
   const isDark = useIsDark()
+  const t = useT(strings)
   const { width } = useWindowDimensions()
   const [method, setMethod] = useState(METHOD.EMAIL)
   const [mode, setMode] = useState(route?.params?.mode === 'signup' ? 'signup' : 'login') // login | signup
@@ -65,11 +68,11 @@ export default function AuthScreen({ navigation, route }) {
     const start = async () => {
       try {
         const res = await fetch(`${API_URL}/api/login-sessions`, { method: 'POST' })
-        if (!res.ok) throw new Error('Could not create a sign-in code. Please try again.')
+        if (!res.ok) throw new Error(t('qrCreateError'))
         const data = await res.json()
         if (cancelled) return
         const token = data.token
-        if (!token) throw new Error('Could not create a sign-in code. Please try again.')
+        if (!token) throw new Error(t('qrCreateError'))
         setQrToken(token)
         clearInterval(pollRef.current)
         pollRef.current = setInterval(async () => {
@@ -92,7 +95,7 @@ export default function AuthScreen({ navigation, route }) {
           }
         }, 2000)
       } catch (e) {
-        if (!cancelled) setError(e?.message ?? 'Could not create a sign-in code.')
+        if (!cancelled) setError(e?.message ?? t('qrCreateErrorShort'))
       }
     }
     start()
@@ -109,7 +112,7 @@ export default function AuthScreen({ navigation, route }) {
   const withGuard = async (fn) => {
     setError('')
     if (!agreed) {
-      setError('Please agree to the Terms of Use to continue.')
+      setError(t('agreeRequired'))
       return
     }
     setLoading(true)
@@ -127,13 +130,13 @@ export default function AuthScreen({ navigation, route }) {
       // Check the name before creating the account, so a blocked name never leaves someone
       // signed in without a profile. (The database enforces this too.)
       const { data: clean } = await supabase.rpc('username_is_clean', { u: username })
-      if (clean === false) throw new Error('That username is not allowed. Please choose another.')
+      if (clean === false) throw new Error(t('usernameNotAllowed'))
       const { data, error: signUpError } = await supabase.auth.signUp({ email, password })
       if (signUpError) throw signUpError
       if (!data.session) {
         // Email confirmation is on: there's no session yet, so the profile can't be written now.
         // It gets created on first sign-in (App.js -> ensureProfile).
-        Alert.alert('Check your email', 'We sent you a link to confirm your account. Open it, then log in here.')
+        Alert.alert(t('checkEmailTitle'), t('checkEmailMsg'))
         setMode('login')
         return
       }
@@ -144,7 +147,7 @@ export default function AuthScreen({ navigation, route }) {
           .from('profiles')
           .upsert({ id: data.user.id, username }, { onConflict: 'id' })
         if (profileError) {
-          Alert.alert('Username not saved', `${profileError.message}\n\nYou can change your username from My Profile.`)
+          Alert.alert(t('usernameNotSavedTitle'), t('usernameNotSavedMsg', { error: profileError.message }))
         }
         logSignup(data.user.id)
       }
@@ -185,7 +188,7 @@ export default function AuthScreen({ navigation, route }) {
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.topRow}>
-          {navigation.canGoBack() ? <HeaderButton icon="chevron-back" onPress={() => navigation.goBack()} label="Back to explore" /> : <View />}
+          {navigation.canGoBack() ? <HeaderButton icon="chevron-back" onPress={() => navigation.goBack()} label={t('backToExplore')} /> : <View />}
         </View>
 
         {/* Hero: wordmark + headline. Nothing is absolutely positioned, so it can't overlap the form. */}
@@ -194,12 +197,12 @@ export default function AuthScreen({ navigation, route }) {
             <Image source={ICON} style={styles.brandIcon} />
             <Text style={styles.brandWord}>iYiYi</Text>
           </View>
-          <Text style={styles.headline}>Grow your profile.{'\n'}Become a local celebrity.</Text>
-          <Text style={styles.subhead}>See who's within 150 ft, and get followed on every platform in one tap.</Text>
+          <Text style={styles.headline}>{t('headline')}</Text>
+          <Text style={styles.subhead}>{t('subhead')}</Text>
           {totalUsers != null ? (
             <Surface style={styles.counter} radius={999} shadow={false}>
               <Ionicons name="people" size={14} color={colors.accent} />
-              <Text style={styles.counterText}>{Number(totalUsers).toLocaleString()} people on iYiYi</Text>
+              <Text style={styles.counterText}>{t('peopleCount', { n: Number(totalUsers).toLocaleString() })}</Text>
             </Surface>
           ) : null}
         </FadeIn>
@@ -209,26 +212,26 @@ export default function AuthScreen({ navigation, route }) {
             <View style={styles.form}>
               {qrMode ? (
                 <View style={styles.qrWrap}>
-                  <Text style={styles.formTitle}>Sign in with QR code</Text>
+                  <Text style={styles.formTitle}>{t('qrTitle')}</Text>
                   {qrImageUrl && !qrExpired ? (
                     <Image source={{ uri: qrImageUrl }} style={styles.qrImage} />
                   ) : (
-                    <Text style={type.body}>{qrExpired ? 'This code expired.' : 'Loading code…'}</Text>
+                    <Text style={type.body}>{qrExpired ? t('qrExpired') : t('qrLoading')}</Text>
                   )}
                   <Text style={[type.caption, styles.qrHint]}>
-                    Open iYiYi on your phone, go to Settings → "Sign in on another device", and scan this code.
+                    {t('qrHint')}
                   </Text>
                   {qrExpired && (
-                    <TextLink onPress={() => { setQrToken(null); setQrExpired(false); setQrMode(false); setTimeout(() => setQrMode(true), 0) }}>Get a new code</TextLink>
+                    <TextLink onPress={() => { setQrToken(null); setQrExpired(false); setQrMode(false); setTimeout(() => setQrMode(true), 0) }}>{t('qrNewCode')}</TextLink>
                   )}
                   {error ? <Text style={styles.error}>{error}</Text> : null}
-                  <TextLink onPress={() => setQrMode(false)}>Use email or phone instead</TextLink>
+                  <TextLink onPress={() => setQrMode(false)}>{t('qrUseOther')}</TextLink>
                 </View>
               ) : (
                 <>
-                  <Text style={styles.formTitle}>{signup ? 'Create your account' : 'Welcome back'}</Text>
+                  <Text style={styles.formTitle}>{signup ? t('createTitle') : t('welcomeBack')}</Text>
                   <Segmented
-                    options={[{ key: METHOD.EMAIL, label: 'Email' }, { key: METHOD.PHONE, label: 'Phone' }]}
+                    options={[{ key: METHOD.EMAIL, label: t('email') }, { key: METHOD.PHONE, label: t('phone') }]}
                     value={method}
                     onChange={(k) => { setMethod(k); setError('') }}
                     isDark={isDark}
@@ -237,33 +240,33 @@ export default function AuthScreen({ navigation, route }) {
                   {method === METHOD.EMAIL ? (
                     <>
                       {signup && (
-                        <Field icon="at" placeholder="Username" autoCapitalize="none" value={username} onChangeText={setUsername} />
+                        <Field icon="at" placeholder={t('username')} autoCapitalize="none" value={username} onChangeText={setUsername} />
                       )}
-                      <Field icon="mail" placeholder="Email" autoCapitalize="none" keyboardType="email-address" textContentType="emailAddress" value={email} onChangeText={setEmail} />
-                      <Field icon="lock-closed" placeholder="Password" secureTextEntry textContentType={signup ? 'newPassword' : 'password'} value={password} onChangeText={setPassword} />
+                      <Field icon="mail" placeholder={t('email')} autoCapitalize="none" keyboardType="email-address" textContentType="emailAddress" value={email} onChangeText={setEmail} />
+                      <Field icon="lock-closed" placeholder={t('password')} secureTextEntry textContentType={signup ? 'newPassword' : 'password'} value={password} onChangeText={setPassword} />
                       <TermsRow agreed={agreed} onToggle={() => { setAgreed((a) => !a); setError('') }} />
                       {error ? <Text style={styles.error}>{error}</Text> : null}
-                      <PrimaryButton onPress={submitEmail} loading={loading} label={signup ? 'Create account' : 'Log in'} />
+                      <PrimaryButton onPress={submitEmail} loading={loading} label={signup ? t('createAccount') : t('logIn')} />
                       <TextLink onPress={() => { setMode((m) => (m === 'signup' ? 'login' : 'signup')); setError('') }}>
-                        {signup ? 'Already have an account? Log in' : 'New here? Create an account'}
+                        {signup ? t('haveAccount') : t('newHere')}
                       </TextLink>
                     </>
                   ) : (
                     <>
                       <Field icon="call" placeholder="+1 555 555 5555" keyboardType="phone-pad" textContentType="telephoneNumber" editable={!otpSent} value={phone} onChangeText={setPhone} />
                       {otpSent && (
-                        <Field icon="keypad" placeholder="6-digit code" keyboardType="number-pad" textContentType="oneTimeCode" value={otp} onChangeText={setOtp} />
+                        <Field icon="keypad" placeholder={t('otpPlaceholder')} keyboardType="number-pad" textContentType="oneTimeCode" value={otp} onChangeText={setOtp} />
                       )}
                       <TermsRow agreed={agreed} onToggle={() => { setAgreed((a) => !a); setError('') }} />
                       {error ? <Text style={styles.error}>{error}</Text> : null}
-                      <PrimaryButton onPress={otpSent ? verifyOtp : sendOtp} loading={loading} label={otpSent ? 'Verify code' : 'Send code'} />
-                      {otpSent ? <TextLink onPress={() => { setOtpSent(false); setOtp('') }}>Use a different number</TextLink> : null}
+                      <PrimaryButton onPress={otpSent ? verifyOtp : sendOtp} loading={loading} label={otpSent ? t('verifyCode') : t('sendCode')} />
+                      {otpSent ? <TextLink onPress={() => { setOtpSent(false); setOtp('') }}>{t('differentNumber')}</TextLink> : null}
                     </>
                   )}
 
                   <View style={styles.divider}>
                     <View style={styles.dividerLine} />
-                    <Text style={styles.dividerText}>or continue with</Text>
+                    <Text style={styles.dividerText}>{t('orContinueWith')}</Text>
                     <View style={styles.dividerLine} />
                   </View>
 
@@ -277,15 +280,15 @@ export default function AuthScreen({ navigation, route }) {
                     />
                   )}
                   {SOCIAL_PROVIDERS.map((p) => (
-                    <Press key={p.key} onPress={() => socialSignIn(p.key)} disabled={loading} scaleTo={0.97} accessibilityLabel={`Continue with ${p.label}`}>
+                    <Press key={p.key} onPress={() => socialSignIn(p.key)} disabled={loading} scaleTo={0.97} accessibilityLabel={t('continueWith', { provider: p.label })}>
                       <Surface style={styles.socialButton} radius={26} shadow={false} strong>
                         <SocialIcon platform={p.key} size={18} color={colors.text} />
-                        <Text style={styles.socialText}>Continue with {p.label}</Text>
+                        <Text style={styles.socialText}>{t('continueWith', { provider: p.label })}</Text>
                       </Surface>
                     </Press>
                   ))}
 
-                  <TextLink onPress={() => setQrMode(true)} muted>Sign in with a QR code</TextLink>
+                  <TextLink onPress={() => setQrMode(true)} muted>{t('qrSignIn')}</TextLink>
                 </>
               )}
             </View>
@@ -294,7 +297,7 @@ export default function AuthScreen({ navigation, route }) {
 
         <FadeIn index={4}>
           <Text style={styles.appBrief}>
-            iYiYi is your digital ID: it shows people within 150 ft who you are and how to follow you, so there's no more "what's your @?".
+            {t('appBrief')}
           </Text>
         </FadeIn>
       </ScrollView>
@@ -329,19 +332,20 @@ function Segmented({ options, value, onChange, isDark }) {
 // Agreement to the Terms of Use (which spell out zero tolerance for objectionable content and
 // abusive users) before registering or logging in, as App Review requires for user content.
 function TermsRow({ agreed, onToggle }) {
+  const t = useT(strings)
   return (
     <View style={styles.termsRow}>
-      <Pressable onPress={onToggle} hitSlop={8} accessibilityRole="checkbox" accessibilityState={{ checked: agreed }} accessibilityLabel="Agree to the Terms of Use and Privacy Policy">
+      <Pressable onPress={onToggle} hitSlop={8} accessibilityRole="checkbox" accessibilityState={{ checked: agreed }} accessibilityLabel={t('termsA11y')}>
         <View style={[styles.checkbox, agreed && styles.checkboxOn]}>
           {agreed ? <Ionicons name="checkmark" size={14} color="#fff" /> : null}
         </View>
       </Pressable>
       <Text style={styles.termsText}>
-        I agree to the{' '}
-        <Text style={styles.termsLink} onPress={() => Linking.openURL(TERMS_URL).catch(() => {})}>Terms of Use</Text>
-        {' '}and{' '}
-        <Text style={styles.termsLink} onPress={() => Linking.openURL(PRIVACY_URL).catch(() => {})}>Privacy Policy</Text>
-        . No objectionable content or abusive behavior is tolerated.
+        {t('termsPre')}
+        <Text style={styles.termsLink} onPress={() => Linking.openURL(TERMS_URL).catch(() => {})}>{t('termsOfUse')}</Text>
+        {t('termsAnd')}
+        <Text style={styles.termsLink} onPress={() => Linking.openURL(PRIVACY_URL).catch(() => {})}>{t('privacyPolicy')}</Text>
+        {t('termsPost')}
       </Text>
     </View>
   )
@@ -364,10 +368,11 @@ function Field({ icon, style, ...props }) {
 }
 
 function PrimaryButton({ onPress, label, loading }) {
+  const t = useT(strings)
   return (
     <Press onPress={onPress} disabled={loading} scaleTo={0.97} haptic="light" accessibilityLabel={label}>
       <LinearGradient colors={['#6b7cff', '#8f5bff']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.button}>
-        <Text style={styles.buttonText}>{loading ? 'One moment…' : label}</Text>
+        <Text style={styles.buttonText}>{loading ? t('oneMoment') : label}</Text>
       </LinearGradient>
     </Press>
   )
