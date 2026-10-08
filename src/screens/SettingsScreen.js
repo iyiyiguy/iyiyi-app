@@ -17,6 +17,7 @@ import { THEME_OPTIONS, loadThemePref, saveThemePref } from '../lib/themePref'
 import { LaserTaggableSetting } from '../games/laser/Bystander'
 import { languageName, useLanguage, useT } from '../i18n'
 import strings from '../i18n/strings/settings'
+import { signOutAndReset } from '../lib/reviewAccount'
 
 const PRIVACY_URL = 'https://iyiyi.xyz/privacy'
 const TERMS_URL = 'https://iyiyi.xyz/terms'
@@ -232,7 +233,7 @@ export default function SettingsScreen({ navigation }) {
         <GlassPanel radius={radii.lg} style={styles.card}>
           <Row label={t('privacy')} onPress={() => openLink(PRIVACY_URL)} />
           <Row label={t('terms')} onPress={() => openLink(TERMS_URL)} />
-          <Row label={t('sign_out')} onPress={() => supabase.auth.signOut()} />
+          <Row label={t('sign_out')} onPress={() => signOutAndReset()} />
         </GlassPanel>
 
         <GlassPanel radius={radii.lg} style={styles.card}>

@@ -22,6 +22,11 @@ async function refresh() {
   }
 }
 
+export function clearPro() {
+  cached = false
+  listeners.forEach((l) => l(false))
+}
+
 export function markPro() {
   cached = true
   listeners.forEach((l) => l(true))

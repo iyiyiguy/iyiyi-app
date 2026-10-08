@@ -138,6 +138,21 @@ async function receiptFor(purchase) {
   throw new Error('Could not read the App Store receipt. Please tap Restore Purchases.')
 }
 
+// Verifies with our backend; if Apple says the receipt doesn't show the purchase yet (a stale
+// cached receipt is common right after buying in the sandbox), refresh it once and try again.
+async function verifyFresh(purchase, payload, verifyWithBackend) {
+  const receipt = await receiptFor(purchase)
+  try {
+    return await verifyWithBackend({ ...payload, receipt })
+  } catch (e) {
+    if (Platform.OS !== 'ios') throw e
+    let fresh = null
+    try { fresh = await withTimeout(RNIap.requestReceiptRefreshIOS(), 15000) } catch {}
+    if (!fresh || fresh === receipt) throw e
+    return verifyWithBackend({ ...payload, receipt: fresh })
+  }
+}
+
 // Our server knows the Pro plan as 'pro_all' (product com.iyiyi.app.pro.all.monthly).
 export const BACKEND_TIER = { pro: 'pro_all' }
 
@@ -155,10 +170,14 @@ export async function purchaseSubscription(tier, verifyWithBackend) {
   // leave the button spinning. Activate the existing subscription instead.
   const owned = (await ownedPurchases()).find((p) => p?.productId === sku)
   if (owned) {
-    const receipt = await receiptFor(owned)
-    await verifyWithBackend({ tier, platform: Platform.OS, productId: sku, receipt })
-    try { await RNIap.finishTransaction({ purchase: owned, isConsumable: false }) } catch {}
-    return
+    try {
+      await verifyFresh(owned, { tier, platform: Platform.OS, productId: sku }, verifyWithBackend)
+      try { await RNIap.finishTransaction({ purchase: owned, isConsumable: false }) } catch {}
+      return
+    } catch (e) {
+      // Not active any more (e.g. it ran out): fall through and buy it again.
+      if (e?.code !== 'expired') throw e
+    }
   }
 
   const offers = Platform.OS === 'android' ? await withTimeout(androidOffers(sku), 15000) : undefined
@@ -184,8 +203,7 @@ export async function purchaseSubscription(tier, verifyWithBackend) {
           return
         }
         try {
-          const receipt = await receiptFor(purchase)
-          await verifyWithBackend({ tier, platform: Platform.OS, productId: sku, receipt })
+          await verifyFresh(purchase, { tier, platform: Platform.OS, productId: sku }, verifyWithBackend)
           await RNIap.finishTransaction({ purchase, isConsumable: false })
           settle(resolve)
         } catch (e) {
@@ -215,13 +233,18 @@ export async function restorePurchases(verifyWithBackend) {
   const purchases = (await withTimeout(RNIap.getAvailablePurchases(), 30000)) ?? []
 
   const restored = []
+  let lastError = null
   for (const purchase of purchases) {
     const tier = SKU_TO_TIER[purchase.productId]
-    if (!tier) continue
-    const receipt = await receiptFor(purchase)
-    await verifyWithBackend({ tier, platform: Platform.OS, productId: purchase.productId, receipt })
-    restored.push(tier)
+    if (!tier || restored.includes(tier)) continue
+    try {
+      await verifyFresh(purchase, { tier, platform: Platform.OS, productId: purchase.productId }, verifyWithBackend)
+      restored.push(tier)
+    } catch (e) {
+      lastError = e
+    }
   }
+  if (!restored.length && lastError) throw lastError
   return restored
 }
 

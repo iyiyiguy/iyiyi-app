@@ -6,9 +6,10 @@
 // tap outside or swipe down to close. All transforms run on the native driver: the only
 // JS work while spinning is a slot-change tick.
 import React, { useEffect, useMemo, useRef, useState } from 'react'
-import { Animated, Easing, PanResponder, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native'
+import { Animated, Easing, PanResponder, Pressable, StyleSheet, Text, View, useWindowDimensions, Image } from 'react-native'
 import { buzz } from '../../lib/gamePrefs'
 import { fireRateLabel, gunRatings } from '../../lib/guns'
+import { gunArt } from '../../lib/gunArt'
 
 const SLOT_PX = 92 // horizontal drag per slot
 const STEP_DEG = 36 // arc angle between slots
@@ -174,7 +175,7 @@ function Wheel({ loadout, currentId, onPick, onClose }) {
             return (
               <Animated.View key={w.id} style={[st.item, { left: width / 2 - 44 }, style]} pointerEvents="none">
                 <View style={[st.disc, on && st.discOn, w.id === currentId && st.discCurrent]}>
-                  <Text style={st.icon} allowFontScaling={false}>{w.icon}</Text>
+                  <Image source={gunArt(w.id)} style={st.img} resizeMode="contain" />
                 </View>
                 <Text style={[st.itemName, on && { color: '#fff' }]} numberOfLines={1}>{w.name}</Text>
               </Animated.View>
@@ -220,5 +221,6 @@ const st = StyleSheet.create({
   discOn: { borderColor: GOLD, backgroundColor: 'rgba(255,201,77,0.18)' },
   discCurrent: { borderStyle: 'dashed' },
   icon: { fontSize: 32 },
+  img: { width: '86%', height: '52%' },
   itemName: { marginTop: 4, fontSize: 10, fontWeight: '700', color: 'rgba(255,255,255,0.7)', maxWidth: 88, textAlign: 'center' },
 })

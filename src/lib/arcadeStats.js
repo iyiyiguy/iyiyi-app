@@ -153,6 +153,20 @@ export async function loadArcadeStats() {
   }
 }
 
+/** Wipe the signed-in player's arcade progress (coins, guns, UAVs) back to a fresh start. */
+export async function resetArcadeStats() {
+  const run = async () => {
+    const key = await storageKey()
+    try { await AsyncStorage.removeItem(key) } catch {}
+    cache = defaultState()
+    cacheKey = key
+    listeners.forEach((l) => { try { l(cache) } catch {} })
+  }
+  const p = queue.then(run, run)
+  queue = p.catch(() => {})
+  return p
+}
+
 /** Subscribe to stat changes; returns an unsubscribe function. */
 export function subscribeArcadeStats(listener) {
   listeners.add(listener)

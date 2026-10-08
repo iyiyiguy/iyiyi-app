@@ -43,6 +43,7 @@ const BENEFITS = [
 // Store errors can arrive as a raw JSON string ({"message":"purchase-verification-failed",...});
 // never show that to people.
 function friendlyError(e, fallback) {
+  if (e?.userFacing && e?.message) return e.message
   let msg = e?.message
   try { if (typeof msg === 'string' && msg.trim().startsWith('{')) msg = JSON.parse(msg).message } catch {}
   if (!msg || /verif|receipt|^[a-z-]+$/i.test(msg)) return fallback
@@ -107,7 +108,17 @@ export default function SubscriptionScreen({ navigation, onClose }) {
     if (!res.ok) {
       const detail = await res.json().catch(() => null)
       console.warn('subscription/activate failed', res.status, detail)
-      throw new Error(translate(strings, 'err_verify'))
+      const reason = String(detail?.error || detail?.message || `HTTP ${res.status}`)
+      if (/no active subscription|not active/i.test(reason)) {
+        const err = new Error(translate(strings, 'err_expired'))
+        err.code = 'expired'
+        err.userFacing = true
+        throw err
+      }
+      // Keep the server's reason visible so a failure can be diagnosed from a screenshot.
+      const err = new Error(`${translate(strings, 'err_verify')} (${reason.replace(/^Receipt verification failed:\s*/i, '').slice(0, 80)})`)
+      err.userFacing = true
+      throw err
     }
     await loadCurrent()
     logSubscriptionPurchase(payload.tier, PRICE_USD[payload.tier] ?? 0)

@@ -14,6 +14,7 @@ import {
 import { UavBalancePill, openArcadeStore } from '../games/UavStore'
 import { font } from '../theme'
 import { avatarSource } from '../lib/avatarSource'
+import { gunArt } from '../lib/gunArt'
 
 // The signed-in player's arcade profile: their account basics plus real local stats.
 export default function PlayerProfileScreen({ navigation }) {
@@ -97,7 +98,7 @@ export default function PlayerProfileScreen({ navigation }) {
             <SectionHeader title="Loadout" />
             <ArcadeCard glow={AC.glowHot}>
               <View style={styles.row}>
-                <LinearGradient colors={['#ff5d6c', '#7a1430']} style={styles.gunIcon}><Text style={{ fontSize: 30 }}>{gun.icon}</Text></LinearGradient>
+                <LinearGradient colors={['#ff5d6c', '#7a1430']} style={styles.gunIcon}><Image source={gunArt(gun)} style={{ width: '92%', height: '60%' }} resizeMode="contain" /></LinearGradient>
                 <View style={{ flex: 1, minWidth: 0 }}>
                   <Text style={arcadeText.label}>Equipped for Laser Tag</Text>
                   <Text style={styles.cardTitle} numberOfLines={1}>{gun.name}</Text>

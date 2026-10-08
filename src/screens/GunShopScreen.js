@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { View, Text, Pressable, StyleSheet, ScrollView, Alert, Modal, useWindowDimensions } from 'react-native'
+import { View, Text, Pressable, StyleSheet, ScrollView, Alert, Modal, Image, useWindowDimensions } from 'react-native'
 import { useFocusEffect } from '@react-navigation/native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { LinearGradient } from 'expo-linear-gradient'
@@ -18,6 +18,8 @@ import { useUavInventory } from '../lib/uav'
 import { UavShopCard } from '../games/laser/Uav'
 import { UavBalancePill, openArcadeStore } from '../games/UavStore'
 import { fetchGunProducts, purchaseGun, restoreGunPurchases, isUserCancelled } from '../lib/iap'
+import { gunArt } from '../lib/gunArt'
+import { isReviewAccount } from '../lib/reviewAccount'
 
 // Kept for existing importers (e.g. the Laser Tag lobby).
 export { GUNS }
@@ -25,10 +27,8 @@ export { GUNS }
 const FIRE_MODE = { single: 'Semi-auto', burst: 'Burst', automatic: 'Full-auto' }
 
 // The Arcade Shop (Armory): buy Laser Tag weapons with real money (one Non-Consumable In-App
-// Purchase per gun, lib/iap.js) or with arcade coins earned by playing, then equip one. UAV
-// packs are consumable In-App Purchases (lib/uav.js). Where the store has no price for a gun
-// (e.g. not set up on Google Play yet) only the coin option shows. Optional route params (legacy):
-// { onGunSelected(gunId), selectedGunId }.
+// Purchase per gun, lib/iap.js), then equip one. UAV packs are consumable In-App Purchases
+// (lib/uav.js). Optional route params (legacy): { onGunSelected(gunId), selectedGunId }.
 export default function GunShopScreen({ navigation, route }) {
   const { onGunSelected } = route?.params || {}
   const insets = useArcadeInsets()
@@ -54,6 +54,8 @@ export default function GunShopScreen({ navigation, route }) {
       const p = await fetchGunProducts()
       if (alive) setPrices(p)
       // Re-grant any gun bought with money on this account (new phone, reinstall, interrupted buy).
+      // Not for the App Review demo account, which is wiped on every sign-out.
+      if (await isReviewAccount()) return
       restoreGunPurchases().then((ids) => { if (ids.length) loadArcadeStats().then((x) => alive && setStats(x)) })
     })()
     return () => { alive = false }
@@ -138,76 +140,12 @@ export default function GunShopScreen({ navigation, route }) {
     if (busy) return
     if (owns(gun)) { equip(gun); return }
     const price = prices[gun.id]
-    if (price) {
-      buzz('medium')
-      const canCoins = points >= gun.unlockPoints
-      Alert.alert(`Unlock ${gun.name}`, canCoins ? `Buy it for ${price}, or use ${gun.unlockPoints.toLocaleString()} of your coins.` : `Buy it for ${price}. (Or earn ${gun.unlockPoints.toLocaleString()} coins by playing.)`, [
-        { text: 'Cancel', style: 'cancel' },
-        ...(canCoins ? [{ text: `Use ${gun.unlockPoints.toLocaleString()} coins`, onPress: () => buyWithCoins(gun) }] : []),
-        { text: `Buy for ${price}`, onPress: () => buyWithMoney(gun) },
-      ])
-      return
-    }
-    buyWithCoinsFlow(gun)
-  }
-
-  const buyWithCoins = async (gun) => {
-    setBusy(true)
-    try {
-      const res = await unlockGun(gun.id)
-      if (res.ok) await afterUnlock(gun, `${gun.name} unlocked & equipped`)
-      else {
-        buzz('error')
-        Alert.alert('Not enough coins', `You need ${(res.needed ?? gun.unlockPoints).toLocaleString()} more coins.`)
-      }
-    } catch {
-      buzz('error')
-      Alert.alert('Purchase failed', 'Something went wrong. Your coins weren’t spent — please try again.')
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  const buyWithCoinsFlow = (gun) => {
-    if (points < gun.unlockPoints) {
-      buzz('error')
-      Alert.alert(
-        'Not enough coins',
-        `${gun.name} costs ${gun.unlockPoints.toLocaleString()} coins. You have ${points.toLocaleString()} — ${(gun.unlockPoints - points).toLocaleString()} to go. Earn coins by playing any arcade game.`,
-      )
+    if (!price) {
+      Alert.alert('Not available yet', `${gun.name} isn’t available in the store right now. Please try again later.`)
       return
     }
     buzz('medium')
-    Alert.alert('Confirm purchase', `Buy ${gun.name} for ${gun.unlockPoints.toLocaleString()} coins?\n\nBalance after: ${(points - gun.unlockPoints).toLocaleString()} coins.`, [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Buy & equip',
-        onPress: async () => {
-          setBusy(true)
-          try {
-            const res = await unlockGun(gun.id)
-            if (res.ok) {
-              buzz('success')
-              await setEquippedGun(gun.id)
-              setToast(`${gun.name} unlocked & equipped`)
-              setDetail(null)
-              if (onGunSelected) {
-                onGunSelected(gun.id)
-                navigation.goBack()
-              }
-            } else {
-              buzz('error')
-              Alert.alert('Not enough coins', `You need ${(res.needed ?? gun.unlockPoints).toLocaleString()} more coins.`)
-            }
-          } catch {
-            buzz('error')
-            Alert.alert('Purchase failed', 'Something went wrong. Your coins weren’t spent — please try again.')
-          } finally {
-            setBusy(false)
-          }
-        },
-      },
-    ])
+    buyWithMoney(gun)
   }
 
   const act = (gun) => (owns(gun) ? equip(gun) : buy(gun))
@@ -226,7 +164,6 @@ export default function GunShopScreen({ navigation, route }) {
             </View>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
               <UavBalancePill balance={uav.balance} owner={uav.owner || owner} onPress={() => { buzz('select'); openArcadeStore(navigation) }} />
-              <CoinPill value={stats ? points : null} compact />
             </View>
           </View>
 
@@ -240,7 +177,7 @@ export default function GunShopScreen({ navigation, route }) {
           {/* Loadout */}
           <Glass scheme="dark" radius={24} shadow={false} style={styles.loadout}>
             <LinearGradient colors={rarityGradient(equippedGun)} style={styles.loadoutIcon}>
-              <Text style={styles.loadoutGlyph}>{equippedGun.icon}</Text>
+              <Image source={gunArt(equippedGun)} style={styles.loadoutImg} resizeMode="contain" />
             </LinearGradient>
             <View style={{ flex: 1 }}>
               <Text style={arcadeText.label}>Equipped for Laser Tag</Text>
@@ -262,9 +199,9 @@ export default function GunShopScreen({ navigation, route }) {
               <LinearGradient colors={rarityGradient(g)} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[styles.feat, { width: featW }]}>
                 <View style={styles.featGlow} />
                 <RarityTag gun={g} light />
-                <Text style={styles.featGlyph} allowFontScaling={false}>{g.icon}</Text>
-                <Text style={styles.featName}>{g.name}</Text>
-                <Text style={styles.featDesc} numberOfLines={1}>{g.description}</Text>
+                <Image source={gunArt(g)} style={styles.featImg} resizeMode="contain" />
+                <Text style={styles.featName} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>{g.name}</Text>
+                <Text style={styles.featDesc} numberOfLines={2}>{g.description}</Text>
                 <View style={styles.featFoot}>
                   <PriceTag gun={g} price={prices[g.id]} owned={owns(g)} equipped={equippedGun.id === g.id} light />
                   <Ionicons name="arrow-forward-circle" size={28} color="#fff" />
@@ -282,10 +219,10 @@ export default function GunShopScreen({ navigation, route }) {
 
         <View style={styles.pad}>
           {list.map((g) => (
-            <ItemCard key={g.id} gun={g} price={prices[g.id]} owned={owns(g)} equipped={equippedGun.id === g.id} affordable={!!prices[g.id] || points >= g.unlockPoints} busy={busy} onOpen={() => { buzz('select'); setDetail(g) }} onAct={() => act(g)} />
+            <ItemCard key={g.id} gun={g} price={prices[g.id]} owned={owns(g)} equipped={equippedGun.id === g.id} affordable={!!prices[g.id]} busy={busy} onOpen={() => { buzz('select'); setDetail(g) }} onAct={() => act(g)} />
           ))}
           {list.length === 0 && <Text style={[arcadeText.caption, { textAlign: 'center', marginTop: 20 }]}>Nothing here yet.</Text>}
-          <Text style={styles.footer}>Unlock guns with an in-app purchase or with coins earned by playing — wins and higher difficulties pay more.</Text>
+          <Text style={styles.footer}>Each gun is a one-time purchase and stays unlocked on your Apple ID or Google account.</Text>
           <Pressable onPress={restore} disabled={busy} hitSlop={8} accessibilityRole="button" style={{ alignSelf: 'center', marginTop: 10 }}>
             <Text style={[arcadeText.caption, { color: AC.text, fontWeight: '700' }]}>Restore Purchases</Text>
           </Pressable>
@@ -296,9 +233,7 @@ export default function GunShopScreen({ navigation, route }) {
         gun={detail}
         owned={detail ? owns(detail) : false}
         equipped={detail ? equippedGun.id === detail.id : false}
-        points={points}
         price={detail ? prices[detail.id] : null}
-        onCoins={() => detail && buyWithCoins(detail)}
         onMoney={() => detail && buyWithMoney(detail)}
         busy={busy}
         onClose={() => setDetail(null)}
@@ -340,20 +275,8 @@ function PriceTag({ gun, price, owned, equipped, light }) {
   if (equipped) return <Text style={[styles.price, { color: light ? '#fff' : AC.live }]}>✓ Equipped</Text>
   if (owned) return <Text style={[styles.price, { color: light ? '#fff' : AC.text }]}>Owned</Text>
   if (!gun.unlockPoints) return <Text style={[styles.price, { color: light ? '#fff' : AC.text }]}>Free</Text>
-  if (price) {
-    return (
-      <View style={styles.priceRow}>
-        <Text style={[styles.price, { color: light ? '#fff' : AC.gold }]}>{price}</Text>
-        <Text style={[styles.price, { color: light ? 'rgba(255,255,255,0.75)' : AC.text, fontSize: 12, marginLeft: 6 }]}>or ◆ {gun.unlockPoints.toLocaleString()}</Text>
-      </View>
-    )
-  }
-  return (
-    <View style={styles.priceRow}>
-      <View style={styles.coinDot}><Text style={styles.coinGlyph}>◆</Text></View>
-      <Text style={[styles.price, { color: light ? '#fff' : AC.gold }]}>{gun.unlockPoints.toLocaleString()}</Text>
-    </View>
-  )
+  if (price) return <Text style={[styles.price, { color: light ? '#fff' : AC.gold }]}>{price}</Text>
+  return <Text style={[styles.price, { color: light ? 'rgba(255,255,255,0.75)' : AC.muted, fontSize: 13 }]}>Coming soon</Text>
 }
 
 function StatBar({ label, value, color }) {
@@ -386,7 +309,7 @@ function ItemCard({ gun, price, owned, equipped, affordable, busy, onOpen, onAct
       <Glass scheme="dark" radius={24} shadow={false} style={[styles.item, equipped && styles.itemEquipped]}>
         <View style={styles.itemHead}>
           <LinearGradient colors={rarityGradient(gun)} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.itemIcon}>
-            <Text style={[styles.itemGlyph, !owned && { opacity: 0.8 }]} allowFontScaling={false}>{gun.icon}</Text>
+            <Image source={gunArt(gun)} style={styles.itemImg} resizeMode="contain" />
             {!owned && <View style={styles.lock}><Ionicons name="lock-closed" size={11} color="#fff" /></View>}
           </LinearGradient>
           <View style={{ flex: 1 }}>
@@ -397,6 +320,7 @@ function ItemCard({ gun, price, owned, equipped, affordable, busy, onOpen, onAct
               <RarityTag gun={gun} />
               <Text style={styles.itemMeta} numberOfLines={1}>{FIRE_MODE[gun.fireMode]} · {fireRateLabel(gun)}{gun.free ? ' · Free' : ''}</Text>
             </View>
+            <Text style={styles.itemDesc}>{gun.description}</Text>
           </View>
         </View>
         <Bars gun={gun} />
@@ -415,7 +339,7 @@ function ItemCard({ gun, price, owned, equipped, affordable, busy, onOpen, onAct
   )
 }
 
-function ItemSheet({ gun, owned, equipped, points, price, onCoins, onMoney, busy, onClose, onAct, bottom }) {
+function ItemSheet({ gun, owned, equipped, price, onMoney, busy, onClose, onAct, bottom }) {
   return (
     <Modal visible={!!gun} transparent animationType="slide" onRequestClose={onClose}>
       <Pressable style={styles.backdrop} onPress={onClose} accessibilityLabel="Close" />
@@ -424,7 +348,7 @@ function ItemSheet({ gun, owned, equipped, points, price, onCoins, onMoney, busy
           <Glass scheme="dark" radius={30} strong style={styles.sheet}>
             <LinearGradient colors={rarityGradient(gun)} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.sheetArt}>
               <View style={styles.featGlow} />
-              <Text style={styles.sheetGlyph} allowFontScaling={false}>{gun.icon}</Text>
+              <Image source={gunArt(gun)} style={styles.sheetImg} resizeMode="contain" />
               <View style={{ position: 'absolute', top: 14, left: 14 }}><RarityTag gun={gun} light /></View>
               <Pressable onPress={onClose} hitSlop={10} style={styles.sheetClose} accessibilityRole="button" accessibilityLabel="Close">
                 <Ionicons name="close" size={20} color="#fff" />
@@ -445,23 +369,11 @@ function ItemSheet({ gun, owned, equipped, points, price, onCoins, onMoney, busy
               ) : owned ? (
                 <PlayButton title="Equip" icon="flash" onPress={onAct} busy={busy} />
               ) : (
-                <>
-                  {price ? (
-                    <View style={{ marginBottom: 10 }}>
-                      <PlayButton title={`Buy for ${price}`} icon="cart" onPress={onMoney} busy={busy} colors={['#ffc94d', '#ff8a3c']} />
-                    </View>
-                  ) : null}
-                  <PlayButton
-                    title={`${price ? 'Or use' : 'Buy for'} ${gun.unlockPoints.toLocaleString()} coins`}
-                    icon="cart"
-                    onPress={price ? onCoins : onAct}
-                    busy={busy}
-                    colors={points >= gun.unlockPoints ? (price ? ['#6b7cff', '#8f5bff'] : ['#ffc94d', '#ff8a3c']) : ['#4a4f6a', '#363a52']}
-                  />
-                  {points < gun.unlockPoints && (
-                    <Text style={[arcadeText.caption, { textAlign: 'center', marginTop: 8 }]}>{(gun.unlockPoints - points).toLocaleString()} more coins needed</Text>
-                  )}
-                </>
+                price ? (
+                  <PlayButton title={`Buy for ${price}`} icon="cart" onPress={onMoney} busy={busy} colors={['#ffc94d', '#ff8a3c']} />
+                ) : (
+                  <GhostButton title="Coming soon" icon="time-outline" disabled />
+                )
               )}
             </View>
           </Glass>
@@ -490,11 +402,11 @@ const styles = StyleSheet.create({
   ownerText: { flex: 1, fontSize: 13, ...font.bold, color: '#3a2200' },
   loadout: { flexDirection: 'row', alignItems: 'center', gap: 14, padding: 14, marginTop: 16 },
   loadoutIcon: { width: 60, height: 60, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
-  loadoutGlyph: { fontSize: 32 },
+  loadoutImg: { width: 54, height: 30 },
   loadoutName: { fontSize: 18, ...font.heavy, color: AC.text, marginVertical: 2 },
-  feat: { height: 250, borderRadius: 28, padding: 18, overflow: 'hidden' },
+  feat: { height: 280, borderRadius: 28, padding: 18, overflow: 'hidden' },
   featGlow: { position: 'absolute', width: 240, height: 240, borderRadius: 120, right: -60, top: -60, backgroundColor: 'rgba(255,255,255,0.16)' },
-  featGlyph: { fontSize: 76, alignSelf: 'center', marginTop: 4 },
+  featImg: { width: '100%', height: 110, marginTop: 6 },
   featName: { fontSize: 22, ...font.heavy, color: '#fff', marginTop: 6 },
   featDesc: { fontSize: 13, color: 'rgba(255,255,255,0.85)' },
   featFoot: { position: 'absolute', left: 18, right: 18, bottom: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
@@ -509,10 +421,11 @@ const styles = StyleSheet.create({
   itemEquipped: { borderWidth: 1.5, borderColor: AC.live },
   itemHead: { flexDirection: 'row', alignItems: 'center', gap: 14 },
   itemIcon: { width: 58, height: 58, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
-  itemGlyph: { fontSize: 30 },
+  itemImg: { width: 54, height: 30 },
   lock: { position: 'absolute', right: -4, bottom: -4, width: 20, height: 20, borderRadius: 10, backgroundColor: 'rgba(0,0,0,0.75)', alignItems: 'center', justifyContent: 'center' },
   itemName: { fontSize: 17, ...font.bold, color: AC.text, flexShrink: 1 },
   itemMeta: { fontSize: 12, color: AC.muted },
+  itemDesc: { fontSize: 13, color: AC.text, opacity: 0.85, marginTop: 6, lineHeight: 18 },
   itemFoot: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   equippedPill: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 14, backgroundColor: 'rgba(47,220,143,0.16)' },
   equippedText: { fontSize: 13, ...font.bold, color: AC.live },
@@ -525,7 +438,7 @@ const styles = StyleSheet.create({
   sheetWrap: { flex: 1, justifyContent: 'flex-end', paddingHorizontal: 10 },
   sheet: {},
   sheetArt: { height: 180, alignItems: 'center', justifyContent: 'center', overflow: 'hidden', borderTopLeftRadius: 30, borderTopRightRadius: 30 },
-  sheetGlyph: { fontSize: 96 },
+  sheetImg: { width: '86%', height: 140 },
   sheetClose: { position: 'absolute', top: 12, right: 12, width: 32, height: 32, borderRadius: 16, backgroundColor: 'rgba(0,0,0,0.35)', alignItems: 'center', justifyContent: 'center' },
   specs: { flexDirection: 'row', gap: 8, marginTop: 16, marginBottom: 18 },
   spec: { flex: 1, alignItems: 'center', paddingVertical: 10, borderRadius: 14, backgroundColor: AC.card },

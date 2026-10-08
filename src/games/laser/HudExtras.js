@@ -3,12 +3,13 @@
 // Views (never native Modals) so they can't get stuck, and every one of them swallows
 // touches so a tap on the HUD never fires the gun.
 import React, { memo, useEffect, useRef, useState } from 'react'
-import { Animated, Easing, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
+import { Animated, Easing, Pressable, ScrollView, StyleSheet, Text, View, Image } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { TEAMS } from '../../lib/multiplayer'
 import { buzz } from '../../lib/gamePrefs'
 import { playSfx } from '../../lib/gunAudio'
 import { WeaponSpinWheel } from './WeaponSpinWheel'
+import { gunArt } from '../../lib/gunArt'
 
 const hudShadow = { textShadowColor: 'rgba(0,0,0,0.85)', textShadowRadius: 4, textShadowOffset: { width: 0, height: 1 } }
 const W = '#fff'
@@ -32,7 +33,7 @@ export const WeaponChip = memo(function WeaponChip({ weapon, count, onWheel, max
       accessibilityRole="button"
       accessibilityLabel={`Weapon: ${weapon?.name}. Tap to choose a weapon`}
     >
-      <Text style={s.chipIcon}>{weapon?.icon}</Text>
+      <Image source={gunArt(weapon?.id)} style={s.chipImg} resizeMode="contain" />
       <View style={{ flexShrink: 1 }}>
         <Text style={s.chipName} numberOfLines={1}>{weapon?.name}</Text>
         <Text style={s.chipSub} numberOfLines={1}>{weapon?.automatic ? 'AUTO' : weapon?.shotsPerClick > 1 ? 'BURST' : 'SEMI'} · ∞{count > 1 ? `  ·  ${count} guns ◎` : ''}</Text>
@@ -377,6 +378,7 @@ const s = StyleSheet.create({
   close: { width: 34, height: 34, borderRadius: 17, backgroundColor: 'rgba(255,255,255,0.14)', alignItems: 'center', justifyContent: 'center' },
   chip: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 18, backgroundColor: 'rgba(0,0,0,0.55)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.25)', maxWidth: 210 },
   chipIcon: { fontSize: 24 },
+  chipImg: { width: 44, height: 24 },
   chipName: { fontSize: 13, fontWeight: '800', color: W, maxWidth: 140 },
   chipSub: { fontSize: 10, fontWeight: '700', color: GOLD, letterSpacing: 0.5 },
   wheelCenter: { flex: 1, alignItems: 'center', justifyContent: 'center' },

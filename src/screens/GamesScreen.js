@@ -187,7 +187,7 @@ export default function GamesScreen({ navigation }) {
               <GridCard key={g.id} game={g} width={gridW} live={liveFor(g)} stats={statsFor(g.id)} onPress={() => openGame(g)} />
             ))}
           </View>
-          <Text style={styles.footer}>Earn coins by playing. Spend them on Laser Tag gear in the Shop — no real money, ever.</Text>
+          <Text style={styles.footer}>Get Laser Tag guns and UAVs in the Shop.</Text>
         </View>
       </ScrollView>
 
@@ -221,7 +221,10 @@ export default function GamesScreen({ navigation }) {
           </Pressable>
           <View style={styles.topActions}>
             <UavBalancePill balance={uavInv.balance} owner={uavInv.owner} onPress={() => openArcadeStore(navigation)} />
-            <CoinPill value={stats ? stats.points : null} compact onPress={() => navigation.navigate('GunShop')} />
+            <Pressable onPress={() => navigation.navigate('GunShop')} style={styles.shopPill} accessibilityRole="button" accessibilityLabel="Open the shop">
+              <Ionicons name="bag-handle" size={15} color="#fff" />
+              <Text style={styles.shopPillText}>Shop</Text>
+            </Pressable>
             <IconCircle icon={searchOpen ? 'close' : 'search'} label="Search games" onPress={() => { setSearchOpen((v) => !v); if (searchOpen) setQuery('') }} />
           </View>
         </View>
@@ -325,6 +328,11 @@ function QuickTile({ icon, label, colors, onPress }) {
 }
 
 const styles = StyleSheet.create({
+  shopPill: {
+    flexDirection: 'row', alignItems: 'center', gap: 5, height: 34, paddingHorizontal: 12, borderRadius: 17,
+    backgroundColor: '#1f9a86', borderWidth: 1, borderColor: 'rgba(255,255,255,0.22)',
+  },
+  shopPillText: { color: '#fff', fontWeight: '800', fontSize: 13 },
   screen: { flex: 1, backgroundColor: AC.bg[0] },
   pad: { paddingHorizontal: 20 },
   center: { alignItems: 'center', justifyContent: 'center' },

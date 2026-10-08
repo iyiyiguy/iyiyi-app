@@ -581,7 +581,7 @@ export function LaserTagGame({ room, onExit }) {
     buzz('medium')
     if (id === weaponId) return
     selectWeapon(id)
-    flash(`${w.icon} ${w.name}`, true)
+    flash(`${w.name}`, true)
   }, [weaponId, selectWeapon, flash])
   const openWheel = useCallback(() => { trigger.stop(); buzz('medium'); setWheelOpen(true) }, [trigger])
 
