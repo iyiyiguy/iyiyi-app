@@ -21,6 +21,26 @@ export const SKUS = {
 
 let connected = false
 
+// Never let a store call hang the UI: resolves the call's result, or rejects after `ms`.
+function withTimeout(promise, ms, message = 'The App Store is taking too long to answer. Please try again.') {
+  let t
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => { t = setTimeout(() => reject(new Error(message)), ms) }),
+  ]).finally(() => clearTimeout(t))
+}
+
+const SLOW_STORE = 'The App Store is taking longer than usual. If you were charged, tap Restore Purchases and it will unlock.'
+
+// Purchases this Apple ID / Google account already owns (empty if the store doesn't answer quickly).
+async function ownedPurchases() {
+  try {
+    return (await withTimeout(RNIap.getAvailablePurchases(), 12000)) ?? []
+  } catch {
+    return []
+  }
+}
+
 export async function initIAP() {
   if (connected) return
   await RNIap.initConnection()
@@ -100,16 +120,17 @@ export async function fetchSubscriptionInfo(tier) {
 // purchase's own signed StoreKit transaction (JWS).
 async function receiptFor(purchase) {
   if (Platform.OS !== 'ios') return purchase.purchaseToken || purchase.purchaseTokenAndroid
+  // Each step is time-limited: a receipt refresh can sit waiting forever in the sandbox.
   try {
-    const r = await RNIap.getReceiptDataIOS()
+    const r = await withTimeout(RNIap.getReceiptDataIOS(), 8000)
     if (r) return r
   } catch {}
   try {
-    const r = await RNIap.requestReceiptRefreshIOS()
+    const r = await withTimeout(RNIap.requestReceiptRefreshIOS(), 12000)
     if (r) return r
   } catch {}
   try {
-    const r = await RNIap.getReceiptDataIOS()
+    const r = await withTimeout(RNIap.getReceiptDataIOS(), 5000)
     if (r) return r
   } catch {}
   const jws = purchase.purchaseToken || purchase.jwsRepresentationIOS
@@ -126,9 +147,21 @@ export const BACKEND_TIER = { pro: 'pro_all' }
 // confirmed and activated the tier. The transaction is only finished after the backend
 // accepts it, so a rejected receipt is never silently consumed.
 export async function purchaseSubscription(tier, verifyWithBackend) {
-  await initIAP()
+  await withTimeout(initIAP(), 15000)
   const sku = SKUS[tier]
-  const offers = Platform.OS === 'android' ? await androidOffers(sku) : undefined
+
+  // Already subscribed on this Apple ID (e.g. an earlier purchase whose activation failed)?
+  // The store won't sell it again and just shows "You're already subscribed", which used to
+  // leave the button spinning. Activate the existing subscription instead.
+  const owned = (await ownedPurchases()).find((p) => p?.productId === sku)
+  if (owned) {
+    const receipt = await receiptFor(owned)
+    await verifyWithBackend({ tier, platform: Platform.OS, productId: sku, receipt })
+    try { await RNIap.finishTransaction({ purchase: owned, isConsumable: false }) } catch {}
+    return
+  }
+
+  const offers = Platform.OS === 'android' ? await withTimeout(androidOffers(sku), 15000) : undefined
 
   return new Promise((resolve, reject) => {
     let settled = false
@@ -136,13 +169,20 @@ export async function purchaseSubscription(tier, verifyWithBackend) {
     const settle = (fn, value) => {
       if (settled) return
       settled = true
+      clearTimeout(timer)
       subscriptions.forEach((s) => s.remove())
       fn(value)
     }
+    // Never spin forever: a late purchase is picked up by Restore Purchases.
+    const timer = setTimeout(() => settle(reject, new Error(SLOW_STORE)), 120000)
 
     subscriptions.push(
       RNIap.purchaseUpdatedListener(async (purchase) => {
         if (purchase.productId !== sku) return
+        if (purchase.purchaseState === 'pending') {
+          settle(reject, new Error('Your purchase is waiting for approval. Pro turns on as soon as it goes through.'))
+          return
+        }
         try {
           const receipt = await receiptFor(purchase)
           await verifyWithBackend({ tier, platform: Platform.OS, productId: sku, receipt })
@@ -171,8 +211,8 @@ const SKU_TO_TIER = Object.fromEntries(Object.entries(SKUS).map(([tier, sku]) =>
 // purchases already owned by this Apple/Google account and re-activates
 // them server-side, without charging again.
 export async function restorePurchases(verifyWithBackend) {
-  await initIAP()
-  const purchases = (await RNIap.getAvailablePurchases()) ?? []
+  await withTimeout(initIAP(), 15000)
+  const purchases = (await withTimeout(RNIap.getAvailablePurchases(), 30000)) ?? []
 
   const restored = []
   for (const purchase of purchases) {
@@ -309,9 +349,9 @@ export async function fetchUavProduct() {
  */
 export async function purchaseUavPack(sku = UAV_SKU) {
   if (!isUavSku(sku)) throw new Error('Unknown pack.')
-  await initIAP()
+  await withTimeout(initIAP(), 15000)
   ensureUavListener()
-  const products = (await RNIap.fetchProducts({ skus: [sku], type: 'in-app' })) ?? []
+  const products = (await withTimeout(RNIap.fetchProducts({ skus: [sku], type: 'in-app' }), 15000)) ?? []
   if (!products.some((p) => p?.id === sku)) throw new Error('This pack isn’t available in the store yet. Please try again later.')
 
   return new Promise((resolve, reject) => {
@@ -332,7 +372,7 @@ export async function purchaseUavPack(sku = UAV_SKU) {
     }
     uavWaiters.add(waiter)
     // Never leave the UI spinning forever; a late purchase is still credited by the listener.
-    timer = setTimeout(() => settle(resolve, { status: 'unknown' }), 180000)
+    timer = setTimeout(() => settle(resolve, { status: 'unknown' }), 90000)
 
     RNIap.requestPurchase({
       request: {
@@ -388,8 +428,17 @@ export async function fetchGunProducts() {
 export async function purchaseGun(gunId) {
   const sku = gunSku(gunId)
   if (!GUN_BY_SKU[sku]) throw new Error('This gun is not sold in the store.')
-  await initIAP()
-  const products = (await RNIap.fetchProducts({ skus: [sku], type: 'in-app' })) ?? []
+  await withTimeout(initIAP(), 15000)
+
+  // Already bought on this Apple ID / Google account: unlock it straight away instead of
+  // asking the store to sell it again (which only shows "already purchased").
+  const owned = (await ownedPurchases()).find((p) => p?.productId === sku)
+  if (owned) {
+    await grantGunFromPurchase(owned)
+    return { status: 'purchased' }
+  }
+
+  const products = (await withTimeout(RNIap.fetchProducts({ skus: [sku], type: 'in-app' }), 15000)) ?? []
   if (!products.some((p) => p?.id === sku)) throw new Error('This gun isn’t available in the store yet. Please try again later.')
 
   return new Promise((resolve, reject) => {
@@ -402,7 +451,7 @@ export async function purchaseGun(gunId) {
       subs.forEach((s) => s.remove())
       fn(v)
     }
-    const timer = setTimeout(() => settle(resolve, { status: 'pending' }), 180000)
+    const timer = setTimeout(() => settle(resolve, { status: 'pending' }), 90000)
     subs.push(RNIap.purchaseUpdatedListener(async (purchase) => {
       if (purchase?.productId !== sku) return
       if (purchase.purchaseState === 'pending') { settle(resolve, { status: 'pending' }); return }

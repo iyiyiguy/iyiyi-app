@@ -65,10 +65,21 @@ export default function SubscriptionScreen({ navigation, onClose }) {
     const { data } = await supabase.auth.getSession()
     const session = data?.session
     if (!session?.access_token) throw new Error(translate(strings, 'err_sign_in'))
-    return fetch(`${API_URL}${path}`, {
-      ...options,
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}`, ...options.headers },
-    })
+    // Time-limited so a slow server can't leave the purchase button spinning.
+    const ctrl = new AbortController()
+    const timer = setTimeout(() => ctrl.abort(), 30000)
+    try {
+      return await fetch(`${API_URL}${path}`, {
+        ...options,
+        signal: ctrl.signal,
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}`, ...options.headers },
+      })
+    } catch (e) {
+      if (e?.name === 'AbortError') throw new Error('The server is taking too long. If you were charged, tap Restore Purchases.')
+      throw e
+    } finally {
+      clearTimeout(timer)
+    }
   }
 
   const loadCurrent = useCallback(async () => {
