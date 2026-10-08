@@ -84,8 +84,8 @@ export default function MyProfileScreen({ navigation }) {
 
   const [loadError, setLoadError] = useState(false)
   const [reloadKey, setReloadKey] = useState(0)
-  // Edit fields live behind "Edit profile" so your posts sit right under the header.
-  const [editOpen, setEditOpen] = useState(false)
+  // Edit profile is always shown (no drop-down); the header's Edit profile button jumps to it.
+  const editOpen = true
   const scrollRef = useRef(null)
   const editY = useRef(0)
   const scrollToEditOnLayout = useRef(false)
@@ -297,12 +297,11 @@ export default function MyProfileScreen({ navigation }) {
   }
 
   const toggleEdit = () => {
-    if (editOpen) {
-      setEditOpen(false)
-      return
+    try {
+      scrollRef.current?.scrollTo?.({ y: Math.max(0, editY.current - 12), animated: true })
+    } catch {
+      // Scrolling is a convenience.
     }
-    scrollToEditOnLayout.current = true
-    setEditOpen(true)
   }
 
   const deleteMedia = async (id) => {
@@ -380,12 +379,11 @@ export default function MyProfileScreen({ navigation }) {
       <View style={styles.headerActions}>
         <Pressable
           onPress={toggleEdit}
-          style={[styles.headerBtn, editOpen && styles.headerBtnActive]}
+          style={styles.headerBtn}
           accessibilityRole="button"
-          accessibilityState={{ expanded: editOpen }}
         >
-          <Ionicons name={editOpen ? 'chevron-up' : 'create-outline'} size={16} color={editOpen ? colors.ink : colors.text} />
-          <Text style={[styles.headerBtnText, editOpen && { color: colors.ink }]}>{editOpen ? t('doneEditing') : t('editProfile')}</Text>
+          <Ionicons name="create-outline" size={16} color={colors.text} />
+          <Text style={styles.headerBtnText}>{t('editProfile')}</Text>
         </Pressable>
         <Pressable onPress={shareProfile} style={styles.headerBtn} accessibilityRole="button">
           <Ionicons name="share-outline" size={16} color={colors.text} />
@@ -462,22 +460,23 @@ export default function MyProfileScreen({ navigation }) {
       )}
 
 
-      {/* ---- Edit profile (collapsed by default) ---- */}
-      <Pressable
-        onPress={toggleEdit}
+      {/* ---- Edit profile: always open, Save changes at the top ---- */}
+      <View
         style={styles.editToggle}
         onLayout={(e) => {
           editY.current = e?.nativeEvent?.layout?.y ?? 0
         }}
-        accessibilityRole="button"
-        accessibilityState={{ expanded: editOpen }}
       >
         <View style={{ flex: 1 }}>
           <Text style={type.body}>{t('editProfile')}</Text>
           <Text style={type.caption}>{t('editProfileSub')}</Text>
         </View>
-        <Ionicons name={editOpen ? 'chevron-up' : 'chevron-down'} size={18} color={colors.textMuted} />
-      </Pressable>
+        <Pressable onPress={save} disabled={saving || uploading} accessibilityRole="button" accessibilityLabel={t('saveChanges')}>
+          <LinearGradient colors={gradients.brand} style={styles.saveTop}>
+            <Text style={styles.saveTopText}>{saving ? t('saving') : t('saveChanges')}</Text>
+          </LinearGradient>
+        </Pressable>
+      </View>
 
       {editOpen ? (
         <View
@@ -823,6 +822,8 @@ const styles = StyleSheet.create({
   },
   postsCamera: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   postsCameraText: { color: colors.magenta, fontSize: 13, fontWeight: '700' },
+  saveTop: { paddingHorizontal: 16, paddingVertical: 9, borderRadius: radii.pill },
+  saveTopText: { color: colors.onBrand, fontWeight: '700', fontSize: 14 },
   editToggle: {
     flexDirection: 'row', alignItems: 'center', gap: 10,
     marginHorizontal: 20, marginBottom: 8, padding: 16, borderRadius: radii.lg,
