@@ -22,6 +22,7 @@ import ContentGrid from '../components/ContentGrid'
 import { fetchMyMedia, normalizeMediaItem, sortMediaNewest } from '../lib/myContent'
 import { useT } from '../i18n'
 import strings from '../i18n/strings/myProfile'
+import { avatarSource } from '../lib/avatarSource'
 
 const RECOMMENDED_TIERS = ['pro', 'premium', 'creator']
 
@@ -343,12 +344,12 @@ export default function MyProfileScreen({ navigation }) {
       <ScrollView ref={scrollRef} keyboardShouldPersistTaps="handled">
       {/* ---- Header: avatar, name, counts, actions ---- */}
       <LinearGradient colors={gradients.brandSubtle} style={styles.hero}>
-        <Image source={{ uri: profile.avatar_url }} style={styles.heroAvatar} />
+        <Image source={avatarSource(profile.avatar_url)} style={styles.heroAvatar} />
       </LinearGradient>
 
       <View style={styles.avatarWrap}>
         <Pressable onPress={pickAvatar} disabled={uploading} accessibilityRole="button" accessibilityLabel={t('changePhotoA11y')}>
-          <Image source={{ uri: profile.avatar_url }} style={styles.avatar} />
+          <Image source={avatarSource(profile.avatar_url)} style={styles.avatar} />
           <View style={styles.editBadge}>
             {uploading ? <ActivityIndicator size="small" color={colors.onBrand} /> : <Text style={{ fontSize: 16 }}>📷</Text>}
           </View>

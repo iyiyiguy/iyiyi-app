@@ -11,6 +11,7 @@ import { getMyUserId } from '../lib/profileNav'
 import { MP_GAMES } from '../lib/multiplayer'
 import { sendGameInvite } from '../lib/invites'
 import { inviteByText } from '../lib/textInvite'
+import { avatarSource } from '../lib/avatarSource'
 
 // "Invite" sheet: people within 150 ft (same lookup the camera uses), everyone you follow and
 // everyone who follows you. Each row sends an invite to that person's inbox.
@@ -93,7 +94,7 @@ export default function InvitePeopleSheet({ visible, onClose, gameId, code, excl
     const st = sent[u.id]
     return (
       <View key={key} style={styles.row}>
-        {u.avatar_url ? <Image source={{ uri: u.avatar_url }} style={styles.avatar} /> : <View style={styles.avatar} />}
+        {<Image source={avatarSource(u.avatar_url)} style={styles.avatar} />}
         <Text style={[type.body, { flex: 1 }]} numberOfLines={1}>{u.username ?? 'iYiYi user'}</Text>
         <GlassButton size="sm" variant={st === 'sent' ? 'glass' : 'primary'} disabled={st === 'sending' || st === 'sent'} onPress={() => invite(u)}>
           {st === 'sending' ? 'Sending…' : st === 'sent' ? 'Invited' : st === 'error' ? 'Retry' : 'Invite'}

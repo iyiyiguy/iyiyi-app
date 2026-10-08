@@ -9,6 +9,7 @@ import SearchField from '../components/SearchField'
 import { GuestLoginButton, useGuestPrompt } from '../components/GuestPrompt'
 import { supabase, API_URL } from '../lib/supabase'
 import { matchesTags, matchesSearch } from '../lib/tags'
+import { avatarSource } from '../lib/avatarSource'
 
 // Logged-out "Discover": popular public profiles (database function guest_recommended,
 // migration 070), same glass cards as the member Recommended tab. Tapping a card opens the
@@ -35,7 +36,7 @@ function GuestUserCard({ user, onPress, onFollow }) {
     <Pressable onPress={onPress} style={({ pressed }) => [{ flex: 1 }, pressed && { transform: [{ scale: 0.97 }] }]} accessibilityRole="button" accessibilityLabel={`Open ${user.username}'s profile`}>
       <GlassPanel radius={28} style={{ flex: 1 }}>
         <View style={styles.cardInner}>
-          <Image source={{ uri: user.avatar_url }} style={styles.avatar} />
+          <Image source={avatarSource(user.avatar_url)} style={styles.avatar} />
           <Text style={[type.body, { marginTop: 10, fontWeight: '700' }]} numberOfLines={1}>{user.username}</Text>
           <Text style={[type.caption, { marginTop: 1 }]} numberOfLines={1}>{stat}</Text>
           <View style={styles.cardFooter}>

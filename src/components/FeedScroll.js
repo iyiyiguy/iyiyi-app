@@ -4,6 +4,7 @@ import { colors, radii, type } from '../theme'
 import { post, del } from '../lib/api'
 import Bounce from './Bounce'
 import { useOpenProfile } from '../lib/profileNav'
+import { avatarSource } from '../lib/avatarSource'
 
 // One-post-per-row scrolling feed (as opposed to MasonryGrid's thumbnail grid) - each
 // item shows the owner, the full media, and an inline like/comment action row so you
@@ -37,7 +38,7 @@ export default function FeedScroll({ items, onOpen, onChange, onOpenProfile }) {
       {items.map((item, i) => (
         <View key={`${item.kind ?? 'm'}-${item.id ?? i}`} style={styles.card}>
           <Pressable style={styles.ownerRow} onPress={() => (item.owner_id ? openOwner(item.owner_id) : onOpen(i))} accessibilityRole="button">
-            {item.owner_avatar_url ? <Image source={{ uri: item.owner_avatar_url }} style={styles.avatar} /> : <View style={styles.avatar} />}
+            {<Image source={avatarSource(item.owner_avatar_url)} style={styles.avatar} />}
             <Text style={[type.body, { fontWeight: '600', flexShrink: 1 }]} numberOfLines={1}>{item.owner_username ?? (item.is_mine ? 'You' : '')}</Text>
             {item.is_mine ? <View style={styles.mineBadge}><Text style={styles.mineBadgeText}>You</Text></View> : null}
           </Pressable>

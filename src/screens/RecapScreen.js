@@ -8,6 +8,7 @@ import GlassPanel from '../components/GlassPanel'
 import { colors, radii, type } from '../theme'
 import { API_URL } from '../lib/supabase'
 import { fetchRecap } from '../lib/activityData'
+import { avatarSource } from '../lib/avatarSource'
 
 const RANGES = [
   { days: 7, label: 'This week' },
@@ -98,7 +99,7 @@ export default function RecapScreen({ navigation }) {
             <LinearGradient colors={['#ff2bd6', '#7a3cff', '#19e3ff']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.card}>
               <Text style={styles.brand}>iYiYi ✦ recap</Text>
               <View style={styles.who}>
-                {recap.avatar_url ? <Image source={{ uri: recap.avatar_url }} style={styles.avatar} /> : <View style={[styles.avatar, { backgroundColor: '#ffffff55' }]} />}
+                {<Image source={avatarSource(recap.avatar_url)} style={styles.avatar} />}
                 <Text style={styles.name}>@{recap.username ?? 'you'}</Text>
               </View>
 

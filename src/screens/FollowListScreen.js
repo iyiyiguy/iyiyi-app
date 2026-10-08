@@ -5,6 +5,7 @@ import GlassPanel from '../components/GlassPanel'
 import { colors, radii, type } from '../theme'
 import { apiJson } from '../lib/api'
 import { openProfile } from '../lib/profileNav'
+import { avatarSource } from '../lib/avatarSource'
 
 const TITLES = { followers: 'Followers', following: 'Following', requests: 'Follow Requests' }
 
@@ -48,7 +49,7 @@ export default function FollowListScreen({ route, navigation }) {
         renderItem={({ item }) => (
           <View style={styles.row}>
             <Pressable style={styles.rowInfo} onPress={() => openProfile(navigation, item.id)}>
-              <Image source={{ uri: item.avatar_url }} style={styles.avatar} />
+              <Image source={avatarSource(item.avatar_url)} style={styles.avatar} />
               <Text style={type.body}>{item.username}</Text>
             </Pressable>
             {mode === 'requests' && (

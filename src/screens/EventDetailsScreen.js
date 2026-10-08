@@ -21,6 +21,7 @@ import {
   getCategory, isUnlimited, formatEventWhen, formatDay, formatTime, defaultEnd, eventPlace, eventShareUrl,
 } from '../lib/events'
 import { addToCalendar } from '../lib/calendar'
+import { avatarSource } from '../lib/avatarSource'
 
 // A shareable event page: cover, title, date/time, location with mini-map + directions, host,
 // attendee avatars, Going/Interested RSVP, share link, add-to-calendar and (for hosts) invites.
@@ -382,8 +383,8 @@ export default function EventDetailsScreen({ navigation, route }) {
 function Avatar({ profile, size }) {
   const [failed, setFailed] = useState(false)
   const s = { width: size, height: size, borderRadius: size / 2 }
-  if (profile?.avatar_url && !failed) {
-    return <Image source={{ uri: profile.avatar_url }} style={[styles.avatar, s]} onError={() => setFailed(true)} />
+  if (!failed) {
+    return <Image source={avatarSource(profile.avatar_url)} style={[styles.avatar, s]} onError={() => setFailed(true)} />
   }
   const initial = (String(profile?.username || '?').trim()[0] || '?').toUpperCase()
   return (

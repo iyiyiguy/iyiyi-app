@@ -13,6 +13,7 @@ import { removeCameraTag } from '../lib/cameraApi'
 import { shareMedia } from '../lib/shareMedia'
 import { displayCity } from '../lib/photoLocation'
 import { useOpenProfile } from '../lib/profileNav'
+import { avatarSource } from '../lib/avatarSource'
 
 // Full-screen viewer for profile photos/videos with like, save, and comments.
 // items: [{ id, media_url, media_type, owner_id, owner_username, owner_avatar_url,
@@ -240,7 +241,7 @@ export default function ContentViewer({ visible, items, startIndex = 0, onClose,
                 accessibilityRole="button"
                 accessibilityLabel={current.owner_username ? `Open ${current.owner_username}'s profile` : 'Open profile'}
               >
-                {current.owner_avatar_url ? <Image source={{ uri: current.owner_avatar_url }} style={styles.ownerAvatar} /> : null}
+                {<Image source={avatarSource(current.owner_avatar_url)} style={styles.ownerAvatar} />}
                 <View style={styles.ownerText}>
                   {current.owner_username ? <Text style={styles.ownerName} numberOfLines={1} ellipsizeMode="tail">{current.owner_username}</Text> : null}
                   {displayCity(current.location_label) ? <Text style={styles.locationLabel} numberOfLines={1} ellipsizeMode="tail">📍 {displayCity(current.location_label)}</Text> : null}
@@ -367,7 +368,7 @@ function CommentsSheet({ media, onClose, onCountChange, onOpenProfile }) {
                 return (
                 <View key={c.id} style={styles.comment}>
                   <Pressable disabled={!authorId} onPress={() => onOpenProfile?.(authorId)} hitSlop={6}>
-                    {c.profiles?.avatar_url ? <Image source={{ uri: c.profiles.avatar_url }} style={styles.commentAvatar} /> : <View style={styles.commentAvatar} />}
+                    {c.profiles?.avatar_url ? <Image source={avatarSource(c.profiles.avatar_url)} style={styles.commentAvatar} /> : <View style={styles.commentAvatar} />}
                   </Pressable>
                   <View style={{ flex: 1 }}>
                     <Pressable disabled={!authorId} onPress={() => onOpenProfile?.(authorId)} hitSlop={6} style={{ alignSelf: 'flex-start' }}>

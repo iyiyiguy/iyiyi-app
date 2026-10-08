@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { View, Text, Image, Modal, Pressable, FlatList, ActivityIndicator, StyleSheet } from 'react-native'
 import { colors, radii, type } from '../theme'
 import { apiJson } from '../lib/api'
+import { avatarSource } from '../lib/avatarSource'
 
 // One button on a post opens this: who was picked ("Tagged in") and who else was just
 // nearby when it was shot ("Nearby"), each a tappable list into their profile.
@@ -24,7 +25,7 @@ export default function TaggedInSheet({ mediaId, visible, onClose, onOpenProfile
         <Text style={styles.sectionTitle}>{title} ({people.length})</Text>
         {people.map((p) => (
           <Pressable key={p.id} style={styles.row} onPress={() => onOpenProfile?.(p.id)}>
-            <Image source={{ uri: p.avatar_url }} style={styles.avatar} />
+            <Image source={avatarSource(p.avatar_url)} style={styles.avatar} />
             <Text style={type.body}>{p.username ?? 'iYiYi user'}</Text>
           </Pressable>
         ))}

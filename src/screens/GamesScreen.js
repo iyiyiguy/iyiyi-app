@@ -15,6 +15,7 @@ import {
 import { UavBalancePill, openArcadeStore } from '../games/UavStore'
 import { useUavInventory } from '../lib/uav'
 import { font } from '../theme'
+import { avatarSource } from '../lib/avatarSource'
 
 // The Arcade tab: a game hub. No back button — it's a bottom tab.
 export default function GamesScreen({ navigation }) {
@@ -197,7 +198,7 @@ export default function GamesScreen({ navigation }) {
           <Pressable onPress={() => navigation.navigate('PlayerProfile')} style={styles.player} accessibilityRole="button" accessibilityLabel="Your arcade profile">
             <View style={[styles.avatarRing, { borderColor: rank.color }]}>
               {me?.avatar ? (
-                <Image source={{ uri: me.avatar }} style={styles.avatar} />
+                <Image source={avatarSource(me.avatar)} style={styles.avatar} />
               ) : (
                 <LinearGradient colors={AC.play} style={[styles.avatar, styles.center]}>
                   <Text style={styles.avatarLetter}>{(me?.username || 'P').charAt(0).toUpperCase()}</Text>

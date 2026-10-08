@@ -23,6 +23,7 @@ import {
   DEFAULT_RADIUS_M, MILE_M, clampRadius, clearSafeZone, distanceM, formatRadius, loadSafeZone,
   offsetEast, releaseSafeZoneHide, saveSafeZone, subscribeSafeZone, updateSafeZonePresence,
 } from '../lib/safeZone'
+import { avatarSource } from '../lib/avatarSource'
 
 // Fabric (React Native's new architecture, on by default since SDK 52) is far
 // stricter than the old bridge about native view prop types — a marker or
@@ -1109,8 +1110,8 @@ function SelectedCard({ user, onClose, onOpen }) {
   return (
     <Glass radius={radii.lg} strong style={styles.selectedCard}>
       <View style={styles.selectedRow}>
-        {user.avatar_url ? (
-          <Image source={{ uri: user.avatar_url }} style={styles.selectedAvatar} />
+        {true ? (
+          <Image source={avatarSource(user.avatar_url)} style={styles.selectedAvatar} />
         ) : (
           <View style={[styles.selectedAvatar, styles.selectedAvatarEmpty]}><Text style={styles.selectedInitial}>{initial}</Text></View>
         )}

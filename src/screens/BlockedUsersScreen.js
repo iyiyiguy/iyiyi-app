@@ -3,6 +3,7 @@ import { View, Text, Image, FlatList, Pressable, StyleSheet, Alert } from 'react
 import BrandHeader from '../components/BrandHeader'
 import { colors, type } from '../theme'
 import { apiJson } from '../lib/api'
+import { avatarSource } from '../lib/avatarSource'
 
 export default function BlockedUsersScreen({ navigation }) {
   const [blocked, setBlocked] = useState([])
@@ -34,7 +35,7 @@ export default function BlockedUsersScreen({ navigation }) {
         contentContainerStyle={{ padding: 20 }}
         renderItem={({ item }) => (
           <View style={styles.row}>
-            <Image source={{ uri: item.avatar_url }} style={styles.avatar} />
+            <Image source={avatarSource(item.avatar_url)} style={styles.avatar} />
             <Text style={[type.body, { flex: 1 }]}>{item.username}</Text>
             <Pressable onPress={() => unblock(item.id)}>
               <Text style={{ color: colors.magenta }}>Unblock</Text>

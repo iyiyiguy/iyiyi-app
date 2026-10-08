@@ -6,6 +6,7 @@ import BrandHeader from '../components/BrandHeader'
 import { colors, font, radii, type } from '../theme'
 import { fetchActivity } from '../lib/activityData'
 import { openProfile } from '../lib/profileNav'
+import { avatarSource } from '../lib/avatarSource'
 
 const ICONS = {
   follow: { name: 'person-add', color: '#5b6cf0' },
@@ -105,7 +106,7 @@ export default function ActivityScreen({ navigation }) {
             >
               <View>
                 {item.avatar_url ? (
-                  <Image source={{ uri: item.avatar_url }} style={styles.avatar} />
+                  <Image source={avatarSource(item.avatar_url)} style={styles.avatar} />
                 ) : (
                   <View style={[styles.avatar, styles.avatarFallback]}><Ionicons name="person" size={20} color={colors.textFaint} /></View>
                 )}
@@ -119,7 +120,7 @@ export default function ActivityScreen({ navigation }) {
                 </Text>
                 <Text style={styles.time}>{ago(item.at)}</Text>
               </View>
-              {item.media_url ? <Image source={{ uri: item.media_url }} style={styles.thumb} /> : null}
+              {<Image source={{ uri: item.media_url }} style={styles.thumb} />}
             </Pressable>
           )
         }}

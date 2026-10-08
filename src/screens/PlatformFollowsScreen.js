@@ -8,6 +8,7 @@ import { colors, radii, type } from '../theme'
 import { apiJson } from '../lib/api'
 import { PLATFORM_LABELS } from '../lib/socialLinks'
 import { openProfile } from '../lib/profileNav'
+import { avatarSource } from '../lib/avatarSource'
 
 const TABS = [
   { key: 'mine', label: 'Profiles I followed' },
@@ -72,7 +73,7 @@ export default function PlatformFollowsScreen({ navigation }) {
         onRefresh={() => load(tab)}
         renderItem={({ item }) => (
           <Pressable style={styles.row} onPress={() => openProfile(navigation, item.id, item.avatar_url ?? null)}>
-            <Image source={{ uri: item.avatar_url }} style={styles.avatar} />
+            <Image source={avatarSource(item.avatar_url)} style={styles.avatar} />
             <View style={{ flex: 1 }}>
               <Text style={type.body}>{item.username}</Text>
               <Text style={type.caption}>

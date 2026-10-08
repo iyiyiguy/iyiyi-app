@@ -5,6 +5,7 @@ import BrandHeader from '../components/BrandHeader'
 import { colors, radii, type } from '../theme'
 import { apiJson } from '../lib/api'
 import { openProfile } from '../lib/profileNav'
+import { avatarSource } from '../lib/avatarSource'
 
 export default function ViewersScreen({ navigation }) {
   const [viewers, setViewers] = useState([])
@@ -34,7 +35,7 @@ export default function ViewersScreen({ navigation }) {
         onRefresh={load}
         renderItem={({ item }) => (
           <Pressable style={styles.row} onPress={() => openProfile(navigation, item.id)}>
-            <Image source={{ uri: item.avatar_url }} style={styles.avatar} />
+            <Image source={avatarSource(item.avatar_url)} style={styles.avatar} />
             <View style={{ flex: 1 }}>
               <Text style={type.body}>{item.username}</Text>
               <Text style={type.caption}>

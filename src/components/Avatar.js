@@ -1,10 +1,10 @@
 import { useState } from 'react'
 import { Image as RNImage, StyleSheet, Text, View } from 'react-native'
 import { Image } from 'expo-image'
-import { LinearGradient } from 'expo-linear-gradient'
 
 // Profile picture with a proper fallback: when there's no photo (or it fails to load) show the
-// first letter of the name on a soft brand gradient instead of a blank dark box.
+// iYiYi default picture instead of a blank dark box.
+const DEFAULT_AVATAR = require('../../assets/default-avatar.jpg')
 const PALETTES = [
   ['#6b7cff', '#b39bff'],
   ['#ff6fb5', '#ff9fd0'],
@@ -34,9 +34,7 @@ export default function Avatar({ uri, name = '', size = 48, radius, style, fill 
   return (
     <View style={[box, { borderRadius: r, overflow: 'hidden', backgroundColor: 'rgba(127,140,180,0.18)' }, style]}>
       {!showImage ? (
-        <LinearGradient colors={paletteFor(name)} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[StyleSheet.absoluteFill, styles.center]}>
-          <Text style={[styles.letter, { fontSize: fill ? 40 : Math.max(12, size * 0.42) }]}>{letter}</Text>
-        </LinearGradient>
+        <RNImage source={DEFAULT_AVATAR} style={StyleSheet.absoluteFill} resizeMode="cover" accessibilityLabel={letter} />
       ) : null}
       {showImage && stage === 1 ? (
         <RNImage source={{ uri }} style={StyleSheet.absoluteFill} resizeMode={contentFit === 'contain' ? 'contain' : 'cover'} onError={() => setStage(2)} />

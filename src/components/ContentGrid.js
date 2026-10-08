@@ -2,6 +2,7 @@ import { View, Text, Image, Pressable, StyleSheet, ActivityIndicator, useWindowD
 import { VideoView, useVideoPlayer } from 'expo-video'
 import { colors, radii } from '../theme'
 import { useOpenProfile } from '../lib/profileNav'
+import { avatarSource } from '../lib/avatarSource'
 
 // 3-column grid of photo/video tiles. items need { id, media_url, media_type,
 // owner_avatar_url? }. Videos show a play badge over a dark tile.
@@ -71,9 +72,9 @@ export default function ContentGrid({
           {showOwner && m.owner_avatar_url ? (
             m.owner_id ? (
               <Pressable onPress={() => openOwner(m.owner_id)} hitSlop={8} style={styles.ownerDotWrap} accessibilityRole="button">
-                <Image source={{ uri: m.owner_avatar_url }} style={styles.ownerDotImg} />
+                <Image source={avatarSource(m.owner_avatar_url)} style={styles.ownerDotImg} />
               </Pressable>
-            ) : <Image source={{ uri: m.owner_avatar_url }} style={styles.ownerDot} />
+            ) : <Image source={avatarSource(m.owner_avatar_url)} style={styles.ownerDot} />
           ) : null}
           {onDelete ? (
             <Pressable

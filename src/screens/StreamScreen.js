@@ -17,6 +17,7 @@ import { supabase } from '../lib/supabase'
 import { openProfile, getMyUserId } from '../lib/profileNav'
 import { fetchMyMedia, mergeMine, itemFromMediaRow } from '../lib/myContent'
 import { onMediaPosted } from '../lib/mediaEvents'
+import { avatarSource } from '../lib/avatarSource'
 
 // Live Stream as a 3D cover-flow "TV": the current photo is a big portrait card in the
 // centre, ~3 cards each side recede in perspective (rotated toward the centre, smaller,
@@ -538,7 +539,7 @@ function CoverCard({ item, i, scrollX, step, left, top, cardW, cardH, reflH, zIn
         <LinearGradient colors={['rgba(0,0,0,0)', 'rgba(0,0,0,0.78)']} locations={[0.55, 1]} style={StyleSheet.absoluteFill} pointerEvents="none" />
         <Pressable onPress={centered ? onOwner : onPress} style={styles.cardOwner} hitSlop={4} accessibilityRole="button" accessibilityLabel={`Open ${item.owner_username ?? 'their'} profile`}>
           {item.owner_avatar_url ? (
-            <Image source={{ uri: item.owner_avatar_url }} style={styles.avatar} />
+            <Image source={avatarSource(item.owner_avatar_url)} style={styles.avatar} />
           ) : (
             <View style={[styles.avatar, styles.avatarFallback]}><Ionicons name="person" size={13} color="#fff" /></View>
           )}

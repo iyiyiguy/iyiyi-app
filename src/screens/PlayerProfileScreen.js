@@ -13,6 +13,7 @@ import {
 } from '../games/arcadeUI'
 import { UavBalancePill, openArcadeStore } from '../games/UavStore'
 import { font } from '../theme'
+import { avatarSource } from '../lib/avatarSource'
 
 // The signed-in player's arcade profile: their account basics plus real local stats.
 export default function PlayerProfileScreen({ navigation }) {
@@ -65,8 +66,8 @@ export default function PlayerProfileScreen({ navigation }) {
         <LinearGradient colors={['#2a1a5e', '#141838', '#0b0d1f']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.hero}>
           <View style={[styles.heroGlow, { backgroundColor: rank.color }]} />
           <View style={[styles.avatarRing, { borderColor: rank.color }]}>
-            {profile?.avatar_url ? (
-              <Image source={{ uri: profile.avatar_url }} style={styles.avatar} />
+            {true ? (
+              <Image source={avatarSource(profile.avatar_url)} style={styles.avatar} />
             ) : (
               <LinearGradient colors={AC.play} style={[styles.avatar, styles.center]}>
                 <Text style={styles.avatarLetter}>{name.charAt(0).toUpperCase()}</Text>

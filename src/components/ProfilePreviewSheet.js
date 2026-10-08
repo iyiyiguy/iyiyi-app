@@ -5,6 +5,7 @@ import GlassPanel from './GlassPanel'
 import FollowButton from './FollowButton'
 import { colors, radii, type } from '../theme'
 import { apiJson } from '../lib/api'
+import { avatarSource } from '../lib/avatarSource'
 
 // Lightweight profile card shown over a running game (laser tag camera, live GPS games)
 // so you can see who someone is and follow them without leaving the match.
@@ -46,7 +47,7 @@ export default function ProfilePreviewSheet({ person, onClose }) {
           <View style={styles.inner}>
             <View style={styles.row}>
               {avatar ? (
-                <Image source={{ uri: avatar }} style={styles.avatar} />
+                <Image source={avatarSource(avatar)} style={styles.avatar} />
               ) : (
                 <View style={[styles.avatar, styles.avatarFallback]}>
                   <Text style={styles.avatarLetter}>{name.charAt(0).toUpperCase()}</Text>

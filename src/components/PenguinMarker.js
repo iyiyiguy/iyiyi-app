@@ -1,5 +1,6 @@
 import { memo, useEffect, useRef, useState } from 'react'
 import { Animated, Easing, Image, Platform, StyleSheet, Text, View } from 'react-native'
+import { avatarSource } from '../lib/avatarSource'
 
 // An original little penguin drawn with plain Views (no SVG dependency): navy body, white
 // belly, orange beak + feet and a silver-blue scarf in the app's accent. It waddles (a gentle
@@ -78,7 +79,7 @@ function PenguinMarker({ username, avatarUrl, animate = true, selected = false, 
   const translateY = anim.interpolate({ inputRange: [-1, 0, 1], outputRange: [-1.5, -3, -1.5] })
 
   const initial = (String(username || '?').trim()[0] || '?').toUpperCase()
-  const showImg = !!avatarUrl && !imgFailed
+  const showImg = !imgFailed
 
   // No avatar to load -> the view is final right away.
   useEffect(() => {
@@ -94,7 +95,7 @@ function PenguinMarker({ username, avatarUrl, animate = true, selected = false, 
       <View style={[styles.badge, selected && styles.badgeSelected]}>
         {showImg ? (
           <Image
-            source={{ uri: avatarUrl }}
+            source={avatarSource(avatarUrl)}
             style={styles.badgeImg}
             onLoadEnd={() => onReady?.()}
             onError={() => setImgFailed(true)}

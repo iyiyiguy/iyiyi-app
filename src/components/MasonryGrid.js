@@ -3,6 +3,7 @@ import { View, Text, Image, Pressable, StyleSheet, useWindowDimensions } from 'r
 import { VideoView, useVideoPlayer } from 'expo-video'
 import { colors, radii } from '../theme'
 import { useOpenProfile } from '../lib/profileNav'
+import { avatarSource } from '../lib/avatarSource'
 
 // A grid where every tile keeps its own shape: wide photos, tall vertical videos, squares.
 // Two columns; each new tile goes into whichever column is currently shorter. Videos show
@@ -74,9 +75,9 @@ export default function MasonryGrid({ items, onOpen, showOwner, columns = 2, onO
               {showOwner && m.owner_avatar_url ? (
                 m.owner_id ? (
                   <Pressable onPress={() => openOwner(m.owner_id)} hitSlop={8} style={styles.ownerDotWrap} accessibilityRole="button" accessibilityLabel={`Open ${m.owner_username ?? 'owner'}’s profile`}>
-                    <Image source={{ uri: m.owner_avatar_url }} style={styles.ownerDotImg} />
+                    <Image source={avatarSource(m.owner_avatar_url)} style={styles.ownerDotImg} />
                   </Pressable>
-                ) : <Image source={{ uri: m.owner_avatar_url }} style={styles.ownerDot} />
+                ) : <Image source={avatarSource(m.owner_avatar_url)} style={styles.ownerDot} />
               ) : null}
             </Pressable>
           ))}

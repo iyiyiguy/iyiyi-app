@@ -6,6 +6,7 @@ import { VideoView, useVideoPlayer } from 'expo-video'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { font } from '../theme'
 import { useGuestPrompt } from './GuestPrompt'
+import { avatarSource } from '../lib/avatarSource'
 
 // Read-only full-screen viewer for logged-out visitors (the member ContentViewer talks to the
 // authed API for likes/saves/comments). Swipe up/down between posts; like, comment and save
@@ -62,7 +63,7 @@ export default function GuestViewer({ visible, items, startIndex = 0, onClose, o
           accessibilityRole="button"
           accessibilityLabel={`Open ${item.owner_username ?? 'owner'}'s profile`}
         >
-          {item.owner_avatar_url ? <Image source={{ uri: item.owner_avatar_url }} style={styles.avatar} /> : null}
+          {<Image source={avatarSource(item.owner_avatar_url)} style={styles.avatar} />}
           <Text style={styles.ownerName} numberOfLines={1}>@{item.owner_username ?? 'someone'}</Text>
           <Pressable onPress={() => prompt('follow')} hitSlop={6} style={styles.follow} accessibilityRole="button">
             <Text style={styles.followText}>Follow</Text>
