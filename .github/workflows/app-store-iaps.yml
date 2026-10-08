@@ -1,0 +1,25 @@
+# Creates / completes the UAV pack and gun In-App Purchases in App Store Connect
+# (scripts/asc_iaps.py). Runs when the script or the review screenshots change, or by hand.
+name: App Store in-app purchases → App Store Connect
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['scripts/asc_iaps.py', 'store-assets/iap-review/**', '.github/workflows/app-store-iaps.yml']
+
+jobs:
+  iaps:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install pyjwt cryptography requests
+      - run: python scripts/asc_iaps.py
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}

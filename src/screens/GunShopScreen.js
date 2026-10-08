@@ -17,15 +17,17 @@ import { font } from '../theme'
 import { useUavInventory } from '../lib/uav'
 import { UavShopCard } from '../games/laser/Uav'
 import { UavBalancePill, openArcadeStore } from '../games/UavStore'
+import { fetchGunProducts, purchaseGun, restoreGunPurchases, isUserCancelled } from '../lib/iap'
 
 // Kept for existing importers (e.g. the Laser Tag lobby).
 export { GUNS }
 
 const FIRE_MODE = { single: 'Semi-auto', burst: 'Burst', automatic: 'Full-auto' }
 
-// The Arcade Shop (Armory): buy Laser Tag weapons with arcade coins earned by playing,
-// then equip one. Weapons are coins-only; the one real-money item is the Laser Tag UAV
-// pack (consumable In-App Purchase, see lib/uav.js). Optional route params (legacy):
+// The Arcade Shop (Armory): buy Laser Tag weapons with real money (one Non-Consumable In-App
+// Purchase per gun, lib/iap.js) or with arcade coins earned by playing, then equip one. UAV
+// packs are consumable In-App Purchases (lib/uav.js). Where the store has no price for a gun
+// (e.g. not set up on Google Play yet) only the coin option shows. Optional route params (legacy):
 // { onGunSelected(gunId), selectedGunId }.
 export default function GunShopScreen({ navigation, route }) {
   const { onGunSelected } = route?.params || {}
@@ -37,6 +39,7 @@ export default function GunShopScreen({ navigation, route }) {
   const [category, setCategory] = useState('all')
   const [detail, setDetail] = useState(null)
   const [toast, setToast] = useState(null)
+  const [prices, setPrices] = useState({}) // gunId -> localized store price
   const uav = useUavInventory()
   useArcadeStatusBar()
 
@@ -48,6 +51,10 @@ export default function GunShopScreen({ navigation, route }) {
       if (!alive) return
       setOwner(!!o)
       setStats(s)
+      const p = await fetchGunProducts()
+      if (alive) setPrices(p)
+      // Re-grant any gun bought with money on this account (new phone, reinstall, interrupted buy).
+      restoreGunPurchases().then((ids) => { if (ids.length) loadArcadeStats().then((x) => alive && setStats(x)) })
     })()
     return () => { alive = false }
   }, []))
@@ -88,9 +95,80 @@ export default function GunShopScreen({ navigation, route }) {
     }
   }
 
+  const afterUnlock = async (gun, msg) => {
+    buzz('success')
+    await setEquippedGun(gun.id)
+    setStats(await loadArcadeStats())
+    setToast(msg)
+    setDetail(null)
+    if (onGunSelected) {
+      onGunSelected(gun.id)
+      navigation.goBack()
+    }
+  }
+
+  const buyWithMoney = async (gun) => {
+    setBusy(true)
+    try {
+      const res = await purchaseGun(gun.id)
+      if (res.status === 'purchased') await afterUnlock(gun, `${gun.name} unlocked & equipped`)
+      else Alert.alert('Purchase pending', 'Your purchase is waiting for approval. The gun unlocks as soon as it goes through.')
+    } catch (e) {
+      if (!isUserCancelled(e)) {
+        buzz('error')
+        Alert.alert('Purchase didn’t go through', 'You weren’t charged. Please try again.')
+      }
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const restore = async () => {
+    setBusy(true)
+    try {
+      const ids = await restoreGunPurchases()
+      setStats(await loadArcadeStats())
+      Alert.alert(ids.length ? 'Purchases restored' : 'Nothing to restore', ids.length ? `Restored ${ids.length} gun${ids.length === 1 ? '' : 's'}.` : 'No guns were bought with this Apple ID or Google account.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
   const buy = (gun) => {
     if (busy) return
     if (owns(gun)) { equip(gun); return }
+    const price = prices[gun.id]
+    if (price) {
+      buzz('medium')
+      const canCoins = points >= gun.unlockPoints
+      Alert.alert(`Unlock ${gun.name}`, canCoins ? `Buy it for ${price}, or use ${gun.unlockPoints.toLocaleString()} of your coins.` : `Buy it for ${price}. (Or earn ${gun.unlockPoints.toLocaleString()} coins by playing.)`, [
+        { text: 'Cancel', style: 'cancel' },
+        ...(canCoins ? [{ text: `Use ${gun.unlockPoints.toLocaleString()} coins`, onPress: () => buyWithCoins(gun) }] : []),
+        { text: `Buy for ${price}`, onPress: () => buyWithMoney(gun) },
+      ])
+      return
+    }
+    buyWithCoinsFlow(gun)
+  }
+
+  const buyWithCoins = async (gun) => {
+    setBusy(true)
+    try {
+      const res = await unlockGun(gun.id)
+      if (res.ok) await afterUnlock(gun, `${gun.name} unlocked & equipped`)
+      else {
+        buzz('error')
+        Alert.alert('Not enough coins', `You need ${(res.needed ?? gun.unlockPoints).toLocaleString()} more coins.`)
+      }
+    } catch {
+      buzz('error')
+      Alert.alert('Purchase failed', 'Something went wrong. Your coins weren’t spent — please try again.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const buyWithCoinsFlow = (gun) => {
     if (points < gun.unlockPoints) {
       buzz('error')
       Alert.alert(
@@ -188,7 +266,7 @@ export default function GunShopScreen({ navigation, route }) {
                 <Text style={styles.featName}>{g.name}</Text>
                 <Text style={styles.featDesc} numberOfLines={1}>{g.description}</Text>
                 <View style={styles.featFoot}>
-                  <PriceTag gun={g} owned={owns(g)} equipped={equippedGun.id === g.id} light />
+                  <PriceTag gun={g} price={prices[g.id]} owned={owns(g)} equipped={equippedGun.id === g.id} light />
                   <Ionicons name="arrow-forward-circle" size={28} color="#fff" />
                 </View>
               </LinearGradient>
@@ -204,10 +282,13 @@ export default function GunShopScreen({ navigation, route }) {
 
         <View style={styles.pad}>
           {list.map((g) => (
-            <ItemCard key={g.id} gun={g} owned={owns(g)} equipped={equippedGun.id === g.id} affordable={points >= g.unlockPoints} busy={busy} onOpen={() => { buzz('select'); setDetail(g) }} onAct={() => act(g)} />
+            <ItemCard key={g.id} gun={g} price={prices[g.id]} owned={owns(g)} equipped={equippedGun.id === g.id} affordable={!!prices[g.id] || points >= g.unlockPoints} busy={busy} onOpen={() => { buzz('select'); setDetail(g) }} onAct={() => act(g)} />
           ))}
           {list.length === 0 && <Text style={[arcadeText.caption, { textAlign: 'center', marginTop: 20 }]}>Nothing here yet.</Text>}
-          <Text style={styles.footer}>Coins are earned by playing — wins and higher difficulties pay more. Weapons are never sold for real money.</Text>
+          <Text style={styles.footer}>Unlock guns with an in-app purchase or with coins earned by playing — wins and higher difficulties pay more.</Text>
+          <Pressable onPress={restore} disabled={busy} hitSlop={8} accessibilityRole="button" style={{ alignSelf: 'center', marginTop: 10 }}>
+            <Text style={[arcadeText.caption, { color: AC.text, fontWeight: '700' }]}>Restore Purchases</Text>
+          </Pressable>
         </View>
       </ScrollView>
 
@@ -216,6 +297,9 @@ export default function GunShopScreen({ navigation, route }) {
         owned={detail ? owns(detail) : false}
         equipped={detail ? equippedGun.id === detail.id : false}
         points={points}
+        price={detail ? prices[detail.id] : null}
+        onCoins={() => detail && buyWithCoins(detail)}
+        onMoney={() => detail && buyWithMoney(detail)}
         busy={busy}
         onClose={() => setDetail(null)}
         onAct={() => detail && act(detail)}
@@ -252,10 +336,18 @@ function RarityTag({ gun, light }) {
   )
 }
 
-function PriceTag({ gun, owned, equipped, light }) {
+function PriceTag({ gun, price, owned, equipped, light }) {
   if (equipped) return <Text style={[styles.price, { color: light ? '#fff' : AC.live }]}>✓ Equipped</Text>
   if (owned) return <Text style={[styles.price, { color: light ? '#fff' : AC.text }]}>Owned</Text>
   if (!gun.unlockPoints) return <Text style={[styles.price, { color: light ? '#fff' : AC.text }]}>Free</Text>
+  if (price) {
+    return (
+      <View style={styles.priceRow}>
+        <Text style={[styles.price, { color: light ? '#fff' : AC.gold }]}>{price}</Text>
+        <Text style={[styles.price, { color: light ? 'rgba(255,255,255,0.75)' : AC.text, fontSize: 12, marginLeft: 6 }]}>or ◆ {gun.unlockPoints.toLocaleString()}</Text>
+      </View>
+    )
+  }
   return (
     <View style={styles.priceRow}>
       <View style={styles.coinDot}><Text style={styles.coinGlyph}>◆</Text></View>
@@ -288,7 +380,7 @@ function Bars({ gun }) {
   )
 }
 
-function ItemCard({ gun, owned, equipped, affordable, busy, onOpen, onAct }) {
+function ItemCard({ gun, price, owned, equipped, affordable, busy, onOpen, onAct }) {
   return (
     <Pressable onPress={onOpen} style={({ pressed }) => [{ marginBottom: 12 }, pressed && { transform: [{ scale: 0.985 }] }]} accessibilityRole="button" accessibilityLabel={`${gun.name} details`}>
       <Glass scheme="dark" radius={24} shadow={false} style={[styles.item, equipped && styles.itemEquipped]}>
@@ -309,7 +401,7 @@ function ItemCard({ gun, owned, equipped, affordable, busy, onOpen, onAct }) {
         </View>
         <Bars gun={gun} />
         <View style={styles.itemFoot}>
-          <PriceTag gun={gun} owned={owned} equipped={equipped} />
+          <PriceTag gun={gun} price={price} owned={owned} equipped={equipped} />
           {equipped ? (
             <View style={styles.equippedPill}><Text style={styles.equippedText}>In use</Text></View>
           ) : owned ? (
@@ -323,7 +415,7 @@ function ItemCard({ gun, owned, equipped, affordable, busy, onOpen, onAct }) {
   )
 }
 
-function ItemSheet({ gun, owned, equipped, points, busy, onClose, onAct, bottom }) {
+function ItemSheet({ gun, owned, equipped, points, price, onCoins, onMoney, busy, onClose, onAct, bottom }) {
   return (
     <Modal visible={!!gun} transparent animationType="slide" onRequestClose={onClose}>
       <Pressable style={styles.backdrop} onPress={onClose} accessibilityLabel="Close" />
@@ -354,12 +446,17 @@ function ItemSheet({ gun, owned, equipped, points, busy, onClose, onAct, bottom 
                 <PlayButton title="Equip" icon="flash" onPress={onAct} busy={busy} />
               ) : (
                 <>
+                  {price ? (
+                    <View style={{ marginBottom: 10 }}>
+                      <PlayButton title={`Buy for ${price}`} icon="cart" onPress={onMoney} busy={busy} colors={['#ffc94d', '#ff8a3c']} />
+                    </View>
+                  ) : null}
                   <PlayButton
-                    title={`Buy for ${gun.unlockPoints.toLocaleString()} coins`}
+                    title={`${price ? 'Or use' : 'Buy for'} ${gun.unlockPoints.toLocaleString()} coins`}
                     icon="cart"
-                    onPress={onAct}
+                    onPress={price ? onCoins : onAct}
                     busy={busy}
-                    colors={points >= gun.unlockPoints ? ['#ffc94d', '#ff8a3c'] : ['#4a4f6a', '#363a52']}
+                    colors={points >= gun.unlockPoints ? (price ? ['#6b7cff', '#8f5bff'] : ['#ffc94d', '#ff8a3c']) : ['#4a4f6a', '#363a52']}
                   />
                   {points < gun.unlockPoints && (
                     <Text style={[arcadeText.caption, { textAlign: 'center', marginTop: 8 }]}>{(gun.unlockPoints - points).toLocaleString()} more coins needed</Text>

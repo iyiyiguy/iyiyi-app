@@ -1,6 +1,6 @@
 import { Platform } from 'react-native'
 import * as RNIap from 'react-native-iap'
-import { _creditUavs } from './arcadeStats'
+import { _creditUavs, _grantItems } from './arcadeStats'
 
 // These must match the product IDs you create in App Store Connect
 // (Subscriptions) and Google Play Console (Monetize > Subscriptions).
@@ -94,10 +94,31 @@ export async function fetchSubscriptionInfo(tier) {
 }
 
 // iOS is verified server-side from the app receipt; Android from the purchase token.
+// The receipt the backend verifies. On iOS the app receipt can be missing right after a
+// StoreKit 2 purchase (common on TestFlight / sandbox, where it surfaced as
+// "purchase-verification-failed"), so: try it, then refresh it once, then fall back to the
+// purchase's own signed StoreKit transaction (JWS).
 async function receiptFor(purchase) {
-  if (Platform.OS === 'ios') return RNIap.getReceiptDataIOS()
-  return purchase.purchaseToken
+  if (Platform.OS !== 'ios') return purchase.purchaseToken || purchase.purchaseTokenAndroid
+  try {
+    const r = await RNIap.getReceiptDataIOS()
+    if (r) return r
+  } catch {}
+  try {
+    const r = await RNIap.requestReceiptRefreshIOS()
+    if (r) return r
+  } catch {}
+  try {
+    const r = await RNIap.getReceiptDataIOS()
+    if (r) return r
+  } catch {}
+  const jws = purchase.purchaseToken || purchase.jwsRepresentationIOS
+  if (jws) return jws
+  throw new Error('Could not read the App Store receipt. Please tap Restore Purchases.')
 }
+
+// Our server knows the Pro plan as 'pro_all' (product com.iyiyi.app.pro.all.monthly).
+export const BACKEND_TIER = { pro: 'pro_all' }
 
 // Buys a subscription, then hands the platform receipt to our backend for verification.
 // In react-native-iap v16 the purchase result arrives through listeners rather than the
@@ -321,4 +342,101 @@ export async function purchaseUavPack(sku = UAV_SKU) {
       type: 'in-app',
     }).catch((e) => settle(reject, e))
   })
+}
+
+
+// ---------------------------------------------------------------------------
+// Non-consumables: Laser Tag guns. Each paid gun is its own In-App Purchase
+// (App Store Connect type: Non-Consumable; Google Play: one-time product).
+// Owning a gun is recorded in arcade stats, the same place coin unlocks go.
+// ---------------------------------------------------------------------------
+export const PAID_GUN_IDS = ['burst', 'smg', 'sniper', 'scatter', 'assault', 'marksman', 'minigun', 'railgun']
+export const gunSku = (gunId) => Platform.select({ ios: `com.iYiYi.gun.${gunId}`, android: `iyiyi_gun_${gunId}` })
+const GUN_BY_SKU = Object.fromEntries(PAID_GUN_IDS.map((id) => [gunSku(id), id]))
+export const isGunSku = (sku) => !!GUN_BY_SKU[sku]
+
+async function grantGunFromPurchase(purchase) {
+  const gunId = GUN_BY_SKU[purchase?.productId]
+  if (!gunId) return null
+  await _grantItems([gunId])
+  try {
+    await RNIap.finishTransaction({ purchase, isConsumable: false })
+  } catch (e) {
+    console.warn('iap: finishTransaction (gun) failed', e)
+  }
+  return gunId
+}
+
+/** Localized prices for every paid gun: { [gunId]: '$2.99' }. Missing = not in the store yet. Never throws. */
+export async function fetchGunProducts() {
+  try {
+    await initIAP()
+    const products = (await RNIap.fetchProducts({ skus: PAID_GUN_IDS.map(gunSku), type: 'in-app' })) ?? []
+    const out = {}
+    for (const p of products) {
+      const id = GUN_BY_SKU[p?.id]
+      if (id && p.displayPrice) out[id] = String(p.displayPrice)
+    }
+    return out
+  } catch (e) {
+    console.warn('iap: fetchGunProducts failed', e?.message || e)
+    return {}
+  }
+}
+
+/** Buys one gun. Resolves { status: 'purchased' | 'pending' } ; rejects on error / cancel. */
+export async function purchaseGun(gunId) {
+  const sku = gunSku(gunId)
+  if (!GUN_BY_SKU[sku]) throw new Error('This gun is not sold in the store.')
+  await initIAP()
+  const products = (await RNIap.fetchProducts({ skus: [sku], type: 'in-app' })) ?? []
+  if (!products.some((p) => p?.id === sku)) throw new Error('This gun isn’t available in the store yet. Please try again later.')
+
+  return new Promise((resolve, reject) => {
+    let settled = false
+    const subs = []
+    const settle = (fn, v) => {
+      if (settled) return
+      settled = true
+      clearTimeout(timer)
+      subs.forEach((s) => s.remove())
+      fn(v)
+    }
+    const timer = setTimeout(() => settle(resolve, { status: 'pending' }), 180000)
+    subs.push(RNIap.purchaseUpdatedListener(async (purchase) => {
+      if (purchase?.productId !== sku) return
+      if (purchase.purchaseState === 'pending') { settle(resolve, { status: 'pending' }); return }
+      try {
+        await grantGunFromPurchase(purchase)
+        settle(resolve, { status: 'purchased' })
+      } catch (e) {
+        settle(reject, e)
+      }
+    }))
+    subs.push(RNIap.purchaseErrorListener((error) => {
+      if (error?.productId && error.productId !== sku) return
+      settle(reject, error)
+    }))
+    RNIap.requestPurchase({
+      request: { apple: { sku }, google: { skus: [sku] } },
+      type: 'in-app',
+    }).catch((e) => settle(reject, e))
+  })
+}
+
+/** Restores guns bought with real money on this Apple ID / Google account. Resolves the gun ids. Never throws. */
+export async function restoreGunPurchases() {
+  try {
+    await initIAP()
+    const purchases = (await RNIap.getAvailablePurchases()) ?? []
+    const out = []
+    for (const p of purchases) {
+      if (!isGunSku(p?.productId)) continue
+      const id = await grantGunFromPurchase(p)
+      if (id) out.push(id)
+    }
+    return out
+  } catch {
+    return []
+  }
 }

@@ -8,7 +8,7 @@ import { HeaderButton } from '../components/BrandHeader'
 import { colors, radii, type } from '../theme'
 import { FadeIn, Press } from '../lib/motion'
 import { API_URL, supabase } from '../lib/supabase'
-import { purchaseSubscription, restorePurchases, isUserCancelled, fetchSubscriptionInfo } from '../lib/iap'
+import { BACKEND_TIER, purchaseSubscription, restorePurchases, isUserCancelled, fetchSubscriptionInfo } from '../lib/iap'
 import { logSubscriptionPurchase } from '../lib/attribution'
 import { openLink } from '../lib/socialLinks'
 import { markPro } from '../lib/useIsPro'
@@ -39,6 +39,15 @@ const BENEFITS = [
   { icon: 'star', colors: ['#ffb16b', '#ff7e9d'], title: 'benefit_badge_title', text: 'benefit_badge_text' },
   { icon: 'heart', colors: ['#ff6fb5', '#ff9fd0'], title: 'benefit_support_title', text: 'benefit_support_text' },
 ]
+
+// Store errors can arrive as a raw JSON string ({"message":"purchase-verification-failed",...});
+// never show that to people.
+function friendlyError(e, fallback) {
+  let msg = e?.message
+  try { if (typeof msg === 'string' && msg.trim().startsWith('{')) msg = JSON.parse(msg).message } catch {}
+  if (!msg || /verif|receipt|^[a-z-]+$/i.test(msg)) return fallback
+  return msg
+}
 
 export default function SubscriptionScreen({ navigation, onClose }) {
   const insets = useSafeAreaInsets()
@@ -82,8 +91,13 @@ export default function SubscriptionScreen({ navigation, onClose }) {
   }, [loadCurrent]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const verifyWithBackend = async (payload) => {
-    const res = await authedFetch('/api/subscription/activate', { method: 'POST', body: JSON.stringify(payload) })
-    if (!res.ok) throw new Error(translate(strings, 'err_verify'))
+    const body = { ...payload, tier: BACKEND_TIER[payload.tier] ?? payload.tier }
+    const res = await authedFetch('/api/subscription/activate', { method: 'POST', body: JSON.stringify(body) })
+    if (!res.ok) {
+      const detail = await res.json().catch(() => null)
+      console.warn('subscription/activate failed', res.status, detail)
+      throw new Error(translate(strings, 'err_verify'))
+    }
     await loadCurrent()
     logSubscriptionPurchase(payload.tier, PRICE_USD[payload.tier] ?? 0)
   }
@@ -97,7 +111,7 @@ export default function SubscriptionScreen({ navigation, onClose }) {
       if (onboarding) onClose()
       else Alert.alert(t('welcome_title'), t('welcome_msg'))
     } catch (e) {
-      if (!isUserCancelled(e)) setError(e.message)
+      if (!isUserCancelled(e)) setError(friendlyError(e, t('err_verify')))
     } finally {
       setPurchasing(false)
     }
