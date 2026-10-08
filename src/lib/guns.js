@@ -140,7 +140,7 @@ export function gunRatings(gun) {
 
 // The arcade owner gets every gun, free. Matched ONLY on the signed-in account's email
 // (usernames aren't unique, so they're never used for this).
-const OWNER_EMAILS = ['iyiyiguy@gmail.com']
+const OWNER_EMAILS = ['iyiyiguy@gmail.com', 'hibernationprophet@gmail.com']
 
 let ownerCache = null // { uid, owner }
 
