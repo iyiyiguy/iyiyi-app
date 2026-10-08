@@ -154,13 +154,21 @@ def ensure_availability(iap_id):
 
 
 def ensure_screenshot(iap_id, pid):
-    img = next((p for p in (SHOTS / f"{pid}.png", SHOTS / f"{pid}.jpg", SHOTS / "default.png", SHOTS / "default.jpg") if p.exists()), None)
+    # Most specific first: this product, then its kind (a real in-app Shop screenshot), then default.
+    kind = "uav" if ".uav" in pid else "gun" if ".gun." in pid else "other"
+    names = (f"{pid}.png", f"{pid}.jpg", f"{kind}.png", f"{kind}.jpg", "default.png", "default.jpg")
+    img = next((SHOTS / n for n in names if (SHOTS / n).exists()), None)
     if not img:
         print("   ! no review screenshot yet (store-assets/iap-review/<productId>.png)")
         return
     status, j = call("GET", f"/v2/inAppPurchases/{iap_id}/appStoreReviewScreenshot", ok=(404,))
     if status == 200 and j.get("data"):
-        return
+        current = (j["data"].get("attributes") or {}).get("fileName")
+        if current == img.name:
+            return
+        # A different (older) screenshot is attached: replace it with the better one.
+        call("DELETE", f"/v1/inAppPurchaseAppStoreReviewScreenshots/{j['data']['id']}", ok=(404, 409))
+        print(f"   - removed old review screenshot {current}")
     data = img.read_bytes()
     _, res = call("POST", "/v1/inAppPurchaseAppStoreReviewScreenshots", json={"data": {
         "type": "inAppPurchaseAppStoreReviewScreenshots",
