@@ -163,8 +163,10 @@ def ensure_screenshot(iap_id, pid):
         return
     status, j = call("GET", f"/v2/inAppPurchases/{iap_id}/appStoreReviewScreenshot", ok=(404,))
     if status == 200 and j.get("data"):
-        current = (j["data"].get("attributes") or {}).get("fileName")
-        if current == img.name:
+        attrs = j["data"].get("attributes") or {}
+        current = attrs.get("fileName")
+        state = ((attrs.get("assetDeliveryState") or {}).get("state") or "").upper()
+        if attrs.get("sourceFileChecksum") == hashlib.md5(img.read_bytes()).hexdigest() and state != "FAILED":
             return
         # A different (older) screenshot is attached: replace it with the better one.
         call("DELETE", f"/v1/inAppPurchaseAppStoreReviewScreenshots/{j['data']['id']}", ok=(404, 409))
