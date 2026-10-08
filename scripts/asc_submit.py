@@ -137,7 +137,26 @@ def main():
     # so that step retries.
     open_states = {"READY_FOR_REVIEW", "UNRESOLVED_ISSUES"}
     subs = M.call("GET", "/reviewSubmissions", params={"filter[app]": M.APP_ID, "filter[platform]": "IOS", "limit": 20})["data"]
-    sub = next((x for x in subs if x["attributes"].get("state") in open_states), None)
+    opened = [x for x in subs if x["attributes"].get("state") in open_states]
+
+    def has_version(x):
+        items = M.call("GET", f"/reviewSubmissions/{x['id']}/items", params={"include": "appStoreVersion"})["data"]
+        return any((i.get("relationships", {}).get("appStoreVersion", {}).get("data") or {}).get("id") == v["id"] for i in items)
+
+    # A rejected version lives in its "Unresolved Issues" submission: resubmit that one. Any other
+    # open draft (e.g. in-app purchases added by hand in App Store Connect) is cancelled so its
+    # items can join the version's submission.
+    sub = next((x for x in opened if has_version(x)), None) or \
+        next((x for x in opened if x["attributes"].get("state") == "UNRESOLVED_ISSUES"), None) or \
+        next(iter(opened), None)
+    for x in opened:
+        if sub is not None and x["id"] != sub["id"] and x["attributes"].get("state") == "READY_FOR_REVIEW":
+            try:
+                M.call("PATCH", f"/reviewSubmissions/{x['id']}", json={"data": {"type": "reviewSubmissions", "id": x["id"], "attributes": {"canceled": True}}})
+                print(f"Cancelled extra draft submission {x['id']} so its items can be resubmitted with the version")
+                time.sleep(10)
+            except RuntimeError as e:
+                print(f"  could not cancel draft {x['id']}: {str(e)[:200]}")
     if sub is None:
         sub = M.call("POST", "/reviewSubmissions", json={"data": {"type": "reviewSubmissions", "attributes": {"platform": "IOS"},
                       "relationships": {"app": {"data": {"type": "apps", "id": M.APP_ID}}}}})["data"]
