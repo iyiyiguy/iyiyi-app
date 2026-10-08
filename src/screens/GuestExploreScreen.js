@@ -165,7 +165,7 @@ export default function GuestExploreScreen({ navigation }) {
 
   const renderItem = ({ item, index }) => (
     <Press
-      onPress={() => navigation.navigate('PublicProfile', { username: item.username })}
+      onPress={() => navigation.navigate('PublicProfile', { username: item.username, avatarUrl: item.avatar_url ?? null })}
       style={{ width: cell, height: cell, marginBottom: GAP }}
       scaleTo={0.96}
       accessibilityLabel={t('openProfile', { name: item.username })}

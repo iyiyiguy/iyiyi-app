@@ -3,7 +3,7 @@ import TagLinks from '../components/TagLinks'
 import { View, Text, Image, StyleSheet, Pressable, Modal, Alert, Share, ScrollView, useWindowDimensions } from 'react-native'
 import { useFocusEffect } from '@react-navigation/native'
 import { LinearGradient } from 'expo-linear-gradient'
-import { colors, gradients, radii, type, onImageType } from '../theme'
+import { colors, gradients, radii, type } from '../theme'
 import { API_URL, supabase } from '../lib/supabase'
 import { socialUrl, openLink } from '../lib/socialLinks'
 import SocialIcon from '../components/SocialIcon'
@@ -179,10 +179,21 @@ export default function UserProfileScreen({ route, navigation }) {
   return (
     <View style={styles.screen}>
       <ScrollView>
-        <View style={[styles.heroWrap, { height: Math.max(340, Math.min(440, Math.round((winW || 390) * 1.0))) }]}>
-          <Avatar uri={profile.avatar_url} name={profile.username} fill radius={0} transition={250} />
-          <LinearGradient colors={['transparent', 'rgba(13,7,16,0.95)']} style={styles.overlay}>
-            <Text style={onImageType.display}>{profile.username} {TIER_LABEL[profile.account_type]}</Text>
+        {/* Compact profile header: top bar, round photo next to the name and counts. */}
+        <View style={[styles.headerBarRow, { paddingTop: insets.top + 6 }]}>
+          <HeaderButton icon="chevron-back" onPress={() => navigation.goBack()} label="Back" />
+          <View style={{ flexDirection: 'row', gap: 10 }}>
+            <HeaderButton icon="share-outline" onPress={shareProfile} label="Share profile" />
+            {preview ? null : <HeaderButton icon="ellipsis-horizontal" onPress={() => setMenuOpen(true)} label="More" />}
+          </View>
+        </View>
+        <View style={styles.hero}>
+          <View style={styles.heroTop}>
+            <View style={styles.heroAvatar}>
+              <Avatar uri={profile.avatar_url} name={profile.username} size={96} transition={250} />
+            </View>
+            <View style={{ flex: 1 }}>
+            <Text style={styles.heroName} numberOfLines={2}>{profile.username} {TIER_LABEL[profile.account_type]}</Text>
             <View style={styles.followRow}>
               <Text style={styles.followStat}><Text style={styles.followStatNum}>{profile.follower_count ?? 0}</Text> followers</Text>
               <Text style={styles.followStat}><Text style={styles.followStatNum}>{profile.following_count ?? 0}</Text> following</Text>
@@ -192,6 +203,8 @@ export default function UserProfileScreen({ route, navigation }) {
                 {profile.view_count} profile views{profile.like_count != null ? ` · ${profile.like_count} likes` : ''}
               </Text>
             )}
+            </View>
+          </View>
             {preview ? null : <View style={styles.actionRow}>
               <Pressable onPress={toggleFollow} disabled={followBusy} style={[styles.followButton, (profile.is_following || isPending) && styles.followButtonActive]}>
                 <Text style={[styles.followButtonText, (profile.is_following || isPending) && styles.followButtonTextActive]}>
@@ -226,15 +239,6 @@ export default function UserProfileScreen({ route, navigation }) {
                 ))}
               </View>
             )}
-          </LinearGradient>
-
-          <View style={[styles.headerBar, { top: insets.top + 6 }]} pointerEvents="box-none">
-            <HeaderButton icon="chevron-back" onPress={() => navigation.goBack()} label="Back" />
-            <View style={{ flexDirection: 'row', gap: 10 }}>
-              <HeaderButton icon="share-outline" onPress={shareProfile} label="Share profile" />
-              {preview ? null : <HeaderButton icon="ellipsis-horizontal" onPress={() => setMenuOpen(true)} label="More" />}
-            </View>
-          </View>
         </View>
 
         {preview ? (
@@ -382,13 +386,18 @@ const styles = StyleSheet.create({
   previewText: { ...type.caption, color: colors.text, fontWeight: '600' },
   screen: { flex: 1, backgroundColor: 'transparent' },
   heroWrap: { height: 480 },
+  headerBarRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingBottom: 4 },
+  hero: { paddingHorizontal: 20, paddingTop: 6, paddingBottom: 12 },
+  heroTop: { flexDirection: 'row', alignItems: 'center', gap: 16 },
+  heroAvatar: { width: 96, height: 96, borderRadius: 48, overflow: 'hidden', borderWidth: 2, borderColor: 'rgba(255,255,255,0.18)' },
+  heroName: { ...type.title, color: colors.text, fontSize: 24, fontWeight: '800' },
   photo: { width: '100%', height: '100%' },
   overlay: { position: 'absolute', left: 0, right: 0, bottom: 0, padding: 20, paddingBottom: 24 },
   bio: { ...type.body, color: colors.textMuted, marginHorizontal: 20, marginTop: 16 },
-  viewCount: { ...type.caption, color: colors.onBrandMuted, marginTop: 4 },
+  viewCount: { ...type.caption, color: colors.textMuted, marginTop: 4 },
   followRow: { flexDirection: 'row', gap: 16, marginTop: 8 },
-  followStat: { ...type.caption, color: colors.onBrandMuted },
-  followStatNum: { color: colors.onBrand, fontWeight: '700' },
+  followStat: { ...type.caption, color: colors.textMuted },
+  followStatNum: { color: colors.text, fontWeight: '700' },
   actionRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 12 },
   challengeButton: {
     flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 18, paddingVertical: 10,
@@ -401,13 +410,13 @@ const styles = StyleSheet.create({
   followButtonActive: { backgroundColor: 'transparent', borderWidth: 1, borderColor: colors.magenta },
   followButtonText: { color: colors.onBrand, fontWeight: '700' },
   followButtonTextActive: { color: colors.magenta },
-  privateNotice: { ...type.caption, color: colors.onBrandMuted, marginTop: 10 },
+  privateNotice: { ...type.caption, color: colors.textMuted, marginTop: 10 },
   tagRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 10 },
   tagChip: {
     paddingHorizontal: 10, paddingVertical: 4, borderRadius: radii.pill,
     backgroundColor: 'rgba(224,21,139,0.2)', borderWidth: 1, borderColor: colors.magenta,
   },
-  tagText: { color: colors.onBrand, fontSize: 12, fontWeight: '600' },
+  tagText: { color: colors.text, fontSize: 12, fontWeight: '600' },
   back: {
     position: 'absolute', top: 50, left: 16, width: 44, height: 44, borderRadius: 22,
     backgroundColor: 'rgba(0,0,0,0.4)', alignItems: 'center', justifyContent: 'center',

@@ -121,7 +121,7 @@ export default function GuestRecommendedScreen({ navigation }) {
         renderItem={({ item }) => (item._pad != null ? <View style={{ flex: 1 }} /> : (
           <GuestUserCard
             user={item}
-            onPress={() => navigation.navigate('PublicProfile', { username: item.username })}
+            onPress={() => navigation.navigate('PublicProfile', { username: item.username, avatarUrl: item.avatar_url ?? null })}
             onFollow={() => prompt('follow')}
           />
         ))}

@@ -37,13 +37,13 @@ export default function ContentViewer({ visible, items, startIndex = 0, onClose,
   const { width, height } = useWindowDimensions()
   const insets = useViewerInsets()
   const navOpenProfile = useOpenProfile()
-  const onOpenProfile = useCallback((id) => {
+  const onOpenProfile = useCallback((id, avatarUrl = null) => {
     if (!id) return
     if (onOpenProfileProp) {
       onOpenProfileProp(id)
     } else {
       onClose?.()
-      navOpenProfile(id)
+      navOpenProfile(id, avatarUrl)
     }
   }, [onOpenProfileProp, onClose, navOpenProfile])
   const [list, setList] = useState(items ?? [])
@@ -234,7 +234,7 @@ export default function ContentViewer({ visible, items, startIndex = 0, onClose,
             {(current.owner_username || current.owner_avatar_url || current.location_label) ? (
               <Pressable
                 style={styles.owner}
-                onPress={() => current.owner_id && onOpenProfile(current.owner_id)}
+                onPress={() => current.owner_id && onOpenProfile(current.owner_id, current.owner_avatar_url ?? null)}
                 disabled={!current.owner_id}
                 hitSlop={6}
                 accessibilityRole="button"

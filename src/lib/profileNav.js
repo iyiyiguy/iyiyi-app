@@ -24,14 +24,14 @@ export function useMyUserId() {
   return id
 }
 
-export async function openProfile(navigation, userId) {
+export async function openProfile(navigation, userId, avatarUrl = null) {
   if (!navigation || !userId) return
   const me = await getMyUserId()
   if (me && userId === me) {
     // pop: go back to the existing Tabs route rather than stacking a second one.
     navigation.navigate('Tabs', { screen: 'MyProfile' }, { pop: true })
   } else {
-    navigation.dispatch(StackActions.push('UserProfile', { userId }))
+    navigation.dispatch(StackActions.push('UserProfile', { userId, avatarUrl }))
   }
 }
 
@@ -39,5 +39,5 @@ export async function openProfile(navigation, userId) {
 // context directly (not useNavigation) so it's a harmless no-op outside a navigator.
 export function useOpenProfile() {
   const navigation = useContext(NavigationContext)
-  return useCallback((userId) => openProfile(navigation, userId), [navigation])
+  return useCallback((userId, avatarUrl) => openProfile(navigation, userId, avatarUrl), [navigation])
 }

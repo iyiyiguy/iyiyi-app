@@ -961,7 +961,7 @@ export default function MapScreen({ navigation, route }) {
             <SelectedCard
               user={selected}
               onClose={() => setSelected(null)}
-              onOpen={() => openProfile(navigation, selected.user_id)}
+              onOpen={() => openProfile(navigation, selected.user_id, selected.avatar_url ?? null)}
             />
           ) : null}
           {zoneDraft ? (

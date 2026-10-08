@@ -65,8 +65,8 @@ export default function GuestFeedScreen({ navigation }) {
     setMore(false)
   }, [more, done, loading, items, sort])
 
-  const openProfile = useCallback((username) => {
-    if (username) navigation.navigate('PublicProfile', { username })
+  const openProfile = useCallback((username, avatarUrl = null) => {
+    if (username) navigation.navigate('PublicProfile', { username, avatarUrl })
   }, [navigation])
 
   const list = items ?? []
@@ -101,7 +101,7 @@ export default function GuestFeedScreen({ navigation }) {
             columns={columns}
             showOwner
             onOpen={(i) => setViewer({ open: true, index: i })}
-            onOpenProfile={(id) => openProfile(usernameById(id))}
+            onOpenProfile={(id) => { const m = list.find((x) => x.owner_id === id); openProfile(m?.owner_username, m?.owner_avatar_url ?? null) }}
           />
         ) : items == null ? (
           <ActivityIndicator color={colors.text} style={{ marginTop: 60 }} />
@@ -120,7 +120,7 @@ export default function GuestFeedScreen({ navigation }) {
         onClose={() => setViewer({ open: false, index: 0 })}
         onOpenProfile={(m) => {
           setViewer({ open: false, index: 0 })
-          openProfile(m.owner_username)
+          openProfile(m.owner_username, m.owner_avatar_url ?? null)
         }}
       />
       {sheet}
