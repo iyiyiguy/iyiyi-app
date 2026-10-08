@@ -120,6 +120,11 @@ export async function fetchSubscriptionInfo(tier) {
 // purchase's own signed StoreKit transaction (JWS).
 async function receiptFor(purchase) {
   if (Platform.OS !== 'ios') return purchase.purchaseToken || purchase.purchaseTokenAndroid
+  // StoreKit 2: the purchase's own signed transaction (JWS). Our server verifies it directly,
+  // and using it avoids the old-receipt refresh that makes iOS ask for the Apple ID password
+  // a second time.
+  const signed = purchase.purchaseToken || purchase.jwsRepresentationIOS
+  if (typeof signed === 'string' && signed.split('.').length === 3) return signed
   // Each step is time-limited: a receipt refresh can sit waiting forever in the sandbox.
   try {
     const r = await withTimeout(RNIap.getReceiptDataIOS(), 8000)
@@ -145,7 +150,7 @@ async function verifyFresh(purchase, payload, verifyWithBackend) {
   try {
     return await verifyWithBackend({ ...payload, receipt })
   } catch (e) {
-    if (Platform.OS !== 'ios') throw e
+    if (Platform.OS !== 'ios' || e?.code === 'expired') throw e
     let fresh = null
     try { fresh = await withTimeout(RNIap.requestReceiptRefreshIOS(), 15000) } catch {}
     if (!fresh || fresh === receipt) throw e
