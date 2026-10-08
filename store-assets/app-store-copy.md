@@ -64,7 +64,7 @@ Follow us: Instagram @iyiyiapp, YouTube @iYiYiapp
 
 Pro subscription: $1/month for your first 3 months, then $10/month, renewing monthly until cancelled. Payment is charged to your Apple ID at confirmation of purchase. Subscriptions renew automatically unless auto-renew is turned off at least 24 hours before the end of the current period. Manage or cancel in your App Store account settings.
 Terms: https://shop.iyiyi.xyz/policies/terms-of-service
-Privacy: https://shop.iyiyi.xyz/policies/privacy-policy
+Privacy: https://iyiyi.xyz/privacy
 
 ## What's New (next version)
 - Guests can look around before signing up

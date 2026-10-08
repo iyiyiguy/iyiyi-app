@@ -20,7 +20,7 @@ const METHOD = { EMAIL: 'email', PHONE: 'phone' }
 
 const ICON = require('../../assets/icon.png')
 export const TERMS_URL = 'https://iyiyi.xyz/terms'
-export const PRIVACY_URL = 'https://shop.iyiyi.xyz/policies/privacy-policy'
+export const PRIVACY_URL = 'https://iyiyi.xyz/privacy'
 
 const SOCIAL_PROVIDERS = [
   { key: 'google', label: 'Google' },

@@ -25,7 +25,7 @@ import strings from '../i18n/strings/subscription'
 // Prices come from the store, localized; nothing is hard-coded.
 
 const TERMS_URL = 'https://iyiyi.xyz/terms'
-const PRIVACY_URL = 'https://shop.iyiyi.xyz/policies/privacy-policy'
+const PRIVACY_URL = 'https://iyiyi.xyz/privacy'
 const APPLE_SUBSCRIPTIONS_URL = 'https://apps.apple.com/account/subscriptions'
 const ICON = require('../../assets/icon.png')
 

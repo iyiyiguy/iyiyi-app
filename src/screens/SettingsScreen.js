@@ -18,7 +18,7 @@ import { LaserTaggableSetting } from '../games/laser/Bystander'
 import { languageName, useLanguage, useT } from '../i18n'
 import strings from '../i18n/strings/settings'
 
-const PRIVACY_URL = 'https://shop.iyiyi.xyz/policies/privacy-policy'
+const PRIVACY_URL = 'https://iyiyi.xyz/privacy'
 const TERMS_URL = 'https://iyiyi.xyz/terms'
 
 const FOLLOW_US = [
