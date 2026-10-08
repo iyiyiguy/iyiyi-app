@@ -64,6 +64,38 @@ def ready_build():
     return None
 
 
+def add_iaps(sub_id):
+    """Put every in-app purchase that's waiting for its first review into this submission
+    (Apple requires first-time in-app purchases to be reviewed together with an app version)."""
+    iaps, url = [], f"/apps/{M.APP_ID}/inAppPurchasesV2"
+    params = {"limit": 200}
+    while url:
+        j = M.call("GET", url, params=params)
+        iaps += j.get("data", [])
+        url, params = j.get("links", {}).get("next"), None
+    for i in iaps:
+        a = i["attributes"]
+        if a.get("state") != "READY_TO_SUBMIT":
+            print(f"  IAP {a.get('productId')}: {a.get('state')}")
+            continue
+        try:
+            M.call("POST", "/reviewSubmissionItems", json={"data": {"type": "reviewSubmissionItems", "relationships": {
+                "reviewSubmission": {"data": {"type": "reviewSubmissions", "id": sub_id}},
+                "inAppPurchaseV2": {"data": {"type": "inAppPurchases", "id": i["id"]}}}}})
+            print(f"  + IAP {a.get('productId')} added to the submission")
+        except RuntimeError as e:
+            msg = str(e)
+            if "409" in msg and ("already" in msg.lower() or "ITEM_ALREADY" in msg):
+                print(f"  IAP {a.get('productId')} already in the submission")
+                continue
+            try:  # older route: submit the in-app purchase on its own; it rides along with the version
+                M.call("POST", "/inAppPurchaseSubmissions", json={"data": {"type": "inAppPurchaseSubmissions", "relationships": {
+                    "inAppPurchaseV2": {"data": {"type": "inAppPurchases", "id": i["id"]}}}}})
+                print(f"  + IAP {a.get('productId')} submitted with the version")
+            except RuntimeError as e2:
+                print(f"  ! IAP {a.get('productId')} not added: {msg[:200]} / {str(e2)[:200]}")
+
+
 def main():
     if not BUILD:
         raise RuntimeError("BUILD_NUMBER is required")
@@ -111,8 +143,8 @@ def main():
                       "relationships": {"app": {"data": {"type": "apps", "id": M.APP_ID}}}}})["data"]
     print(f"Using review submission {sub['id']} ({sub['attributes'].get('state')})")
     for attempt in range(12):
-        items = M.call("GET", f"/reviewSubmissions/{sub['id']}/items")["data"]
-        if items:
+        items = M.call("GET", f"/reviewSubmissions/{sub['id']}/items", params={"include": "appStoreVersion"})["data"]
+        if any((i.get("relationships", {}).get("appStoreVersion", {}).get("data") or {}).get("id") == v["id"] for i in items):
             break
         try:
             M.call("POST", "/reviewSubmissionItems", json={"data": {"type": "reviewSubmissionItems", "relationships": {
@@ -124,6 +156,7 @@ def main():
                 raise
             print(f"  not accepted yet ({str(e)[:300]}), retrying in 60s")
             time.sleep(60)
+    add_iaps(sub["id"])
     # After a rejection the version can stay "not ready to be submitted yet" for a while once the
     # new build is attached; the final submit retries too.
     for attempt in range(15):

@@ -2,6 +2,12 @@ Demo account: appreview@iyiyi.xyz (password in Sign-in information). Sign in wit
 
 Location for testing: use lat 37.3521, long -122.0415. Test user Nancy appears within 150 ft of this account (she is a free user, so only one close user shows next to Mark).
 
+Response to the review of 1.3.0 build 226 (2.1(b) In-App Purchases):
+
+- The in-app purchases are now in the binary and are submitted with this version: the iYiYi Pro subscription (com.iyiyi.app.pro.all.monthly), Laser Tag guns (Non-Consumable, com.iYiYi.gun.*) and UAV packs (Consumable, com.iYiYi.uav*). The old "Premium Account" and "Creator Subscription" products are no longer offered in the app.
+- Where to find them: iYiYi Pro: Settings > iYiYi Pro, or the "Go Pro" button on My Profile. Guns and UAV packs: Arcade tab > Shop (top right).
+- A screen recording of sandbox purchases of the Pro subscription, a UAV pack and a gun, made on this build with the demo account, is attached in App Review Information.
+
 Responses to the review of 1.3.0 build 224:
 
 5.1.1(ii) Purpose strings: the location string now explains how location is used, with an example ("when you open Nearby, you see people within 150 ft of you... Other people only see an approximate distance, never your exact location"). The camera, microphone, photo library and calendar strings were rewritten the same way, each with an example.
