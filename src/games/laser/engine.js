@@ -22,6 +22,15 @@ export const BOMB_MS = 45000
 export const SITE_RADIUS_M = 12
 export const PICKUP_RANGE_M = 5
 export const MAX_RANGE_M = 150
+// Grenades: thrown along the compass heading up to GRENADE_MAX_THROW_M, explode after the fuse
+// on the thrower's phone, and damage every enemy within GRENADE_RADIUS_M of where they land
+// (full damage in the middle, less towards the edge).
+export const GRENADE_MAX_THROW_M = 35
+export const GRENADE_MIN_THROW_M = 5
+export const GRENADE_RADIUS_M = 7
+export const GRENADE_MAX_DAMAGE = 90
+export const GRENADE_MIN_DAMAGE = 35
+export const GRENADE_COOLDOWN_MS = 2500
 
 // Extra room for GPS error when checking "inside a radius".
 export const gpsSlack = (acc) => Math.min(8, Math.max(2, (acc ?? 10) / 2))
@@ -283,6 +292,7 @@ export function applyAction(state, action, from, { now, posOf }) {
   switch (action.type) {
     case 'hit': return applyHit(state, action, from, now, posOf)
     case 'bystander': return applyBystander(state, action, from, now)
+    case 'grenade': return applyGrenade(state, action, from, now, posOf)
     case 'plant_start': {
       if (state.mode !== 'snd' || !me.alive || state.snd.act) return { state }
       const b = state.snd.bomb
@@ -356,6 +366,53 @@ function applyBystander(state, action, from, now) {
     state: { ...state, players, feed: pushFeed(state, `${me.name} tagged iYiYi user @${username}`, now) },
     reply: { type: 'bystander_ok', data: { userId, username, points: BYSTANDER_POINTS } },
   }
+}
+
+function applyGrenade(state, action, from, now, posOf) {
+  const thrower = state.players[from]
+  if (!thrower?.alive) return { state }
+  if (now - (thrower.lastGrenadeAt || 0) < GRENADE_COOLDOWN_MS) return { state }
+  const land = { lat: Number(action.lat), lng: Number(action.lng) }
+  if (!Number.isFinite(land.lat) || !Number.isFinite(land.lng)) return { state }
+  const from0 = posOf(from)
+  if (!from0) return { state, reply: notice('Grenade lost — waiting for GPS.') }
+  if (distanceMeters(from0, land) > GRENADE_MAX_THROW_M + gpsSlack(from0.acc) + 5) return { state, reply: notice('Nobody can throw that far.') }
+  const players = { ...state.players, [from]: { ...thrower, lastGrenadeAt: now, grenades: (thrower.grenades || 0) + 1 } }
+  const snd = state.mode === 'snd'
+  const hits = []
+  let feed = state.feed
+  let teamScore = state.teamScore
+  let sndState = state.snd
+  for (const [id, target] of Object.entries(state.players)) {
+    if (id === from || !target.alive) continue
+    if (state.mode !== 'ffa' && target.team === thrower.team) continue
+    if ((target.protectedUntil || 0) > now) continue
+    const pos = posOf(id)
+    if (!pos) continue
+    const d = distanceMeters(pos, land)
+    const reach = GRENADE_RADIUS_M + Math.min(4, gpsSlack(pos.acc))
+    if (d > reach) continue
+    const damage = Math.round(GRENADE_MAX_DAMAGE - (GRENADE_MAX_DAMAGE - GRENADE_MIN_DAMAGE) * Math.min(1, d / reach))
+    const hp = Math.max(0, target.hp - damage)
+    const killed = hp <= 0
+    players[id] = { ...target, hp, alive: !killed, deaths: target.deaths + (killed ? 1 : 0), respawnAt: killed && !snd ? now + RESPAWN_MS : null }
+    const me = players[from]
+    players[from] = { ...me, hits: me.hits + 1, score: me.score + 10 + (killed ? 100 : 0), kills: me.kills + (killed ? 1 : 0) }
+    hits.push({ id, name: target.name, damage: Math.min(damage, target.hp), killed })
+    if (killed) {
+      feed = pushFeed({ feed }, `${thrower.name} 💥 ${target.name}`, now)
+      if (state.mode === 'tdm') teamScore = { ...teamScore, [thrower.team]: teamScore[thrower.team] + 1 }
+    }
+    if (snd) {
+      if (sndState.act?.by === id) sndState = { ...sndState, act: null }
+      if (killed && sndState.bomb?.state === 'carried' && sndState.bomb.carrier === id) {
+        sndState = { ...sndState, bomb: dropBomb(sndState.bomb, pos) }
+        feed = pushFeed({ feed }, `${target.name} dropped the bomb`, now)
+      }
+    }
+  }
+  const next = { ...state, players, feed, teamScore, ...(snd ? { snd: sndState } : {}) }
+  return { state: next, reply: { type: 'grenade_ok', data: { hits, by: thrower.name } } }
 }
 
 function applyHit(state, action, from, now, posOf) {

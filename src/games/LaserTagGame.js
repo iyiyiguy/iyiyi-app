@@ -47,6 +47,9 @@ import { useArcadeInsets } from './arcadeUI'
 import { DOCK_GAP, TOP_BUTTONS_W, useHudMetrics, useMeasuredHeight } from './laser/hudLayout'
 import { BINOCULAR_MAX_ZOOM, formatZoom, maxZoomFor, useScopeZoom } from './laser/useScopeZoom'
 import { BinocularFrame, BinocularMarkers, binocularMarkers } from './laser/Binoculars'
+import { GRENADE_FUSE_MS, GrenadeBlast, GrenadeButton, destinationPoint } from './laser/Grenade'
+import GunViewModel from './laser/GunViewModel'
+import { spendGrenade, useGrenadeInventory } from '../lib/grenades'
 
 function normalizeGun(g) {
   const gun = g || getWeapon('pistol')
@@ -179,6 +182,13 @@ export function LaserTagGame({ room, onExit }) {
     return () => releaseWeaponSounds()
   }, [])
 
+  // ---- grenades + first-person gun ----
+  const grenadeInv = useGrenadeInventory()
+  const [shotTick, setShotTick] = useState(0)
+  const [blastKey, setBlastKey] = useState(0)
+  const grenadeTimers = useRef([])
+  useEffect(() => () => grenadeTimers.current.forEach(clearTimeout), [])
+
   const flash = useCallback((text, good) => {
     setMarker({ text, good })
     clearTimeout(markerTimer.current)
@@ -233,11 +243,21 @@ export function LaserTagGame({ room, onExit }) {
         else flash(`✕ ${d?.zone === 'limb' ? 'Limb' : 'Hit'}${dmg}`, true)
       }),
       room.onMessage('notice', (d) => flash(String(d?.text || ''), false)),
+      room.onMessage('grenade_ok', (d) => {
+        const hits = Array.isArray(d?.hits) ? d.hits : []
+        const kills = hits.filter((h) => h.killed)
+        if (!hits.length) { flash('💥 Grenade missed', false); return }
+        playSfx('hit')
+        buzz('success')
+        if (kills.length) flash(`💥 Grenade tagged out ${kills.map((k) => k.name).join(', ')}!`, true)
+        else flash(`💥 Grenade hit ${hits.map((h) => `${h.name} −${h.damage}`).join(', ')}`, true)
+      }),
       room.onMessage('got_hit', (d) => {
         const by = String(d?.by || 'Someone').slice(0, 24)
         const dmg = d?.damage ? ` −${d.damage}` : ''
-        if (d?.killed) flash(`💀 Tagged out by ${by}`, false)
-        else flash(`${d?.zone === 'head' ? '🎯 Headshot' : 'Hit'} by ${by}${dmg}`, false)
+        if (d?.zone === 'grenade') { playSfx('explosion'); setBlastKey(Date.now()) }
+        if (d?.killed) flash(`💀 Tagged out by ${by}${d?.zone === 'grenade' ? '’s grenade' : ''}`, false)
+        else flash(`${d?.zone === 'head' ? '🎯 Headshot' : d?.zone === 'grenade' ? '💥 Grenade' : 'Hit'} by ${by}${dmg}`, false)
       }),
       room.onMessage('bystander_ok', (d) => {
         try {
@@ -371,6 +391,13 @@ export function LaserTagGame({ room, onExit }) {
       const { state: next, reply } = engine.applyAction(s, action, from, { now: t, posOf })
       if (next !== s) room.publishState(next)
       // Tell the person who got hit who shot them (their phone already rumbles from the HP drop).
+      if (action?.type === 'grenade' && reply?.type === 'grenade_ok') {
+        for (const h of reply.data?.hits || []) {
+          const victimMsg = { by: s.players?.[from]?.name || 'Someone', zone: 'grenade', damage: h.damage, killed: h.killed }
+          if (h.id === meId) room.emitter.emit('msg:got_hit', victimMsg, from)
+          else room.send('got_hit', victimMsg, { to: h.id })
+        }
+      }
       if (action?.type === 'hit' && reply?.type === 'hit_ok' && action.target) {
         const victimMsg = { by: s.players?.[from]?.name || 'Someone', zone: reply.data.zone, damage: reply.data.damage, killed: reply.data.killed }
         if (action.target === meId) room.emitter.emit('msg:got_hit', victimMsg, from)
@@ -515,6 +542,7 @@ export function LaserTagGame({ room, onExit }) {
     if (dead || !playing) return
     const shots = gun.shotsPerClick
     shotsRef.current += shots
+    setShotTick((n) => n + 1)
     playShot(gun)
     buzz(gun.automatic ? 'light' : 'medium') // recoil rumble (respects the Vibration setting)
     const h = aimRef.current
@@ -558,6 +586,30 @@ export function LaserTagGame({ room, onExit }) {
     if (!picked) { flash('That’s not a player in this game', false); return }
     const per = zoneDamage(hit.zone, gun, picked.distance)
     room.sendAction({ type: 'hit', target: picked.target.id, hits: shots, zone: hit.zone, damage: per * shots, method: 'vision' })
+  }
+
+  // Throw along the compass heading; it goes off after the fuse, where it landed.
+  const throwGrenade = async (distance, how) => {
+    if (dead || !playing) return
+    const h = aimRef.current
+    if (!h.pos || !h.heading) { flash('No GPS/compass fix yet', false); return }
+    if (!grenadeInv.owner && !(grenadeInv.balance > 0)) { flash('No grenades left — get more in the Arcade Shop', false); return }
+    const ok = await spendGrenade()
+    if (!ok) { flash('No grenades left — get more in the Arcade Shop', false); return }
+    const land = destinationPoint(h.pos, h.heading.deg, distance)
+    buzz('medium')
+    flash(`💣 Grenade ${how === 'swing' ? 'thrown' : 'out'} — ${distance} m`, true)
+    const t = setTimeout(() => {
+      try {
+        playSfx('explosion')
+        buzz('heavy')
+        setBlastKey(Date.now())
+        room.sendAction({ type: 'grenade', lat: Math.round(land.lat * 1e6) / 1e6, lng: Math.round(land.lng * 1e6) / 1e6 })
+      } catch {
+        // The match may have ended mid-fuse.
+      }
+    }, GRENADE_FUSE_MS)
+    grenadeTimers.current.push(t)
   }
 
   const tagBystander = (user) => {
@@ -724,6 +776,10 @@ export function LaserTagGame({ room, onExit }) {
       ) : <EnemyMarkers markers={enemyMarkers} />}
       <BystanderMarkers markers={bystanderMarkers} />
 
+      {camPerm?.granted && !topMode && !bino && aim.mode === 'camera' ? (
+        <GunViewModel gun={gun} shotTick={shotTick} bottom={dockH || 0} hidden={dead} leftHanded={leftHanded} />
+      ) : null}
+      <GrenadeBlast key={blastKey} visible={!!blastKey} />
       <Animated.View pointerEvents="none" style={[styles.vignette, { opacity: vignette }]} />
 
       {/* HUD — top: explicit rows in normal flow (see laser/hudLayout.js). The right edge
@@ -857,6 +913,13 @@ export function LaserTagGame({ room, onExit }) {
         ) : <View />}
         <View style={[styles.fireCol, hud.landscape && { flexDirection: leftHanded ? 'row-reverse' : 'row', alignItems: 'flex-end' }, !hud.landscape && { alignItems: leftHanded ? 'flex-start' : 'flex-end' }, { maxWidth: hud.landscape ? hud.width - hud.side * 2 - hud.mapSize - DOCK_GAP : hud.chipMaxW }]} pointerEvents="box-none">
           <UavButton count={uav.count} activeMsLeft={uav.myMs} disabled={!playing && !uav.empty} onPress={uav.callUav} size={hud.compact ? 48 : 54} />
+          <GrenadeButton
+            count={grenadeInv.owner ? Infinity : grenadeInv.balance}
+            disabled={!playing || dead || bino}
+            size={hud.compact ? 48 : 54}
+            onThrow={throwGrenade}
+            onEmpty={() => flash('No grenades — get 10 in the Arcade Shop', false)}
+          />
           {camPerm?.granted && !topMode ? (
             <Pressable
               onPress={toggleBino}

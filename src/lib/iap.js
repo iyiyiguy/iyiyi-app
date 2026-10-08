@@ -1,6 +1,6 @@
 import { Platform } from 'react-native'
 import * as RNIap from 'react-native-iap'
-import { _creditUavs, _grantItems } from './arcadeStats'
+import { _creditUavs, _creditGrenades, _grantItems } from './arcadeStats'
 
 // These must match the product IDs you create in App Store Connect
 // (Subscriptions) and Google Play Console (Monetize > Subscriptions).
@@ -516,4 +516,86 @@ export async function restoreGunPurchases() {
   } catch {
     return []
   }
+}
+
+
+// ---------------------------------------------------------------------------
+// Consumable: Laser Tag grenade pack (10 grenades). App Store Connect type: Consumable.
+// ---------------------------------------------------------------------------
+export const GRENADE_PACK = {
+  id: 'grenade10',
+  count: 10,
+  sku: Platform.select({ ios: 'com.iYiYi.grenade10', android: 'iyiyi_grenade10' }),
+  refPrice: 4.99,
+}
+export const isGrenadeSku = (sku) => sku === GRENADE_PACK.sku
+
+async function creditGrenadePurchase(purchase) {
+  const qty = Math.max(1, Math.min(10, Number(purchase.quantity) || 1))
+  const txnId = purchase.id || purchase.purchaseToken || `${purchase.productId}:${purchase.transactionDate}`
+  const res = await _creditGrenades(GRENADE_PACK.count * qty, txnId)
+  try {
+    await RNIap.finishTransaction({ purchase, isConsumable: true })
+  } catch (e) {
+    console.warn('iap: finishTransaction (grenades) failed', e)
+  }
+  return { ...res, count: GRENADE_PACK.count * qty }
+}
+
+/** Store info for the grenade pack: { displayPrice } or null. Never throws. */
+export async function fetchGrenadeProduct() {
+  try {
+    await withTimeout(initIAP(), 15000)
+    const products = (await withTimeout(RNIap.fetchProducts({ skus: [GRENADE_PACK.sku], type: 'in-app' }), 15000)) ?? []
+    const p = products.find((x) => x?.id === GRENADE_PACK.sku)
+    return p?.displayPrice ? { displayPrice: String(p.displayPrice) } : null
+  } catch {
+    return null
+  }
+}
+
+/** Credits + finishes any grenade purchase that completed outside the buy flow. Never throws. */
+export async function recoverGrenadePurchases() {
+  try {
+    for (const p of await ownedPurchases()) {
+      if (isGrenadeSku(p?.productId) && p.purchaseState !== 'pending') await creditGrenadePurchase(p)
+    }
+  } catch {
+    // Next time.
+  }
+}
+
+/** Buys one grenade pack. Resolves { status: 'purchased', balance, count } | { status: 'pending' }. */
+export async function purchaseGrenadePack() {
+  const sku = GRENADE_PACK.sku
+  await withTimeout(initIAP(), 15000)
+  const products = (await withTimeout(RNIap.fetchProducts({ skus: [sku], type: 'in-app' }), 15000)) ?? []
+  if (!products.some((p) => p?.id === sku)) throw new Error('Grenades aren’t available in the store yet. Please try again later.')
+  return new Promise((resolve, reject) => {
+    let settled = false
+    const subs = []
+    const settle = (fn, v) => {
+      if (settled) return
+      settled = true
+      clearTimeout(timer)
+      subs.forEach((s) => s.remove())
+      fn(v)
+    }
+    const timer = setTimeout(() => settle(resolve, { status: 'pending' }), 90000)
+    subs.push(RNIap.purchaseUpdatedListener(async (purchase) => {
+      if (purchase?.productId !== sku) return
+      if (purchase.purchaseState === 'pending') { settle(resolve, { status: 'pending' }); return }
+      try {
+        const res = await creditGrenadePurchase(purchase)
+        settle(resolve, { status: 'purchased', balance: res?.balance, count: res?.count })
+      } catch (e) {
+        settle(reject, e)
+      }
+    }))
+    subs.push(RNIap.purchaseErrorListener((error) => {
+      if (error?.productId && error.productId !== sku) return
+      settle(reject, error)
+    }))
+    RNIap.requestPurchase({ request: { apple: { sku }, google: { skus: [sku] } }, type: 'in-app' }).catch((e) => settle(reject, e))
+  })
 }

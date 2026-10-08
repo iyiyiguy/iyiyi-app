@@ -61,6 +61,7 @@ const defaultState = () => ({
   equippedGun: 'pistol',
   uavs: 0, // purchased Laser Tag UAVs (see src/lib/uav.js)
   uavTxns: [], // store transaction ids already credited (dedupe for consumable IAP)
+  grenades: 0, // purchased Laser Tag grenades (see src/lib/grenades.js)
   recent: [], // last 20 results: { gameId, result, score, points, at }
 })
 
@@ -86,6 +87,7 @@ function normalize(raw) {
     recent: Array.isArray(raw.recent) ? raw.recent : [],
     uavs: Number.isFinite(raw.uavs) && raw.uavs > 0 ? Math.floor(raw.uavs) : 0,
     uavTxns: Array.isArray(raw.uavTxns) ? raw.uavTxns.filter((x) => typeof x === 'string').slice(-100) : [],
+    grenades: Number.isFinite(raw.grenades) && raw.grenades > 0 ? Math.floor(raw.grenades) : 0,
   }
 }
 
@@ -336,6 +338,29 @@ export function _creditUavs(count, txnId) {
     s.uavs = (s.uavs || 0) + n
     if (id) s.uavTxns = [...s.uavTxns, id].slice(-100)
     return { result: { credited: true, balance: s.uavs } }
+  })
+}
+
+// Laser Tag grenades (internal helpers for grenades.js / iap.js) -----------
+
+/** Spend one purchased grenade. Resolves true if the balance covered it. */
+export function _spendGrenade() {
+  return mutate((s) => {
+    if (!(s.grenades > 0)) return { result: false }
+    s.grenades -= 1
+    return { result: true }
+  })
+}
+
+/** Credit purchased grenades once per store transaction (same dedupe list as UAVs). */
+export function _creditGrenades(count, txnId) {
+  return mutate((s) => {
+    const n = Math.max(0, Math.floor(Number(count) || 0))
+    const id = txnId ? `g:${txnId}` : null
+    if (id && s.uavTxns.includes(id)) return { result: { credited: false, balance: s.grenades || 0 } }
+    s.grenades = (s.grenades || 0) + n
+    if (id) s.uavTxns = [...s.uavTxns, id].slice(-100)
+    return { result: { credited: true, balance: s.grenades } }
   })
 }
 

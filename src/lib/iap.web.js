@@ -40,3 +40,10 @@ export async function fetchUavProduct() {
 export async function purchaseUavPack() {
   throw new Error('In-app purchases are only available in the iOS/Android app.')
 }
+
+// Grenades: in-app purchases only exist in the iOS / Android apps.
+export const GRENADE_PACK = { id: 'grenade10', count: 10, sku: 'grenade10', refPrice: 4.99 }
+export const isGrenadeSku = () => false
+export async function fetchGrenadeProduct() { return null }
+export async function recoverGrenadePurchases() {}
+export async function purchaseGrenadePack() { throw new Error('Grenades can be bought in the iYiYi app.') }

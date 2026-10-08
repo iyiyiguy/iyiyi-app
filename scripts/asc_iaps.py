@@ -2,6 +2,7 @@
 """Create iYiYi's one-time In-App Purchases in App Store Connect (idempotent).
 
   UAV packs (Consumable)       com.iYiYi.uav5 / uav20 / uav50 / uav120
+  Grenade pack (Consumable)    com.iYiYi.grenade10 (10 grenades, $4.99)
   Guns (Non-Consumable)        com.iYiYi.gun.<id>
 
 For each product it makes sure that the product exists, has an English name and description,
@@ -27,6 +28,7 @@ PRODUCTS = [
     ("com.iYiYi.uav20", "CONSUMABLE", "UAV pack 20", "20 UAVs", "Twenty UAV scans for Laser Tag.", "1.99"),
     ("com.iYiYi.uav50", "CONSUMABLE", "UAV pack 50", "50 UAVs", "Fifty UAV scans for Laser Tag.", "3.99"),
     ("com.iYiYi.uav120", "CONSUMABLE", "UAV pack 120", "120 UAVs", "120 UAV scans for Laser Tag.", "7.99"),
+    ("com.iYiYi.grenade10", "CONSUMABLE", "Grenade pack 10", "10 Grenades", "Ten grenades for Laser Tag.", "4.99"),
     ("com.iYiYi.gun.burst", "NON_CONSUMABLE", "Gun Burst Rifle", "Burst Rifle", "Laser Tag gun: 3 beams per tap.", "0.99"),
     ("com.iYiYi.gun.smg", "NON_CONSUMABLE", "Gun Pulse SMG", "Pulse SMG", "Laser Tag gun: very fast automatic.", "1.99"),
     ("com.iYiYi.gun.scatter", "NON_CONSUMABLE", "Gun Scatter Blaster", "Scatter Blaster", "Laser Tag gun: five-beam spread.", "1.99"),
@@ -155,7 +157,7 @@ def ensure_availability(iap_id):
 
 def ensure_screenshot(iap_id, pid):
     # Most specific first: this product, then its kind (a real in-app Shop screenshot), then default.
-    kind = "uav" if ".uav" in pid else "gun" if ".gun." in pid else "other"
+    kind = "uav" if (".uav" in pid or ".grenade" in pid) else "gun" if ".gun." in pid else "other"
     names = (f"{pid}.png", f"{pid}.jpg", f"{kind}.png", f"{kind}.jpg", "default.png", "default.jpg")
     img = next((SHOTS / n for n in names if (SHOTS / n).exists()), None)
     if not img:
