@@ -2,7 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { PanResponder } from 'react-native'
 
 // Scope zoom for Laser Tag's camera aim: pinch with two fingers, or tap the zoom button to step
-// through 1× → 2× (→ 4× on precision guns such as the sniper).
+// through the zoom steps: 2× on most guns, 4× on the Marksman, 6× on the Sniper and Railgun,
+// and up to 8× in binocular mode (no shooting).
 //
 // The zoom is applied to the camera PREVIEW (scaled around the middle of the screen), not to
 // the camera itself. Hit detection keeps working exactly as before: it still analyses the full
@@ -12,8 +13,12 @@ import { PanResponder } from 'react-native'
 
 export const PRECISION_MAX_ZOOM = 4
 export const DEFAULT_MAX_ZOOM = 2
+export const SNIPER_MAX_ZOOM = 6 // sniper rifle and railgun
+export const BINOCULAR_MAX_ZOOM = 8
+const STEPS = [1, 2, 4, 6, 8]
 
 export function maxZoomFor(weapon) {
+  if (weapon?.id === 'sniper' || weapon?.id === 'railgun') return SNIPER_MAX_ZOOM
   return weapon?.category === 'precision' ? PRECISION_MAX_ZOOM : DEFAULT_MAX_ZOOM
 }
 
@@ -52,7 +57,7 @@ export function useScopeZoom(maxZoom, { enabled = true, onChange } = {}) {
 
   // Tap the zoom button: 1× → 2× → 4× (precision) → 1×.
   const cycle = useCallback(() => {
-    const steps = maxRef.current >= PRECISION_MAX_ZOOM ? [1, 2, PRECISION_MAX_ZOOM] : [1, DEFAULT_MAX_ZOOM]
+    const steps = STEPS.filter((z) => z <= maxRef.current)
     const cur = zoomRef.current
     const next = steps.find((s) => s > cur + 0.05) ?? 1
     setZoom(next)

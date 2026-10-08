@@ -45,7 +45,8 @@ import { BystanderMarkers, useTaggablePrompt } from './laser/Bystander'
 import { colors, radii, type } from '../theme'
 import { useArcadeInsets } from './arcadeUI'
 import { DOCK_GAP, TOP_BUTTONS_W, useHudMetrics, useMeasuredHeight } from './laser/hudLayout'
-import { formatZoom, maxZoomFor, useScopeZoom } from './laser/useScopeZoom'
+import { BINOCULAR_MAX_ZOOM, formatZoom, maxZoomFor, useScopeZoom } from './laser/useScopeZoom'
+import { BinocularFrame, BinocularMarkers, binocularMarkers } from './laser/Binoculars'
 
 function normalizeGun(g) {
   const gun = g || getWeapon('pistol')
@@ -67,6 +68,9 @@ function normalizeGun(g) {
     range: gun.range || 60,
   }
 }
+
+// Compass aim can't see walls or cover, so it only reaches this far (camera aim uses the gun's range).
+const COMPASS_MAX_RANGE_M = 40
 
 // Compass calibration level (0-3) → extra degrees of slack.
 const COMPASS_SLACK = { 3: 4, 2: 8, 1: 12, 0: 15 }
@@ -146,7 +150,15 @@ export function LaserTagGame({ room, onExit }) {
   const [bodies, setBodies] = useState(null) // latest target-lock detections
   const [view, setView] = useState({ width: 0, height: 0 })
   // Scope zoom (pinch or the zoom button). Precision guns (sniper, DMR, railgun) go to 4×.
-  const scope = useScopeZoom(maxZoomFor(getWeapon(weaponId)), { enabled: !!camPerm?.granted, onChange: () => buzz('select') })
+  // Binoculars: look up to 8× with GPS name tags on every enemy; shooting is off while they're up.
+  const [bino, setBino] = useState(false)
+  const scope = useScopeZoom(bino ? BINOCULAR_MAX_ZOOM : maxZoomFor(getWeapon(weaponId)), { enabled: !!camPerm?.granted, onChange: () => buzz('select') })
+  const toggleBino = () => {
+    buzz('select')
+    setBino((b) => !b)
+  }
+  // Runs after the zoom limit has switched (8× for binoculars, the gun's own limit after).
+  useEffect(() => { scope.setZoom(bino ? 4 : 1) }, [bino]) // eslint-disable-line react-hooks/exhaustive-deps
   const vignette = useRef(new Animated.Value(0)).current
 
   const meId = snap?.me?.id
@@ -392,7 +404,7 @@ export function LaserTagGame({ room, onExit }) {
     if (!heading || !myPos) return null
     let best = null
     for (const o of enemies) {
-      if (!o.alive || o.d > gun.range) continue
+      if (!o.alive || o.d > (visionAim ? gun.range : Math.min(gun.range, COMPASS_MAX_RANGE_M))) continue
       const tol = aimTolerance(o.d, myPos.acc, o.pos.acc, heading.accuracy)
       const off = Math.abs(angleDiff(o.bearing, heading.deg))
       if (off > tol) continue
@@ -400,7 +412,7 @@ export function LaserTagGame({ room, onExit }) {
       if (!best || ratio < best.ratio) best = { ...o, ratio, chance: hitChance(o.d, gun, ratio) }
     }
     return best
-  }, [enemies, heading, myPos, gun])
+  }, [enemies, heading, myPos, gun, visionAim])
 
   // ---- bystanders (opted-in iYiYi users outside the match) ----
   const playerKeys = state ? Object.keys(state.players).sort().join(',') : ''
@@ -431,7 +443,7 @@ export function LaserTagGame({ room, onExit }) {
   inSightsRef.current = inSights
 
   // Live target lock: detect people in the camera view ~2.5×/s (setting).
-  const lockOn = visionAim && prefs.targetLock && playing && !dead && !miniGame
+  const lockOn = visionAim && prefs.targetLock && playing && !dead && !miniGame && !bino
   useEffect(() => {
     if (!lockOn) { setBodies(null); return undefined }
     let cancelled = false
@@ -558,7 +570,7 @@ export function LaserTagGame({ room, onExit }) {
     room.sendAction({ type: 'bystander', userId: user.id, username: user.username })
   }
 
-  const trigger = useTrigger(gun, fireShot, { enabled: playing && !dead && !overlayOpen })
+  const trigger = useTrigger(gun, fireShot, { enabled: playing && !dead && !overlayOpen && !bino })
   triggerRef.current = trigger
 
   // ---- weapon switching ----
@@ -680,7 +692,7 @@ export function LaserTagGame({ room, onExit }) {
       )}
 
       {/* Top-edge and trigger modes: the whole screen is the trigger. */}
-      {fullScreenTrigger && (
+      {fullScreenTrigger && !bino && (
         <Pressable
           style={StyleSheet.absoluteFill}
           onPressIn={trigger.onPressIn}
@@ -699,7 +711,17 @@ export function LaserTagGame({ room, onExit }) {
           <View key={i} pointerEvents="none" style={[styles.bracket, { left: r.left, top: r.top, width: r.width, height: r.height, borderColor: locked ? colors.danger : 'rgba(255,255,255,0.4)' }]} />
         )
       })}
-      <EnemyMarkers markers={enemyMarkers} />
+      {bino ? <BinocularFrame zoom={scope.zoom} view={view} /> : null}
+      {bino ? (
+        <BinocularMarkers
+          markers={binocularMarkers({
+            players: enemies.filter((e) => e.alive).map((e) => ({ id: e.id, name: e.name, d: e.d, bearing: e.bearing, color: state?.mode === 'ffa' ? colors.danger : TEAMS[e.team]?.color || colors.danger })),
+            headingDeg: heading?.deg,
+            zoom: scope.zoom,
+            view,
+          })}
+        />
+      ) : <EnemyMarkers markers={enemyMarkers} />}
       <BystanderMarkers markers={bystanderMarkers} />
 
       <Animated.View pointerEvents="none" style={[styles.vignette, { opacity: vignette }]} />
@@ -780,7 +802,7 @@ export function LaserTagGame({ room, onExit }) {
               ? `${inSights.name} · ${formatDistance(inSights.d)} · ~${Math.round(inSights.chance * 100)}% hit`
               : enemies.some((e) => e.alive) ? 'No one in your sights' : 'Waiting for other players’ GPS…'}
         </Text>}
-        {!visionAim && !triggerMode && <Text style={styles.aimMode}>Compass aim — less precise</Text>}
+        {!visionAim && !triggerMode && <Text style={styles.aimMode}>Compass aim — can’t see cover · {formatDistance(Math.min(gun.range, COMPASS_MAX_RANGE_M))} range</Text>}
         {isProtected && <Text style={[styles.aimMode, { color: colors.success }]}>Spawn protection</Text>}
         {!!marker && <Text style={[styles.marker, { color: marker.good ? colors.success : colors.onBrand }]} numberOfLines={2}>{marker.text}</Text>}
       </View>
@@ -835,6 +857,18 @@ export function LaserTagGame({ room, onExit }) {
         ) : <View />}
         <View style={[styles.fireCol, hud.landscape && { flexDirection: leftHanded ? 'row-reverse' : 'row', alignItems: 'flex-end' }, !hud.landscape && { alignItems: leftHanded ? 'flex-start' : 'flex-end' }, { maxWidth: hud.landscape ? hud.width - hud.side * 2 - hud.mapSize - DOCK_GAP : hud.chipMaxW }]} pointerEvents="box-none">
           <UavButton count={uav.count} activeMsLeft={uav.myMs} disabled={!playing && !uav.empty} onPress={uav.callUav} size={hud.compact ? 48 : 54} />
+          {camPerm?.granted && !topMode ? (
+            <Pressable
+              onPress={toggleBino}
+              hitSlop={6}
+              style={({ pressed }) => [styles.zoomBtn, bino && styles.zoomBtnOn, pressed && { opacity: 0.75 }]}
+              accessibilityRole="button"
+              accessibilityLabel={bino ? 'Lower binoculars' : 'Binoculars: look far and see enemy names. You can’t shoot while they’re up.'}
+            >
+              <Text style={{ fontSize: 14 }}>🔭</Text>
+              <Text style={[styles.zoomText, bino && { color: colors.onGold }]}>{bino ? 'Lower' : 'Scout'}</Text>
+            </Pressable>
+          ) : null}
           {camPerm?.granted && !topMode ? (
             <Pressable
               onPress={scope.cycle}
