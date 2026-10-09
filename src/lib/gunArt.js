@@ -10,6 +10,7 @@ const ART = {
   marksman: require('../../assets/guns/marksman.png'),
   minigun: require('../../assets/guns/minigun.png'),
   railgun: require('../../assets/guns/railgun.png'),
+  rocket: require('../../assets/guns/rocket.png'),
 }
 
 export const gunArt = (gunOrId) => ART[typeof gunOrId === 'string' ? gunOrId : gunOrId?.id] || ART.pistol

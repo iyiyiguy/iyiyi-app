@@ -402,6 +402,12 @@ export function LaserTagGame({ room, onExit }) {
         const victimMsg = { by: s.players?.[from]?.name || 'Someone', zone: reply.data.zone, damage: reply.data.damage, killed: reply.data.killed }
         if (action.target === meId) room.emitter.emit('msg:got_hit', victimMsg, from)
         else room.send('got_hit', victimMsg, { to: action.target })
+        // Rocket splash: notify everyone caught in the blast
+        for (const sh of reply.data?.splash || []) {
+          const splashMsg = { by: s.players?.[from]?.name || 'Someone', zone: 'rocket', damage: sh.damage, killed: sh.killed }
+          if (sh.id === meId) room.emitter.emit('msg:got_hit', splashMsg, from)
+          else room.send('got_hit', splashMsg, { to: sh.id })
+        }
       }
       if (reply) {
         if (from === meId) room.emitter.emit(`msg:${reply.type}`, reply.data, meId)
@@ -556,7 +562,7 @@ export function LaserTagGame({ room, onExit }) {
     for (let i = 0; i < shots; i++) if (Math.random() < target.chance) hits += 1
     if (!hits) return
     const per = zoneDamage('body', gun, target.d)
-    room.sendAction({ type: 'hit', target: target.id, hits, zone: 'body', damage: hits * per, method: 'compass' })
+    room.sendAction({ type: 'hit', target: target.id, hits, zone: 'body', damage: hits * per, method: 'compass', weapon: gun.id })
   }
 
   // Camera aim: what's actually under the crosshair decides the hit. Rapid shots share
@@ -585,7 +591,7 @@ export function LaserTagGame({ room, onExit }) {
     })
     if (!picked) { flash('That’s not a player in this game', false); return }
     const per = zoneDamage(hit.zone, gun, picked.distance)
-    room.sendAction({ type: 'hit', target: picked.target.id, hits: shots, zone: hit.zone, damage: per * shots, method: 'vision' })
+    room.sendAction({ type: 'hit', target: picked.target.id, hits: shots, zone: hit.zone, damage: per * shots, method: 'vision', weapon: gun.id })
   }
 
   // Throw along the compass heading; it goes off after the fuse, where it landed.

@@ -31,6 +31,10 @@ export const GRENADE_RADIUS_M = 7
 export const GRENADE_MAX_DAMAGE = 90
 export const GRENADE_MIN_DAMAGE = 35
 export const GRENADE_COOLDOWN_MS = 2500
+// Rocket launcher: splash damage in a radius around the target on a direct hit.
+export const ROCKET_RADIUS_M = 25
+export const ROCKET_SPLASH_MAX = 70
+export const ROCKET_SPLASH_MIN = 20
 
 // Extra room for GPS error when checking "inside a radius".
 export const gpsSlack = (acc) => Math.min(8, Math.max(2, (acc ?? 10) / 2))
@@ -464,5 +468,47 @@ function applyHit(state, action, from, now, posOf) {
     }
     next.snd = sndState
   }
-  return { state: next, reply: { type: 'hit_ok', data: { name: target.name, killed, zone, damage: Math.min(damage, target.hp) } } }
+
+  // Rocket launcher splash damage: hit everyone near the target within ROCKET_RADIUS_M.
+  const splashHits = []
+  if (action.weapon === 'rocket') {
+    const updPlayers = { ...next.players }
+    const me = updPlayers[from]
+    let splashKills = 0
+    let splashHitCount = 0
+    for (const [id, other] of Object.entries(updPlayers)) {
+      if (id === from || id === action.target || !other.alive) continue
+      if (state.mode !== 'ffa' && other.team === shooter.team) continue
+      if ((other.protectedUntil || 0) > now) continue
+      const pos = posOf(id)
+      if (!pos) continue
+      const d = distanceMeters(pos, b)
+      const reach = ROCKET_RADIUS_M + Math.min(4, gpsSlack(pos.acc))
+      if (d > reach) continue
+      const splashDmg = Math.round(ROCKET_SPLASH_MAX - (ROCKET_SPLASH_MAX - ROCKET_SPLASH_MIN) * Math.min(1, d / reach))
+      const oHp = Math.max(0, other.hp - splashDmg)
+      const oKilled = oHp <= 0
+      updPlayers[id] = { ...other, hp: oHp, alive: !oKilled, deaths: other.deaths + (oKilled ? 1 : 0), respawnAt: oKilled && !snd ? now + RESPAWN_MS : null }
+      splashHitCount += 1
+      if (oKilled) splashKills += 1
+      splashHits.push({ id, name: other.name, damage: Math.min(splashDmg, other.hp), killed: oKilled })
+      if (oKilled) {
+        next.feed = pushFeed(next, `${shooter.name} 🚀💥 ${other.name}`, now)
+        if (state.mode === 'tdm') next.teamScore = { ...(next.teamScore || state.teamScore), [shooter.team]: (next.teamScore || state.teamScore)[shooter.team] + 1 }
+      }
+      if (snd) {
+        let ss = next.snd || state.snd
+        if (ss.act?.by === id) ss = { ...ss, act: null }
+        if (oKilled && ss.bomb?.state === 'carried' && ss.bomb.carrier === id) {
+          ss = { ...ss, bomb: dropBomb(ss.bomb, pos) }
+          next.feed = pushFeed(next, `${other.name} dropped the bomb`, now)
+        }
+        next.snd = ss
+      }
+    }
+    updPlayers[from] = { ...me, hits: me.hits + splashHitCount, score: me.score + splashHitCount * 10 + splashKills * 100, kills: me.kills + splashKills }
+    next.players = updPlayers
+  }
+
+  return { state: next, reply: { type: 'hit_ok', data: { name: target.name, killed, zone, damage: Math.min(damage, target.hp), splash: splashHits.length ? splashHits : undefined } } }
 }

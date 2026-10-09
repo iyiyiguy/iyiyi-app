@@ -86,6 +86,9 @@ export const GUNS = [
   { id: 'railgun', name: 'Ion Railgun', icon: '☄️', category: 'precision', rarity: 'legendary',
     description: 'Heavy charged beams – hold for 4 punchy shots a second', fireMode: 'automatic', shotsPerClick: null, fireRate: 4, fixedAutoRate: 4,
     accuracy: 40, damage: 100, damageMultiplier: 1.6, range: 140, sound: 'railgun', unlockPoints: 1200 },
+  { id: 'rocket', name: 'Rocket Launcher', icon: '🚀', category: 'heavy', rarity: 'legendary',
+    description: 'Massive blast radius – inaccurate but devastating', fireMode: 'single', shotsPerClick: 1, fireRate: 1/3,
+    accuracy: -30, damage: 150, damageMultiplier: 2.5, range: 80, blastRadius: 25, sound: 'rocket', unlockPoints: 0, iap: true },
 ]
 
 export const WEAPONS = GUNS

@@ -422,7 +422,7 @@ export async function purchaseUavPack(sku = UAV_SKU) {
 // (App Store Connect type: Non-Consumable; Google Play: one-time product).
 // Owning a gun is recorded in arcade stats, the same place coin unlocks go.
 // ---------------------------------------------------------------------------
-export const PAID_GUN_IDS = ['burst', 'smg', 'sniper', 'scatter', 'assault', 'marksman', 'minigun', 'railgun']
+export const PAID_GUN_IDS = ['burst', 'smg', 'sniper', 'scatter', 'assault', 'marksman', 'minigun', 'railgun', 'rocket']
 export const gunSku = (gunId) => Platform.select({ ios: `com.iYiYi.gun.${gunId}`, android: `iyiyi_gun_${gunId}` })
 const GUN_BY_SKU = Object.fromEntries(PAID_GUN_IDS.map((id) => [gunSku(id), id]))
 export const isGunSku = (sku) => !!GUN_BY_SKU[sku]

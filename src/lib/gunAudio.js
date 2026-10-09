@@ -20,6 +20,7 @@ export const SFX = {
   shotgun: require('../../assets/sounds/shotgun.wav'),
   minigun: require('../../assets/sounds/minigun.wav'),
   railgun: require('../../assets/sounds/railgun.wav'),
+  rocket: require('../../assets/sounds/rocket.wav'),
   empty: require('../../assets/sounds/empty.wav'),
   hit: require('../../assets/sounds/hit.wav'),
   planted: require('../../assets/sounds/planted.wav'),
@@ -43,7 +44,7 @@ export const SFX = {
 // Weapon id → effect (kept here too so this module has no dependency on guns.js).
 const WEAPON_SOUND = {
   pistol: 'pistol', uzi: 'smg', burst: 'rifle', smg: 'smg', sniper: 'sniper', scatter: 'shotgun',
-  assault: 'ar', marksman: 'dmr', minigun: 'minigun', railgun: 'railgun',
+  assault: 'ar', marksman: 'dmr', minigun: 'minigun', railgun: 'railgun', rocket: 'rocket',
 }
 // Rapid-fire effects get more voices.
 const POOL_SIZE = { smg: 5, minigun: 6, ar: 4, rifle: 4, railgun: 3, tap: 3, hit: 3, wordKey: 4, wordFlip: 5 }
