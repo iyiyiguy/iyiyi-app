@@ -9,6 +9,7 @@ import { apiJson } from '../lib/api'
 import { exportHistory } from '../lib/exportPeople'
 import ExportSheet from '../components/ExportSheet'
 import { openProfile } from '../lib/profileNav'
+import { useIsBusinessPro } from '../lib/useIsPro'
 
 export default function HistoryScreen({ navigation }) {
   const [layout, setLayout] = useState('grid')
@@ -18,6 +19,7 @@ export default function HistoryScreen({ navigation }) {
   const [exporting, setExporting] = useState(false)
   const [showExport, setShowExport] = useState(false)
   const { statuses, setStatus } = useFollowStatuses(history, 'id')
+  const isBiz = useIsBusinessPro()
 
   const runExport = async (opts) => {
     setExporting(true)
@@ -56,8 +58,25 @@ export default function HistoryScreen({ navigation }) {
         onBack={() => navigation.goBack()}
         right={
           <View style={{ flexDirection: 'row', gap: 18, alignItems: 'center' }}>
-            <Pressable onPress={() => setShowExport(true)} disabled={exporting} hitSlop={8}>
-              {exporting ? <ActivityIndicator color={colors.text} /> : <Text style={{ color: colors.text, fontSize: 15, fontWeight: '700' }}>Export</Text>}
+            <Pressable
+              onPress={() => {
+                if (isBiz === false) {
+                  Alert.alert('Business Pro', 'Export history is available on the Business Pro plan.', [
+                    { text: 'Not now', style: 'cancel' },
+                    { text: 'Upgrade', onPress: () => navigation.navigate('Subscription') },
+                  ])
+                } else {
+                  setShowExport(true)
+                }
+              }}
+              disabled={exporting}
+              hitSlop={8}
+            >
+              {exporting ? <ActivityIndicator color={colors.text} /> : (
+                <Text style={{ color: isBiz === false ? colors.textFaint : colors.text, fontSize: 15, fontWeight: '700' }}>
+                  {isBiz === false ? '🔒 Export' : 'Export'}
+                </Text>
+              )}
             </Pressable>
             <Pressable onPress={() => setLayout(l => (l === 'grid' ? 'list' : 'grid'))}>
               <Text style={{ color: colors.text, fontSize: 20 }}>{layout === 'grid' ? '☰' : '▦'}</Text>

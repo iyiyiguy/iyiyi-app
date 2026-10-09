@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback } from 'react'
-import { View, Text, StyleSheet, ActivityIndicator, Alert, Platform, ScrollView, Linking, Image } from 'react-native'
+import { useState, useEffect, useCallback, useRef } from 'react'
+import { View, Text, StyleSheet, ActivityIndicator, Alert, Platform, ScrollView, Linking, Image, Dimensions } from 'react-native'
 import { LinearGradient } from 'expo-linear-gradient'
 import { Ionicons } from '@expo/vector-icons'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -15,13 +15,12 @@ import { markPro } from '../lib/useIsPro'
 import { translate, useT } from '../i18n'
 import strings from '../i18n/strings/subscription'
 
-// iYiYi Pro paywall. Used two ways:
-//  - as a screen (Settings → iYiYi Pro, the Pro button), with a back button;
-//  - once during onboarding (`onClose` set), with a close button and "Not now".
+// iYiYi Pro paywall — two-tier layout.
+//   Creator Pro  · $0.99 intro for 2 months → $9.99/mo
+//   Business Pro · $9.99 intro for 1 month  → $29/mo
 //
-// App Review 3.1.2(c): the amount that will be billed (the regular monthly price) is the largest,
-// most prominent price on the screen and is repeated on the button. The introductory offer is
-// shown smaller, underneath, and always says how long it lasts and what is charged afterwards.
+// App Review 3.1.2(c): the regular monthly price is largest/most-prominent on-screen and
+// repeated on the button. Intro is smaller, underneath, with duration + what follows.
 // Prices come from the store, localized; nothing is hard-coded.
 
 const TERMS_URL = 'https://iyiyi.xyz/terms'
@@ -29,19 +28,34 @@ const PRIVACY_URL = 'https://iyiyi.xyz/privacy'
 const APPLE_SUBSCRIPTIONS_URL = 'https://apps.apple.com/account/subscriptions'
 const ICON = require('../../assets/icon.png')
 
-const TIER_LABELS = { pro: 'Pro', pro_local: 'Pro', pro_national: 'Pro', pro_all: 'Pro', premium: 'Premium', creator: 'Creator' }
-const PRICE_USD = { pro: 10 }
+const TIER_LABELS = {
+  pro: 'Creator Pro', pro_local: 'Creator Pro', pro_national: 'Creator Pro', pro_all: 'Creator Pro',
+  premium: 'Premium', creator: 'Creator', business: 'Business Pro', business_pro: 'Business Pro',
+}
+const PRICE_USD = { pro: 10, business: 29 }
 
-// title/text are keys into strings/subscription.js, translated at render.
-const BENEFITS = [
-  { icon: 'rocket', colors: ['#6b7cff', '#9b8cff'], title: 'benefit_seen_title', text: 'benefit_seen_text' },
-  { icon: 'globe', colors: ['#4fd1c5', '#7fb3ff'], title: 'benefit_reach_title', text: 'benefit_reach_text' },
-  { icon: 'star', colors: ['#ffb16b', '#ff7e9d'], title: 'benefit_badge_title', text: 'benefit_badge_text' },
-  { icon: 'heart', colors: ['#ff6fb5', '#ff9fd0'], title: 'benefit_support_title', text: 'benefit_support_text' },
+// ---- Creator Pro benefits ----
+const CREATOR_BENEFITS = [
+  { icon: 'rocket', colors: ['#6b7cff', '#9b8cff'], title: 'Get seen first', text: 'Your profile is shown ahead of free profiles in Nearby and Discover.' },
+  { icon: 'globe', colors: ['#4fd1c5', '#7fb3ff'], title: 'Extended discovery', text: 'Reach people beyond your block — local, regional, or international.' },
+  { icon: 'star', colors: ['#ffb16b', '#ff7e9d'], title: 'Pro badge', text: 'A ⭐ next to your name everywhere people see you.' },
+  { icon: 'game-controller', colors: ['#a78bfa', '#6366f1'], title: 'Premium arcade', text: 'Exclusive gun skins, premium weapons, and bonus loadouts in Laser Tag.' },
+  { icon: 'trophy', colors: ['#f59e0b', '#ef4444'], title: 'Priority placement', text: 'Appear higher in search results and recommendation feeds.' },
+  { icon: 'heart', colors: ['#ff6fb5', '#ff9fd0'], title: 'Support iYiYi', text: 'Help an independent team keep building new features and games.' },
 ]
 
-// Store errors can arrive as a raw JSON string ({"message":"purchase-verification-failed",...});
-// never show that to people.
+// ---- Business Pro benefits ----
+const BUSINESS_BENEFITS = [
+  { icon: 'bar-chart', colors: ['#10b981', '#3b82f6'], title: 'Analytics dashboard', text: 'Track impressions, profile taps, and follow-throughs to your socials in real time.' },
+  { icon: 'megaphone', colors: ['#f97316', '#ef4444'], title: 'Promoted placement', text: 'Pin your business to the top of the nearby feed within a radius you choose.' },
+  { icon: 'gift', colors: ['#8b5cf6', '#ec4899'], title: 'Game sponsorship', text: 'Sponsor nearby arcade games with branded shoutout cards and prizes.' },
+  { icon: 'qr-code', colors: ['#06b6d4', '#3b82f6'], title: 'QR code & tap link', text: 'Generate a QR code and tap-to-follow landing page for your storefront or events.' },
+  { icon: 'people', colors: ['#6366f1', '#a78bfa'], title: 'Team members', text: 'Add up to 3 staff accounts so your team can manage the business profile together.' },
+  { icon: 'mail', colors: ['#14b8a6', '#0ea5e9'], title: 'Weekly digest', text: 'Get a weekly email with your top stats — impressions, new followers, and engagement.' },
+  { icon: 'download', colors: ['#64748b', '#475569'], title: 'Export history', text: 'Download your encounter history and analytics as CSV any time.' },
+  { icon: 'rocket', colors: ['#6b7cff', '#9b8cff'], title: 'Everything in Creator Pro', text: 'Priority placement, Pro badge, premium arcade, extended discovery — all included.' },
+]
+
 function friendlyError(e, fallback) {
   if (e?.userFacing && e?.message) return e.message
   let msg = e?.message
@@ -54,19 +68,20 @@ export default function SubscriptionScreen({ navigation, onClose }) {
   const insets = useSafeAreaInsets()
   const t = useT(strings)
   const onboarding = typeof onClose === 'function'
+  const [selectedTier, setSelectedTier] = useState('pro') // 'pro' | 'business'
   const [purchasing, setPurchasing] = useState(false)
   const [restoring, setRestoring] = useState(false)
   const [cancelling, setCancelling] = useState(false)
   const [current, setCurrent] = useState(null)
   const [error, setError] = useState('')
-  const [info, setInfo] = useState(null) // localized store pricing; null until loaded / unavailable
+  const [proInfo, setProInfo] = useState(null)
+  const [bizInfo, setBizInfo] = useState(null)
   const [infoFailed, setInfoFailed] = useState(false)
 
   const authedFetch = async (path, options = {}) => {
     const { data } = await supabase.auth.getSession()
     const session = data?.session
     if (!session?.access_token) throw new Error(translate(strings, 'err_sign_in'))
-    // Time-limited so a slow server can't leave the purchase button spinning.
     const ctrl = new AbortController()
     const timer = setTimeout(() => ctrl.abort(), 30000)
     try {
@@ -94,11 +109,15 @@ export default function SubscriptionScreen({ navigation, onClose }) {
   useEffect(() => {
     let cancelled = false
     loadCurrent()
-      .then((c) => { if (!cancelled && onboarding && c?.status === 'active') onClose() }) // already Pro: skip
+      .then((c) => { if (!cancelled && onboarding && c?.status === 'active') onClose() })
       .catch(() => {})
+    // Fetch pricing for both tiers in parallel.
     fetchSubscriptionInfo('pro')
-      .then((i) => { if (!cancelled) { setInfo(i); if (!i) setInfoFailed(true) } })
+      .then((i) => { if (!cancelled) { setProInfo(i); if (!i) setInfoFailed(true) } })
       .catch(() => { if (!cancelled) setInfoFailed(true) })
+    fetchSubscriptionInfo('business')
+      .then((i) => { if (!cancelled) setBizInfo(i) })
+      .catch(() => {})
     return () => { cancelled = true }
   }, [loadCurrent]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -115,7 +134,6 @@ export default function SubscriptionScreen({ navigation, onClose }) {
         err.userFacing = true
         throw err
       }
-      // Keep the server's reason visible so a failure can be diagnosed from a screenshot.
       const err = new Error(`${translate(strings, 'err_verify')} (${reason.replace(/^Receipt verification failed:\s*/i, '').slice(0, 80)})`)
       err.userFacing = true
       throw err
@@ -128,10 +146,13 @@ export default function SubscriptionScreen({ navigation, onClose }) {
     setError('')
     setPurchasing(true)
     try {
-      await purchaseSubscription('pro', verifyWithBackend)
+      await purchaseSubscription(selectedTier, verifyWithBackend)
       markPro()
       if (onboarding) onClose()
-      else Alert.alert(t('welcome_title'), t('welcome_msg'))
+      else Alert.alert(
+        selectedTier === 'business' ? 'Welcome to Business Pro' : t('welcome_title'),
+        selectedTier === 'business' ? 'Your business tools are now active.' : t('welcome_msg'),
+      )
     } catch (e) {
       if (!isUserCancelled(e)) setError(friendlyError(e, t('err_verify')))
     } finally {
@@ -140,7 +161,6 @@ export default function SubscriptionScreen({ navigation, onClose }) {
   }
 
   const cancel = async () => {
-    // Apple subscriptions can only be cancelled by the user in their Apple ID settings.
     if (Platform.OS === 'ios') {
       Linking.openURL(APPLE_SUBSCRIPTIONS_URL).catch(() =>
         Alert.alert(t('manage_title'), t('manage_msg')))
@@ -155,7 +175,7 @@ export default function SubscriptionScreen({ navigation, onClose }) {
         t('cancelled_title'),
         current?.renews_at
           ? t('cancelled_msg_date', { date: new Date(current.renews_at).toLocaleDateString() })
-          : t('cancelled_msg_period')
+          : t('cancelled_msg_period'),
       )
     } catch (e) {
       setError(e.message)
@@ -171,7 +191,7 @@ export default function SubscriptionScreen({ navigation, onClose }) {
       const restored = await restorePurchases(verifyWithBackend)
       Alert.alert(
         restored.length ? t('restored_title') : t('nothing_title'),
-        restored.length ? t('restored_msg', { items: restored.join(', ') }) : t('nothing_msg')
+        restored.length ? t('restored_msg', { items: restored.join(', ') }) : t('nothing_msg'),
       )
       if (restored.length && onboarding) onClose()
     } catch (e) {
@@ -182,13 +202,15 @@ export default function SubscriptionScreen({ navigation, onClose }) {
   }
 
   const active = current?.status === 'active'
-  const busy = purchasing || restoring
-  // info.period is an English unit from the store helper ('month', 'year', ...): translate the word.
+  const info = selectedTier === 'business' ? bizInfo : proInfo
   const period = info ? (t(`period_${info.period}`) === `period_${info.period}` ? info.period : t(`period_${info.period}`)) : null
   const billed = info ? `${info.displayPrice}/${period}` : null
   const store = Platform.OS === 'ios' ? 'App Store' : 'Google Play'
   const account = Platform.OS === 'ios' ? 'Apple ID' : 'Google Play'
   const goBack = !onboarding && navigation?.canGoBack?.() ? () => navigation.goBack() : null
+  const busy = purchasing || restoring
+  const benefits = selectedTier === 'business' ? BUSINESS_BENEFITS : CREATOR_BENEFITS
+  const tierLabel = selectedTier === 'business' ? 'Business Pro' : 'Creator Pro'
 
   return (
     <View style={styles.screen}>
@@ -209,26 +231,49 @@ export default function SubscriptionScreen({ navigation, onClose }) {
               <Text style={styles.proPillText}>PRO</Text>
             </LinearGradient>
           </View>
-          <Text style={styles.title}>{active ? t('title_active') : t('title')}</Text>
+          <Text style={styles.title}>{active ? t('title_active') : 'Choose your plan'}</Text>
           <Text style={styles.subtitle}>
             {active
               ? `${t('thanks')} ${current?.renews_at ? t('renews_on', { date: new Date(current.renews_at).toLocaleDateString() }) : ''}`
-              : t('subtitle')}
+              : 'Level up your profile or grow your business on iYiYi.'}
           </Text>
         </FadeIn>
 
+        {/* ---- tier toggle ---- */}
+        {!active && (
+          <FadeIn index={1} style={{ marginTop: 18 }}>
+            <View style={styles.tierToggle}>
+              <Press
+                onPress={() => setSelectedTier('pro')}
+                style={[styles.tierTab, selectedTier === 'pro' && styles.tierTabActive]}
+                haptic="selection"
+              >
+                <Text style={[styles.tierTabText, selectedTier === 'pro' && styles.tierTabTextActive]}>Creator Pro</Text>
+              </Press>
+              <Press
+                onPress={() => setSelectedTier('business')}
+                style={[styles.tierTab, selectedTier === 'business' && styles.tierTabActive]}
+                haptic="selection"
+              >
+                <Text style={[styles.tierTabText, selectedTier === 'business' && styles.tierTabTextActive]}>Business Pro</Text>
+                <View style={styles.popularBadge}><Text style={styles.popularText}>BEST</Text></View>
+              </Press>
+            </View>
+          </FadeIn>
+        )}
+
         {/* ---- benefits ---- */}
-        <View style={{ gap: 10, marginTop: 22 }}>
-          {BENEFITS.map((b, i) => (
-            <FadeIn key={b.title} index={i + 1}>
+        <View style={{ gap: 10, marginTop: 18 }}>
+          {benefits.map((b, i) => (
+            <FadeIn key={`${selectedTier}-${b.title}`} index={i + 2}>
               <GlassPanel radius={radii.lg} lite animateIn={false}>
                 <View style={styles.benefit}>
                   <LinearGradient colors={b.colors} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.benefitIcon}>
                     <Ionicons name={b.icon} size={19} color="#fff" />
                   </LinearGradient>
                   <View style={{ flex: 1 }}>
-                    <Text style={type.headline}>{t(b.title)}</Text>
-                    <Text style={[type.caption, { marginTop: 2 }]}>{t(b.text)}</Text>
+                    <Text style={type.headline}>{b.title}</Text>
+                    <Text style={[type.caption, { marginTop: 2 }]}>{b.text}</Text>
                   </View>
                 </View>
               </GlassPanel>
@@ -237,7 +282,7 @@ export default function SubscriptionScreen({ navigation, onClose }) {
         </View>
 
         {/* ---- plan + purchase ---- */}
-        <FadeIn index={6} style={{ marginTop: 22 }}>
+        <FadeIn index={benefits.length + 3} style={{ marginTop: 22 }}>
           {active ? (
             <GlassPanel radius={radii.lg} strong animateIn={false}>
               <View style={styles.planInner}>
@@ -256,12 +301,13 @@ export default function SubscriptionScreen({ navigation, onClose }) {
             <GlassPanel radius={radii.lg} strong animateIn={false}>
               <View style={styles.planInner}>
                 <View style={styles.planHeader}>
-                  <Text style={type.headline}>{t('plan_name')}</Text>
-                  <Ionicons name="checkmark-circle" size={22} color={colors.magenta} />
+                  <Text style={type.headline}>
+                    {selectedTier === 'business' ? '💼 Business Pro · Monthly' : '⭐ Creator Pro · Monthly'}
+                  </Text>
+                  <Ionicons name="checkmark-circle" size={22} color={selectedTier === 'business' ? '#10b981' : colors.magenta} />
                 </View>
                 {info ? (
                   <>
-                    {/* The billed amount: biggest price on the screen. */}
                     <Text style={styles.price} accessibilityLabel={t('price_a11y', { price: info.displayPrice, period })}>
                       {info.displayPrice}
                       <Text style={styles.pricePer}> / {period}</Text>
@@ -287,13 +333,15 @@ export default function SubscriptionScreen({ navigation, onClose }) {
           {!active ? (
             <Press onPress={purchase} disabled={busy || !info} scaleTo={0.97} haptic="light" accessibilityLabel={billed ? t('subscribe_a11y', { billed }) : t('subscribe')} style={{ marginTop: 16 }}>
               <LinearGradient
-                colors={['#6b7cff', '#8f5bff']}
+                colors={selectedTier === 'business' ? ['#10b981', '#059669'] : ['#6b7cff', '#8f5bff']}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
                 style={[styles.cta, (busy || !info) && { opacity: 0.6 }]}
               >
                 {purchasing ? <ActivityIndicator color="#fff" /> : (
-                  <Text style={styles.ctaText}>{billed ? t('subscribe_price', { billed }) : t('subscribe')}</Text>
+                  <Text style={styles.ctaText}>
+                    {billed ? `Subscribe to ${tierLabel} · ${billed}` : `Subscribe to ${tierLabel}`}
+                  </Text>
                 )}
               </LinearGradient>
             </Press>
@@ -342,8 +390,18 @@ const styles = StyleSheet.create({
   proPillText: { color: colors.onGold, fontWeight: '900', fontSize: 11, letterSpacing: 0.8 },
   title: { ...type.display, textAlign: 'center' },
   subtitle: { ...type.subhead, textAlign: 'center', marginTop: 8, maxWidth: 380 },
+  // ---- tier toggle ----
+  tierToggle: { flexDirection: 'row', backgroundColor: colors.inkSurface, borderRadius: radii.pill, padding: 4, gap: 4, borderWidth: 1, borderColor: colors.hairline },
+  tierTab: { flex: 1, paddingVertical: 12, borderRadius: radii.pill, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 6 },
+  tierTabActive: { backgroundColor: colors.magenta },
+  tierTabText: { fontWeight: '700', fontSize: 14, color: colors.textMuted },
+  tierTabTextActive: { color: '#fff' },
+  popularBadge: { backgroundColor: '#f59e0b', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 },
+  popularText: { color: '#fff', fontSize: 9, fontWeight: '900', letterSpacing: 0.5 },
+  // ---- benefits ----
   benefit: { flexDirection: 'row', alignItems: 'center', gap: 14, padding: 14 },
   benefitIcon: { width: 40, height: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  // ---- plan card ----
   planInner: { padding: 18 },
   planHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   price: { color: colors.text, fontWeight: '800', fontSize: 38, letterSpacing: -1, marginTop: 10 },

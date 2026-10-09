@@ -17,6 +17,10 @@ export const SKUS = {
     ios: 'com.iyiyi.app.pro.all.monthly',
     android: 'iyiyi_pro_monthly',
   }),
+  business: Platform.select({
+    ios: 'com.iyiyi.app.business.monthly',
+    android: 'iyiyi_business_monthly',
+  }),
 }
 
 let connected = false
@@ -159,7 +163,7 @@ async function verifyFresh(purchase, payload, verifyWithBackend) {
 }
 
 // Our server knows the Pro plan as 'pro_all' (product com.iyiyi.app.pro.all.monthly).
-export const BACKEND_TIER = { pro: 'pro_all' }
+export const BACKEND_TIER = { pro: 'pro_all', business: 'business_pro' }
 
 // Buys a subscription, then hands the platform receipt to our backend for verification.
 // In react-native-iap v16 the purchase result arrives through listeners rather than the

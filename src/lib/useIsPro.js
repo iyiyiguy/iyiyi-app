@@ -5,9 +5,12 @@ import { apiJson } from './api'
 // Whether the signed-in user is on a paid plan, for showing / hiding "Go Pro" prompts.
 // null while unknown (prompts stay hidden until we know), then true / false. Cached across
 // screens and refreshed whenever a screen using it comes into focus (e.g. after subscribing).
-const PAID = ['pro', 'pro_local', 'pro_national', 'pro_all', 'premium', 'creator']
+const PAID = ['pro', 'pro_local', 'pro_national', 'pro_all', 'premium', 'creator', 'business', 'business_pro']
+const BUSINESS_TIERS = ['business', 'business_pro']
 let cached = null
+let cachedTier = null
 const listeners = new Set()
+const tierListeners = new Set()
 
 async function refresh() {
   try {
@@ -16,6 +19,11 @@ async function refresh() {
     if (next !== cached) {
       cached = next
       listeners.forEach((l) => l(next))
+    }
+    const nextTier = me?.account_type ?? null
+    if (nextTier !== cachedTier) {
+      cachedTier = nextTier
+      tierListeners.forEach((l) => l(nextTier))
     }
   } catch {
     // Keep what we had.
@@ -40,4 +48,26 @@ export default function useIsPro() {
   }, [])
   useFocusEffect(useCallback(() => { refresh() }, []))
   return isPro
+}
+
+/** Returns true when the user is on a Business Pro plan. */
+export function useIsBusinessPro() {
+  const [tier, setTier] = useState(cachedTier)
+  useEffect(() => {
+    tierListeners.add(setTier)
+    return () => { tierListeners.delete(setTier) }
+  }, [])
+  useFocusEffect(useCallback(() => { refresh() }, []))
+  return BUSINESS_TIERS.includes(tier)
+}
+
+/** Returns the raw account_type string (null while unknown). */
+export function useAccountTier() {
+  const [tier, setTier] = useState(cachedTier)
+  useEffect(() => {
+    tierListeners.add(setTier)
+    return () => { tierListeners.delete(setTier) }
+  }, [])
+  useFocusEffect(useCallback(() => { refresh() }, []))
+  return tier
 }

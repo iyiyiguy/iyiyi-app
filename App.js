@@ -72,6 +72,10 @@ const PlayerProfileScreen = lazyScreen(() => import('./src/screens/PlayerProfile
 const GunShopScreen = lazyScreen(() => import('./src/screens/GunShopScreen'))
 const ChessScreen = lazyScreen(() => import('./src/screens/ChessScreen'))
 const WordRaceScreen = lazyScreen(() => import('./src/screens/WordRaceScreen'))
+const BusinessDashboardScreen = lazyScreen(() => import('./src/screens/BusinessDashboardScreen'))
+const PromotedPlacementScreen = lazyScreen(() => import('./src/screens/PromotedPlacementScreen'))
+const BusinessQRScreen = lazyScreen(() => import('./src/screens/BusinessQRScreen'))
+const BusinessTeamScreen = lazyScreen(() => import('./src/screens/BusinessTeamScreen'))
 
 // Shared event links (iyiyi://event/<id>, https://iyiyi.xyz/e/<id>) open the event page.
 const LINKING = {
@@ -154,6 +158,10 @@ const Aura = {
   StreamScreen: withAura(StreamScreen),
   LocationConsentScreen: withAura(LocationConsentScreen),
   ImportLinksScreen: withAura(ImportLinksScreen),
+  BusinessDashboardScreen: withAura(BusinessDashboardScreen),
+  PromotedPlacementScreen: withAura(PromotedPlacementScreen),
+  BusinessQRScreen: withAura(BusinessQRScreen),
+  BusinessTeamScreen: withAura(BusinessTeamScreen),
 }
 
 function Tabs() {
@@ -346,6 +354,10 @@ export default function App() {
             <Stack.Screen name="GunShop" component={Aura.GunShopScreen} />
             <Stack.Screen name="Chess" component={Aura.ChessScreen} />
             <Stack.Screen name="WordRace" component={Aura.WordRaceScreen} />
+            <Stack.Screen name="BusinessDashboard" component={Aura.BusinessDashboardScreen} />
+            <Stack.Screen name="PromotedPlacement" component={Aura.PromotedPlacementScreen} />
+            <Stack.Screen name="BusinessQR" component={Aura.BusinessQRScreen} />
+            <Stack.Screen name="BusinessTeam" component={Aura.BusinessTeamScreen} />
           </Stack.Navigator>
         )}
         {/* Game challenges from other users (inbox:<myId>), only once fully signed in. */}
