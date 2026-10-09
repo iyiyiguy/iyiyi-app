@@ -35,7 +35,7 @@ export default function BlockedUsersScreen({ navigation }) {
         contentContainerStyle={{ padding: 20 }}
         renderItem={({ item }) => (
           <View style={styles.row}>
-            <Image source={avatarSource(item.avatar_url)} style={styles.avatar} />
+            <Image source={avatarSource(item?.avatar_url)} style={styles.avatar} />
             <Text style={[type.body, { flex: 1 }]}>{item.username}</Text>
             <Pressable onPress={() => unblock(item.id)}>
               <Text style={{ color: colors.magenta }}>Unblock</Text>

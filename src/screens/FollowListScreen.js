@@ -49,7 +49,7 @@ export default function FollowListScreen({ route, navigation }) {
         renderItem={({ item }) => (
           <View style={styles.row}>
             <Pressable style={styles.rowInfo} onPress={() => openProfile(navigation, item.id)}>
-              <Image source={avatarSource(item.avatar_url)} style={styles.avatar} />
+              <Image source={avatarSource(item?.avatar_url)} style={styles.avatar} />
               <Text style={type.body}>{item.username}</Text>
             </Pressable>
             {mode === 'requests' && (

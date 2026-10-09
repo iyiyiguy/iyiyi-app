@@ -384,7 +384,7 @@ function Avatar({ profile, size }) {
   const [failed, setFailed] = useState(false)
   const s = { width: size, height: size, borderRadius: size / 2 }
   if (!failed) {
-    return <Image source={avatarSource(profile.avatar_url)} style={[styles.avatar, s]} onError={() => setFailed(true)} />
+    return <Image source={avatarSource(profile?.avatar_url)} style={[styles.avatar, s]} onError={() => setFailed(true)} />
   }
   const initial = (String(profile?.username || '?').trim()[0] || '?').toUpperCase()
   return (

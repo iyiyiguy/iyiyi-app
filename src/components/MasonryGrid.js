@@ -75,9 +75,9 @@ export default function MasonryGrid({ items, onOpen, showOwner, columns = 2, onO
               {showOwner && m.owner_avatar_url ? (
                 m.owner_id ? (
                   <Pressable onPress={() => openOwner(m.owner_id)} hitSlop={8} style={styles.ownerDotWrap} accessibilityRole="button" accessibilityLabel={`Open ${m.owner_username ?? 'owner'}’s profile`}>
-                    <Image source={avatarSource(m.owner_avatar_url)} style={styles.ownerDotImg} />
+                    <Image source={avatarSource(m?.owner_avatar_url)} style={styles.ownerDotImg} />
                   </Pressable>
-                ) : <Image source={avatarSource(m.owner_avatar_url)} style={styles.ownerDot} />
+                ) : <Image source={avatarSource(m?.owner_avatar_url)} style={styles.ownerDot} />
               ) : null}
             </Pressable>
           ))}

@@ -106,7 +106,7 @@ export default function ActivityScreen({ navigation }) {
             >
               <View>
                 {item.avatar_url ? (
-                  <Image source={avatarSource(item.avatar_url)} style={styles.avatar} />
+                  <Image source={avatarSource(item?.avatar_url)} style={styles.avatar} />
                 ) : (
                   <View style={[styles.avatar, styles.avatarFallback]}><Ionicons name="person" size={20} color={colors.textFaint} /></View>
                 )}

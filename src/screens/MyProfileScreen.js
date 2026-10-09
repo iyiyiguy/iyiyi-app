@@ -343,12 +343,12 @@ export default function MyProfileScreen({ navigation }) {
       <ScrollView ref={scrollRef} keyboardShouldPersistTaps="handled">
       {/* ---- Header: avatar, name, counts, actions ---- */}
       <LinearGradient colors={gradients.brandSubtle} style={styles.hero}>
-        <Image source={avatarSource(profile.avatar_url)} style={styles.heroAvatar} />
+        <Image source={avatarSource(profile?.avatar_url)} style={styles.heroAvatar} />
       </LinearGradient>
 
       <View style={styles.avatarWrap}>
         <Pressable onPress={pickAvatar} disabled={uploading} accessibilityRole="button" accessibilityLabel={t('changePhotoA11y')}>
-          <Image source={avatarSource(profile.avatar_url)} style={styles.avatar} />
+          <Image source={avatarSource(profile?.avatar_url)} style={styles.avatar} />
           <View style={styles.editBadge}>
             {uploading ? <ActivityIndicator size="small" color={colors.onBrand} /> : <Text style={{ fontSize: 16 }}>📷</Text>}
           </View>

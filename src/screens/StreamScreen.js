@@ -539,7 +539,7 @@ function CoverCard({ item, i, scrollX, step, left, top, cardW, cardH, reflH, zIn
         <LinearGradient colors={['rgba(0,0,0,0)', 'rgba(0,0,0,0.78)']} locations={[0.55, 1]} style={StyleSheet.absoluteFill} pointerEvents="none" />
         <Pressable onPress={centered ? onOwner : onPress} style={styles.cardOwner} hitSlop={4} accessibilityRole="button" accessibilityLabel={`Open ${item.owner_username ?? 'their'} profile`}>
           {item.owner_avatar_url ? (
-            <Image source={avatarSource(item.owner_avatar_url)} style={styles.avatar} />
+            <Image source={avatarSource(item?.owner_avatar_url)} style={styles.avatar} />
           ) : (
             <View style={[styles.avatar, styles.avatarFallback]}><Ionicons name="person" size={13} color="#fff" /></View>
           )}

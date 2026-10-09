@@ -73,7 +73,7 @@ export default function PlatformFollowsScreen({ navigation }) {
         onRefresh={() => load(tab)}
         renderItem={({ item }) => (
           <Pressable style={styles.row} onPress={() => openProfile(navigation, item.id, item.avatar_url ?? null)}>
-            <Image source={avatarSource(item.avatar_url)} style={styles.avatar} />
+            <Image source={avatarSource(item?.avatar_url)} style={styles.avatar} />
             <View style={{ flex: 1 }}>
               <Text style={type.body}>{item.username}</Text>
               <Text style={type.caption}>

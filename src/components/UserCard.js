@@ -36,7 +36,7 @@ export default function UserCard({ user, onPress, layout = 'grid', followStatus,
           <View style={styles.listRowInner}>
             {rank != null && <Text style={styles.rank}>{rank}</Text>}
             <View>
-              <Image source={avatarSource(user.avatar_url)} style={styles.avatarSm} contentFit="cover" transition={150} cachePolicy="memory-disk" recyclingKey={String(userId)} />
+              <Image source={avatarSource(user?.avatar_url)} style={styles.avatarSm} contentFit="cover" transition={150} cachePolicy="memory-disk" recyclingKey={String(userId)} />
               {isSelf ? <View style={styles.youDot}><Text style={styles.youDotText}>You</Text></View> : null}
             </View>
             <View style={{ flex: 1 }}>
@@ -59,7 +59,7 @@ export default function UserCard({ user, onPress, layout = 'grid', followStatus,
       <GlassPanel radius={28} style={styles.card} lite animateIn={false}>
         <View style={styles.cardInner}>
           <View>
-            <Image source={avatarSource(user.avatar_url)} style={styles.avatar} contentFit="cover" transition={150} cachePolicy="memory-disk" recyclingKey={String(userId)} />
+            <Image source={avatarSource(user?.avatar_url)} style={styles.avatar} contentFit="cover" transition={150} cachePolicy="memory-disk" recyclingKey={String(userId)} />
             {isSelf ? (
               <View style={styles.youBadge}><Text style={styles.youText}>You</Text></View>
             ) : null}

@@ -68,7 +68,7 @@ export default function PlayerProfileScreen({ navigation }) {
           <View style={[styles.heroGlow, { backgroundColor: rank.color }]} />
           <View style={[styles.avatarRing, { borderColor: rank.color }]}>
             {true ? (
-              <Image source={avatarSource(profile.avatar_url)} style={styles.avatar} />
+              <Image source={avatarSource(profile?.avatar_url)} style={styles.avatar} />
             ) : (
               <LinearGradient colors={AC.play} style={[styles.avatar, styles.center]}>
                 <Text style={styles.avatarLetter}>{name.charAt(0).toUpperCase()}</Text>

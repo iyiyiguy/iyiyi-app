@@ -99,7 +99,7 @@ export default function RecapScreen({ navigation }) {
             <LinearGradient colors={['#ff2bd6', '#7a3cff', '#19e3ff']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.card}>
               <Text style={styles.brand}>iYiYi ✦ recap</Text>
               <View style={styles.who}>
-                {<Image source={avatarSource(recap.avatar_url)} style={styles.avatar} />}
+                {<Image source={avatarSource(recap?.avatar_url)} style={styles.avatar} />}
                 <Text style={styles.name}>@{recap.username ?? 'you'}</Text>
               </View>
 

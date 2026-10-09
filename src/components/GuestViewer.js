@@ -63,7 +63,7 @@ export default function GuestViewer({ visible, items, startIndex = 0, onClose, o
           accessibilityRole="button"
           accessibilityLabel={`Open ${item.owner_username ?? 'owner'}'s profile`}
         >
-          {<Image source={avatarSource(item.owner_avatar_url)} style={styles.avatar} />}
+          {<Image source={avatarSource(item?.owner_avatar_url)} style={styles.avatar} />}
           <Text style={styles.ownerName} numberOfLines={1}>@{item.owner_username ?? 'someone'}</Text>
           <Pressable onPress={() => prompt('follow')} hitSlop={6} style={styles.follow} accessibilityRole="button">
             <Text style={styles.followText}>Follow</Text>

@@ -24,6 +24,7 @@ export class ErrorBoundary extends React.Component {
     })
 
     // Log to crash tracker
+    try { require('@sentry/react-native').captureException(error, { tags: { screen: this.props.screen || 'unknown' } }) } catch {}
     logCrash(error, {
       errorBoundary: true,
       componentStack: errorInfo.componentStack,
@@ -57,6 +58,11 @@ export class ErrorBoundary extends React.Component {
             <Pressable onPress={this.handleReset} style={styles.button}>
               <Text style={styles.buttonText}>Try Again</Text>
             </Pressable>
+            {this.props.onBack ? (
+              <Pressable onPress={() => { this.handleReset(); this.props.onBack() }} style={[styles.button, { marginTop: 10, backgroundColor: 'rgba(255,255,255,0.12)' }]}>
+                <Text style={styles.buttonText}>Go back</Text>
+              </Pressable>
+            ) : null}
 
             {process.env.NODE_ENV === 'development' && (
               <View style={styles.devInfo}>
@@ -78,7 +84,7 @@ export class ErrorBoundary extends React.Component {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: 'linear-gradient(135deg, #0a0e27 0%, #1a1f3a 50%, #2a1e4e 100%)',
+    backgroundColor: '#0b0d1f',
     alignItems: 'center',
     justifyContent: 'center',
     padding: 16,

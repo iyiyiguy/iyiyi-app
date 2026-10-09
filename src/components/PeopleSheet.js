@@ -29,7 +29,7 @@ export default function PeopleSheet({ visible, onClose, title, subtitle, people 
               {list.map((p) => (
                 <View key={p.id} style={styles.row}>
                   <Pressable onPress={() => onOpenProfile?.(p.id)} style={styles.who} accessibilityRole="button">
-                    {<Image source={avatarSource(p.avatar_url)} style={styles.avatar} />}
+                    {<Image source={avatarSource(p?.avatar_url)} style={styles.avatar} />}
                     <Text style={[type.body, { flex: 1 }]} numberOfLines={1}>{p.username ?? 'iYiYi user'}</Text>
                   </Pressable>
                   <FollowButton userId={p.id} status={statuses[p.id]} onChange={setStatus} />

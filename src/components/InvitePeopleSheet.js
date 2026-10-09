@@ -94,7 +94,7 @@ export default function InvitePeopleSheet({ visible, onClose, gameId, code, excl
     const st = sent[u.id]
     return (
       <View key={key} style={styles.row}>
-        {<Image source={avatarSource(u.avatar_url)} style={styles.avatar} />}
+        {<Image source={avatarSource(u?.avatar_url)} style={styles.avatar} />}
         <Text style={[type.body, { flex: 1 }]} numberOfLines={1}>{u.username ?? 'iYiYi user'}</Text>
         <GlassButton size="sm" variant={st === 'sent' ? 'glass' : 'primary'} disabled={st === 'sending' || st === 'sent'} onPress={() => invite(u)}>
           {st === 'sending' ? 'Sending…' : st === 'sent' ? 'Invited' : st === 'error' ? 'Retry' : 'Invite'}

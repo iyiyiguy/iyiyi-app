@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { DarkTheme, DefaultTheme, NavigationContainer, useNavigationContainerRef } from '@react-navigation/native'
 import { createNativeStackNavigator } from '@react-navigation/native-stack'
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs'
+import { ErrorBoundary as ScreenErrorBoundary } from './src/components/ErrorBoundary'
 import { StatusBar, useColorScheme } from 'react-native'
 import { SafeAreaProvider, initialWindowMetrics, useSafeAreaInsets } from 'react-native-safe-area-context'
 import AsyncStorage from '@react-native-async-storage/async-storage'
@@ -93,6 +94,11 @@ const paywallSeenKey = (uid) => `iyiyi_paywall_seen_${uid}`
 const importSeenKey = (userId) => `iyiyi_import_prompt_seen_${userId}`
 
 const Tab = createBottomTabNavigator()
+// Every screen renders inside its own error boundary: a bug on one screen shows a
+// "Something went wrong" card with Go back, instead of closing the whole app.
+const screenLayout = ({ children, route, navigation }) => (
+  <ScreenErrorBoundary screen={route.name} onBack={() => (navigation.canGoBack() ? navigation.goBack() : null)}>{children}</ScreenErrorBoundary>
+)
 const Stack = createNativeStackNavigator()
 
 const screenOptions = { headerShown: false, contentStyle: { backgroundColor: colors.ink } }
@@ -154,7 +160,7 @@ function Tabs() {
   return (
     <View style={{ flex: 1 }}>
     <AuraBackground />
-    <Tab.Navigator screenOptions={tabScreenOptions} tabBar={(props) => <TabBar {...props} />}>
+    <Tab.Navigator screenLayout={screenLayout} screenOptions={tabScreenOptions} tabBar={(props) => <TabBar {...props} />}>
       <Tab.Screen name="Nearby" component={Aura.NearbyScreen} />
       <Tab.Screen name="Recommended" component={Aura.RecommendedScreen} />
       <Tab.Screen name="MyProfile" component={Aura.MyProfileScreen} />
@@ -185,6 +191,7 @@ function GuestTabs({ navigation }) {
     <View style={{ flex: 1 }}>
       <AuraBackground />
       <Tab.Navigator
+        screenLayout={screenLayout}
         screenOptions={tabScreenOptions}
         tabBar={(props) => <GuestTabBar {...props} />}
         screenListeners={({ route }) => ({ focus: () => setCurrent(route.name) })}
@@ -294,7 +301,7 @@ export default function App() {
           <Aura.LanguageScreen onDone={() => setLangState({ chosen: true })} />
         ) : !session ? (
           // Keyed so signing in/out mounts a fresh navigator (both have a "Tabs" route).
-          <Stack.Navigator key="guest" screenOptions={screenOptions}>
+          <Stack.Navigator key="guest" screenLayout={screenLayout} screenOptions={screenOptions}>
             <Stack.Screen name="Tabs" component={GuestTabs} />
             <Stack.Screen name="SignIn" component={Aura.AuthScreen} />
             <Stack.Screen name="PublicProfile" component={Aura.PublicProfileScreen} />
@@ -306,7 +313,7 @@ export default function App() {
         ) : showPaywall ? (
           <Aura.SubscriptionScreen onClose={finishPaywall} />
         ) : (
-          <Stack.Navigator key="member" screenOptions={screenOptions}>
+          <Stack.Navigator key="member" screenLayout={screenLayout} screenOptions={screenOptions}>
             <Stack.Screen name="Tabs" component={Tabs} />
             <Stack.Screen name="UserProfile" component={Aura.UserProfileScreen} />
             <Stack.Screen name="PublicProfile" component={Aura.PublicProfileScreen} />

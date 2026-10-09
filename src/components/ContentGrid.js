@@ -72,9 +72,9 @@ export default function ContentGrid({
           {showOwner && m.owner_avatar_url ? (
             m.owner_id ? (
               <Pressable onPress={() => openOwner(m.owner_id)} hitSlop={8} style={styles.ownerDotWrap} accessibilityRole="button">
-                <Image source={avatarSource(m.owner_avatar_url)} style={styles.ownerDotImg} />
+                <Image source={avatarSource(m?.owner_avatar_url)} style={styles.ownerDotImg} />
               </Pressable>
-            ) : <Image source={avatarSource(m.owner_avatar_url)} style={styles.ownerDot} />
+            ) : <Image source={avatarSource(m?.owner_avatar_url)} style={styles.ownerDot} />
           ) : null}
           {onDelete ? (
             <Pressable

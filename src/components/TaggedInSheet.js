@@ -25,7 +25,7 @@ export default function TaggedInSheet({ mediaId, visible, onClose, onOpenProfile
         <Text style={styles.sectionTitle}>{title} ({people.length})</Text>
         {people.map((p) => (
           <Pressable key={p.id} style={styles.row} onPress={() => onOpenProfile?.(p.id)}>
-            <Image source={avatarSource(p.avatar_url)} style={styles.avatar} />
+            <Image source={avatarSource(p?.avatar_url)} style={styles.avatar} />
             <Text style={type.body}>{p.username ?? 'iYiYi user'}</Text>
           </Pressable>
         ))}

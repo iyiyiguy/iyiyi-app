@@ -241,7 +241,7 @@ export default function ContentViewer({ visible, items, startIndex = 0, onClose,
                 accessibilityRole="button"
                 accessibilityLabel={current.owner_username ? `Open ${current.owner_username}'s profile` : 'Open profile'}
               >
-                {<Image source={avatarSource(current.owner_avatar_url)} style={styles.ownerAvatar} />}
+                {<Image source={avatarSource(current?.owner_avatar_url)} style={styles.ownerAvatar} />}
                 <View style={styles.ownerText}>
                   {current.owner_username ? <Text style={styles.ownerName} numberOfLines={1} ellipsizeMode="tail">{current.owner_username}</Text> : null}
                   {displayCity(current.location_label) ? <Text style={styles.locationLabel} numberOfLines={1} ellipsizeMode="tail">📍 {displayCity(current.location_label)}</Text> : null}
@@ -368,7 +368,7 @@ function CommentsSheet({ media, onClose, onCountChange, onOpenProfile }) {
                 return (
                 <View key={c.id} style={styles.comment}>
                   <Pressable disabled={!authorId} onPress={() => onOpenProfile?.(authorId)} hitSlop={6}>
-                    {c.profiles?.avatar_url ? <Image source={avatarSource(c.profiles.avatar_url)} style={styles.commentAvatar} /> : <View style={styles.commentAvatar} />}
+                    {c.profiles?.avatar_url ? <Image source={avatarSource(c?.profiles?.avatar_url)} style={styles.commentAvatar} /> : <View style={styles.commentAvatar} />}
                   </Pressable>
                   <View style={{ flex: 1 }}>
                     <Pressable disabled={!authorId} onPress={() => onOpenProfile?.(authorId)} hitSlop={6} style={{ alignSelf: 'flex-start' }}>

@@ -1111,7 +1111,7 @@ function SelectedCard({ user, onClose, onOpen }) {
     <Glass radius={radii.lg} strong style={styles.selectedCard}>
       <View style={styles.selectedRow}>
         {true ? (
-          <Image source={avatarSource(user.avatar_url)} style={styles.selectedAvatar} />
+          <Image source={avatarSource(user?.avatar_url)} style={styles.selectedAvatar} />
         ) : (
           <View style={[styles.selectedAvatar, styles.selectedAvatarEmpty]}><Text style={styles.selectedInitial}>{initial}</Text></View>
         )}
