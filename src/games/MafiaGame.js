@@ -7,7 +7,7 @@
 // Host-authoritative: the host drives the game state machine and holds the
 // secret role assignments.
 import React, { useEffect, useMemo, useRef, useState } from 'react'
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
+import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { Avatar, Btn, Card, Pill, PlayerRow, PlayerTap, ProgressRing, Spectating, formatClock } from './MultiplayerUI'
 import {
   recordRoundResult,
@@ -16,12 +16,20 @@ import {
 import { buzz } from '../lib/gamePrefs'
 import { colors, radii, type } from '../theme'
 
+// ─── Character art ────────────────────────────────────────────────────────────
+const CHAR_IMAGES = {
+  town: require('../../assets/mafia-characters/townsperson.png'),
+  mafia: require('../../assets/mafia-characters/mafia.png'),
+  doctor: require('../../assets/mafia-characters/doctor.png'),
+  detective: require('../../assets/mafia-characters/detective.png'),
+}
+
 // ─── Role config ──────────────────────────────────────────────────────────────
 const ROLES = {
-  town: { label: 'Townsperson', icon: '🏠', color: '#3b82f6', desc: 'Find and vote out the Mafia.' },
-  mafia: { label: 'Mafia', icon: '🔪', color: '#ef4444', desc: 'Eliminate the Town without getting caught.' },
-  doctor: { label: 'Doctor', icon: '🩺', color: '#22c55e', desc: 'Each night, choose someone to protect.' },
-  detective: { label: 'Detective', icon: '🔍', color: '#eab308', desc: 'Each night, investigate one player.' },
+  town: { label: 'Townsperson', icon: '🏠', color: '#3b82f6', desc: 'Find and vote out the Mafia.', image: CHAR_IMAGES.town },
+  mafia: { label: 'Mafia', icon: '🔪', color: '#ef4444', desc: 'Eliminate the Town without getting caught.', image: CHAR_IMAGES.mafia },
+  doctor: { label: 'Doctor', icon: '🩺', color: '#22c55e', desc: 'Each night, choose someone to protect.', image: CHAR_IMAGES.doctor },
+  detective: { label: 'Detective', icon: '🔍', color: '#eab308', desc: 'Each night, investigate one player.', image: CHAR_IMAGES.detective },
 }
 
 // ─── Timing ───────────────────────────────────────────────────────────────────
@@ -309,7 +317,9 @@ export function MafiaGame({ room, onExit }) {
     const r = ROLES[roleKnown] || null
     return (
       <View style={[styles.reveal, { backgroundColor: r ? r.color : colors.inkSurfaceRaised }]}>
-        <Text style={[styles.revealIcon]}>{r ? r.icon : '🎭'}</Text>
+        {r?.image
+          ? <Image source={r.image} style={styles.revealCharImg} />
+          : <Text style={[styles.revealIcon]}>{'🎭'}</Text>}
         <Text style={styles.revealSmall}>Your secret role</Text>
         <Text style={styles.revealBig}>{r ? r.label.toUpperCase() : '…'}</Text>
         <Text style={styles.revealSmall}>{r ? r.desc : 'Getting your role…'}</Text>
@@ -338,7 +348,10 @@ export function MafiaGame({ room, onExit }) {
 
         {me.alive && roleKnown === 'mafia' && (
           <Card>
-            <Text style={[type.label, { color: ROLES.mafia.color }]}>🔪 Choose a target to eliminate</Text>
+            <View style={styles.roleHeader}>
+              <Image source={CHAR_IMAGES.mafia} style={styles.roleHeaderImg} />
+              <Text style={[type.label, { color: ROLES.mafia.color, flex: 1 }]}>Choose a target to eliminate</Text>
+            </View>
             {alive.filter(([id]) => id !== meId && roleKnown !== 'mafia').map(([id, p]) => (
               <PlayerRow key={id} player={{ username: p.name, avatar: avatarOf(id) }}
                 right={<Btn title="Target" size="sm" variant="danger" onPress={() => { buzz('select'); room.sendAction({ type: 'mafia_target', target: id }) }} />}
@@ -350,7 +363,10 @@ export function MafiaGame({ room, onExit }) {
 
         {me.alive && roleKnown === 'doctor' && (
           <Card>
-            <Text style={[type.label, { color: ROLES.doctor.color }]}>🩺 Choose someone to protect</Text>
+            <View style={styles.roleHeader}>
+              <Image source={CHAR_IMAGES.doctor} style={styles.roleHeaderImg} />
+              <Text style={[type.label, { color: ROLES.doctor.color, flex: 1 }]}>Choose someone to protect</Text>
+            </View>
             {alive.map(([id, p]) => (
               <PlayerRow key={id} player={{ username: id === meId ? `${p.name} (you)` : p.name, avatar: avatarOf(id) }}
                 right={<Btn title="Protect" size="sm" variant="primary" onPress={() => { buzz('select'); room.sendAction({ type: 'doctor_save', target: id }) }} />}
@@ -361,7 +377,10 @@ export function MafiaGame({ room, onExit }) {
 
         {me.alive && roleKnown === 'detective' && (
           <Card>
-            <Text style={[type.label, { color: ROLES.detective.color }]}>🔍 Investigate a player</Text>
+            <View style={styles.roleHeader}>
+              <Image source={CHAR_IMAGES.detective} style={styles.roleHeaderImg} />
+              <Text style={[type.label, { color: ROLES.detective.color, flex: 1 }]}>Investigate a player</Text>
+            </View>
             {alive.filter(([id]) => id !== meId).map(([id, p]) => (
               <PlayerRow key={id} player={{ username: p.name, avatar: avatarOf(id) }}
                 right={<Btn title="Investigate" size="sm" variant="primary" onPress={() => { buzz('select'); room.sendAction({ type: 'detective_investigate', target: id }) }} />}
@@ -465,7 +484,7 @@ function Summary({ state, meId, roleKnown, avatarOf, isHost, room, snap, onExit 
   return (
     <ScrollView contentContainerStyle={styles.pad}>
       <View style={[styles.summaryBanner, { backgroundColor: state.winner === 'town' ? '#3b82f6' : '#ef4444' }]}>
-        <Text style={styles.summaryIcon}>{state.winner === 'town' ? '🏠' : '🔪'}</Text>
+        <Image source={state.winner === 'town' ? CHAR_IMAGES.town : CHAR_IMAGES.mafia} style={styles.summaryCharImg} />
         <Text style={styles.summaryTitle}>{state.winner === 'town' ? 'Town Wins!' : 'Mafia Wins!'}</Text>
         <Text style={styles.summarySub}>{iWon ? 'You were on the winning side!' : 'Better luck next time.'}</Text>
       </View>
@@ -502,15 +521,18 @@ const styles = StyleSheet.create({
   pad: { padding: 12, paddingBottom: 40 },
   reveal: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 28, borderRadius: radii.lg },
   revealIcon: { fontSize: 64, marginBottom: 12 },
+  revealCharImg: { width: 120, height: 120, borderRadius: 60, marginBottom: 12, borderWidth: 3, borderColor: 'rgba(255,255,255,0.4)' },
   revealSmall: { ...type.body, color: 'rgba(255,255,255,0.8)', textAlign: 'center', marginTop: 8 },
   revealBig: { fontSize: 40, fontWeight: '800', letterSpacing: 2, color: '#ffffff', marginTop: 8 },
   revealCount: { fontSize: 72, fontWeight: '800', color: '#ffffff', marginTop: 20 },
+  roleHeader: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 8 },
+  roleHeaderImg: { width: 36, height: 36, borderRadius: 18 },
   nightCard: { alignItems: 'center', paddingVertical: 24 },
   moonIcon: { fontSize: 48, marginBottom: 8 },
   dayCard: { alignItems: 'center', paddingVertical: 20 },
   sunIcon: { fontSize: 48, marginBottom: 8 },
   summaryBanner: { borderRadius: radii.lg, padding: 32, alignItems: 'center', marginBottom: 12 },
-  summaryIcon: { fontSize: 56, marginBottom: 8 },
+  summaryCharImg: { width: 80, height: 80, borderRadius: 40, marginBottom: 8, borderWidth: 2, borderColor: 'rgba(255,255,255,0.4)' },
   summaryTitle: { fontSize: 32, fontWeight: '900', color: '#ffffff', letterSpacing: -0.5 },
   summarySub: { ...type.body, color: 'rgba(255,255,255,0.85)', marginTop: 6, textAlign: 'center' },
 })
