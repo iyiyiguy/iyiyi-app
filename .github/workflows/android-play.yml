@@ -4,7 +4,8 @@
 # Repo secrets:
 #   ANDROID_KEYSTORE_B64        base64 of the upload keystore (secrets/android/ on Colin's Mac)
 #   ANDROID_KEYSTORE_PASSWORD   its password (store and key use the same one, alias "upload")
-#   PLAY_SERVICE_ACCOUNT_JSON   (optional) Google Play service-account key -> auto upload
+# Google Play upload signs in WITHOUT a key (Workload Identity Federation: GitHub -> Google
+#   service account play-publisher@project-bdce1459-401b-43ec-803, invited in Play Console).
 #   GOOGLE_MAPS_ANDROID_API_KEY (optional) Google Maps key; without it maps show a placeholder
 # Repo variables (optional): PLAY_TRACK (default internal), PLAY_STATUS (default draft;
 #   set to completed once the app has been reviewed/published on Play).
@@ -16,6 +17,10 @@ on:
   push:
     branches: [main]
     paths-ignore: ['**.md', 'iyiyi-rebuild/**', 'web/site/**', 'store-assets/**', 'scripts/asc_metadata.py', '.github/workflows/app-store-metadata.yml', '.github/workflows/app-store-submit.yml', 'scripts/asc_submit.py']
+
+permissions:
+  contents: read
+  id-token: write
 
 concurrency:
   group: android-release
@@ -33,7 +38,6 @@ jobs:
       SENTRY_DISABLE_AUTO_UPLOAD: 'true'
       GOOGLE_MAPS_ANDROID_API_KEY: ${{ secrets.GOOGLE_MAPS_ANDROID_API_KEY }}
       HAS_KEYSTORE: ${{ secrets.ANDROID_KEYSTORE_B64 != '' }}
-      HAS_PLAY: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON != '' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -123,11 +127,19 @@ jobs:
           name: iyiyi-android-${{ env.ANDROID_VERSION_CODE }}
           path: ${{ runner.temp }}/out/*
 
+      - name: Sign in to Google Play (keyless)
+        id: gauth
+        if: env.HAS_KEYSTORE == 'true'
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.PLAY_WIF_PROVIDER || 'projects/642174796559/locations/global/workloadIdentityPools/github/providers/github' }}
+          service_account: ${{ vars.PLAY_SERVICE_ACCOUNT || 'play-publisher@project-bdce1459-401b-43ec-803.iam.gserviceaccount.com' }}
+
       - name: Upload to Google Play
-        if: env.HAS_PLAY == 'true' && env.HAS_KEYSTORE == 'true'
+        if: env.HAS_KEYSTORE == 'true'
         uses: r0adkll/upload-google-play@v1
         with:
-          serviceAccountJsonPlainText: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+          serviceAccountJson: ${{ steps.gauth.outputs.credentials_file_path }}
           packageName: com.iyiyi.app
           releaseFiles: ${{ runner.temp }}/out/iyiyi-${{ env.ANDROID_VERSION_CODE }}.aab
           track: ${{ vars.PLAY_TRACK || 'internal' }}
