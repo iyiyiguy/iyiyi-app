@@ -16,7 +16,7 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
-    paths-ignore: ['**.md', 'iyiyi-rebuild/**', 'web/site/**', 'store-assets/**', 'scripts/asc_metadata.py', '.github/workflows/app-store-metadata.yml', '.github/workflows/app-store-submit.yml', 'scripts/asc_submit.py']
+    paths-ignore: ['**.md', 'iyiyi-rebuild/**', 'web/site/**', 'store-assets/**', 'scripts/asc_metadata.py', '.github/workflows/app-store-metadata.yml', '.github/workflows/app-store-submit.yml', 'scripts/asc_submit.py', 'scripts/play_products.py', '.github/workflows/play-products.yml']
 
 permissions:
   contents: read

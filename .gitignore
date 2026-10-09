@@ -32,3 +32,4 @@ preview.html
 3d-*.html
 secrets/
 dist-app/
+__pycache__/

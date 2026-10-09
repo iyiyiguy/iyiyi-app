@@ -71,8 +71,12 @@ def money(usd):
 
 
 def converted(usd):
-    """Google's local price for every billable region, for a US price."""
-    res = call("POST", "/pricing:convertRegionPrices", {"price": money(usd)})
+    """Google's local price for every billable region, for a US price (US only if Google won't convert)."""
+    try:
+        res = call("POST", "/pricing:convertRegionPrices", {"price": money(usd)})
+    except RuntimeError as e:
+        print(f"    price conversion unavailable ({str(e)[:120]}...), using the US price only")
+        return {"US": money(usd)}, {}
     regions = {code: v["price"] for code, v in res.get("convertedRegionPrices", {}).items()}
     other = res.get("convertedOtherRegionsPrice", {})
     return regions, other
@@ -80,27 +84,8 @@ def converted(usd):
 
 # ---------- one-time products (guns, UAV packs, grenades) ----------
 
-def legacy_inapp(pid, title, desc, usd):
-    body = {
-        "packageName": PKG,
-        "sku": pid,
-        "status": "active",
-        "purchaseType": "managedUser",
-        "defaultLanguage": LANG,
-        "listings": {LANG: {"title": title, "description": desc}},
-        "defaultPrice": {"priceMicros": str(int(Decimal(usd) * 1_000_000)), "currency": "USD"},
-    }
-    params = {"autoConvertMissingPrices": "true"}
-    r = http.get(f"{API}/inappproducts/{pid}")
-    if r.status_code == 200:
-        call("PUT", f"/inappproducts/{pid}", body, params)
-        return "updated"
-    call("POST", "/inappproducts", body, params)
-    return "created"
-
-
 def new_onetime(pid, title, desc, usd):
-    """The newer one-time products API (used if Play refuses the legacy one)."""
+    """Google Play one-time products API (the old inappproducts API is retired)."""
     regions, _ = converted(usd)
     body = {
         "packageName": PKG,
@@ -119,16 +104,12 @@ def new_onetime(pid, title, desc, usd):
     call("POST", f"/oneTimeProducts/{pid}/purchaseOptions:batchUpdateStates", {
         "requests": [{"activatePurchaseOptionRequest": {"packageName": PKG, "productId": pid, "purchaseOptionId": "default"}}]
     })
-    return "saved (new API)"
+    return "saved + active"
 
 
 for pid, title, desc, usd in ONE_TIME:
     try:
-        try:
-            what = legacy_inapp(pid, title, desc, usd)
-        except RuntimeError as e:
-            print(f"  legacy API refused {pid}: {e}")
-            what = new_onetime(pid, title, desc, usd)
+        what = new_onetime(pid, title, desc, usd)
         print(f"OK  {pid:22} ${usd}  {what}")
     except Exception as e:  # keep going so one bad product doesn't block the rest
         failures.append(pid)
