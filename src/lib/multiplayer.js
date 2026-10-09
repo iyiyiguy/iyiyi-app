@@ -112,6 +112,35 @@ export const MP_GAMES = {
       hostColor: { label: 'Host plays', options: ['random', 'w', 'b'], labels: { random: 'Random', w: 'White', b: 'Black' }, default: 'random' },
     },
   },
+  mafia: {
+    id: 'mafia',
+    codePrefix: 'M',
+    name: 'Mafia',
+    icon: '🔪',
+    minPlayers: 5,
+    maxPlayers: 15,
+    usesLocation: false,
+    blurb: 'Classic social deduction. The Town sleeps while the Mafia secretly eliminates someone each night. By day, discuss and vote — find the Mafia before they outnumber you.',
+    settings: {
+      nightSeconds: { label: 'Night length', options: [20, 30, 45], default: 30, unit: 's' },
+      discussSeconds: { label: 'Discussion time', options: [30, 60, 90], default: 60, unit: 's' },
+      voteSeconds: { label: 'Voting time', options: [20, 30, 45], default: 30, unit: 's' },
+    },
+  },
+  'heads-up': {
+    id: 'heads-up',
+    codePrefix: 'H',
+    name: 'Heads Up 7 Up',
+    icon: '👆',
+    minPlayers: 8,
+    maxPlayers: 30,
+    usesLocation: false,
+    blurb: 'The classic classroom game. 7 pickers secretly tap a sitter each; then everyone guesses who tapped them. Correct guessers swap into the picker role.',
+    settings: {
+      pickSeconds: { label: 'Picking time', options: [20, 30, 45], default: 30, unit: 's' },
+      guessSeconds: { label: 'Guessing time', options: [15, 20, 30], default: 20, unit: 's' },
+    },
+  },
 }
 
 // Laser Tag play-area presets (radius in metres) the host picks on the map.
@@ -208,6 +237,32 @@ export function howToPlay(gameId, settings = {}) {
       ],
     }
   }
+  if (gameId === 'mafia') {
+    return {
+      title: 'Mafia',
+      steps: [
+        'Everyone gets a secret role: Townsperson, Mafia, Doctor or Detective. Don't reveal it!',
+        'Night: the Mafia secretly picks someone to eliminate. The Doctor chooses someone to protect. The Detective investigates one player to learn if they're Mafia.',
+        'Day: if someone was eliminated, it's announced. Discuss who you suspect — then vote.',
+        'The player with the most votes is eliminated and their role is revealed.',
+        'Town wins when all Mafia are eliminated. Mafia wins when they equal or outnumber the Town.',
+        '5–6 players: 1 Mafia. 7–9 players: 2 Mafia + Doctor + Detective. 10+: 3 Mafia.',
+      ],
+    }
+  }
+  if (gameId === 'heads-up') {
+    return {
+      title: 'Heads Up 7 Up',
+      steps: [
+        '7 players are chosen as pickers. Everyone else is a sitter.',
+        'Sitters close their eyes (put your phone face-down). Each picker secretly taps one sitter.',
+        'Once all pickers have chosen, it's "heads up!" — every tapped sitter tries to guess which picker tapped them.',
+        'Correct guesses swap you into the picker role next round. Wrong guesses keep you sitting.',
+        'Scores are tracked across rounds — the player with the most correct guesses leads the board.',
+        'Play as many rounds as you like. The host starts each new round.',
+      ],
+    }
+  }
   return {
     title: 'Beside Them',
     steps: [
@@ -224,8 +279,8 @@ export function howToPlay(gameId, settings = {}) {
 }
 
 // Other parts of the app (arcade stats) use slightly different ids.
-const GAME_ID_ALIASES = { 'laser-tag': 'lasertag', spider: 'spider-spider' }
-const STATS_IDS = { lasertag: 'laser-tag', 'spider-spider': 'spider', 'beside-them': 'beside-them', chess: 'chess', royale: 'battle-royale' }
+const GAME_ID_ALIASES = { 'laser-tag': 'lasertag', spider: 'spider-spider', 'heads-up-7-up': 'heads-up' }
+const STATS_IDS = { lasertag: 'laser-tag', 'spider-spider': 'spider', 'beside-them': 'beside-them', chess: 'chess', royale: 'battle-royale', mafia: 'mafia', 'heads-up': 'heads-up-7-up' }
 export const statsIdFor = (gameId) => STATS_IDS[resolveGameId(gameId)] || gameId
 
 export const resolveGameId = (gameId) => GAME_ID_ALIASES[gameId] || gameId

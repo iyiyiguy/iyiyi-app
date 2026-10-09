@@ -12,6 +12,8 @@ import { WordGame } from '../games/WordGame'
 import { SpiderGame } from '../games/SpiderGame'
 import { LaserTagGame } from '../games/LaserTagGame'
 import { RoyaleGame } from '../games/royale/RoyaleGame'
+import { MafiaGame } from '../games/MafiaGame'
+import { HeadsUp7UpGame } from '../games/HeadsUp7UpGame'
 import { GameMenu } from '../games/GameMenu'
 import { Btn, Card, ConnectionBanner, Pill, PlayerRow, PlayerTapContext, useTint } from '../games/MultiplayerUI'
 import ProfilePreviewSheet from '../components/ProfilePreviewSheet'
@@ -152,6 +154,10 @@ export default function GamePlayScreen({ navigation, route }) {
         return <RoyaleGame room={room} onExit={leave} />
       case 'beside-them':
         return <BesideThemGame room={room} onExit={leave} />
+      case 'mafia':
+        return <MafiaGame room={room} onExit={leave} />
+      case 'heads-up':
+        return <HeadsUp7UpGame room={room} onExit={leave} />
       default:
         return <Text style={[type.body, { padding: 24 }]}>This game isn’t available.</Text>
     }
