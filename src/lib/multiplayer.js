@@ -171,14 +171,14 @@ export function howToPlay(gameId, settings = {}) {
   if (gameId === 'lasertag') {
     const mode = LASER_MODES[settings?.mode] ? settings.mode : 'ffa'
     const aim = [
-      'Portrait (phone upright) = Trigger mode: raise your phone like a camera and put the crosshair on a player. The whole screen is the trigger — tap for one shot, hold to keep firing at your gun’s rate. Your phone checks what is actually under the crosshair; other players can keep their phones in their pockets.',
+      `Portrait (phone upright) = Trigger mode: raise your phone like a camera and put the crosshair on a player. The whole screen is the trigger — tap for one shot, hold to keep firing at your gun's rate. Your phone checks what is actually under the crosshair; other players can keep their phones in their pockets.`,
       'Head shots do double damage (about 50), body shots about 25, arms and legs about 15. Your gun changes these. Damage drops off past 20 m and camera aim reaches about 30 m.',
       'Landscape or flat = Top-edge mode: point the top of the phone at a player and tap anywhere to fire. It uses GPS and the compass only, so it is less precise.',
       'The mode switches automatically as you rotate the phone (shown at the top of the screen). You can force one — or the classic crosshair with a FIRE button — in the menu ☰. On phones without on-device detection, aiming uses the compass.',
     ]
     const byMode = {
       ffa: ['Every hit scores 10 points (+10 for a headshot) and a tag-out scores 100.', 'Tagged-out players are back in after 8 seconds, with 2 seconds of spawn protection.', 'Most points when time runs out wins.'],
-      tdm: ['You are on Red or Blue. You can’t hit your own team.', 'Tagged-out players are back in after 8 seconds, with 2 seconds of spawn protection.', 'The team with the most tag-outs when time runs out wins.'],
+      tdm: ['You are on Red or Blue. You can\'t hit your own team.', 'Tagged-out players are back in after 8 seconds, with 2 seconds of spawn protection.', 'The team with the most tag-outs when time runs out wins.'],
       snd: [
         'Attackers: one of you carries the bomb. Inside a bomb site, tap PLANT BOMB and hit 6 targets within 5 seconds. Miss and you can retry.',
         'If the carrier is tagged out, the bomb drops where they were. A teammate can walk over and pick it up.',
@@ -201,11 +201,11 @@ export function howToPlay(gameId, settings = {}) {
       title: 'Battle Royale',
       steps: [
         SAFETY,
-        'Never play while driving. Above about 15 mph you go “In transit”: you can’t fire and can’t be hit until you’ve slowed to walking pace for a few seconds. The gas still hurts you.',
+        `Never play while driving. Above about 15 mph you go "In transit": you can't fire and can't be hit until you've slowed to walking pace for a few seconds. The gas still hurts you.`,
         'Everyone starts with the free Starter Pistol and Street SMG and one life. Aim and fire exactly like Laser Tag: raise your phone and put the crosshair on a player.',
         'The safe zone shrinks in phases on the real map. The next circle is shown (dashed) before the gas moves. Outside the zone you lose health every second — more in later phases.',
-        'Weapon caches are scattered around the area and every eliminated player drops their weapon. Walk within about 30 ft of one and tap Pick up. Only go where it’s safe and legal to walk.',
-        'When you’re eliminated you can spectate the players who are left, or leave.',
+        `Weapon caches are scattered around the area and every eliminated player drops their weapon. Walk within about 30 ft of one and tap Pick up. Only go where it's safe and legal to walk.`,
+        `When you're eliminated you can spectate the players who are left, or leave.`,
         'Last player standing wins. Results show your placement, kills and how long you survived.',
       ],
     }
@@ -231,7 +231,7 @@ export function howToPlay(gameId, settings = {}) {
         'One random player starts as the spider. Everyone else is free.',
         'Spiders wait out a 15 second head start, then hunt.',
         'To tag, a spider gets within about 10 m (33 ft), presses Tag next to your name, and has to stay that close for 3 seconds. Both phones show the ring filling up.',
-        'If you’re being tagged, run! Getting out of range breaks the tag.',
+        `If you're being tagged, run! Getting out of range breaks the tag.`,
         'Tagged players become spiders too.',
         'Last one free wins. If the host turned on a round timer and it runs out, every free player wins.',
       ],
@@ -241,9 +241,9 @@ export function howToPlay(gameId, settings = {}) {
     return {
       title: 'Mafia',
       steps: [
-        'Everyone gets a secret role: Townsperson, Mafia, Doctor or Detective. Don't reveal it!',
-        'Night: the Mafia secretly picks someone to eliminate. The Doctor chooses someone to protect. The Detective investigates one player to learn if they're Mafia.',
-        'Day: if someone was eliminated, it's announced. Discuss who you suspect — then vote.',
+        `Everyone gets a secret role: Townsperson, Mafia, Doctor or Detective. Don't reveal it!`,
+        `Night: the Mafia secretly picks someone to eliminate. The Doctor chooses someone to protect. The Detective investigates one player to learn if they're Mafia.`,
+        `Day: if someone was eliminated, it's announced. Discuss who you suspect — then vote.`,
         'The player with the most votes is eliminated and their role is revealed.',
         'Town wins when all Mafia are eliminated. Mafia wins when they equal or outnumber the Town.',
         '5–6 players: 1 Mafia. 7–9 players: 2 Mafia + Doctor + Detective. 10+: 3 Mafia.',
@@ -256,7 +256,7 @@ export function howToPlay(gameId, settings = {}) {
       steps: [
         '7 players are chosen as pickers. Everyone else is a sitter.',
         'Sitters close their eyes (put your phone face-down). Each picker secretly taps one sitter.',
-        'Once all pickers have chosen, it's "heads up!" — every tapped sitter tries to guess which picker tapped them.',
+        `Once all pickers have chosen, it's "heads up!" — every tapped sitter tries to guess which picker tapped them.`,
         'Correct guesses swap you into the picker role next round. Wrong guesses keep you sitting.',
         'Scores are tracked across rounds — the player with the most correct guesses leads the board.',
         'Play as many rounds as you like. The host starts each new round.',
@@ -1241,7 +1241,7 @@ export async function openArena() {
     if (outcome === 'ok') return room
     const message = room.error
     room.leave()
-    if (outcome !== 'full') throw new Error(message || 'Couldn’t reach the arena. Check your connection and try again.')
+    if (outcome !== 'full') throw new Error(message || `Couldn't reach the arena. Check your connection and try again.`)
   }
   throw new Error('Every arena is full right now. Try again in a minute.')
 }
