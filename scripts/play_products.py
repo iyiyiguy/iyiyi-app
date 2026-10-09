@@ -125,7 +125,7 @@ def new_onetime(pid, title, desc, usd):
     }
     send_fixing_regions("PATCH", f"/onetimeproducts/{pid}", build,
                         {"allowMissing": "true", "updateMask": "listings,purchaseOptions", **REGIONS_VERSION}, regions, usd)
-    call("POST", f"/onetimeproducts/{pid}/purchaseOptions:batchUpdateStates", {
+    call("POST", f"/oneTimeProducts/{pid}/purchaseOptions:batchUpdateStates", {
         "requests": [{"activatePurchaseOptionRequest": {"packageName": PKG, "productId": pid, "purchaseOptionId": "default"}}]
     })
     return "saved + active"
@@ -187,7 +187,7 @@ def pro_subscription():
         "regionalConfigs": [{"regionCode": c, "price": p} for c, p in intro.items() if c in regions],
     }
       if intro_other.get("usdPrice") and intro_other.get("eurPrice"):
-        phase["otherRegionsConfig"] = {"usdPrice": intro_other["usdPrice"], "eurPrice": intro_other["eurPrice"]}
+        phase["otherRegionsConfig"] = {"otherRegionsPrices": {"usdPrice": intro_other["usdPrice"], "eurPrice": intro_other["eurPrice"]}}
       offer = {
         "packageName": PKG,
         "productId": pid,
