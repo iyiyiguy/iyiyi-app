@@ -33,3 +33,4 @@ preview.html
 secrets/
 dist-app/
 __pycache__/
+.git-token
