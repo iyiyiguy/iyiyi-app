@@ -13,6 +13,7 @@ Auth: Application Default Credentials. In GitHub Actions that's the keyless Work
 login done by google-github-actions/auth (see .github/workflows/play-products.yml).
 """
 import json
+import re
 import os
 import sys
 from decimal import Decimal
@@ -79,7 +80,30 @@ def converted(usd):
         return {"US": money(usd)}, {}
     regions = {code: v["price"] for code, v in res.get("convertedRegionPrices", {}).items()}
     other = res.get("convertedOtherRegionsPrice", {})
+    # Use the regions version these prices were converted at (Google rejects mismatched currencies).
+    ver = (res.get("regionVersion") or {}).get("version")
+    if ver:
+        REGIONS_VERSION["regionsVersion.version"] = ver
     return regions, other
+
+
+def send_fixing_regions(method, path, build, params, regions, usd, tries=40):
+    """call() that repairs 'Invalid currency for region code XX ... Expected USD' by pricing XX in
+    USD (or dropping XX if Google wants another currency), then retries."""
+    for _ in range(tries):
+        try:
+            return call(method, path, build(), params)
+        except RuntimeError as e:
+            m = re.search(r"Invalid currency for region code (\w+).*?Expected (\w+)", str(e))
+            if not m or m.group(1) not in regions:
+                raise
+            code, want = m.group(1), m.group(2)
+            if want == "USD":
+                regions[code] = money(usd)
+            else:
+                regions.pop(code)
+            print(f"    {code}: priced in {want if want == 'USD' else '(dropped)'}")
+    raise RuntimeError(f"{path}: too many region fixes")
 
 
 # ---------- one-time products (guns, UAV packs, grenades) ----------
@@ -87,7 +111,7 @@ def converted(usd):
 def new_onetime(pid, title, desc, usd):
     """Google Play one-time products API (the old inappproducts API is retired)."""
     regions, _ = converted(usd)
-    body = {
+    build = lambda: {
         "packageName": PKG,
         "productId": pid,
         "listings": [{"languageCode": LANG, "title": title, "description": desc}],
@@ -99,9 +123,9 @@ def new_onetime(pid, title, desc, usd):
             ],
         }],
     }
-    call("PATCH", f"/oneTimeProducts/{pid}", body,
-         {"allowMissing": "true", "updateMask": "listings,purchaseOptions", **REGIONS_VERSION})
-    call("POST", f"/oneTimeProducts/{pid}/purchaseOptions:batchUpdateStates", {
+    send_fixing_regions("PATCH", f"/onetimeproducts/{pid}", build,
+                        {"allowMissing": "true", "updateMask": "listings,purchaseOptions", **REGIONS_VERSION}, regions, usd)
+    call("POST", f"/onetimeproducts/{pid}/purchaseOptions:batchUpdateStates", {
         "requests": [{"activatePurchaseOptionRequest": {"packageName": PKG, "productId": pid, "purchaseOptionId": "default"}}]
     })
     return "saved + active"
@@ -121,28 +145,29 @@ for pid, title, desc, usd in ONE_TIME:
 def pro_subscription():
     pid = PRO["id"]
     regions, other = converted(PRO["usd"])
-    base_plan = {
+    def build():
+      base_plan = {
         "basePlanId": "monthly",
         "autoRenewingBasePlanType": {"billingPeriodDuration": "P1M", "legacyCompatible": True,
                                      "resubscribeState": "RESUBSCRIBE_STATE_ACTIVE"},
         "regionalConfigs": [{"regionCode": c, "newSubscriberAvailability": True, "price": p} for c, p in regions.items()],
     }
-    if other.get("usdPrice") and other.get("eurPrice"):
+      if other.get("usdPrice") and other.get("eurPrice"):
         base_plan["otherRegionsConfig"] = {"usdPrice": other["usdPrice"], "eurPrice": other["eurPrice"],
                                            "newSubscriberAvailability": True}
-    body = {
+      return {
         "packageName": PKG,
         "productId": pid,
         "listings": [{"languageCode": LANG, "title": PRO["title"], "benefits": PRO["benefits"],
                       "description": PRO["description"]}],
         "basePlans": [base_plan],
-    }
+      }
     r = http.get(f"{API}/subscriptions/{pid}")
     if r.status_code == 200:
-        call("PATCH", f"/subscriptions/{pid}", body, {"updateMask": "listings,basePlans", **REGIONS_VERSION})
+        send_fixing_regions("PATCH", f"/subscriptions/{pid}", build, {"updateMask": "listings,basePlans", **REGIONS_VERSION}, regions, PRO["usd"])
         print(f"OK  {pid:22} ${PRO['usd']}/month  updated")
     else:
-        call("POST", "/subscriptions", body, {"productId": pid, **REGIONS_VERSION})
+        send_fixing_regions("POST", "/subscriptions", build, {"productId": pid, **REGIONS_VERSION}, regions, PRO["usd"])
         print(f"OK  {pid:22} ${PRO['usd']}/month  created")
 
     state = call("GET", f"/subscriptions/{pid}")
@@ -155,14 +180,15 @@ def pro_subscription():
     # Intro offer: $0.99 paid once for the first 2 months, new subscribers only.
     intro, intro_other = converted(PRO["intro_usd"])
     offer_id = "intro2m"
-    phase = {
+    def build_offer():
+      phase = {
         "recurrenceCount": 1,
         "duration": PRO["intro_duration"],
         "regionalConfigs": [{"regionCode": c, "price": p} for c, p in intro.items() if c in regions],
     }
-    if intro_other.get("usdPrice") and intro_other.get("eurPrice"):
+      if intro_other.get("usdPrice") and intro_other.get("eurPrice"):
         phase["otherRegionsConfig"] = {"usdPrice": intro_other["usdPrice"], "eurPrice": intro_other["eurPrice"]}
-    offer = {
+      offer = {
         "packageName": PKG,
         "productId": pid,
         "basePlanId": "monthly",
@@ -171,14 +197,15 @@ def pro_subscription():
         "targeting": {"acquisitionRule": {"scope": {"thisSubscription": {}}}},
         "regionalConfigs": [{"regionCode": c, "newSubscriberAvailability": True} for c in regions if c in intro],
     }
-    if "otherRegionsConfig" in phase:
+      if "otherRegionsConfig" in phase:
         offer["otherRegionsConfig"] = {"otherRegionsNewSubscriberAvailability": True}
+      return offer
     base = f"/subscriptions/{pid}/basePlans/monthly/offers"
     r = http.get(f"{API}{base}/{offer_id}")
     if r.status_code == 200:
-        call("PATCH", f"{base}/{offer_id}", offer, {"updateMask": "phases,targeting,regionalConfigs,otherRegionsConfig", **REGIONS_VERSION})
+        send_fixing_regions("PATCH", f"{base}/{offer_id}", build_offer, {"updateMask": "phases,targeting,regionalConfigs,otherRegionsConfig", **REGIONS_VERSION}, intro, PRO["intro_usd"])
     else:
-        call("POST", base, offer, {"offerId": offer_id, **REGIONS_VERSION})
+        send_fixing_regions("POST", base, build_offer, {"offerId": offer_id, **REGIONS_VERSION}, intro, PRO["intro_usd"])
     o = call("GET", f"{base}/{offer_id}")
     if o.get("state") != "ACTIVE":
         call("POST", f"{base}/{offer_id}:activate",
