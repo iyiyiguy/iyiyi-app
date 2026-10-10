@@ -259,7 +259,7 @@ export function HeadsUp7UpGame({ room, onExit }) {
         <Text style={styles.revealSmall}>You are a</Text>
         <Text style={styles.revealBig}>{isPicker ? 'PICKER' : 'SITTER'}</Text>
         <Text style={styles.revealSmall}>
-          {isPicker ? 'You'll secretly tap someone. Don't let them guess it was you!' : 'Put your head down. Someone will tap you.'}
+          {isPicker ? "You'll secretly tap someone. Don't let them guess it was you!" : "Put your head down. Someone will tap you."}
         </Text>
         <Text style={styles.revealCount}>{left}</Text>
       </View>
