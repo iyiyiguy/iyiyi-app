@@ -139,6 +139,7 @@ export default function PlayerProfileScreen({ navigation }) {
         <View style={styles.links}>
           <LinkTile icon="trophy" label="My records" onPress={() => navigation.navigate('GameLeaderboard')} />
           <LinkTile icon="bag-handle" label="Shop" onPress={() => navigation.navigate('GunShop')} />
+          <LinkTile icon="shield-checkmark" label="My Equip" onPress={() => navigation.navigate('MyEquip')} />
           <LinkTile icon="sparkles" label="Store" onPress={() => openArcadeStore(navigation)} />
         </View>
       </ScrollView>

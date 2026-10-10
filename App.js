@@ -70,6 +70,7 @@ const LaserTagLobbyScreen = lazyScreen(() => import('./src/screens/LaserTagLobby
 const GameLeaderboardScreen = lazyScreen(() => import('./src/screens/GameLeaderboardScreen'))
 const PlayerProfileScreen = lazyScreen(() => import('./src/screens/PlayerProfileScreen'))
 const GunShopScreen = lazyScreen(() => import('./src/screens/GunShopScreen'))
+const MyEquipScreen = lazyScreen(() => import('./src/screens/MyEquipScreen'))
 const ChessScreen = lazyScreen(() => import('./src/screens/ChessScreen'))
 const WordRaceScreen = lazyScreen(() => import('./src/screens/WordRaceScreen'))
 const BusinessDashboardScreen = lazyScreen(() => import('./src/screens/BusinessDashboardScreen'))
@@ -142,6 +143,7 @@ const Aura = {
   GameLobbyScreen: withAura(GameLobbyScreen),
   GamesScreen: withAura(GamesScreen),
   GunShopScreen: withAura(GunShopScreen),
+  MyEquipScreen: withAura(MyEquipScreen),
   HistoryScreen: withAura(HistoryScreen),
   JoinGameScreen: withAura(JoinGameScreen),
   LaserTagLobbyScreen: withAura(LaserTagLobbyScreen),
@@ -352,6 +354,7 @@ export default function App() {
             <Stack.Screen name="GameLeaderboard" component={Aura.GameLeaderboardScreen} />
             <Stack.Screen name="PlayerProfile" component={Aura.PlayerProfileScreen} />
             <Stack.Screen name="GunShop" component={Aura.GunShopScreen} />
+            <Stack.Screen name="MyEquip" component={Aura.MyEquipScreen} />
             <Stack.Screen name="Chess" component={Aura.ChessScreen} />
             <Stack.Screen name="WordRace" component={Aura.WordRaceScreen} />
             <Stack.Screen name="BusinessDashboard" component={Aura.BusinessDashboardScreen} />

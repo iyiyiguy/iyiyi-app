@@ -228,7 +228,7 @@ export default function GunShopScreen({ navigation, route }) {
           )}
 
           {/* Loadout strip */}
-          <Pressable onPress={() => open(equippedGun)} accessibilityRole="button" accessibilityLabel={`Equipped: ${equippedGun.name}. Inspect`} style={({ pressed }) => pressed && { opacity: 0.85 }}>
+          <Pressable onPress={() => navigation.navigate('MyEquip')} accessibilityRole="button" accessibilityLabel={`My Equipment. Equipped: ${equippedGun.name}`} style={({ pressed }) => pressed && { opacity: 0.85 }}>
             <View style={styles.loadout}>
               <View style={[styles.loadoutIcon, { borderColor: rarityOf(equippedGun).color + '66' }]}>
                 <Image source={gunArt(equippedGun)} style={styles.loadoutImg} resizeMode="contain" fadeDuration={0} />
@@ -241,6 +241,7 @@ export default function GunShopScreen({ navigation, route }) {
                 <Text style={styles.ownedNum}>{ownedCount}<Text style={styles.ownedOf}>/{GUNS.length}</Text></Text>
                 <Text style={styles.ownedLabel}>OWNED</Text>
               </View>
+              <Ionicons name="chevron-forward" size={18} color={AC.faint} style={{ marginLeft: 4 }} />
             </View>
           </Pressable>
         </View>
@@ -474,7 +475,7 @@ function HeroSlide({ gun, width, height, price, owned, equipped, onOpen }) {
         </View>
         <RarityTag gun={gun} solid />
       </View>
-      <View style={{ alignItems: 'center', marginTop: 2 }}>
+      <View style={{ alignItems: 'center', marginTop: 2, zIndex: 2 }}>
         <Image source={gunArt(gun)} style={{ width: imgW, height: imgW / 2 * 0.86 }} resizeMode="contain" fadeDuration={0} />
         <View style={[styles.heroFloor, { width: imgW * 0.6, backgroundColor: r.color }]} />
       </View>
@@ -676,12 +677,12 @@ const styles = StyleSheet.create({
 
   hero: { borderRadius: 26, overflow: 'hidden', borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)', backgroundColor: '#0b0d1c' },
   heroStripe: { position: 'absolute', top: 0, left: 0, right: 0, height: 3 },
-  heroTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingTop: 16 },
+  heroTop: { zIndex: 3, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingTop: 16 },
   heroKickerRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   heroKicker: { fontSize: 11, ...font.heavy, letterSpacing: 2 },
   heroFloor: { height: 10, borderRadius: 999, opacity: 0.25, marginTop: -8, transform: [{ scaleY: 0.6 }] },
-  heroBottomFade: { position: 'absolute', left: 0, right: 0, bottom: 0, height: '52%' },
-  heroInfo: { position: 'absolute', left: 16, right: 16, bottom: 30 },
+  heroBottomFade: { position: 'absolute', left: 0, right: 0, bottom: 0, height: '42%', zIndex: 1 },
+  heroInfo: { position: 'absolute', left: 16, right: 16, bottom: 30, zIndex: 4 },
   heroName: { fontSize: 26, ...font.heavy, color: '#fff', letterSpacing: 0.5 },
   heroDesc: { fontSize: 13, color: 'rgba(255,255,255,0.78)', marginTop: 2, lineHeight: 18 },
   heroFoot: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 12 },
