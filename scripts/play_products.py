@@ -2,8 +2,12 @@
 
   Pro subscription  iyiyi_pro_monthly  base plan "monthly" $9.99/month,
                     intro offer "intro2m": $0.99 up front for the first 2 months (new subscribers)
+  Business Pro      iyiyi_business_monthly  base plan "monthly" $29/month,
+                    intro offer "intro1m": $9.99 for the first month (new subscribers)
   UAV packs         iyiyi_uav5 / 20 / 50 / 120      (consumed in the app)
   Grenades          iyiyi_grenade10                 (consumed in the app)
+  Sticky bombs      iyiyi_stickybomb5               (consumed in the app)
+  Land mines        iyiyi_landmine5                 (consumed in the app)
   Guns              iyiyi_gun_<id>                  (kept forever)
 
 Every other country gets Google's converted price for the US price. Safe to run again:
@@ -34,6 +38,18 @@ PRO = {
     "usd": "9.99",
     "intro_usd": "0.99",
     "intro_duration": "P2M",
+    "offer_id": "intro2m",
+}
+
+BUSINESS = {
+    "id": "iyiyi_business_monthly",
+    "title": "iYiYi Business Pro",
+    "benefits": ["Analytics dashboard", "Promoted placement", "Export history"],
+    "description": "Business Pro: analytics, promotion and every Creator Pro feature.",
+    "usd": "29.00",
+    "intro_usd": "9.99",
+    "intro_duration": "P1M",
+    "offer_id": "intro1m",
 }
 
 # (product id, title, description, US price) - same names and prices as on iOS.
@@ -43,6 +59,8 @@ ONE_TIME = [
     ("iyiyi_uav50", "50 UAVs", "Fifty UAV scans for Laser Tag.", "3.99"),
     ("iyiyi_uav120", "120 UAVs", "120 UAV scans for Laser Tag.", "7.99"),
     ("iyiyi_grenade10", "10 Grenades", "Ten grenades for Laser Tag.", "4.99"),
+    ("iyiyi_stickybomb5", "5 Sticky Bombs", "Five sticky bombs for Laser Tag.", "4.99"),
+    ("iyiyi_landmine5", "5 Land Mines", "Five land mines for Laser Tag.", "4.99"),
     ("iyiyi_gun_burst", "Burst Rifle", "Laser Tag gun: 3 beams per tap.", "0.99"),
     ("iyiyi_gun_smg", "Pulse SMG", "Laser Tag gun: very fast automatic.", "1.99"),
     ("iyiyi_gun_scatter", "Scatter Blaster", "Laser Tag gun: five-beam spread.", "1.99"),
@@ -143,7 +161,7 @@ for pid, title, desc, usd in ONE_TIME:
 
 # ---------- Pro subscription ----------
 
-def pro_subscription():
+def subscription(PRO):
     pid = PRO["id"]
     regions, other = converted(PRO["usd"])
     def build():
@@ -178,9 +196,9 @@ def pro_subscription():
              {"packageName": PKG, "productId": pid, "basePlanId": "monthly"})
         print("    base plan 'monthly' activated")
 
-    # Intro offer: $0.99 paid once for the first 2 months, new subscribers only.
+    # Intro offer: paid once up front for the intro period, new subscribers only.
     intro, intro_other = converted(PRO["intro_usd"])
-    offer_id = "intro2m"
+    offer_id = PRO["offer_id"]
     def build_offer():
       phase = {
         "recurrenceCount": 1,
@@ -211,14 +229,15 @@ def pro_subscription():
     if o.get("state") != "ACTIVE":
         call("POST", f"{base}/{offer_id}:activate",
              {"packageName": PKG, "productId": pid, "basePlanId": "monthly", "offerId": offer_id})
-    print(f"    intro offer '{offer_id}': ${PRO['intro_usd']} for the first 2 months  active")
+    print(f"    intro offer '{offer_id}': ${PRO['intro_usd']} for {PRO['intro_duration']}  active")
 
 
-try:
-    pro_subscription()
-except Exception as e:
-    failures.append(PRO["id"])
-    print(f"ERR {PRO['id']}: {e}")
+for sub in (PRO, BUSINESS):
+    try:
+        subscription(sub)
+    except Exception as e:
+        failures.append(sub["id"])
+        print(f"ERR {sub['id']}: {e}")
 
 print()
 if failures:
