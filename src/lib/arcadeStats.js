@@ -62,6 +62,8 @@ const defaultState = () => ({
   uavs: 0, // purchased Laser Tag UAVs (see src/lib/uav.js)
   uavTxns: [], // store transaction ids already credited (dedupe for consumable IAP)
   grenades: 0, // purchased Laser Tag grenades (see src/lib/grenades.js)
+  stickyBombs: 0, // purchased sticky bombs (see src/lib/stickyBombs.js)
+  landMines: 0, // purchased land mines (see src/lib/landMines.js)
   recent: [], // last 20 results: { gameId, result, score, points, at }
 })
 
@@ -88,6 +90,8 @@ function normalize(raw) {
     uavs: Number.isFinite(raw.uavs) && raw.uavs > 0 ? Math.floor(raw.uavs) : 0,
     uavTxns: Array.isArray(raw.uavTxns) ? raw.uavTxns.filter((x) => typeof x === 'string').slice(-100) : [],
     grenades: Number.isFinite(raw.grenades) && raw.grenades > 0 ? Math.floor(raw.grenades) : 0,
+    stickyBombs: Number.isFinite(raw.stickyBombs) && raw.stickyBombs > 0 ? Math.floor(raw.stickyBombs) : 0,
+    landMines: Number.isFinite(raw.landMines) && raw.landMines > 0 ? Math.floor(raw.landMines) : 0,
   }
 }
 
@@ -361,6 +365,52 @@ export function _creditGrenades(count, txnId) {
     s.grenades = (s.grenades || 0) + n
     if (id) s.uavTxns = [...s.uavTxns, id].slice(-100)
     return { result: { credited: true, balance: s.grenades } }
+  })
+}
+
+// Laser Tag sticky bombs (internal helpers for stickyBombs.js / iap.js) -----
+
+/** Spend one purchased sticky bomb. Resolves true if the balance covered it. */
+export function _spendStickyBomb() {
+  return mutate((s) => {
+    if (!(s.stickyBombs > 0)) return { result: false }
+    s.stickyBombs -= 1
+    return { result: true }
+  })
+}
+
+/** Credit purchased sticky bombs once per store transaction. */
+export function _creditStickyBombs(count, txnId) {
+  return mutate((s) => {
+    const n = Math.max(0, Math.floor(Number(count) || 0))
+    const id = txnId ? `sb:${txnId}` : null
+    if (id && s.uavTxns.includes(id)) return { result: { credited: false, balance: s.stickyBombs || 0 } }
+    s.stickyBombs = (s.stickyBombs || 0) + n
+    if (id) s.uavTxns = [...s.uavTxns, id].slice(-100)
+    return { result: { credited: true, balance: s.stickyBombs } }
+  })
+}
+
+// Laser Tag land mines (internal helpers for landMines.js / iap.js) ----------
+
+/** Spend one purchased land mine. Resolves true if the balance covered it. */
+export function _spendLandMine() {
+  return mutate((s) => {
+    if (!(s.landMines > 0)) return { result: false }
+    s.landMines -= 1
+    return { result: true }
+  })
+}
+
+/** Credit purchased land mines once per store transaction. */
+export function _creditLandMines(count, txnId) {
+  return mutate((s) => {
+    const n = Math.max(0, Math.floor(Number(count) || 0))
+    const id = txnId ? `lm:${txnId}` : null
+    if (id && s.uavTxns.includes(id)) return { result: { credited: false, balance: s.landMines || 0 } }
+    s.landMines = (s.landMines || 0) + n
+    if (id) s.uavTxns = [...s.uavTxns, id].slice(-100)
+    return { result: { credited: true, balance: s.landMines } }
   })
 }
 

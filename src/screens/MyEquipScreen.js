@@ -14,6 +14,8 @@ import {
 import { font } from '../theme'
 import { useUavInventory } from '../lib/uav'
 import { useGrenadeInventory } from '../lib/grenades'
+import { useStickyBombInventory } from '../lib/stickyBombs'
+import { useLandMineInventory } from '../lib/landMines'
 import { gunArt } from '../lib/gunArt'
 import Glass from '../components/Glass'
 
@@ -41,6 +43,8 @@ export default function MyEquipScreen({ navigation }) {
   const [busy, setBusy] = useState(false)
   const uav = useUavInventory()
   const grenades = useGrenadeInventory()
+  const stickyBombs = useStickyBombInventory()
+  const landMines = useLandMineInventory()
   useArcadeStatusBar()
 
   useFocusEffect(useCallback(() => {
@@ -156,6 +160,16 @@ export default function MyEquipScreen({ navigation }) {
               <Text style={{ fontSize: 18 }}>💣</Text>
               <Text style={styles.summaryValue}>{grenades.owner ? '∞' : grenades.balance}</Text>
               <Text style={styles.summaryLabel}>GRENADES</Text>
+            </View>
+            <View style={styles.summaryCard}>
+              <Text style={{ fontSize: 18 }}>🧨</Text>
+              <Text style={styles.summaryValue}>{stickyBombs.owner ? '∞' : stickyBombs.balance}</Text>
+              <Text style={styles.summaryLabel}>STICKY</Text>
+            </View>
+            <View style={styles.summaryCard}>
+              <Text style={{ fontSize: 18 }}>💥</Text>
+              <Text style={styles.summaryValue}>{landMines.owner ? '∞' : landMines.balance}</Text>
+              <Text style={styles.summaryLabel}>MINES</Text>
             </View>
             <View style={styles.summaryCard}>
               <Ionicons name="diamond" size={18} color={AC.gold} />
@@ -275,8 +289,8 @@ const styles = StyleSheet.create({
   rarityDot: { width: 5, height: 5, borderRadius: 3 },
   rarityText: { fontSize: 10, ...font.heavy, letterSpacing: 1.2 },
 
-  summaryRow: { flexDirection: 'row', gap: 8 },
-  summaryCard: { flex: 1, alignItems: 'center', paddingVertical: 14, borderRadius: 16, backgroundColor: AC.card, borderWidth: 1, borderColor: AC.border, gap: 4 },
+  summaryRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  summaryCard: { width: '31%', flexGrow: 1, alignItems: 'center', paddingVertical: 14, borderRadius: 16, backgroundColor: AC.card, borderWidth: 1, borderColor: AC.border, gap: 4 },
   summaryValue: { fontSize: 18, ...font.heavy, color: AC.text },
   summaryOf: { fontSize: 13, color: AC.faint },
   summaryLabel: { fontSize: 8, ...font.heavy, color: AC.faint, letterSpacing: 1.4 },

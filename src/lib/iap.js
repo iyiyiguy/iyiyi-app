@@ -1,6 +1,6 @@
 import { Platform } from 'react-native'
 import * as RNIap from 'react-native-iap'
-import { _creditUavs, _creditGrenades, _grantItems } from './arcadeStats'
+import { _creditUavs, _creditGrenades, _creditStickyBombs, _creditLandMines, _grantItems } from './arcadeStats'
 
 // These must match the product IDs you create in App Store Connect
 // (Subscriptions) and Google Play Console (Monetize > Subscriptions).
@@ -591,6 +591,169 @@ export async function purchaseGrenadePack() {
       if (purchase.purchaseState === 'pending') { settle(resolve, { status: 'pending' }); return }
       try {
         const res = await creditGrenadePurchase(purchase)
+        settle(resolve, { status: 'purchased', balance: res?.balance, count: res?.count })
+      } catch (e) {
+        settle(reject, e)
+      }
+    }))
+    subs.push(RNIap.purchaseErrorListener((error) => {
+      if (error?.productId && error.productId !== sku) return
+      settle(reject, error)
+    }))
+    RNIap.requestPurchase({ request: { apple: { sku }, google: { skus: [sku] } }, type: 'in-app' }).catch((e) => settle(reject, e))
+  })
+}
+// ---------------------------------------------------------------------------
+// Consumable: Laser Tag sticky bomb pack (5 sticky bombs). App Store Connect type: Consumable.
+// Place at a location, detonate remotely when enemies are near.
+// ---------------------------------------------------------------------------
+export const STICKY_BOMB_PACK = {
+  id: 'stickybomb5',
+  count: 5,
+  sku: Platform.select({ ios: 'com.iYiYi.stickybomb5', android: 'iyiyi_stickybomb5' }),
+  refPrice: 4.99,
+}
+export const isStickyBombSku = (sku) => sku === STICKY_BOMB_PACK.sku
+
+async function creditStickyBombPurchase(purchase) {
+  const qty = Math.max(1, Math.min(10, Number(purchase.quantity) || 1))
+  const txnId = purchase.id || purchase.purchaseToken || `${purchase.productId}:${purchase.transactionDate}`
+  const res = await _creditStickyBombs(STICKY_BOMB_PACK.count * qty, txnId)
+  try {
+    await RNIap.finishTransaction({ purchase, isConsumable: true })
+  } catch (e) {
+    console.warn('iap: finishTransaction (stickyBombs) failed', e)
+  }
+  return { ...res, count: STICKY_BOMB_PACK.count * qty }
+}
+
+/** Store info for the sticky bomb pack: { displayPrice } or null. Never throws. */
+export async function fetchStickyBombProduct() {
+  try {
+    await withTimeout(initIAP(), 15000)
+    const products = (await withTimeout(RNIap.fetchProducts({ skus: [STICKY_BOMB_PACK.sku], type: 'in-app' }), 15000)) ?? []
+    const p = products.find((x) => x?.id === STICKY_BOMB_PACK.sku)
+    return p?.displayPrice ? { displayPrice: String(p.displayPrice) } : null
+  } catch {
+    return null
+  }
+}
+
+/** Credits + finishes any sticky bomb purchase that completed outside the buy flow. Never throws. */
+export async function recoverStickyBombPurchases() {
+  try {
+    for (const p of await ownedPurchases()) {
+      if (isStickyBombSku(p?.productId) && p.purchaseState !== 'pending') await creditStickyBombPurchase(p)
+    }
+  } catch {
+    // Next time.
+  }
+}
+
+/** Buys one sticky bomb pack. Resolves { status: 'purchased', balance, count } | { status: 'pending' }. */
+export async function purchaseStickyBombPack() {
+  const sku = STICKY_BOMB_PACK.sku
+  await withTimeout(initIAP(), 15000)
+  const products = (await withTimeout(RNIap.fetchProducts({ skus: [sku], type: 'in-app' }), 15000)) ?? []
+  if (!products.some((p) => p?.id === sku)) throw new Error('Sticky bombs aren\'t available in the store yet. Please try again later.')
+  return new Promise((resolve, reject) => {
+    let settled = false
+    const subs = []
+    const settle = (fn, v) => {
+      if (settled) return
+      settled = true
+      clearTimeout(timer)
+      subs.forEach((s) => s.remove())
+      fn(v)
+    }
+    const timer = setTimeout(() => settle(resolve, { status: 'pending' }), 90000)
+    subs.push(RNIap.purchaseUpdatedListener(async (purchase) => {
+      if (purchase?.productId !== sku) return
+      if (purchase.purchaseState === 'pending') { settle(resolve, { status: 'pending' }); return }
+      try {
+        const res = await creditStickyBombPurchase(purchase)
+        settle(resolve, { status: 'purchased', balance: res?.balance, count: res?.count })
+      } catch (e) {
+        settle(reject, e)
+      }
+    }))
+    subs.push(RNIap.purchaseErrorListener((error) => {
+      if (error?.productId && error.productId !== sku) return
+      settle(reject, error)
+    }))
+    RNIap.requestPurchase({ request: { apple: { sku }, google: { skus: [sku] } }, type: 'in-app' }).catch((e) => settle(reject, e))
+  })
+}
+
+// ---------------------------------------------------------------------------
+// Consumable: Laser Tag land mine pack (5 land mines). App Store Connect type: Consumable.
+// Place on the ground — detonates when an enemy comes within ~3 ft (1 m). Persists until triggered.
+// ---------------------------------------------------------------------------
+export const LAND_MINE_PACK = {
+  id: 'landmine5',
+  count: 5,
+  sku: Platform.select({ ios: 'com.iYiYi.landmine5', android: 'iyiyi_landmine5' }),
+  refPrice: 4.99,
+}
+export const isLandMineSku = (sku) => sku === LAND_MINE_PACK.sku
+
+async function creditLandMinePurchase(purchase) {
+  const qty = Math.max(1, Math.min(10, Number(purchase.quantity) || 1))
+  const txnId = purchase.id || purchase.purchaseToken || `${purchase.productId}:${purchase.transactionDate}`
+  const res = await _creditLandMines(LAND_MINE_PACK.count * qty, txnId)
+  try {
+    await RNIap.finishTransaction({ purchase, isConsumable: true })
+  } catch (e) {
+    console.warn('iap: finishTransaction (landMines) failed', e)
+  }
+  return { ...res, count: LAND_MINE_PACK.count * qty }
+}
+
+/** Store info for the land mine pack: { displayPrice } or null. Never throws. */
+export async function fetchLandMineProduct() {
+  try {
+    await withTimeout(initIAP(), 15000)
+    const products = (await withTimeout(RNIap.fetchProducts({ skus: [LAND_MINE_PACK.sku], type: 'in-app' }), 15000)) ?? []
+    const p = products.find((x) => x?.id === LAND_MINE_PACK.sku)
+    return p?.displayPrice ? { displayPrice: String(p.displayPrice) } : null
+  } catch {
+    return null
+  }
+}
+
+/** Credits + finishes any land mine purchase that completed outside the buy flow. Never throws. */
+export async function recoverLandMinePurchases() {
+  try {
+    for (const p of await ownedPurchases()) {
+      if (isLandMineSku(p?.productId) && p.purchaseState !== 'pending') await creditLandMinePurchase(p)
+    }
+  } catch {
+    // Next time.
+  }
+}
+
+/** Buys one land mine pack. Resolves { status: 'purchased', balance, count } | { status: 'pending' }. */
+export async function purchaseLandMinePack() {
+  const sku = LAND_MINE_PACK.sku
+  await withTimeout(initIAP(), 15000)
+  const products = (await withTimeout(RNIap.fetchProducts({ skus: [sku], type: 'in-app' }), 15000)) ?? []
+  if (!products.some((p) => p?.id === sku)) throw new Error('Land mines aren\'t available in the store yet. Please try again later.')
+  return new Promise((resolve, reject) => {
+    let settled = false
+    const subs = []
+    const settle = (fn, v) => {
+      if (settled) return
+      settled = true
+      clearTimeout(timer)
+      subs.forEach((s) => s.remove())
+      fn(v)
+    }
+    const timer = setTimeout(() => settle(resolve, { status: 'pending' }), 90000)
+    subs.push(RNIap.purchaseUpdatedListener(async (purchase) => {
+      if (purchase?.productId !== sku) return
+      if (purchase.purchaseState === 'pending') { settle(resolve, { status: 'pending' }); return }
+      try {
+        const res = await creditLandMinePurchase(purchase)
         settle(resolve, { status: 'purchased', balance: res?.balance, count: res?.count })
       } catch (e) {
         settle(reject, e)

@@ -21,6 +21,8 @@ import { fetchGunProducts, purchaseGun, restoreGunPurchases, isUserCancelled } f
 import { gunArt } from '../lib/gunArt'
 import { gunSpinFrames } from '../lib/gunSpin'
 import { useGrenadeInventory, useGrenadeStore, GRENADE_PACK } from '../lib/grenades'
+import { useStickyBombInventory, useStickyBombStore, STICKY_BOMB_PACK } from '../lib/stickyBombs'
+import { useLandMineInventory, useLandMineStore, LAND_MINE_PACK } from '../lib/landMines'
 import { isReviewAccount } from '../lib/reviewAccount'
 
 // Kept for existing importers (e.g. the Laser Tag lobby).
@@ -52,6 +54,10 @@ export default function GunShopScreen({ navigation, route }) {
   const uav = useUavInventory()
   const grenades = useGrenadeInventory()
   const grenadeStore = useGrenadeStore()
+  const stickyBombs = useStickyBombInventory()
+  const stickyBombStore = useStickyBombStore()
+  const landMines = useLandMineInventory()
+  const landMineStore = useLandMineStore()
   const scrollRef = useRef(null)
   const equipY = useRef(0)
   useArcadeStatusBar()
@@ -162,6 +168,32 @@ export default function GunShopScreen({ navigation, route }) {
   }
 
   const act = (gun) => (owns(gun) ? equip(gun) : buy(gun))
+
+  const buyStickyBombs = async () => {
+    if (busy) return
+    setBusy(true)
+    try {
+      const res = await stickyBombStore.buy()
+      if (res.ok) { buzz('success'); setToast(`${res.count} sticky bombs added`) }
+      else if (res.pending) Alert.alert('Purchase pending', 'Your purchase is waiting for approval. The sticky bombs are added as soon as it goes through.')
+      else if (res.cancelled) { /* noop */ }
+      else if (res.error) Alert.alert('Purchase failed', res.error)
+    } catch { Alert.alert('Error', 'Something went wrong. You weren\'t charged.') }
+    setBusy(false)
+  }
+
+  const buyLandMines = async () => {
+    if (busy) return
+    setBusy(true)
+    try {
+      const res = await landMineStore.buy()
+      if (res.ok) { buzz('success'); setToast(`${res.count} land mines added`) }
+      else if (res.pending) Alert.alert('Purchase pending', 'Your purchase is waiting for approval. The land mines are added as soon as it goes through.')
+      else if (res.cancelled) { /* noop */ }
+      else if (res.error) Alert.alert('Purchase failed', res.error)
+    } catch { Alert.alert('Error', 'Something went wrong. You weren\'t charged.') }
+    setBusy(false)
+  }
 
   const buyGrenades = async () => {
     if (grenadeStore.busy) return
@@ -292,6 +324,18 @@ export default function GunShopScreen({ navigation, route }) {
               owner={grenades.owner || owner}
               store={grenadeStore}
               onBuy={buyGrenades}
+            />
+            <StickyBombCard
+              balance={stickyBombs.balance}
+              owner={stickyBombs.owner || owner}
+              store={stickyBombStore}
+              onBuy={buyStickyBombs}
+            />
+            <LandMineCard
+              balance={landMines.balance}
+              owner={landMines.owner || owner}
+              store={landMineStore}
+              onBuy={buyLandMines}
             />
           </View>
         </View>
@@ -554,6 +598,66 @@ function GrenadeCard({ balance, owner, store, onBuy }) {
             <GhostButton title="Unlimited" icon="infinite" small disabled />
           ) : store.status === 'ready' ? (
             <PlayButton title={store.displayPrice ? `Buy · ${store.displayPrice}` : 'Buy'} icon="cart" small busy={store.busy} onPress={onBuy} colors={['#ffc94d', '#ff8a3c']} />
+          ) : store.status === 'loading' ? (
+            <GhostButton title="Loading…" icon="hourglass-outline" small disabled />
+          ) : (
+            <GhostButton title="Unavailable" icon="time-outline" small disabled />
+          )}
+        </View>
+      </View>
+    </View>
+  )
+}
+
+function StickyBombCard({ balance, owner, store, onBuy }) {
+  const count = STICKY_BOMB_PACK?.count || 5
+  return (
+    <View style={[styles.gCard, { borderColor: 'rgba(180,108,255,0.35)' }]}>
+      <LinearGradient colors={['rgba(180,108,255,0.22)', '#121428', '#0b0d1c']} start={{ x: 0, y: 0 }} end={{ x: 0.7, y: 1 }} style={StyleSheet.absoluteFill} />
+      <View style={styles.gArt}>
+        <Glow color="#b46cff" size={110} />
+        <Image source={require('../../assets/guns/stickybomb.png')} style={{ width: 80, height: 50 }} resizeMode="contain" />
+        <View style={[styles.gBadge, { backgroundColor: '#b46cff' }]}><Text style={styles.gBadgeText}>×{count}</Text></View>
+      </View>
+      <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
+        <Text style={styles.gTitle}>{count} Sticky Bombs</Text>
+        <Text style={styles.gMeta}>Place on any surface — detonate remotely when enemies are near.</Text>
+        <Text style={[styles.gBal, { color: '#b46cff' }]}>{owner ? 'Unlimited (owner)' : `Balance: ${Number(balance || 0).toLocaleString()}`}</Text>
+        <View style={{ marginTop: 6, alignSelf: 'flex-start' }}>
+          {owner ? (
+            <GhostButton title="Unlimited" icon="infinite" small disabled />
+          ) : store.status === 'ready' ? (
+            <PlayButton title={store.displayPrice ? `Buy · ${store.displayPrice}` : 'Buy'} icon="cart" small busy={store.busy} onPress={onBuy} colors={['#b46cff', '#8f7bff']} />
+          ) : store.status === 'loading' ? (
+            <GhostButton title="Loading…" icon="hourglass-outline" small disabled />
+          ) : (
+            <GhostButton title="Unavailable" icon="time-outline" small disabled />
+          )}
+        </View>
+      </View>
+    </View>
+  )
+}
+
+function LandMineCard({ balance, owner, store, onBuy }) {
+  const count = LAND_MINE_PACK?.count || 5
+  return (
+    <View style={[styles.gCard, { borderColor: 'rgba(47,220,143,0.35)' }]}>
+      <LinearGradient colors={['rgba(47,220,143,0.22)', '#121428', '#0b0d1c']} start={{ x: 0, y: 0 }} end={{ x: 0.7, y: 1 }} style={StyleSheet.absoluteFill} />
+      <View style={styles.gArt}>
+        <Glow color="#2fdc8f" size={110} />
+        <Image source={require('../../assets/guns/landmine.png')} style={{ width: 80, height: 50 }} resizeMode="contain" />
+        <View style={[styles.gBadge, { backgroundColor: '#2fdc8f' }]}><Text style={[styles.gBadgeText, { color: '#0b0d1c' }]}>×{count}</Text></View>
+      </View>
+      <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
+        <Text style={styles.gTitle}>{count} Land Mines</Text>
+        <Text style={styles.gMeta}>Place on the ground — detonates when an enemy walks within 3 ft. Persists until triggered.</Text>
+        <Text style={[styles.gBal, { color: '#2fdc8f' }]}>{owner ? 'Unlimited (owner)' : `Balance: ${Number(balance || 0).toLocaleString()}`}</Text>
+        <View style={{ marginTop: 6, alignSelf: 'flex-start' }}>
+          {owner ? (
+            <GhostButton title="Unlimited" icon="infinite" small disabled />
+          ) : store.status === 'ready' ? (
+            <PlayButton title={store.displayPrice ? `Buy · ${store.displayPrice}` : 'Buy'} icon="cart" small busy={store.busy} onPress={onBuy} colors={['#2fdc8f', '#1fae84']} />
           ) : store.status === 'loading' ? (
             <GhostButton title="Loading…" icon="hourglass-outline" small disabled />
           ) : (
