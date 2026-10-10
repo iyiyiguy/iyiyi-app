@@ -320,7 +320,7 @@ export function HeadsUp7UpGame({ room, onExit }) {
           <Text style={[type.display, { textAlign: 'center' }]}>Heads Up!</Text>
           <Text style={[type.display, { textAlign: 'center', marginTop: 8 }]}>{formatClock(timeLeft)}</Text>
           <Text style={[type.caption, { textAlign: 'center', marginTop: 4 }]}>
-            {wasTapped ? 'You were tapped! Guess who did it.' : isPicker ? 'Wait for guesses. Keep a straight face!' : 'You weren't tapped this round.'}
+            {wasTapped ? 'You were tapped! Guess who did it.' : isPicker ? 'Wait for guesses. Keep a straight face!' : "You weren't tapped this round."}
           </Text>
         </Card>
 

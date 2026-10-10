@@ -51,6 +51,7 @@ ONE_TIME = [
     ("iyiyi_gun_marksman", "Marksman DMR", "Laser Tag gun: long-range precision.", "2.99"),
     ("iyiyi_gun_minigun", "Minigun", "Laser Tag gun: maximum fire rate.", "2.99"),
     ("iyiyi_gun_railgun", "Ion Railgun", "Laser Tag gun: heavy charged beams.", "4.99"),
+    ("iyiyi_gun_rocket", "Rocket Launcher", "Massive blast radius weapon.", "9.99"),
 ]
 
 creds, _ = google.auth.default(scopes=["https://www.googleapis.com/auth/androidpublisher"])
