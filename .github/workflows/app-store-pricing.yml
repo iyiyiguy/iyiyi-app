@@ -18,8 +18,25 @@ jobs:
         with:
           python-version: '3.12'
       - run: pip install pyjwt cryptography requests
-      - run: python scripts/asc_pricing.py
+      - name: Creator Pro ($9.99/mo, intro $0.99 for 2 months)
+        run: python scripts/asc_pricing.py
         env:
           ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
           ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
           ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+      - name: Business Pro ($29/mo, intro $9.99 for the first month)
+        if: always()
+        run: python scripts/asc_pricing.py
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+          PRO_PRODUCT_ID: com.iyiyi.app.business.monthly
+          BASE_USD: '29.00'
+          INTRO_USD: '9.99'
+          INTRO_DURATION: ONE_MONTH
+          CREATE_NAME: Business Pro
+          CREATE_DISPLAY: Business Pro
+          CREATE_DESC: Analytics, promotion and every Creator Pro perk.
+          CREATE_LEVEL: '1'
+          CREATE_SCREENSHOT: store-assets/screenshot-2-paywall.png

@@ -1,11 +1,7 @@
 New in this version:
-• Safe zone: set your home area and you're hidden from the map while you're there
-• Fresh glass design with light and dark mode, and smoother animations
-• Redesigned sign-up and explore screens
-• iY emblem on everyone facing the camera, in photos and videos
-• Profile Preview now shows exactly what visitors see
-• Faster app launch; screens open faster and remember what they last showed
-• iYiYi in 11 languages: pick yours when you first open the app, or any time in Settings → Language
-• New iYiYi Pro screen, with a Go Pro button on your profile and in Nearby
-• Laser tag: brand-new Armory shop with realistic weapons you can spin 360° to inspect, grenades (hold to power up or make a throwing motion), your gun shown on screen in first person, binoculars (up to 8×) that tag enemy names and distance, sniper scope up to 6×, UAV packs, see who hit you, clearer miss feedback
+• Rocket Launcher: a new heavy weapon for Laser Tag with a massive blast radius
+• Sticky bombs and land mines in Laser Tag
+• My Equip: see and switch your loadout in one place
+• Two new party games in the Arcade: Mafia and Heads Up 7 Up
+• Business Pro: analytics, promoted placement, QR codes, team members and history export for local businesses
 • Fixes and polish throughout

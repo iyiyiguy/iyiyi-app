@@ -37,6 +37,9 @@ PRODUCTS = [
     ("com.iYiYi.gun.marksman", "NON_CONSUMABLE", "Gun Marksman DMR", "Marksman DMR", "Laser Tag gun: long-range precision.", "2.99"),
     ("com.iYiYi.gun.minigun", "NON_CONSUMABLE", "Gun Minigun", "Minigun", "Laser Tag gun: maximum fire rate.", "2.99"),
     ("com.iYiYi.gun.railgun", "NON_CONSUMABLE", "Gun Ion Railgun", "Ion Railgun", "Laser Tag gun: heavy charged beams.", "4.99"),
+    ("com.iYiYi.gun.rocket", "NON_CONSUMABLE", "Gun Rocket Launcher", "Rocket Launcher", "Massive blast radius weapon", "9.99"),
+    ("com.iYiYi.stickybomb5", "CONSUMABLE", "Sticky Bomb pack 5", "5 Sticky Bombs", "Five sticky bombs for Laser Tag.", "4.99"),
+    ("com.iYiYi.landmine5", "CONSUMABLE", "Land Mine pack 5", "5 Land Mines", "Five land mines for Laser Tag.", "4.99"),
 ]
 REVIEW_NOTE = ("Laser Tag item. In the app: Arcade > Laser Tag > Shop (or the UAV button in a match). "
                "Demo account details are in the app's App Review Information.")
@@ -157,7 +160,7 @@ def ensure_availability(iap_id):
 
 def ensure_screenshot(iap_id, pid):
     # Most specific first: this product, then its kind (a real in-app Shop screenshot), then default.
-    kind = "uav" if (".uav" in pid or ".grenade" in pid) else "gun" if ".gun." in pid else "other"
+    kind = "uav" if any(k in pid for k in (".uav", ".grenade", ".stickybomb", ".landmine")) else "gun" if ".gun." in pid else "other"
     names = (f"{pid}.png", f"{pid}.jpg", f"{kind}.png", f"{kind}.jpg", "default.png", "default.jpg")
     img = next((SHOTS / n for n in names if (SHOTS / n).exists()), None)
     if not img:

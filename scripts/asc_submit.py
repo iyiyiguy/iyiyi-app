@@ -96,6 +96,29 @@ def add_iaps(sub_id):
                 print(f"  ! IAP {a.get('productId')} not added: {msg[:200]} / {str(e2)[:200]}")
 
 
+def add_subscriptions(sub_id):
+    """Send every auto-renewable subscription that's waiting for its first review (e.g. a new
+    Business Pro plan) along with this version; Apple reviews new subscriptions with an app version."""
+    groups = M.call("GET", f"/apps/{M.APP_ID}/subscriptionGroups", params={"limit": 50}).get("data", [])
+    for g in groups:
+        subs = M.call("GET", f"/subscriptionGroups/{g['id']}/subscriptions", params={"limit": 50}).get("data", [])
+        for s in subs:
+            a = s["attributes"]
+            if a.get("state") != "READY_TO_SUBMIT":
+                print(f"  Subscription {a.get('productId')}: {a.get('state')}")
+                continue
+            try:
+                M.call("POST", "/subscriptionSubmissions", json={"data": {"type": "subscriptionSubmissions", "relationships": {
+                    "subscription": {"data": {"type": "subscriptions", "id": s["id"]}}}}})
+                print(f"  + Subscription {a.get('productId')} submitted with the version")
+            except RuntimeError as e:
+                msg = str(e)
+                if "409" in msg and "already" in msg.lower():
+                    print(f"  Subscription {a.get('productId')} already submitted")
+                else:
+                    print(f"  ! Subscription {a.get('productId')} not added: {msg[:300]}")
+
+
 def main():
     if not BUILD:
         raise RuntimeError("BUILD_NUMBER is required")
@@ -176,6 +199,7 @@ def main():
             print(f"  not accepted yet ({str(e)[:300]}), retrying in 60s")
             time.sleep(60)
     add_iaps(sub["id"])
+    add_subscriptions(sub["id"])
     # After a rejection the version can stay "not ready to be submitted yet" for a while once the
     # new build is attached; the final submit retries too.
     for attempt in range(15):
