@@ -43,39 +43,161 @@ function MuzzleFlash({ id, angle, onDone }) {
   )
 }
 
-// ─── Explosion: larger blast that fills a portion of the screen ───
-const EXPLOSION_DURATION = 600
+// ─── Explosion colors: every explosive has its own multi-colour palette ───
+// [core, inner ring, mid ring, outer ring, screen tint]
+const PALETTES = {
+  'Land mine':   ['#fff6d5', '#ffd400', '#ff6a00', '#ff1744', '#ff5a1f'],
+  'Sticky bomb': ['#eaffd9', '#76ff03', '#00e5ff', '#2979ff', '#33ff99'],
+  'Grenade':     ['#fffde7', '#ffea00', '#ff9100', '#d50000', '#ffb300'],
+  'Rocket':      ['#fde7ff', '#ea80fc', '#7c4dff', '#ff4081', '#b04dff'],
+}
+const DEFAULT_PALETTE = PALETTES.Grenade
+export const paletteFor = (label) => PALETTES[label] || DEFAULT_PALETTE
+
+// Layered fireball: a colour flash over the whole screen, a bright core and three
+// rings in different colours racing outwards. `size` is the fireball diameter in px.
+function Fireball({ palette, size, duration, children }) {
+  const t = useRef(new Animated.Value(0)).current
+  const fade = useRef(new Animated.Value(1)).current
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(t, { toValue: 1, duration, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
+      Animated.timing(fade, { toValue: 0, duration, delay: 0, easing: Easing.in(Easing.quad), useNativeDriver: true }),
+    ]).start()
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  const ring = (i, color, from, to, width) => (
+    <Animated.View
+      key={i}
+      style={{
+        position: 'absolute', width: size, height: size, borderRadius: size / 2,
+        borderWidth: width, borderColor: color,
+        opacity: t.interpolate({ inputRange: [0, 0.15 + i * 0.1, 1], outputRange: [0, 0.95, 0] }),
+        transform: [{ scale: t.interpolate({ inputRange: [0, 1], outputRange: [from, to] }) }],
+      }}
+    />
+  )
+  return (
+    <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }} pointerEvents="none">
+      {/* glowing core */}
+      <Animated.View
+        style={{
+          position: 'absolute', width: size * 0.7, height: size * 0.7, borderRadius: size * 0.35,
+          backgroundColor: palette[1],
+          shadowColor: palette[2], shadowOpacity: 1, shadowRadius: size * 0.25, shadowOffset: { width: 0, height: 0 },
+          opacity: fade,
+          transform: [{ scale: t.interpolate({ inputRange: [0, 0.3, 1], outputRange: [0.2, 1.1, 1.4] }) }],
+        }}
+      />
+      <Animated.View
+        style={{
+          position: 'absolute', width: size * 0.4, height: size * 0.4, borderRadius: size * 0.2,
+          backgroundColor: palette[0], opacity: fade,
+          transform: [{ scale: t.interpolate({ inputRange: [0, 0.25, 1], outputRange: [0.3, 1.2, 0.6] }) }],
+        }}
+      />
+      {ring(0, palette[1], 0.3, 1.8, 10)}
+      {ring(1, palette[2], 0.3, 2.6, 8)}
+      {ring(2, palette[3], 0.3, 3.4, 6)}
+      <Animated.Text style={{ fontSize: size * 0.45, opacity: fade, transform: [{ scale: t.interpolate({ inputRange: [0, 0.3, 1], outputRange: [0.3, 1.3, 1.5] }) }] }}>{'💥'}</Animated.Text>
+      {children}
+    </View>
+  )
+}
+
+// Full-screen colour flash that tints the camera for a moment.
+function ScreenFlash({ color, peak = 0.45, duration = 700 }) {
+  const o = useRef(new Animated.Value(peak)).current
+  useEffect(() => {
+    Animated.timing(o, { toValue: 0, duration, easing: Easing.out(Easing.quad), useNativeDriver: true }).start()
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  return <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: color, opacity: o }]} />
+}
+
+// ─── Explosion right on top of you (you threw it, or it hit you) ───
+const EXPLOSION_DURATION = 1100
 const EXPLOSION_MAX = 4
 
 function Explosion({ id, label, onDone }) {
-  const scale = useRef(new Animated.Value(0.2)).current
-  const opacity = useRef(new Animated.Value(1)).current
-  const ring = useRef(new Animated.Value(0)).current
+  const { width } = useWindowDimensions()
+  const palette = paletteFor(label)
   useEffect(() => {
-    Animated.sequence([
-      Animated.parallel([
-        Animated.timing(scale, { toValue: 1.6, duration: 300, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
-        Animated.timing(ring, { toValue: 1, duration: 300, easing: Easing.out(Easing.quad), useNativeDriver: true }),
-      ]),
-      Animated.timing(opacity, { toValue: 0, duration: 300, easing: Easing.in(Easing.quad), useNativeDriver: true }),
-    ]).start(() => onDone(id))
+    const t = setTimeout(() => onDone(id), EXPLOSION_DURATION + 100)
+    return () => clearTimeout(t)
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  return (
+    <View style={st.explosion} pointerEvents="none">
+      <ScreenFlash color={palette[4]} peak={0.5} duration={EXPLOSION_DURATION * 0.7} />
+      <Fireball palette={palette} size={width * 0.7} duration={EXPLOSION_DURATION} />
+      {label ? <Text style={[st.explosionLabel, { color: palette[1] }]}>{label.toUpperCase()}</Text> : null}
+    </View>
+  )
+}
+
+// ─── Mega explosion: a detonation somewhere in the arena (e.g. a land mine). Huge and
+// placed in the direction it happened, so it can be spotted from a long way off. ───
+const MEGA_DURATION = 1800
+const MEGA_MAX = 4
+const CAMERA_HALF_FOV = 35 // degrees either side of straight ahead that map onto the screen
+
+function MegaExplosion({ id, label, angle, dist, by, onDone }) {
+  const { width, height } = useWindowDimensions()
+  const palette = paletteFor(label)
+  useEffect(() => {
+    const t = setTimeout(() => onDone(id), MEGA_DURATION + 100)
+    return () => clearTimeout(t)
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Relative angle: -180..180, 0 = straight ahead.
+  const rel = angle == null ? 0 : ((angle + 540) % 360) - 180
+  const inView = Math.abs(rel) <= CAMERA_HALF_FOV
+  const x = inView ? width / 2 + (rel / CAMERA_HALF_FOV) * (width / 2) : rel < 0 ? 0 : width
+  // Oversized on purpose: always at least ~screen width, a bit smaller when far away.
+  const far = Number.isFinite(dist) ? Math.min(1, Math.max(0, dist / 500)) : 0.3
+  const size = Math.max(width, height * 0.6) * (1.25 - far * 0.45)
+  const distText = Number.isFinite(dist) ? (dist < 1000 ? `${Math.round(dist)} m` : `${(dist / 1000).toFixed(1)} km`) : ''
+  const arrow = inView ? '' : rel < 0 ? '◀ ' : ''
+  const arrowR = inView ? '' : rel > 0 ? ' ▶' : ''
   return (
-    <Animated.View style={[st.explosion, { opacity }]} pointerEvents="none">
-      <Animated.View style={{ transform: [{ scale }] }}>
-        <Text style={st.explosionEmoji}>{'💥'}</Text>
-      </Animated.View>
-      <Animated.View
-        style={[
-          st.blastRing,
-          {
-            opacity: ring.interpolate({ inputRange: [0, 0.5, 1], outputRange: [0, 0.6, 0] }),
-            transform: [{ scale: ring.interpolate({ inputRange: [0, 1], outputRange: [0.5, 3] }) }],
-          },
-        ]}
-      />
-      {label ? <Text style={st.explosionLabel}>{label}</Text> : null}
+    <View style={StyleSheet.absoluteFill} pointerEvents="none">
+      <ScreenFlash color={palette[4]} peak={inView ? 0.4 : 0.22} duration={MEGA_DURATION * 0.6} />
+      <View style={{ position: 'absolute', left: x - size / 2, top: height * 0.42 - size / 2 }}>
+        <Fireball palette={palette} size={size} duration={MEGA_DURATION} />
+      </View>
+      <View style={st.megaLabelWrap}>
+        <Text style={[st.megaLabel, { color: palette[1] }]}>{`${arrow}💥 ${String(label || 'Explosion').toUpperCase()}${distText ? ` · ${distText}` : ''}${arrowR}`}</Text>
+        {by ? <Text style={st.megaBy}>{by}</Text> : null}
+      </View>
+    </View>
+  )
+}
+
+// ─── Kill notification, Call of Duty style: who you killed and with what ───
+const KILL_MS = 2600
+const KILL_MAX = 3
+
+function KillBanner({ id, victim, weapon, points, index, onDone }) {
+  const a = useRef(new Animated.Value(0)).current
+  useEffect(() => {
+    Animated.sequence([
+      Animated.spring(a, { toValue: 1, friction: 6, tension: 120, useNativeDriver: true }),
+      Animated.delay(KILL_MS - 600),
+      Animated.timing(a, { toValue: 0, duration: 300, useNativeDriver: true }),
+    ]).start(() => onDone(id))
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  return (
+    <Animated.View
+      pointerEvents="none"
+      style={[st.kill, {
+        marginTop: index * 64,
+        opacity: a,
+        transform: [{ scale: a.interpolate({ inputRange: [0, 1], outputRange: [1.6, 1] }) }],
+      }]}
+    >
+      <Text style={st.killTop}>
+        <Text style={st.killWord}>{'KILLED  '}</Text>
+        <Text style={st.killName}>{String(victim || 'Enemy').toUpperCase()}</Text>
+      </Text>
+      <Text style={st.killWeapon}>{`${String(weapon || '').toUpperCase()}${points ? `   +${points}` : ''}`}</Text>
     </Animated.View>
   )
 }
@@ -224,6 +346,8 @@ let nextId = 1
 export function useBattleEffects() {
   const [flashes, setFlashes] = useState([])
   const [explosions, setExplosions] = useState([])
+  const [megas, setMegas] = useState([])
+  const [kills, setKills] = useState([])
   const [hits, setHits] = useState([])
   const [tracers, setTracers] = useState([])
   const [bullets, setBullets] = useState([])
@@ -231,6 +355,8 @@ export function useBattleEffects() {
 
   const removeFlash = useCallback((id) => setFlashes((a) => a.filter((f) => f.id !== id)), [])
   const removeExplosion = useCallback((id) => setExplosions((a) => a.filter((f) => f.id !== id)), [])
+  const removeMega = useCallback((id) => setMegas((a) => a.filter((f) => f.id !== id)), [])
+  const removeKill = useCallback((id) => setKills((a) => a.filter((f) => f.id !== id)), [])
   const removeHit = useCallback((id) => setHits((a) => a.filter((f) => f.id !== id)), [])
   const removeTracer = useCallback((id) => setTracers((a) => a.filter((f) => f.id !== id)), [])
   const removeBullet = useCallback((id) => setBullets((a) => a.filter((f) => f.id !== id)), [])
@@ -246,6 +372,22 @@ export function useBattleEffects() {
     setExplosions((a) => {
       const n = [...a, { id: nextId++, label }]
       return n.length > EXPLOSION_MAX ? n.slice(-EXPLOSION_MAX) : n
+    })
+  }, [])
+
+  // A blast somewhere in the arena: { label, angle (screen-relative deg), dist (m), by }
+  const addMegaExplosion = useCallback((m) => {
+    setMegas((a) => {
+      const n = [...a, { id: nextId++, ...m }]
+      return n.length > MEGA_MAX ? n.slice(-MEGA_MAX) : n
+    })
+  }, [])
+
+  // Kill notification: { victim, weapon, points }
+  const addKill = useCallback((k) => {
+    setKills((a) => {
+      const n = [...a, { id: nextId++, ...k }]
+      return n.length > KILL_MAX ? n.slice(-KILL_MAX) : n
     })
   }, [])
 
@@ -267,14 +409,18 @@ export function useBattleEffects() {
   const overlay = (
     <View style={StyleSheet.absoluteFill} pointerEvents="none">
       {flashes.map((f) => <MuzzleFlash key={f.id} id={f.id} angle={f.angle} onDone={removeFlash} />)}
+      {megas.map((m) => <MegaExplosion key={m.id} id={m.id} label={m.label} angle={m.angle} dist={m.dist} by={m.by} onDone={removeMega} />)}
       {explosions.map((e) => <Explosion key={e.id} id={e.id} label={e.label} onDone={removeExplosion} />)}
       {hits.map((h) => <HitIndicator key={h.id} id={h.id} angle={h.angle} onDone={removeHit} />)}
       {tracers.map((t) => <Tracer key={t.id} id={t.id} angle={t.angle} onDone={removeTracer} />)}
       {bullets.map((b) => <BulletProjectile key={b.id} id={b.id} angle={b.angle} screenW={screenW} screenH={screenH} onDone={removeBullet} />)}
+      <View style={st.killWrap} pointerEvents="none">
+        {kills.map((k, i) => <KillBanner key={k.id} id={k.id} index={i} victim={k.victim} weapon={k.weapon} points={k.points} onDone={removeKill} />)}
+      </View>
     </View>
   )
 
-  return { addFlash, addExplosion, addHit, addTracer, addBullet, overlay }
+  return { addFlash, addExplosion, addMegaExplosion, addKill, addHit, addTracer, addBullet, overlay }
 }
 
 /**
@@ -308,10 +454,19 @@ const st = StyleSheet.create({
     borderWidth: 3,
     borderColor: '#ff6600',
   },
+  megaLabelWrap: { position: 'absolute', top: '18%', left: 0, right: 0, alignItems: 'center' },
+  megaLabel: { fontSize: 22, fontWeight: '900', letterSpacing: 1.5, textShadowColor: '#000', textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 8 },
+  megaBy: { marginTop: 2, fontSize: 13, fontWeight: '800', color: '#fff', textShadowColor: '#000', textShadowRadius: 6 },
+  killWrap: { position: 'absolute', top: '58%', left: 0, right: 0, alignItems: 'center' },
+  kill: { position: 'absolute', alignItems: 'center', paddingHorizontal: 18, paddingVertical: 6, borderRadius: 6, backgroundColor: 'rgba(0,0,0,0.55)', borderLeftWidth: 4, borderLeftColor: '#ff2d2d' },
+  killTop: { fontSize: 20, fontWeight: '900', letterSpacing: 1 },
+  killWord: { color: '#ff3b3b' },
+  killName: { color: '#fff' },
+  killWeapon: { marginTop: 1, fontSize: 12, fontWeight: '800', letterSpacing: 2, color: '#ffd23f' },
   explosionLabel: {
     position: 'absolute',
-    bottom: '38%',
-    fontSize: 14,
+    bottom: '30%',
+    fontSize: 22,
     fontWeight: '800',
     color: '#ff9944',
     textShadowColor: '#000',

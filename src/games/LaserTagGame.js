@@ -178,6 +178,8 @@ export function LaserTagGame({ room, onExit }) {
   const aim = useAim({ enabled: loc.status === 'granted', override: prefs.aimMode })
   const { loadout, weaponId, select: selectWeapon } = useLoadout()
   const gun = useMemo(() => normalizeGun(getWeapon(weaponId)), [weaponId])
+  const gunNameRef = useRef('')
+  gunNameRef.current = gun?.name || 'Gun'
   const [camPerm] = useCameraGate()
   const [marker, setMarker] = useState(null)
   const [shotsBy, setShotsBy] = useState({})
@@ -286,6 +288,10 @@ export function LaserTagGame({ room, onExit }) {
         playSfx('hit')
         buzz(d?.killed ? 'success' : 'medium')
         const dmg = d?.damage ? ` −${d.damage}` : ''
+        if (d?.killed) battle.addKill({ victim: d.name, weapon: d.zone === 'head' ? `${gunNameRef.current} · Headshot` : gunNameRef.current, points: 100 })
+        for (const sh of Array.isArray(d?.splash) ? d.splash : []) {
+          if (sh?.killed) battle.addKill({ victim: sh.name, weapon: `${gunNameRef.current} · Splash`, points: 100 })
+        }
         if (d?.killed) flash(`${d.zone === 'head' ? '🎯 ' : ''}Tagged out ${d.name}!`, true)
         else if (d?.zone === 'head') flash(`🎯 HEADSHOT${dmg}`, true)
         else flash(`✕ ${d?.zone === 'limb' ? 'Limb' : 'Hit'}${dmg}`, true)
@@ -298,6 +304,7 @@ export function LaserTagGame({ room, onExit }) {
         if (!hits.length) { flash('💥 Grenade missed', false); return }
         playSfx('hit')
         buzz('success')
+        kills.forEach((k) => battle.addKill({ victim: k.name, weapon: 'Grenade', points: 100 }))
         if (kills.length) flash(`💥 Grenade tagged out ${kills.map((k) => k.name).join(', ')}!`, true)
         else flash(`💥 Grenade hit ${hits.map((h) => `${h.name} −${h.damage}`).join(', ')}`, true)
       }),
@@ -309,18 +316,23 @@ export function LaserTagGame({ room, onExit }) {
         playSfx('explosion')
         buzz('success')
         setBlastKey(Date.now())
+        kills.forEach((k) => battle.addKill({ victim: k.name, weapon: 'Sticky bomb', points: 100 }))
         if (kills.length) flash(`💥 Sticky bomb tagged out ${kills.map((k) => k.name).join(', ')}!`, true)
         else flash(`💥 Sticky bomb hit ${hits.map((h) => `${h.name} −${h.damage}`).join(', ')}`, true)
       }),
       room.onMessage('land_mine_ok', () => {
         buzz('medium')
-        flash('⚠️ Land mine placed!', true)
+        flash('⚠️ Land mine placed! It\'s on your map', true)
       }),
       room.onMessage('got_hit', (d, from) => {
         const by = String(d?.by || 'Someone').slice(0, 24)
         const dmg = d?.damage ? ` −${d.damage}` : ''
         const isExplosive = d?.zone === 'grenade' || d?.zone === 'sticky_bomb' || d?.zone === 'land_mine' || d?.zone === 'rocket'
-        if (isExplosive) { playSfx('explosion'); buzz('heavy'); setBlastKey(Date.now()); battle.addExplosion(d?.zone === 'rocket' ? 'Rocket' : d?.zone === 'grenade' ? 'Grenade' : d?.zone === 'sticky_bomb' ? 'Sticky bomb' : 'Land mine') }
+        if (isExplosive) {
+          playSfx('explosion'); buzz('heavy'); setBlastKey(Date.now())
+          // Land mines show as an arena-wide mega explosion (see the blasts effect below).
+          if (d?.zone !== 'land_mine') battle.addExplosion(d?.zone === 'rocket' ? 'Rocket' : d?.zone === 'grenade' ? 'Grenade' : 'Sticky bomb')
+        }
         else { playSfx('hit'); buzz('heavy') }
         // Directional hit indicator (from shooter's position if available)
         try {
@@ -355,6 +367,37 @@ export function LaserTagGame({ room, onExit }) {
     ]
     return () => offs.forEach((off) => off())
   }, [room, flash])
+
+  // Arena blasts (land mines): every player sees a huge explosion in the direction it went off,
+  // and the mine's owner gets a kill banner / hit notice.
+  const seenBlastsRef = useRef(null)
+  const blastsKey = (state?.blasts || []).map((b) => b.id).join(',')
+  useEffect(() => {
+    const list = state?.blasts || []
+    if (!seenBlastsRef.current) { seenBlastsRef.current = new Set(list.map((b) => b.id)); return } // ignore old ones on join
+    for (const b of list) {
+      if (!b?.id || seenBlastsRef.current.has(b.id)) continue
+      seenBlastsRef.current.add(b.id)
+      try {
+        const hits = Array.isArray(b.hits) ? b.hits : []
+        const iWasHit = hits.some((h) => h.id === meId)
+        const mine = b.by === meId
+        const myPos = myPosRef.current
+        const pos = b.lat != null && b.lng != null ? { lat: b.lat, lng: b.lng } : null
+        const dist = myPos && pos ? distanceMeters(myPos, pos) : null
+        const angle = myPos && pos ? directionToAngle(myPos, headingRef.current, pos) : 0
+        battle.addMegaExplosion({ label: 'Land mine', angle: iWasHit ? 0 : angle, dist: iWasHit ? 0 : dist, by: mine ? 'YOUR MINE' : b.byName ? `${b.byName}'s mine` : null })
+        if (!iWasHit) { playSfx('explosion'); buzz(mine || (dist != null && dist < 60) ? 'heavy' : 'medium') }
+        if (mine) {
+          const killed = hits.filter((h) => h.killed)
+          killed.forEach((h) => battle.addKill({ victim: h.name, weapon: 'Land mine', points: 100 }))
+          const wounded = hits.filter((h) => !h.killed)
+          if (wounded.length) flash(`💥 Your mine hit ${wounded.map((h) => `${h.name} −${h.damage}`).join(', ')}`, true)
+          else if (!killed.length) flash('💥 Your land mine went off', true)
+        }
+      } catch {}
+    }
+  }, [blastsKey]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Battle effects: flash + tracer for every enemy shot, directional hit indicator when I take damage.
   useEffect(() => {
@@ -833,6 +876,11 @@ export function LaserTagGame({ room, onExit }) {
         color: !pl.alive ? '#7a8099' : mate ? TEAMS[pl.team]?.color || colors.success : colors.danger,
         ring: !!sndS && sndS.bomb?.carrier === id,
       })
+    }
+    // Your own land mines (only the placer sees them).
+    for (const [i, m] of (state.landMines || []).entries()) {
+      if (m?.by !== meId || m.lat == null) continue
+      pts.push({ id: `mine-${m.placedAt || i}`, pos: { lat: m.lat, lng: m.lng }, color: '#ff8a00', label: '⚠️' })
     }
     const areas = sndS ? sndS.sites.map((x) => ({ id: x.id, pos: x, r: x.r, color: colors.gold, label: x.id })) : []
     const b = sndS?.bomb

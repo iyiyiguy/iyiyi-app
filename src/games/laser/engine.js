@@ -177,6 +177,10 @@ function tickDeathmatch(state, now, presentIds, posOf) {
   let next = players === state.players ? state : { ...state, players }
   // Trigger land mines
   if (next.landMines?.length && posOf) next = tickLandMines(next, now, posOf)
+  // Forget blasts older than BLAST_KEEP_MS (clients only react to ids they haven't seen).
+  if (next.blasts?.length && next.blasts.some((b) => now - b.at > BLAST_KEEP_MS)) {
+    next = { ...next, blasts: next.blasts.filter((b) => now - b.at <= BLAST_KEEP_MS) }
+  }
   if (next.endless) return next // the public arena never ends
   const present = Object.keys(next.players).filter((id) => presentIds.has(id))
   const teamsPresent = new Set(present.map((id) => next.players[id].team))
@@ -185,9 +189,14 @@ function tickDeathmatch(state, now, presentIds, posOf) {
   return next
 }
 
+// Detonations every client should see (big explosion in its direction, kill banner for the owner).
+const BLAST_KEEP_MS = 10000
+const BLAST_MAX = 8
+
 // Check every placed land mine: if an enemy is within LAND_MINE_TRIGGER_M, detonate it.
 function tickLandMines(state, now, posOf) {
   if (!state.landMines?.length) return state
+  let blasts = state.blasts || []
   let players = { ...state.players }
   let feed = state.feed
   let teamScore = state.teamScore
@@ -211,6 +220,7 @@ function tickLandMines(state, now, posOf) {
       break
     }
     if (!triggered) { remaining.push(mine); continue }
+    const blastHits = []
     // Detonate — damage all enemies in LAND_MINE_RADIUS_M
     for (const [id, target] of Object.entries(players)) {
       if (id === mine.by || !target.alive) continue
@@ -227,6 +237,7 @@ function tickLandMines(state, now, posOf) {
       players[id] = { ...target, hp, alive: !killed, deaths: target.deaths + (killed ? 1 : 0), respawnAt: killed && !snd ? now + RESPAWN_MS : null }
       const me = players[mine.by]
       players[mine.by] = { ...me, hits: (me.hits || 0) + 1, score: (me.score || 0) + 10 + (killed ? 100 : 0), kills: (me.kills || 0) + (killed ? 1 : 0) }
+      blastHits.push({ id, name: target.name, damage: Math.min(damage, target.hp), killed })
       if (killed) {
         feed = pushFeed({ feed }, `${placer.name} 💥 ${target.name} (land mine)`, now)
         if (state.mode === 'tdm') teamScore = { ...teamScore, [placer.team]: teamScore[placer.team] + 1 }
@@ -239,8 +250,9 @@ function tickLandMines(state, now, posOf) {
         }
       }
     }
+    blasts = [...blasts, { id: `${now}-${Math.random().toString(36).slice(2, 6)}`, kind: 'land_mine', lat: mine.lat, lng: mine.lng, by: mine.by, byName: placer.name, at: now, hits: blastHits }].slice(-BLAST_MAX)
   }
-  return { ...state, players, feed, teamScore, landMines: remaining, ...(snd && sndState !== state.snd ? { snd: sndState } : {}) }
+  return { ...state, players, feed, teamScore, blasts, landMines: remaining, ...(snd && sndState !== state.snd ? { snd: sndState } : {}) }
 }
 
 function finishDeathmatch(state) {
