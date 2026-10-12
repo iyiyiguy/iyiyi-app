@@ -124,7 +124,7 @@ export const CombatView = memo(function CombatView({ room, weapon, myPos, oppone
     buzz(w.automatic ? 'light' : 'medium')
     onShot?.(beams)
     if (!h.myPos || !h.heading) { onFlash?.('No GPS/compass fix yet', false); return }
-    if (h.visionAim) { fireVision(beams); return }
+    if (h.visionAim) { fireVision(beams).catch(() => {}); return }
     const target = h.inSights
     if (!target) return
     let hits = 0

@@ -5,7 +5,7 @@
 //
 // Land mine: tap to drop at your current position. It triggers automatically when an
 // enemy walks within range. No second press needed.
-import React, { useCallback, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
 
 /**
@@ -64,6 +64,7 @@ export function StickyBombButton({ count, disabled, size = 54, onPlace, onDetona
 export function LandMineButton({ count, disabled, size = 54, onDrop, onEmpty }) {
   const [cooldown, setCooldown] = useState(false)
   const timer = useRef(null)
+  useEffect(() => () => clearTimeout(timer.current), [])
   const empty = !(count > 0)
 
   const handlePress = useCallback(() => {

@@ -82,36 +82,39 @@ function Wheel({ loadout, currentId, onPick, onClose }) {
       onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dx) > 4 || Math.abs(g.dy) > 4,
       onPanResponderTerminationRequest: () => false,
       onPanResponderGrant: () => {
-        pos.stopAnimation((v) => { posNow.current = v })
-        start = posNow.current
+        try { pos.stopAnimation((v) => { posNow.current = v }); start = posNow.current } catch {}
       },
       onPanResponderMove: (_, g) => {
-        if (closing.current) return
-        let v = start - g.dx / SLOT_PX
-        if (v < 0) v = v / 3 // rubber band past the ends
-        else if (v > n - 1) v = n - 1 + (v - (n - 1)) / 3
-        pos.setValue(v)
+        try {
+          if (closing.current) return
+          let v = start - g.dx / SLOT_PX
+          if (v < 0) v = v / 3 // rubber band past the ends
+          else if (v > n - 1) v = n - 1 + (v - (n - 1)) / 3
+          pos.setValue(v)
+        } catch {}
       },
       onPanResponderRelease: (e, g) => {
-        if (closing.current) return
-        // Swipe down closes.
-        if (g.dy > 70 && Math.abs(g.dy) > Math.abs(g.dx) * 1.3) { finish('close'); return }
-        const moved = Math.abs(g.dx) > 8 || Math.abs(g.dy) > 8
-        if (!moved) {
-          // Tap: the centre slot equips; either side steps the wheel toward that side.
-          const x = e.nativeEvent.locationX
-          const cx = width / 2
-          const cur = clamp(Math.round(posNow.current), 0, n - 1)
-          if (!Number.isFinite(x) || Math.abs(x - cx) < 62) { snapTo(cur); finish('pick', cur); return }
-          snapTo(cur + (x > cx ? 1 : -1))
-          return
-        }
-        // Momentum: project the fling, then snap. A slow release on a slot equips it.
-        const slow = Math.abs(g.vx) < 0.25
-        const projected = posNow.current - (g.vx * 260) / SLOT_PX
-        snapTo(projected, slow ? (t) => finish('pick', t) : undefined)
+        try {
+          if (closing.current) return
+          // Swipe down closes.
+          if (g.dy > 70 && Math.abs(g.dy) > Math.abs(g.dx) * 1.3) { finish('close'); return }
+          const moved = Math.abs(g.dx) > 8 || Math.abs(g.dy) > 8
+          if (!moved) {
+            // Tap: the centre slot equips; either side steps the wheel toward that side.
+            const x = e.nativeEvent.locationX
+            const cx = width / 2
+            const cur = clamp(Math.round(posNow.current), 0, n - 1)
+            if (!Number.isFinite(x) || Math.abs(x - cx) < 62) { snapTo(cur); finish('pick', cur); return }
+            snapTo(cur + (x > cx ? 1 : -1))
+            return
+          }
+          // Momentum: project the fling, then snap. A slow release on a slot equips it.
+          const slow = Math.abs(g.vx) < 0.25
+          const projected = posNow.current - (g.vx * 260) / SLOT_PX
+          snapTo(projected, slow ? (t) => finish('pick', t) : undefined)
+        } catch {}
       },
-      onPanResponderTerminate: () => snapTo(posNow.current),
+      onPanResponderTerminate: () => { try { snapTo(posNow.current) } catch {} },
     })
   }, [n, width]) // eslint-disable-line react-hooks/exhaustive-deps
 

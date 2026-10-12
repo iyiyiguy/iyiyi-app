@@ -670,7 +670,7 @@ export function LaserTagGame({ room, onExit }) {
     const h = aimRef.current
     broadcastShot(h.pos)
     if (!h.pos || !h.heading) { flash('No GPS/compass fix yet', false); return }
-    if (visionAim) { fireVision(shots); return }
+    if (visionAim) { fireVision(shots).catch(() => {}); return }
     // Compass aim (top-edge mode or no on-device detection): probabilistic.
     const target = inSightsRef.current
     if (!target) return
@@ -712,6 +712,7 @@ export function LaserTagGame({ room, onExit }) {
 
   // Throw along the compass heading; it goes off after the fuse, where it landed.
   const throwGrenade = async (distance, how) => {
+    try {
     if (dead || !playing) return
     const h = aimRef.current
     if (!h.pos || !h.heading) { flash('No GPS/compass fix yet', false); return }
@@ -732,10 +733,12 @@ export function LaserTagGame({ room, onExit }) {
       }
     }, GRENADE_FUSE_MS)
     grenadeTimers.current.push(t)
+    } catch { /* IAP/room error during match */ }
   }
 
   // Place a sticky bomb at the player's current location.
   const placeStickyBomb = async () => {
+    try {
     if (dead || !playing) return
     const h = aimRef.current
     if (!h.pos) { flash('No GPS fix yet', false); return }
@@ -745,6 +748,7 @@ export function LaserTagGame({ room, onExit }) {
     stickyBombPos.current = { lat: h.pos.lat, lng: h.pos.lng }
     buzz('medium')
     flash('🧨 Sticky bomb placed! Tap again to detonate', true)
+    } catch { /* IAP error */ }
   }
 
   // Detonate the placed sticky bomb.
@@ -762,6 +766,7 @@ export function LaserTagGame({ room, onExit }) {
 
   // Drop a land mine at the player's current location.
   const dropLandMine = async () => {
+    try {
     if (dead || !playing) return
     const h = aimRef.current
     if (!h.pos) { flash('No GPS fix yet', false); return }
@@ -771,6 +776,7 @@ export function LaserTagGame({ room, onExit }) {
     buzz('medium')
     flash('⚠️ Land mine dropped! It triggers when an enemy walks near', true)
     room.sendAction({ type: 'land_mine' })
+    } catch { /* IAP error */ }
   }
 
   const tagBystander = (user) => {
