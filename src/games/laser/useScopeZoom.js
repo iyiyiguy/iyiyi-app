@@ -15,7 +15,7 @@ export const PRECISION_MAX_ZOOM = 4
 export const DEFAULT_MAX_ZOOM = 2
 export const SNIPER_MAX_ZOOM = 6 // sniper rifle and railgun
 export const BINOCULAR_MAX_ZOOM = 8
-const STEPS = [1, 2, 4, 6, 8]
+const STEPS = [1, 1.5, 2, 3, 4, 5, 6, 7, 8]
 
 export function maxZoomFor(weapon) {
   if (weapon?.id === 'sniper' || weapon?.id === 'railgun') return SNIPER_MAX_ZOOM
@@ -26,7 +26,9 @@ const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v))
 
 function touchDistance(touches) {
   if (!touches || touches.length < 2) return 0
-  const [a, b] = touches
+  const a = touches[0]
+  const b = touches[1]
+  if (!a || !b || typeof a.pageX !== 'number' || typeof b.pageX !== 'number') return 0
   return Math.hypot(a.pageX - b.pageX, a.pageY - b.pageY)
 }
 
@@ -70,22 +72,23 @@ export function useScopeZoom(maxZoom, { enabled = true, onChange } = {}) {
     onStartShouldSetPanResponderCapture: (e) => enabled && (e.nativeEvent.touches?.length ?? 0) >= 2,
     onMoveShouldSetPanResponderCapture: (e) => enabled && (e.nativeEvent.touches?.length ?? 0) >= 2,
     onPanResponderGrant: (e) => {
-      pinch.current = { startDist: touchDistance(e.nativeEvent.touches), startZoom: zoomRef.current }
+      try { pinch.current = { startDist: touchDistance(e.nativeEvent.touches), startZoom: zoomRef.current } } catch {}
     },
     onPanResponderMove: (e) => {
-      const d = touchDistance(e.nativeEvent.touches)
-      if (!d) return
-      if (!pinch.current.startDist) {
-        pinch.current = { startDist: d, startZoom: zoomRef.current }
-        return
-      }
-      setZoom(pinch.current.startZoom * (d / pinch.current.startDist))
+      try {
+        const d = touchDistance(e.nativeEvent.touches)
+        if (!d) return
+        if (!pinch.current.startDist) {
+          pinch.current = { startDist: d, startZoom: zoomRef.current }
+          return
+        }
+        setZoom(pinch.current.startZoom * (d / pinch.current.startDist))
+      } catch {}
     },
     onPanResponderRelease: () => {
-      pinch.current.startDist = 0
-      onChangeRef.current?.(zoomRef.current)
+      try { pinch.current.startDist = 0; onChangeRef.current?.(zoomRef.current) } catch {}
     },
-    onPanResponderTerminate: () => { pinch.current.startDist = 0 },
+    onPanResponderTerminate: () => { try { pinch.current.startDist = 0 } catch {} },
     onPanResponderTerminationRequest: () => false,
   }), [enabled, setZoom])
 

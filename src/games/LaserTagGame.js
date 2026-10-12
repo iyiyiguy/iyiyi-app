@@ -54,6 +54,44 @@ import { spendGrenade, useGrenadeInventory } from '../lib/grenades'
 import { spendStickyBomb, useStickyBombInventory } from '../lib/stickyBombs'
 import { spendLandMine, useLandMineInventory } from '../lib/landMines'
 
+// Animated death screen: red flash, skull, respawn countdown.
+function DeathOverlay({ respawnSecs, snd }) {
+  const flash = useRef(new Animated.Value(0)).current
+  const skull = useRef(new Animated.Value(0)).current
+  const pulse = useRef(new Animated.Value(1)).current
+  useEffect(() => {
+    flash.setValue(1)
+    skull.setValue(0)
+    Animated.sequence([
+      Animated.timing(flash, { toValue: 0.55, duration: 400, useNativeDriver: true }),
+      Animated.timing(skull, { toValue: 1, duration: 300, useNativeDriver: true }),
+    ]).start()
+    const p = Animated.loop(Animated.sequence([
+      Animated.timing(pulse, { toValue: 1.15, duration: 800, useNativeDriver: true }),
+      Animated.timing(pulse, { toValue: 1, duration: 800, useNativeDriver: true }),
+    ]))
+    p.start()
+    return () => p.stop()
+  }, [flash, skull, pulse])
+
+  return (
+    <Animated.View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(120,0,20,0.65)', opacity: flash.interpolate({ inputRange: [0.55, 1], outputRange: [1, 1] }) }]} pointerEvents="none">
+      <Animated.View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', opacity: skull }}>
+        <Animated.Text style={{ fontSize: 64, transform: [{ scale: pulse }] }}>{'💀'}</Animated.Text>
+        <Text style={{ color: '#fff', fontSize: 28, fontWeight: '900', letterSpacing: 3, marginTop: 12, textShadowColor: '#000', textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 8 }}>TAGGED OUT</Text>
+        <Text style={{ color: 'rgba(255,255,255,0.8)', fontSize: 15, fontWeight: '700', marginTop: 10 }}>
+          {snd ? "You're back next round" : respawnSecs != null ? `Respawning in ${respawnSecs}s` : ''}
+        </Text>
+        {respawnSecs != null && !snd && (
+          <View style={{ marginTop: 16, width: 120, height: 6, borderRadius: 3, backgroundColor: 'rgba(255,255,255,0.2)', overflow: 'hidden' }}>
+            <View style={{ width: `${Math.max(0, 100 - (respawnSecs / 5) * 100)}%`, height: '100%', backgroundColor: '#ff4444', borderRadius: 3 }} />
+          </View>
+        )}
+      </Animated.View>
+    </Animated.View>
+  )
+}
+
 function normalizeGun(g) {
   const gun = g || getWeapon('pistol')
   const automatic = gun.fireMode === 'automatic'
@@ -1076,13 +1114,11 @@ export function LaserTagGame({ room, onExit }) {
         </View>
       )}
 
-      {dead && state.phase === 'playing' && (
-        <View style={styles.deadOverlay} pointerEvents="none">
-          <Text style={[type.display, { color: colors.onBrand }]}>Tagged out</Text>
-          <Text style={[type.body, { color: colors.onBrand, marginTop: 8 }]}>
-            {snd ? 'No respawns this round — you’re back next round.' : `Back in ${Math.max(0, Math.ceil(((myState.respawnAt || now) - now) / 1000))}s`}
-          </Text>
-        </View>
+      {dead && state.phase === ‘playing’ && (
+        <DeathOverlay
+          respawnSecs={snd ? null : Math.max(0, Math.ceil(((myState.respawnAt || now) - now) / 1000))}
+          snd={snd}
+        />
       )}
       <AlertBanner alert={alert} top={(topH ? hud.top + topH : hud.top + 120) + 6} />
       {state.phase === 'countdown' && <CountdownOverlay state={state} now={now} meTeam={myTeam} />}
@@ -1179,9 +1215,9 @@ const styles = StyleSheet.create({
   aboveDock: { position: 'absolute', gap: 8 },
   dock: { position: 'absolute', alignItems: 'flex-end', justifyContent: 'space-between' },
   fireCol: { gap: DOCK_GAP },
-  zoomBtn: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 12, height: 36, borderRadius: 18, backgroundColor: 'rgba(0,0,0,0.45)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.35)' },
-  zoomBtnOn: { backgroundColor: colors.gold, borderColor: colors.gold },
-  zoomText: { color: '#fff', fontWeight: '800', fontSize: 13 },
+  zoomBtn: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 12, height: 36, borderRadius: 18, backgroundColor: 'rgba(10,12,22,0.65)', borderWidth: 1.5, borderColor: 'rgba(100,200,255,0.4)', shadowColor: '#4dc9f6', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.3, shadowRadius: 6 },
+  zoomBtnOn: { backgroundColor: colors.gold, borderColor: colors.gold, shadowColor: colors.gold, shadowOpacity: 0.6, shadowRadius: 10 },
+  zoomText: { color: '#fff', fontWeight: '800', fontSize: 13, textShadowColor: 'rgba(0,0,0,0.5)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 3 },
   fireCompact: { width: 88, height: 88, borderRadius: 44 },
   hpTrack: { height: 10, borderRadius: 5, backgroundColor: 'rgba(255,255,255,0.25)', overflow: 'hidden' },
   hpFill: { height: 10, borderRadius: 5 },
@@ -1201,8 +1237,8 @@ const styles = StyleSheet.create({
   marker: { ...type.title, marginTop: 6, ...hudShadow },
   objective: { alignItems: 'center', gap: 10 },
   objectiveText: { ...type.body, fontWeight: '700', color: colors.onBrand, textAlign: 'center', ...hudShadow },
-  fire: { width: 104, height: 104, borderRadius: 52, backgroundColor: colors.crimson, alignItems: 'center', justifyContent: 'center', borderWidth: 3, borderColor: colors.onBrand },
-  fireText: { ...type.title, color: colors.onBrand, letterSpacing: 2 },
+  fire: { width: 104, height: 104, borderRadius: 52, backgroundColor: colors.crimson, alignItems: 'center', justifyContent: 'center', borderWidth: 3, borderColor: colors.onBrand, shadowColor: '#ff2244', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.8, shadowRadius: 12, elevation: 12 },
+  fireText: { ...type.title, color: colors.onBrand, letterSpacing: 3, fontSize: 18, fontWeight: '900', textShadowColor: 'rgba(0,0,0,0.5)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 4 },
   warn: { ...type.caption, color: colors.gold, ...hudShadow, maxWidth: 220 },
   bracket: { position: 'absolute', borderWidth: 1.5, borderRadius: 6 },
   areaWarn: { position: 'absolute', alignSelf: 'center', backgroundColor: 'rgba(224,79,79,0.85)', paddingHorizontal: 14, paddingVertical: 8, borderRadius: radii.pill },
