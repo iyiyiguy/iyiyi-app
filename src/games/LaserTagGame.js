@@ -15,7 +15,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Animated, Pressable, StyleSheet, Text, View } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
-import { CameraView } from 'expo-camera'
+import { Camera, CameraView } from 'expo-camera'
 import { CameraOff, useCameraGate } from '../components/CameraGate'
 import { setAudioModeAsync } from 'expo-audio'
 import { Btn, LocationGate, Spectating, formatClock } from './MultiplayerUI'
@@ -223,7 +223,10 @@ export function LaserTagGame({ room, onExit }) {
     try {
       if (!recAt) {
         buzz('medium')
-        const ok = await startRecording(true)
+        // Your voice: ask for the mic first (Android asks separately from the screen prompt).
+        let mic = true
+        try { mic = !!(await Camera.requestMicrophonePermissionsAsync())?.granted } catch { mic = false }
+        const ok = await startRecording(mic)
         if (ok) { setRecAt(Date.now()); setRecNow(Date.now()) }
       } else {
         buzz('select')

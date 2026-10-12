@@ -11,8 +11,8 @@ import { gunArt } from '../../lib/gunArt'
 // Art: square renders, hand enters bottom-right, barrel points up-left. muzzle = barrel tip
 // as a fraction of the square; glow = the gun's accent colour for its flash.
 const FPS = {
-  pistol: { img: require('../../../assets/guns/fps/pistol.png'), muzzle: [0.77, 0.45], glow: '#3df5ff', kick: 1 },
-  uzi: { img: require('../../../assets/guns/fps/uzi.png'), muzzle: [0.83, 0.5], glow: '#4dff9a', kick: 0.6 },
+  pistol: { img: require('../../../assets/guns/fps/pistol.png'), muzzle: [0.389, 0.246], glow: '#3df5ff', kick: 1 },
+  uzi: { img: require('../../../assets/guns/fps/uzi.png'), muzzle: [0.346, 0.234], glow: '#4dff9a', kick: 0.6 },
   burst: { img: require('../../../assets/guns/fps/burst.png'), muzzle: [0.381, 0.301], glow: '#ffd23f', kick: 0.8 },
   smg: { img: require('../../../assets/guns/fps/smg.png'), muzzle: [0.4, 0.324], glow: '#4d8bff', kick: 0.6 },
   sniper: { img: require('../../../assets/guns/fps/sniper.png'), muzzle: [0.361, 0.285], glow: '#9b6bff', kick: 1.8 },
