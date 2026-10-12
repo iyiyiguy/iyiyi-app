@@ -49,6 +49,7 @@ import { BINOCULAR_MAX_ZOOM, formatZoom, maxZoomFor, useScopeZoom } from './lase
 import { BinocularFrame, BinocularMarkers, binocularMarkers } from './laser/Binoculars'
 import { GRENADE_FUSE_MS, GrenadeBlast, GrenadeButton, destinationPoint } from './laser/Grenade'
 import { StickyBombButton, LandMineButton } from './laser/Consumables'
+import { useBattleEffects, directionToAngle } from './laser/BattleEffects'
 import GunViewModel from './laser/GunViewModel'
 import { spendGrenade, useGrenadeInventory } from '../lib/grenades'
 import { spendStickyBomb, useStickyBombInventory } from '../lib/stickyBombs'
@@ -228,6 +229,9 @@ export function LaserTagGame({ room, onExit }) {
   const stickyBombInv = useStickyBombInventory()
   const landMineInv = useLandMineInventory()
   const stickyBombPos = useRef(null) // lat/lng of the placed sticky bomb
+  const battle = useBattleEffects()
+  const myPosRef = useRef(null)
+  const headingRef = useRef(null)
   const [shotTick, setShotTick] = useState(0)
   const [blastKey, setBlastKey] = useState(0)
   const grenadeTimers = useRef([])
@@ -290,6 +294,7 @@ export function LaserTagGame({ room, onExit }) {
       room.onMessage('grenade_ok', (d) => {
         const hits = Array.isArray(d?.hits) ? d.hits : []
         const kills = hits.filter((h) => h.killed)
+        battle.addExplosion('Grenade')
         if (!hits.length) { flash('💥 Grenade missed', false); return }
         playSfx('hit')
         buzz('success')
@@ -299,6 +304,7 @@ export function LaserTagGame({ room, onExit }) {
       room.onMessage('sticky_bomb_ok', (d) => {
         const hits = Array.isArray(d?.hits) ? d.hits : []
         const kills = hits.filter((h) => h.killed)
+        battle.addExplosion('Sticky bomb')
         if (!hits.length) { flash('💥 Sticky bomb missed', false); return }
         playSfx('explosion')
         buzz('success')
@@ -310,12 +316,18 @@ export function LaserTagGame({ room, onExit }) {
         buzz('medium')
         flash('⚠️ Land mine placed!', true)
       }),
-      room.onMessage('got_hit', (d) => {
+      room.onMessage('got_hit', (d, from) => {
         const by = String(d?.by || 'Someone').slice(0, 24)
         const dmg = d?.damage ? ` −${d.damage}` : ''
-        const isExplosive = d?.zone === 'grenade' || d?.zone === 'sticky_bomb' || d?.zone === 'land_mine'
-        if (isExplosive) { playSfx('explosion'); buzz('heavy'); setBlastKey(Date.now()) }
+        const isExplosive = d?.zone === 'grenade' || d?.zone === 'sticky_bomb' || d?.zone === 'land_mine' || d?.zone === 'rocket'
+        if (isExplosive) { playSfx('explosion'); buzz('heavy'); setBlastKey(Date.now()); battle.addExplosion(d?.zone === 'rocket' ? 'Rocket' : d?.zone === 'grenade' ? 'Grenade' : d?.zone === 'sticky_bomb' ? 'Sticky bomb' : 'Land mine') }
         else { playSfx('hit'); buzz('heavy') }
+        // Directional hit indicator (from shooter's position if available)
+        try {
+          const shooterPos = from ? positions?.[from] : null
+          const angle = directionToAngle(myPosRef.current, headingRef.current, shooterPos)
+          battle.addHit(angle)
+        } catch {}
         const zoneLabel = d?.zone === 'grenade' ? 'Grenade' : d?.zone === 'sticky_bomb' ? 'Sticky bomb' : d?.zone === 'land_mine' ? 'Land mine' : d?.zone === 'head' ? 'Headshot' : d?.zone === 'rocket' ? 'Rocket' : 'Hit'
         const suffix = d?.zone === 'grenade' ? "'s grenade" : d?.zone === 'sticky_bomb' ? "'s sticky bomb" : d?.zone === 'land_mine' ? "'s land mine" : ''
         if (d?.killed) flash(`💀 Tagged out by ${by}${suffix}`, false)
@@ -343,6 +355,21 @@ export function LaserTagGame({ room, onExit }) {
     ]
     return () => offs.forEach((off) => off())
   }, [room, flash])
+
+  // Battle effects: flash + tracer for every enemy shot, directional hit indicator when I take damage.
+  useEffect(() => {
+    if (!room) return undefined
+    const off = room.onMessage('lt_shot', (d, from) => {
+      try {
+        if (from === meId) return
+        const shooterPos = (d?.lat != null && d?.lng != null) ? { lat: d.lat, lng: d.lng } : positions?.[from]
+        const angle = directionToAngle(myPosRef.current, headingRef.current, shooterPos)
+        battle.addFlash(angle)
+        battle.addTracer(angle)
+      } catch {}
+    })
+    return off
+  }, [room, meId, positions, battle])
 
   // Feedback when I take damage: thud + rumble (each respects its own setting).
   const myHp = myState?.hp
@@ -506,6 +533,8 @@ export function LaserTagGame({ room, onExit }) {
   // ---- aiming ----
   const myPos = loc.coords
   const heading = aim.heading
+  myPosRef.current = myPos
+  headingRef.current = heading?.deg
   const enemies = useMemo(() => {
     if (!state || !myPos) return []
     const out = []
@@ -912,6 +941,7 @@ export function LaserTagGame({ room, onExit }) {
         <GunViewModel gun={gun} shotTick={shotTick} bottom={dockH || 0} hidden={dead} leftHanded={leftHanded} />
       ) : null}
       <GrenadeBlast key={blastKey} visible={!!blastKey} />
+      {battle.overlay}
       <Animated.View pointerEvents="none" style={[styles.vignette, { opacity: vignette }]} />
 
       {/* HUD — top: explicit rows in normal flow (see laser/hudLayout.js). The right edge
