@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   View, Text, Pressable, StyleSheet, Modal, ScrollView, Alert, ActivityIndicator,
-  InteractionManager, useWindowDimensions,
+  useWindowDimensions,
 } from 'react-native'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { Chess } from 'chess.js'
@@ -157,24 +157,23 @@ export function ChessGame({ mode: modeProp, difficulty: difficultyProp, playerCo
     if (mode !== 'ai' || result || turn === playerColor) return undefined
     const token = ++searchTokenRef.current
     setThinking(true)
-    let timer = null
-    const task = InteractionManager.runAfterInteractions(() => {
-      timer = setTimeout(async () => {
-        const shouldAbort = () => !mountedRef.current || token !== searchTokenRef.current
-        try {
-          const move = await findBestMove(fen, difficulty, { shouldAbort })
-          if (shouldAbort()) return
-          if (move) commitMove(move)
-        } catch (e) {
-          console.warn('Chess AI failed', e)
-        } finally {
-          if (!shouldAbort()) setThinking(false)
-        }
-      }, 300)
-    })
+    // A plain timer, not InteractionManager.runAfterInteractions: any looping animation
+    // elsewhere in the app keeps an "interaction" open forever, so the AI never got to
+    // move and the board looked frozen on "AI is thinking…".
+    const timer = setTimeout(async () => {
+      const shouldAbort = () => !mountedRef.current || token !== searchTokenRef.current
+      try {
+        const move = await findBestMove(fen, difficulty, { shouldAbort })
+        if (shouldAbort()) return
+        if (move) commitMove(move)
+      } catch (e) {
+        console.warn('Chess AI failed', e)
+      } finally {
+        if (!shouldAbort()) setThinking(false)
+      }
+    }, 300)
     return () => {
-      task.cancel?.()
-      if (timer) clearTimeout(timer)
+      clearTimeout(timer)
       if (searchTokenRef.current === token) searchTokenRef.current += 1
       setThinking(false)
     }

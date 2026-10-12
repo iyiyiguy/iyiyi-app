@@ -905,6 +905,33 @@ export function LaserTagGame({ room, onExit }) {
   const mapHeading = Math.round((heading?.deg ?? 0) / 4) * 4 // coarse: fewer minimap re-renders
 
   const intelPoints = useEnemyIntel({ room, state, positions, meId, myTeam, uavActive, color: colors.danger })
+  // Enemies the map is currently revealing (UAV sweep or a recent shot ping) also get a
+  // target tag over their head in the camera view, placed from GPS + compass.
+  const revealedMarkers = useMemo(() => {
+    try {
+      if (!myPos || heading?.deg == null || !(view.width > 0)) return []
+      const seenByVision = new Set(enemyMarkers.map((m) => m.id))
+      const out = []
+      const done = new Set()
+      for (const pt of intelPoints) {
+        const pid = pt.kind === 'uav' ? pt.pid : typeof pt.id === 'string' && pt.id.startsWith('ping-') ? pt.id.slice(5) : null
+        if (!pid || done.has(pid) || seenByVision.has(pid)) continue
+        done.add(pid)
+        const live = enemies.find((e) => e.id === pid)
+        const pos = live?.pos || pt.pos
+        if (!pos) continue
+        const pl = state?.players?.[pid]
+        out.push({
+          id: `rev-${pid}`,
+          name: pl?.name || 'Enemy',
+          d: distanceMeters(myPos, pos),
+          bearing: bearingDeg(myPos, pos),
+          color: state?.mode === 'ffa' ? colors.danger : TEAMS[pl?.team]?.color || colors.danger,
+        })
+      }
+      return binocularMarkers({ players: out, headingDeg: heading.deg, zoom: scope.zoom, view })
+    } catch { return [] }
+  }, [intelPoints, enemies, enemyMarkers, myPos, heading?.deg, scope.zoom, view, state])
   const allMapPoints = useMemo(() => (intelPoints.length ? [...mapPoints, ...intelPoints] : mapPoints), [mapPoints, intelPoints])
 
   // ---- render ----
@@ -1000,7 +1027,12 @@ export function LaserTagGame({ room, onExit }) {
             view,
           }) } catch { return [] } })()}
         />
-      ) : <EnemyMarkers markers={enemyMarkers} />}
+      ) : (
+        <>
+          <EnemyMarkers markers={enemyMarkers} />
+          {camPerm?.granted && !topMode ? <BinocularMarkers markers={revealedMarkers} /> : null}
+        </>
+      )}
       <BystanderMarkers markers={bystanderMarkers} />
       {camPerm?.granted && !topMode ? (
         <GroundExplosives
