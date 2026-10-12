@@ -22,4 +22,12 @@ dependencies {
   implementation "androidx.camera:camera-lifecycle:${camerax_version}"
   implementation "androidx.camera:camera-view:${camerax_version}"
   implementation "androidx.core:core-ktx:1.13.1"
+  // ProcessCameraProvider.getInstance() returns a Guava ListenableFuture (same pin as expo-camera).
+  implementation "com.google.guava:listenablefuture:1.0"
+}
+
+// Full Guava (from React Native) swaps listenablefuture for an empty stub; force the real one,
+// exactly like expo-camera does.
+configurations.configureEach {
+  resolutionStrategy.force "com.google.guava:listenablefuture:1.0"
 }
