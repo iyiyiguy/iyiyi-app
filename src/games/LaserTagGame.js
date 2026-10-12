@@ -1159,7 +1159,7 @@ export function LaserTagGame({ room, onExit }) {
         </View>
       )}
 
-      {dead && state.phase === ‘playing’ && (
+      {dead && state.phase === 'playing' && (
         <DeathOverlay
           respawnSecs={snd ? null : Math.max(0, Math.ceil(((myState.respawnAt || now) - now) / 1000))}
           snd={snd}
