@@ -883,7 +883,7 @@ export function LaserTagGame({ room, onExit }) {
     // Your own land mines (only the placer sees them).
     for (const [i, m] of (state.landMines || []).entries()) {
       if (m?.by !== meId || m.lat == null) continue
-      pts.push({ id: `mine-${m.placedAt || i}`, pos: { lat: m.lat, lng: m.lng }, color: '#ff8a00', label: '⚠️' })
+      pts.push({ id: `mine-${m.placedAt || i}`, pos: { lat: m.lat, lng: m.lng }, kind: 'mine' })
     }
     // Your sticky bomb, waiting to be detonated.
     if (stickyMarker?.lat != null) pts.push({ id: 'my-sticky', pos: stickyMarker, kind: 'c4' })
