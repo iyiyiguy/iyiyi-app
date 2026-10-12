@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import { Animated, Easing, LayoutAnimation, Platform, Pressable, UIManager } from 'react-native'
+import { Animated, Easing, LayoutAnimation, Platform, Pressable, StyleSheet, UIManager } from 'react-native'
 import * as Haptics from 'expo-haptics'
 
 // iOS-feel motion for the whole app, built on the native animation driver (no JS-thread work
@@ -76,6 +76,12 @@ export function PopIn({ children, style, delay = 0, enabled = true }) {
 
 // A Pressable that squeezes on touch and springs back, with a light haptic tick. Use it for
 // every tappable surface (cards, buttons, chips) so the whole app responds the same way.
+const PRESS_LAYOUT_KEYS = new Set([
+  'flex', 'flexGrow', 'flexShrink', 'flexBasis', 'width', 'height', 'minWidth', 'maxWidth', 'minHeight', 'maxHeight',
+  'margin', 'marginHorizontal', 'marginVertical', 'marginTop', 'marginBottom', 'marginLeft', 'marginRight',
+  'marginStart', 'marginEnd', 'alignSelf', 'position', 'top', 'left', 'right', 'bottom', 'zIndex', 'aspectRatio',
+])
+
 export function Press({ onPress, onLongPress, children, style, scaleTo = 0.96, haptic = 'selection', disabled, hitSlop, accessibilityRole = 'button', accessibilityLabel, accessibilityState, pointerEvents }) {
   const scale = useRef(new Animated.Value(1)).current
   const to = (v) => Animated.spring(scale, { toValue: v, ...SPRING.snappy }).start()
@@ -85,6 +91,13 @@ export function Press({ onPress, onLongPress, children, style, scaleTo = 0.96, h
     else if (haptic === 'medium') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {})
     onPress?.(e)
   }
+  // Size/position props (flex, width, margins…) must sit on the Pressable itself so the button
+  // takes the space its parent gives it; everything else styles the animated inner view.
+  const flat = StyleSheet.flatten(style) || {}
+  const outer = {}
+  const inner = {}
+  for (const k of Object.keys(flat)) (PRESS_LAYOUT_KEYS.has(k) ? outer : inner)[k] = flat[k]
+  const sized = outer.flex != null || outer.height != null || outer.flexGrow != null || outer.minHeight != null || outer.aspectRatio != null
   return (
     <Pressable
       onPress={handlePress}
@@ -96,10 +109,10 @@ export function Press({ onPress, onLongPress, children, style, scaleTo = 0.96, h
       accessibilityRole={accessibilityRole}
       accessibilityLabel={accessibilityLabel}
       accessibilityState={accessibilityState}
-      style={disabled ? { opacity: 0.5 } : undefined}
+      style={[outer, disabled && { opacity: 0.5 }]}
       pointerEvents={pointerEvents}
     >
-      <Animated.View style={[style, { transform: [{ scale }] }]}>{children}</Animated.View>
+      <Animated.View style={[inner, sized && { flexGrow: 1 }, { transform: [{ scale }] }]}>{children}</Animated.View>
     </Pressable>
   )
 }
