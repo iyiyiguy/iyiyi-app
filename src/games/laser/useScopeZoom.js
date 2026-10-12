@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { PanResponder } from 'react-native'
+import { Animated, PanResponder } from 'react-native'
 
 // Scope zoom for Laser Tag's camera aim: pinch with two fingers, or tap the zoom button to step
 // through the zoom steps: 2× on most guns, 4× on the Marksman, 6× on the Sniper and Railgun,
@@ -35,20 +35,42 @@ function touchDistance(touches) {
 export function useScopeZoom(maxZoom, { enabled = true, onChange } = {}) {
   const [zoom, setZoomState] = useState(1)
   const zoomRef = useRef(1)
+  // The preview's scale is driven by this Animated value, so pinching only moves the camera
+  // layer and doesn't re-render the whole game on every finger movement (that flood of
+  // re-renders under a scaling camera view is what crashed pinch-zoom). React state (the
+  // HUD label, marker maths) catches up a few times a second and when the pinch ends.
+  const scaleAnim = useRef(new Animated.Value(1)).current
+  const lastCommit = useRef(0)
+  const commitTimer = useRef(null)
   const maxRef = useRef(maxZoom)
   maxRef.current = maxZoom
   const pinch = useRef({ startDist: 0, startZoom: 1 })
   const onChangeRef = useRef(onChange)
   onChangeRef.current = onChange
 
-  const setZoom = useCallback((z) => {
-    const n = Number(z)
-    if (!Number.isFinite(n)) return
-    const next = Math.round(clamp(n, 1, maxRef.current) * 10) / 10
-    if (next === zoomRef.current) return
-    zoomRef.current = next
-    setZoomState(next)
+  const commit = useCallback(() => {
+    if (commitTimer.current) { clearTimeout(commitTimer.current); commitTimer.current = null }
+    lastCommit.current = Date.now()
+    setZoomState(zoomRef.current)
   }, [])
+
+  // live = true while pinching: move the preview now, update React state at most ~6×/s.
+  const setZoom = useCallback((z, live = false) => {
+    try {
+      const n = Number(z)
+      if (!Number.isFinite(n)) return
+      const max = Number.isFinite(maxRef.current) && maxRef.current >= 1 ? maxRef.current : 1
+      const next = Math.round(clamp(n, 1, max) * 10) / 10
+      if (next === zoomRef.current) return
+      zoomRef.current = next
+      scaleAnim.setValue(next)
+      if (!live) { commit(); return }
+      if (Date.now() - lastCommit.current > 160) commit()
+      else if (!commitTimer.current) commitTimer.current = setTimeout(commit, 160)
+    } catch {}
+  }, [scaleAnim, commit])
+
+  useEffect(() => () => { if (commitTimer.current) clearTimeout(commitTimer.current) }, [])
 
   // Switching to a gun with a lower limit brings the zoom back inside it.
   useEffect(() => {
@@ -86,15 +108,15 @@ export function useScopeZoom(maxZoom, { enabled = true, onChange } = {}) {
         }
         const ratio = d / pinch.current.startDist
         if (!Number.isFinite(ratio) || ratio <= 0) return
-        setZoom(pinch.current.startZoom * ratio)
+        setZoom(pinch.current.startZoom * ratio, true)
       } catch {}
     },
     onPanResponderRelease: () => {
-      try { pinch.current.startDist = 0; onChangeRef.current?.(zoomRef.current) } catch {}
+      try { pinch.current.startDist = 0; commit(); onChangeRef.current?.(zoomRef.current) } catch {}
     },
-    onPanResponderTerminate: () => { try { pinch.current.startDist = 0 } catch {} },
+    onPanResponderTerminate: () => { try { pinch.current.startDist = 0; commit() } catch {} },
     onPanResponderTerminationRequest: () => false,
-  }), [enabled, setZoom])
+  }), [enabled, setZoom, commit])
 
   // Map a rectangle measured on the unzoomed preview onto the zoomed one.
   const zoomRect = useCallback((r, view) => {
@@ -105,7 +127,7 @@ export function useScopeZoom(maxZoom, { enabled = true, onChange } = {}) {
     return { left: cx + (r.left - cx) * z, top: cy + (r.top - cy) * z, width: r.width * z, height: r.height * z }
   }, [])
 
-  return { zoom, setZoom, cycle, panHandlers: responder.panHandlers, zoomRect }
+  return { zoom, scaleAnim, setZoom, cycle, panHandlers: responder.panHandlers, zoomRect }
 }
 
 export function formatZoom(z) {

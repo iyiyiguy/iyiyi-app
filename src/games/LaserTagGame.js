@@ -231,6 +231,7 @@ export function LaserTagGame({ room, onExit }) {
   const stickyBombInv = useStickyBombInventory()
   const landMineInv = useLandMineInventory()
   const stickyBombPos = useRef(null) // lat/lng of the placed sticky bomb
+  const [stickyMarker, setStickyMarker] = useState(null) // same, for the map
   const battle = useBattleEffects()
   const myPosRef = useRef(null)
   const headingRef = useRef(null)
@@ -790,6 +791,7 @@ export function LaserTagGame({ room, onExit }) {
     const ok = await spendStickyBomb()
     if (!ok) { flash('No sticky bombs left', false); return }
     stickyBombPos.current = { lat: h.pos.lat, lng: h.pos.lng }
+    setStickyMarker(stickyBombPos.current)
     buzz('medium')
     flash('🧨 Sticky bomb placed! Tap again to detonate', true)
     } catch { /* IAP error */ }
@@ -800,6 +802,7 @@ export function LaserTagGame({ room, onExit }) {
     if (!stickyBombPos.current) return
     const pos = stickyBombPos.current
     stickyBombPos.current = null
+    setStickyMarker(null)
     playSfx('explosion')
     buzz('heavy')
     setBlastKey(Date.now())
@@ -882,6 +885,8 @@ export function LaserTagGame({ room, onExit }) {
       if (m?.by !== meId || m.lat == null) continue
       pts.push({ id: `mine-${m.placedAt || i}`, pos: { lat: m.lat, lng: m.lng }, color: '#ff8a00', label: '⚠️' })
     }
+    // Your sticky bomb, waiting to be detonated.
+    if (stickyMarker?.lat != null) pts.push({ id: 'my-sticky', pos: stickyMarker, color: '#33d17a', label: '🧨' })
     const areas = sndS ? sndS.sites.map((x) => ({ id: x.id, pos: x, r: x.r, color: colors.gold, label: x.id })) : []
     const b = sndS?.bomb
     // A planted bomb is shown to everyone; a dropped one to attackers.
@@ -889,7 +894,7 @@ export function LaserTagGame({ room, onExit }) {
       pts.push({ id: 'bomb', pos: b, color: b.state === 'planted' ? colors.danger : colors.gold, label: '💣' })
     }
     return { mapPoints: pts, mapAreas: areas }
-  }, [state, positions, meId, myTeam])
+  }, [state, positions, meId, myTeam, stickyMarker])
   const area = snap?.info?.settings?.area
   const mapBoundary = useMemo(
     () => (area && Number.isFinite(area.lat) && Number.isFinite(area.lng) && area.r > 0 ? { lat: area.lat, lng: area.lng, r: area.r } : null),
@@ -949,9 +954,9 @@ export function LaserTagGame({ room, onExit }) {
     <View style={styles.fill} {...scope.panHandlers}>
       {camPerm?.granted ? (
         <View style={[StyleSheet.absoluteFill, { overflow: 'hidden' }]} onLayout={(e) => setView(e.nativeEvent.layout)}>
-          <View style={[StyleSheet.absoluteFill, scope.zoom !== 1 && { transform: [{ scale: Math.min(scope.zoom, 8) }] }]}>
+          <Animated.View style={[StyleSheet.absoluteFill, { transform: [{ scale: scope.scaleAnim }] }]}>
             <CameraView ref={cameraRef} style={StyleSheet.absoluteFill} facing="back" animateShutter={false} />
-          </View>
+          </Animated.View>
         </View>
       ) : (
         <View style={[StyleSheet.absoluteFill, styles.noCam]}>

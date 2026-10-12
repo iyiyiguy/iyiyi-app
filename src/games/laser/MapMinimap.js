@@ -184,7 +184,7 @@ export const MapMinimap = React.memo(function MapMinimap({ size = 140, me, headi
   const lastTap = useRef(0)
   const onPress = () => {
     const t = Date.now()
-    if (t - lastTap.current < 320) {
+    if (t - lastTap.current < 400) {
       lastTap.current = 0
       onOpen?.()
     } else {
