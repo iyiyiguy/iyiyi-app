@@ -886,7 +886,7 @@ export function LaserTagGame({ room, onExit }) {
       pts.push({ id: `mine-${m.placedAt || i}`, pos: { lat: m.lat, lng: m.lng }, color: '#ff8a00', label: '⚠️' })
     }
     // Your sticky bomb, waiting to be detonated.
-    if (stickyMarker?.lat != null) pts.push({ id: 'my-sticky', pos: stickyMarker, color: '#33d17a', label: '🧨' })
+    if (stickyMarker?.lat != null) pts.push({ id: 'my-sticky', pos: stickyMarker, kind: 'c4' })
     const areas = sndS ? sndS.sites.map((x) => ({ id: x.id, pos: x, r: x.r, color: colors.gold, label: x.id })) : []
     const b = sndS?.bomb
     // A planted bomb is shown to everyone; a dropped one to attackers.

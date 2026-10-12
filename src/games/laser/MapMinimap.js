@@ -5,7 +5,7 @@
 // coordinate. Markers use tracksViewChanges={false}; the camera follows the player at
 // most about once a second.
 import React, { useEffect, useMemo, useRef, useState } from 'react'
-import { Platform, Pressable, StyleSheet, Text, View } from 'react-native'
+import { Image, Platform, Pressable, StyleSheet, Text, View } from 'react-native'
 import MapView from '../../components/SafeMapView'
 import { Circle, Marker } from 'react-native-maps'
 import { Ionicons } from '@expo/vector-icons'
@@ -50,8 +50,15 @@ function cameraFor(center, rangeM, sizePx, headingDeg) {
   }
 }
 
+// Your placed sticky bomb: a big block of C4 lying on the ground.
+const C4_IMG = require('../../../assets/games/c4.png')
+function C4Marker() {
+  return <Image source={C4_IMG} style={s.c4} resizeMode="contain" fadeDuration={0} />
+}
+
 function Dot({ color, label, ring, me, kind }) {
   if (kind === 'uav') return <PulseDot ring={ring} />
+  if (kind === 'c4') return <C4Marker />
   if (kind === 'ping') return <ShotPing />
   if (me) {
     return (
@@ -159,7 +166,7 @@ function LaserMap({ me, headingDeg, rangeM, points, areas, boundary, rangeRingM,
           <Marker
             key={`p-${p.id}`}
             coordinate={{ latitude: p.pos.lat, longitude: p.pos.lng }}
-            tracksViewChanges={p.kind === 'uav'}
+            tracksViewChanges={p.kind === 'uav' || p.kind === 'c4'}
             opacity={Number.isFinite(p.opacity) ? Math.max(0, Math.min(1, p.opacity)) : 1}
             anchor={{ x: 0.5, y: 0.5 }}
           >
@@ -285,6 +292,7 @@ export function MapOverlay({ visible, onClose, insets, me, rangeId, allowed, onR
 const s = StyleSheet.create({
   mini: { overflow: 'hidden', backgroundColor: '#1a1f2e' },
   rim: { ...StyleSheet.absoluteFillObject, borderRadius: 999, borderWidth: 2, borderColor: 'rgba(255,255,255,0.55)' },
+  c4: { width: 54, height: 54 },
   north: { position: 'absolute', width: 12, textAlign: 'center', fontSize: 11, fontWeight: '900', color: '#ff5d6c', textShadowColor: 'rgba(0,0,0,0.9)', textShadowRadius: 3 },
   scale: { position: 'absolute', top: 20, alignSelf: 'center', fontSize: 9, fontWeight: '800', color: '#fff', backgroundColor: 'rgba(0,0,0,0.45)', paddingHorizontal: 5, borderRadius: 4, overflow: 'hidden' },
   meArrowWrap: { position: 'absolute', width: 16, height: 18, alignItems: 'center', justifyContent: 'center' },
