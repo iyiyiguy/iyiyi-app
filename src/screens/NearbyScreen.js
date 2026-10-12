@@ -9,7 +9,6 @@ import BrandHeader, { HeaderButton } from '../components/BrandHeader'
 import GlassPanel from '../components/GlassPanel'
 import GlowBackdrop from '../components/GlowBackdrop'
 import UserCard from '../components/UserCard'
-import GoProBanner from '../components/GoProBanner'
 import { useFollowStatuses } from '../lib/useFollowStatuses'
 import TagDropdown from '../components/TagDropdown'
 import ScopeChips, { scopeLabel } from '../components/ScopeChips'
@@ -187,7 +186,12 @@ export default function NearbyScreen({ navigation }) {
       <BrandHeader
         title={myName ? t('helloName', { name: myName }) : t('hello')}
         subtitle={subtitle}
-        right={<HeaderButton icon="notifications-outline" label={t('activity')} onPress={() => navigation.navigate('Activity')} />}
+        right={(
+          <>
+            <HeaderButton icon="star" color="#ffc83d" label="iYiYi Pro: choose your plan" onPress={() => navigation.navigate('Subscription')} />
+            <HeaderButton icon="notifications-outline" label={t('activity')} onPress={() => navigation.navigate('Activity')} />
+          </>
+        )}
       />
       <SearchField
         style={styles.search}
@@ -205,7 +209,6 @@ export default function NearbyScreen({ navigation }) {
         <TagDropdown selected={activeTags} onApply={setActiveTags} />
       </View>
       <ScopeChips value={scope} onChange={setScope} />
-      <GoProBanner navigation={navigation} />
       {inSafeZone ? (
         <Pressable onPress={() => navigation.navigate('Map', { safeZone: true })} style={styles.safeBanner} accessibilityRole="button">
           <Ionicons name="shield-checkmark" size={16} color="#3ef08b" />

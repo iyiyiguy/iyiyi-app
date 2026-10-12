@@ -171,6 +171,31 @@ function MegaExplosion({ id, label, angle, dist, by, onDone }) {
   )
 }
 
+// ─── Your own shot: a glowing round flying from the gun into the crosshair ───
+const OUT_MS = 230
+const OUT_MAX = 8
+
+function OutgoingBullet({ id, fromX, fromY, toX, toY, onDone }) {
+  const t = useRef(new Animated.Value(0)).current
+  useEffect(() => {
+    Animated.timing(t, { toValue: 1, duration: OUT_MS, easing: Easing.out(Easing.quad), useNativeDriver: true }).start(() => onDone(id))
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  return (
+    <Animated.View
+      pointerEvents="none"
+      style={[st.outBullet, {
+        left: fromX - 9, top: fromY - 9,
+        opacity: t.interpolate({ inputRange: [0, 0.8, 1], outputRange: [1, 1, 0] }),
+        transform: [
+          { translateX: t.interpolate({ inputRange: [0, 1], outputRange: [0, toX - fromX] }) },
+          { translateY: t.interpolate({ inputRange: [0, 1], outputRange: [0, toY - fromY] }) },
+          { scale: t.interpolate({ inputRange: [0, 1], outputRange: [1.3, 0.2] }) },
+        ],
+      }]}
+    />
+  )
+}
+
 // ─── Kill notification, Call of Duty style: who you killed and with what ───
 const KILL_MS = 2600
 const KILL_MAX = 3
@@ -348,6 +373,7 @@ export function useBattleEffects() {
   const [explosions, setExplosions] = useState([])
   const [megas, setMegas] = useState([])
   const [kills, setKills] = useState([])
+  const [outs, setOuts] = useState([])
   const [hits, setHits] = useState([])
   const [tracers, setTracers] = useState([])
   const [bullets, setBullets] = useState([])
@@ -357,6 +383,7 @@ export function useBattleEffects() {
   const removeExplosion = useCallback((id) => setExplosions((a) => a.filter((f) => f.id !== id)), [])
   const removeMega = useCallback((id) => setMegas((a) => a.filter((f) => f.id !== id)), [])
   const removeKill = useCallback((id) => setKills((a) => a.filter((f) => f.id !== id)), [])
+  const removeOut = useCallback((id) => setOuts((a) => a.filter((f) => f.id !== id)), [])
   const removeHit = useCallback((id) => setHits((a) => a.filter((f) => f.id !== id)), [])
   const removeTracer = useCallback((id) => setTracers((a) => a.filter((f) => f.id !== id)), [])
   const removeBullet = useCallback((id) => setBullets((a) => a.filter((f) => f.id !== id)), [])
@@ -382,6 +409,14 @@ export function useBattleEffects() {
       return n.length > MEGA_MAX ? n.slice(-MEGA_MAX) : n
     })
   }, [])
+
+  // Your own shot. leftHanded puts the gun (and the bullet's start) on the left.
+  const addOutgoing = useCallback((leftHanded = false) => {
+    setOuts((a) => {
+      const n = [...a, { id: nextId++, fromX: screenW * (leftHanded ? 0.3 : 0.7), fromY: screenH * 0.8, toX: screenW / 2, toY: screenH / 2 }]
+      return n.length > OUT_MAX ? n.slice(-OUT_MAX) : n
+    })
+  }, [screenW, screenH])
 
   // Kill notification: { victim, weapon, points }
   const addKill = useCallback((k) => {
@@ -413,6 +448,7 @@ export function useBattleEffects() {
       {explosions.map((e) => <Explosion key={e.id} id={e.id} label={e.label} onDone={removeExplosion} />)}
       {hits.map((h) => <HitIndicator key={h.id} id={h.id} angle={h.angle} onDone={removeHit} />)}
       {tracers.map((t) => <Tracer key={t.id} id={t.id} angle={t.angle} onDone={removeTracer} />)}
+      {outs.map((o) => <OutgoingBullet key={o.id} id={o.id} fromX={o.fromX} fromY={o.fromY} toX={o.toX} toY={o.toY} onDone={removeOut} />)}
       {bullets.map((b) => <BulletProjectile key={b.id} id={b.id} angle={b.angle} screenW={screenW} screenH={screenH} onDone={removeBullet} />)}
       <View style={st.killWrap} pointerEvents="none">
         {kills.map((k, i) => <KillBanner key={k.id} id={k.id} index={i} victim={k.victim} weapon={k.weapon} points={k.points} onDone={removeKill} />)}
@@ -420,7 +456,7 @@ export function useBattleEffects() {
     </View>
   )
 
-  return { addFlash, addExplosion, addMegaExplosion, addKill, addHit, addTracer, addBullet, overlay }
+  return { addFlash, addExplosion, addMegaExplosion, addKill, addOutgoing, addHit, addTracer, addBullet, overlay }
 }
 
 /**
@@ -454,6 +490,7 @@ const st = StyleSheet.create({
     borderWidth: 3,
     borderColor: '#ff6600',
   },
+  outBullet: { position: 'absolute', width: 18, height: 18, borderRadius: 9, backgroundColor: '#fff6c2', borderWidth: 3, borderColor: '#ffb300', shadowColor: '#ff8a00', shadowOpacity: 1, shadowRadius: 10, shadowOffset: { width: 0, height: 0 }, elevation: 8 },
   megaLabelWrap: { position: 'absolute', top: '18%', left: 0, right: 0, alignItems: 'center' },
   megaLabel: { fontSize: 22, fontWeight: '900', letterSpacing: 1.5, textShadowColor: '#000', textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 8 },
   megaBy: { marginTop: 2, fontSize: 13, fontWeight: '800', color: '#fff', textShadowColor: '#000', textShadowRadius: 6 },

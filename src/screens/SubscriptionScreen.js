@@ -239,50 +239,71 @@ export default function SubscriptionScreen({ navigation, onClose }) {
           </Text>
         </FadeIn>
 
-        {/* ---- tier toggle ---- */}
+        {/* ---- plan picker: two side-by-side plan cards (price on each) ---- */}
         {!active && (
-          <FadeIn index={1} style={{ marginTop: 18 }}>
-            <View style={styles.tierToggle}>
-              <Press
-                onPress={() => setSelectedTier('pro')}
-                style={[styles.tierTab, selectedTier === 'pro' && styles.tierTabActive]}
-                haptic="selection"
-              >
-                <Text style={[styles.tierTabText, selectedTier === 'pro' && styles.tierTabTextActive]}>Creator Pro</Text>
-              </Press>
-              <Press
-                onPress={() => setSelectedTier('business')}
-                style={[styles.tierTab, selectedTier === 'business' && styles.tierTabActive]}
-                haptic="selection"
-              >
-                <Text style={[styles.tierTabText, selectedTier === 'business' && styles.tierTabTextActive]}>Business Pro</Text>
-                <View style={styles.popularBadge}><Text style={styles.popularText}>BEST</Text></View>
-              </Press>
-            </View>
+          <FadeIn index={1} style={styles.plans}>
+            {[
+              { id: 'pro', name: 'Creator Pro', badge: 'MOST POPULAR', info: proInfo, color: '#8f5bff', icon: 'star' },
+              { id: 'business', name: 'Business Pro', badge: 'FOR BUSINESS', info: bizInfo, color: '#10b981', icon: 'briefcase' },
+            ].map((p) => {
+              const on = selectedTier === p.id
+              const per = p.info ? (t(`period_${p.info.period}`) === `period_${p.info.period}` ? p.info.period : t(`period_${p.info.period}`)) : null
+              return (
+                <Press
+                  key={p.id}
+                  onPress={() => setSelectedTier(p.id)}
+                  haptic="selection"
+                  scaleTo={0.97}
+                  style={[styles.planCard, on && { borderColor: p.color, backgroundColor: p.color + '1f' }]}
+                  accessibilityLabel={`${p.name}${p.info ? `, ${p.info.displayPrice} per ${per}` : ''}`}
+                  accessibilityState={{ selected: on }}
+                >
+                  <View style={[styles.planBadge, { backgroundColor: on ? p.color : 'rgba(255,255,255,0.12)' }]}>
+                    <Text style={styles.planBadgeText}>{p.badge}</Text>
+                  </View>
+                  <View style={styles.planTop}>
+                    <Ionicons name={p.icon} size={16} color={on ? p.color : colors.textMuted} />
+                    <Ionicons name={on ? 'checkmark-circle' : 'ellipse-outline'} size={22} color={on ? p.color : colors.textFaint} />
+                  </View>
+                  <Text style={styles.planName}>{p.name}</Text>
+                  {p.info ? (
+                    <>
+                      <Text style={styles.planPrice} numberOfLines={1} adjustsFontSizeToFit>{p.info.displayPrice}</Text>
+                      <Text style={styles.planPer}>per {per}</Text>
+                      {p.info.introText ? <Text style={styles.planIntro} numberOfLines={2}>{p.info.introText}</Text> : null}
+                    </>
+                  ) : infoFailed ? (
+                    <Text style={styles.planPer}>Price unavailable</Text>
+                  ) : (
+                    <ActivityIndicator color={colors.textMuted} style={{ marginTop: 14, alignSelf: 'flex-start' }} />
+                  )}
+                </Press>
+              )
+            })}
           </FadeIn>
         )}
 
-        {/* ---- benefits ---- */}
-        <View style={{ gap: 10, marginTop: 18 }}>
-          {benefits.map((b, i) => (
-            <FadeIn key={`${selectedTier}-${b.title}`} index={i + 2}>
-              <GlassPanel radius={radii.lg} lite animateIn={false}>
-                <View style={styles.benefit}>
-                  <LinearGradient colors={b.colors} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.benefitIcon}>
-                    <Ionicons name={b.icon} size={19} color="#fff" />
+        {/* ---- what you get: short checklist ---- */}
+        <FadeIn index={2} style={{ marginTop: 18 }}>
+          <GlassPanel radius={radii.lg} lite animateIn={false}>
+            <View style={styles.checklist}>
+              <Text style={styles.checkHead}>{active ? 'Your benefits' : `What you get with ${tierLabel}`}</Text>
+              {benefits.map((b) => (
+                <View key={`${selectedTier}-${b.title}`} style={styles.checkRow}>
+                  <LinearGradient colors={b.colors} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.checkIcon}>
+                    <Ionicons name={b.icon} size={14} color="#fff" />
                   </LinearGradient>
                   <View style={{ flex: 1 }}>
-                    <Text style={type.headline}>{b.title}</Text>
-                    <Text style={[type.caption, { marginTop: 2 }]}>{b.text}</Text>
+                    <Text style={styles.checkTitle}>{b.title}</Text>
+                    <Text style={styles.checkText} numberOfLines={2}>{b.text}</Text>
                   </View>
                 </View>
-              </GlassPanel>
-            </FadeIn>
-          ))}
-        </View>
+              ))}
+            </View>
+          </GlassPanel>
+        </FadeIn>
 
-        {/* ---- plan + purchase ---- */}
-        <FadeIn index={benefits.length + 3} style={{ marginTop: 22 }}>
+        <FadeIn index={3} style={{ marginTop: 18 }}>
           {active ? (
             <GlassPanel radius={radii.lg} strong animateIn={false}>
               <View style={styles.planInner}>
@@ -297,54 +318,36 @@ export default function SubscriptionScreen({ navigation, onClose }) {
                 </Press>
               </View>
             </GlassPanel>
-          ) : (
-            <GlassPanel radius={radii.lg} strong animateIn={false}>
-              <View style={styles.planInner}>
-                <View style={styles.planHeader}>
-                  <Text style={type.headline}>
-                    {selectedTier === 'business' ? '💼 Business Pro · Monthly' : '⭐ Creator Pro · Monthly'}
-                  </Text>
-                  <Ionicons name="checkmark-circle" size={22} color={selectedTier === 'business' ? '#10b981' : colors.magenta} />
-                </View>
-                {info ? (
-                  <>
-                    <Text style={styles.price} accessibilityLabel={t('price_a11y', { price: info.displayPrice, period })}>
-                      {info.displayPrice}
-                      <Text style={styles.pricePer}> / {period}</Text>
-                    </Text>
-                    <Text style={styles.billedLine}>{t('billed_line', { price: info.displayPrice, period })}</Text>
-                    {info.introText ? (
-                      <Text style={styles.introLine}>
-                        {t('intro_line', { intro: info.introText, price: info.displayPrice, period })}
-                      </Text>
-                    ) : null}
-                  </>
-                ) : infoFailed ? (
-                  <Text style={[type.caption, { marginTop: 8 }]}>
-                    {t('pricing_failed', { store })}
-                  </Text>
-                ) : (
-                  <ActivityIndicator color={colors.textMuted} style={{ marginVertical: 18 }} />
-                )}
-              </View>
-            </GlassPanel>
-          )}
+          ) : null}
 
           {!active ? (
-            <Press onPress={purchase} disabled={busy || !info} scaleTo={0.97} haptic="light" accessibilityLabel={billed ? t('subscribe_a11y', { billed }) : t('subscribe')} style={{ marginTop: 16 }}>
-              <LinearGradient
-                colors={selectedTier === 'business' ? ['#10b981', '#059669'] : ['#6b7cff', '#8f5bff']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={[styles.cta, (busy || !info) && { opacity: 0.6 }]}
-              >
-                {purchasing ? <ActivityIndicator color="#fff" /> : (
-                  <Text style={styles.ctaText}>
-                    {billed ? `Subscribe to ${tierLabel} · ${billed}` : `Subscribe to ${tierLabel}`}
-                  </Text>
-                )}
-              </LinearGradient>
-            </Press>
+            <>
+              {info ? (
+                <Text style={styles.billedLine}>
+                  {t('billed_line', { price: info.displayPrice, period })}
+                  {info.introText ? `\n${t('intro_line', { intro: info.introText, price: info.displayPrice, period })}` : ''}
+                </Text>
+              ) : null}
+              <Press onPress={purchase} disabled={busy || !info} scaleTo={0.97} haptic="light" accessibilityLabel={billed ? t('subscribe_a11y', { billed }) : t('subscribe')} style={{ marginTop: 12 }}>
+                <LinearGradient
+                  colors={selectedTier === 'business' ? ['#10b981', '#059669'] : ['#6b7cff', '#8f5bff']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={[styles.cta, (busy || !info) && { opacity: 0.6 }]}
+                >
+                  {purchasing ? <ActivityIndicator color="#fff" /> : (
+                    <>
+                      <Text style={styles.ctaText}>{`Subscribe to ${tierLabel}`}</Text>
+                      {billed ? <Text style={styles.ctaSub}>{billed}</Text> : null}
+                    </>
+                  )}
+                </LinearGradient>
+              </Press>
+              <View style={styles.reassure}>
+                <Ionicons name="shield-checkmark" size={13} color={colors.textMuted} />
+                <Text style={styles.reassureText}>Cancel anytime in {Platform.OS === 'ios' ? 'Settings' : 'Google Play'}. Secured by {store}.</Text>
+              </View>
+            </>
           ) : null}
 
           {error ? <Text style={styles.error}>{error}</Text> : null}
@@ -384,13 +387,33 @@ const styles = StyleSheet.create({
   scroll: { paddingHorizontal: 20, maxWidth: 560, width: '100%', alignSelf: 'center' },
   topBar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', minHeight: 44 },
   hero: { alignItems: 'center', marginTop: 4 },
-  iconWrap: { marginBottom: 16 },
-  icon: { width: 84, height: 84, borderRadius: 22 },
+  iconWrap: { marginBottom: 12 },
+  icon: { width: 64, height: 64, borderRadius: 17 },
   proPill: { position: 'absolute', right: -14, bottom: -6, borderRadius: 999, paddingHorizontal: 9, paddingVertical: 3 },
   proPillText: { color: colors.onGold, fontWeight: '900', fontSize: 11, letterSpacing: 0.8 },
   title: { ...type.display, textAlign: 'center' },
   subtitle: { ...type.subhead, textAlign: 'center', marginTop: 8, maxWidth: 380 },
-  // ---- tier toggle ----
+  // ---- plan cards ----
+  plans: { flexDirection: 'row', gap: 12, marginTop: 20 },
+  planCard: { flex: 1, padding: 14, paddingTop: 18, borderRadius: 20, borderWidth: 2, borderColor: colors.hairline, backgroundColor: colors.inkSurface, minHeight: 168 },
+  planBadge: { position: 'absolute', top: -11, alignSelf: 'center', paddingHorizontal: 9, paddingVertical: 3, borderRadius: 999 },
+  planBadgeText: { color: '#fff', fontSize: 9.5, fontWeight: '900', letterSpacing: 0.8 },
+  planTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  planName: { color: colors.text, fontWeight: '800', fontSize: 16, marginTop: 8 },
+  planPrice: { color: colors.text, fontWeight: '900', fontSize: 30, letterSpacing: -0.8, marginTop: 6 },
+  planPer: { color: colors.textMuted, fontWeight: '600', fontSize: 13, marginTop: -2 },
+  planIntro: { color: colors.textMuted, fontSize: 11.5, marginTop: 8, lineHeight: 15 },
+  // ---- checklist ----
+  checklist: { padding: 16, gap: 12 },
+  checkHead: { ...type.headline, marginBottom: 2 },
+  checkRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  checkIcon: { width: 28, height: 28, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
+  checkTitle: { color: colors.text, fontWeight: '700', fontSize: 14.5 },
+  checkText: { color: colors.textMuted, fontSize: 12.5, marginTop: 1, lineHeight: 16 },
+  ctaSub: { color: 'rgba(255,255,255,0.85)', fontWeight: '600', fontSize: 13, marginTop: 2, textAlign: 'center' },
+  reassure: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: 10 },
+  reassureText: { color: colors.textMuted, fontSize: 12.5 },
+  // ---- tier toggle (unused) ----
   tierToggle: { flexDirection: 'row', backgroundColor: colors.inkSurface, borderRadius: radii.pill, padding: 4, gap: 4, borderWidth: 1, borderColor: colors.hairline },
   tierTab: { flex: 1, paddingVertical: 12, borderRadius: radii.pill, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 6 },
   tierTabActive: { backgroundColor: colors.magenta },
@@ -406,7 +429,7 @@ const styles = StyleSheet.create({
   planHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   price: { color: colors.text, fontWeight: '800', fontSize: 38, letterSpacing: -1, marginTop: 10 },
   pricePer: { fontSize: 18, fontWeight: '600', color: colors.text, letterSpacing: 0 },
-  billedLine: { ...type.subhead, color: colors.text, marginTop: 4 },
+  billedLine: { ...type.caption, color: colors.textMuted, textAlign: 'center', marginTop: 4, lineHeight: 17 },
   introLine: { ...type.caption, marginTop: 10 },
   cta: { paddingVertical: 15, paddingHorizontal: 22, minHeight: 58, borderRadius: 999, alignItems: 'center', justifyContent: 'center', shadowColor: '#6b7cff', shadowOpacity: 0.35, shadowRadius: 14, shadowOffset: { width: 0, height: 8 } },
   ctaText: { color: '#fff', fontWeight: '700', fontSize: 17, textAlign: 'center' },

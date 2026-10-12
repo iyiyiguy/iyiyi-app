@@ -47,6 +47,7 @@ import { useArcadeInsets } from './arcadeUI'
 import { DOCK_GAP, TOP_BUTTONS_W, useHudMetrics, useMeasuredHeight } from './laser/hudLayout'
 import { BINOCULAR_MAX_ZOOM, formatZoom, maxZoomFor, useScopeZoom } from './laser/useScopeZoom'
 import { BinocularFrame, BinocularMarkers, binocularMarkers } from './laser/Binoculars'
+import { GroundExplosives, groundMarkers } from './laser/GroundExplosives'
 import { GRENADE_FUSE_MS, GrenadeBlast, GrenadeButton, destinationPoint } from './laser/Grenade'
 import { StickyBombButton, LandMineButton } from './laser/Consumables'
 import { useBattleEffects, directionToAngle } from './laser/BattleEffects'
@@ -710,6 +711,7 @@ export function LaserTagGame({ room, onExit }) {
     const shots = gun.shotsPerClick
     shotsRef.current += shots
     setShotTick((n) => n + 1)
+    try { battle.addOutgoing(leftHanded) } catch {}
     playShot(gun)
     buzz(gun.automatic ? 'light' : 'medium') // recoil rumble (respects the Vibration setting)
     const h = aimRef.current
@@ -1000,6 +1002,20 @@ export function LaserTagGame({ room, onExit }) {
         />
       ) : <EnemyMarkers markers={enemyMarkers} />}
       <BystanderMarkers markers={bystanderMarkers} />
+      {camPerm?.granted && !topMode ? (
+        <GroundExplosives
+          markers={(() => { try { return groundMarkers({
+            items: [
+              ...(stickyMarker?.lat != null ? [{ id: 'my-c4', kind: 'c4', lat: stickyMarker.lat, lng: stickyMarker.lng }] : []),
+              ...(state?.landMines || []).filter((m) => m?.by === meId).map((m, i) => ({ id: `my-mine-${m.placedAt || i}`, kind: 'mine', lat: m.lat, lng: m.lng })),
+            ],
+            myPos,
+            headingDeg: heading?.deg,
+            zoom: scope.zoom,
+            view,
+          }) } catch { return [] } })()}
+        />
+      ) : null}
 
       {camPerm?.granted && !topMode && !bino && aim.mode === 'camera' ? (
         <GunViewModel gun={gun} shotTick={shotTick} bottom={dockH || 0} hidden={dead} leftHanded={leftHanded} />

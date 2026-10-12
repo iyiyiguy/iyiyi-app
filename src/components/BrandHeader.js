@@ -27,7 +27,7 @@ export default function BrandHeader({ title, subtitle, onBack, right }) {
 }
 
 // Round glass icon button (Ionicons name) for header actions.
-export function HeaderButton({ icon, onPress, label, badge, size = 42 }) {
+export function HeaderButton({ icon, onPress, label, badge, size = 42, color }) {
   return (
     <Pressable
       onPress={onPress}
@@ -38,7 +38,7 @@ export function HeaderButton({ icon, onPress, label, badge, size = 42 }) {
     >
       <Glass radius={size / 2} style={{ width: size, height: size }} interactive shadow={false}>
         <View style={styles.iconCenter}>
-          <Ionicons name={icon} size={size * 0.48} color={colors.text} />
+          <Ionicons name={icon} size={size * 0.48} color={color || colors.text} />
         </View>
       </Glass>
       {badge ? <View style={styles.badge} /> : null}
