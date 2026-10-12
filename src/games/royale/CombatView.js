@@ -216,7 +216,7 @@ const s = StyleSheet.create({
   noCam: { backgroundColor: '#0b0d18', alignItems: 'center', justifyContent: 'center' },
   allow: { paddingHorizontal: 16, paddingVertical: 10, borderRadius: 999, backgroundColor: 'rgba(255,255,255,0.12)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.25)' },
   allowText: { color: '#fff', fontWeight: '700', fontSize: 14 },
-  center: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 30 },
+  center: { ...StyleSheet.absoluteFill, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 30 },
   cross: { width: 64, height: 64, borderRadius: 32, borderWidth: 2, borderColor: '#fff', alignItems: 'center', justifyContent: 'center' },
   crossH: { position: 'absolute', width: 28, height: 2, backgroundColor: '#fff' },
   crossV: { position: 'absolute', width: 2, height: 28, backgroundColor: '#fff' },

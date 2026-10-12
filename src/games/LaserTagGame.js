@@ -1343,9 +1343,9 @@ const styles = StyleSheet.create({
   bracket: { position: 'absolute', borderWidth: 1.5, borderRadius: 6 },
   areaWarn: { position: 'absolute', alignSelf: 'center', backgroundColor: 'rgba(224,79,79,0.85)', paddingHorizontal: 14, paddingVertical: 8, borderRadius: radii.pill },
   areaWarnText: { ...type.caption, color: '#fff', fontWeight: '700' },
-  vignette: { ...StyleSheet.absoluteFillObject, borderWidth: 40, borderColor: 'rgba(224,79,79,0.7)', backgroundColor: 'rgba(224,79,79,0.18)' },
+  vignette: { ...StyleSheet.absoluteFill, borderWidth: 40, borderColor: 'rgba(224,79,79,0.7)', backgroundColor: 'rgba(224,79,79,0.18)' },
   modePill: { flexShrink: 1, backgroundColor: 'rgba(0,0,0,0.5)', paddingHorizontal: 10, paddingVertical: 4, borderRadius: radii.pill },
   modePillText: { fontSize: 11, fontWeight: '700', color: colors.onBrand, letterSpacing: 0.3 },
   aimMode: { ...type.caption, color: colors.gold, marginTop: 4, textAlign: 'center', ...hudShadow },
-  deadOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(120,0,20,0.5)', alignItems: 'center', justifyContent: 'center' },
+  deadOverlay: { ...StyleSheet.absoluteFill, backgroundColor: 'rgba(120,0,20,0.5)', alignItems: 'center', justifyContent: 'center' },
 })

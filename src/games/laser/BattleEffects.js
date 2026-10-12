@@ -443,7 +443,7 @@ const st = StyleSheet.create({
   },
   flashEmoji: { fontSize: 36 },
   explosion: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     alignItems: 'center', justifyContent: 'center',
   },
   explosionEmoji: { fontSize: 72 },

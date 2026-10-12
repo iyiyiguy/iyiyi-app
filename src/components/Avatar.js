@@ -29,7 +29,7 @@ export default function Avatar({ uri, name = '', size = 48, radius, style, fill 
     setStage(0)
   }
   const r = radius ?? size / 2
-  const box = fill ? StyleSheet.absoluteFillObject : { width: size, height: size }
+  const box = fill ? StyleSheet.absoluteFill : { width: size, height: size }
   const letter = (name || '?').replace(/^@/, '').trim().charAt(0).toUpperCase() || '?'
   const showImage = !!uri && stage < 2
   return (

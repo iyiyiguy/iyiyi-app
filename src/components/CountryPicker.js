@@ -87,7 +87,7 @@ function Row({ flag, name, code, selected, onPress }) {
 }
 
 const styles = StyleSheet.create({
-  backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.35)' },
+  backdrop: { ...StyleSheet.absoluteFill, backgroundColor: 'rgba(0,0,0,0.35)' },
   sheetWrap: { flex: 1, justifyContent: 'flex-end' },
   sheet: {
     height: '78%', backgroundColor: colors.inkSurface, borderTopLeftRadius: radii.lg, borderTopRightRadius: radii.lg,

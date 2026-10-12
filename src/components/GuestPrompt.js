@@ -97,7 +97,7 @@ export function useGuestPrompt(onLeave) {
 }
 
 const styles = StyleSheet.create({
-  backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(3,4,10,0.55)' },
+  backdrop: { ...StyleSheet.absoluteFill, backgroundColor: 'rgba(3,4,10,0.55)' },
   sheetWrap: { position: 'absolute', left: 0, right: 0, bottom: 0, paddingHorizontal: 14, alignItems: 'center' },
   sheet: { width: '100%', maxWidth: 440, paddingHorizontal: 22, paddingTop: 26, paddingBottom: 20, alignItems: 'center' },
   close: { position: 'absolute', top: 12, right: 12, width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.08)' },

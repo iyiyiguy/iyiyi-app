@@ -187,7 +187,7 @@ const st = StyleSheet.create({
   pingRing: { position: 'absolute', width: 22, height: 22, borderRadius: 11, borderWidth: 2, borderColor: UAV_RED },
   pingCore: { width: 8, height: 8, borderRadius: 4, backgroundColor: UAV_RED },
   sheetRoot: { zIndex: 60, elevation: 60 },
-  backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.45)' },
+  backdrop: { ...StyleSheet.absoluteFill, backgroundColor: 'rgba(0,0,0,0.45)' },
   sheetWrap: { flex: 1, justifyContent: 'flex-end', paddingHorizontal: 10 },
   sheet: { padding: 16, gap: 12, borderRadius: 28, borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)' },
   sheetHead: { flexDirection: 'row', alignItems: 'center', gap: 12 },

@@ -44,7 +44,7 @@ export default function PeopleSheet({ visible, onClose, title, subtitle, people 
 }
 
 const styles = StyleSheet.create({
-  backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.45)' },
+  backdrop: { ...StyleSheet.absoluteFill, backgroundColor: 'rgba(0,0,0,0.45)' },
   wrap: { flex: 1, justifyContent: 'flex-end', padding: 12, paddingBottom: 34 },
   inner: { padding: 18 },
   head: { flexDirection: 'row', alignItems: 'center', marginBottom: 4 },

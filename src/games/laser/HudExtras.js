@@ -370,7 +370,7 @@ export const EnemyMarkers = memo(function EnemyMarkers({ markers }) {
 
 const s = StyleSheet.create({
   overlayRoot: { zIndex: 60, elevation: 60 },
-  backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.55)' },
+  backdrop: { ...StyleSheet.absoluteFill, backgroundColor: 'rgba(0,0,0,0.55)' },
   centerWrap: { flex: 1, justifyContent: 'center', paddingHorizontal: 12 },
   panel: { backgroundColor: PANEL, borderRadius: 24, padding: 16, borderWidth: 1, borderColor: BORDER },
   panelHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 },
@@ -408,7 +408,7 @@ const s = StyleSheet.create({
   targetWrap: { position: 'absolute', width: 74, height: 74 },
   target: { width: 74, height: 74, borderRadius: 37, backgroundColor: RED, borderWidth: 4, borderColor: W, alignItems: 'center', justifyContent: 'center' },
   targetInner: { width: 26, height: 26, borderRadius: 13, backgroundColor: W },
-  gameResult: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', padding: 24 },
+  gameResult: { ...StyleSheet.absoluteFill, alignItems: 'center', justifyContent: 'center', padding: 24 },
   resultBig: { fontSize: 32, fontWeight: '900', color: GOLD },
   resultSub: { fontSize: 15, color: MUTED, marginTop: 6 },
   retry: { marginTop: 20, backgroundColor: GOLD, paddingHorizontal: 26, paddingVertical: 14, borderRadius: 18 },

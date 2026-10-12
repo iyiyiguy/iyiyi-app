@@ -106,7 +106,7 @@ export default function MatchChat({ visible, onClose, room, chat, myId, names, c
 }
 
 const styles = StyleSheet.create({
-  backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(2,3,10,0.35)' },
+  backdrop: { ...StyleSheet.absoluteFill, backgroundColor: 'rgba(2,3,10,0.35)' },
   kav: { flex: 1, justifyContent: 'flex-end' },
   sheet: {
     maxHeight: 420, borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 14,

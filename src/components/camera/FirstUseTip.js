@@ -42,7 +42,7 @@ export default function FirstUseTip({ tip, onClose }) {
 
 const styles = StyleSheet.create({
   overlay: {
-    ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center',
+    ...StyleSheet.absoluteFill, alignItems: 'center', justifyContent: 'center',
     backgroundColor: 'rgba(0,0,0,0.3)', zIndex: 50,
   },
   card: { padding: 18, paddingTop: 16, alignItems: 'center' },

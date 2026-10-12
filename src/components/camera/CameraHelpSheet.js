@@ -82,7 +82,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(30,30,50,0.35)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.22)',
   },
   overlay: {
-    ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center',
+    ...StyleSheet.absoluteFill, alignItems: 'center', justifyContent: 'center',
     backgroundColor: 'rgba(0,0,0,0.3)', zIndex: 49,
   },
   sheetWrap: { width: '88%', maxWidth: 360, maxHeight: '82%' },

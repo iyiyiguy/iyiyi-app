@@ -295,7 +295,7 @@ export function MapOverlay({ visible, onClose, insets, me, rangeId, allowed, onR
 
 const s = StyleSheet.create({
   mini: { overflow: 'hidden', backgroundColor: '#1a1f2e' },
-  rim: { ...StyleSheet.absoluteFillObject, borderRadius: 999, borderWidth: 2, borderColor: 'rgba(255,255,255,0.55)' },
+  rim: { ...StyleSheet.absoluteFill, borderRadius: 999, borderWidth: 2, borderColor: 'rgba(255,255,255,0.55)' },
   c4: { width: 54, height: 54 },
   mine: { width: 56, height: 32 },
   north: { position: 'absolute', width: 12, textAlign: 'center', fontSize: 11, fontWeight: '900', color: '#ff5d6c', textShadowColor: 'rgba(0,0,0,0.9)', textShadowRadius: 3 },
@@ -311,7 +311,7 @@ const s = StyleSheet.create({
   siteTag: { paddingHorizontal: 5, paddingVertical: 1, borderRadius: 6, backgroundColor: 'rgba(0,0,0,0.6)' },
   siteText: { fontSize: 10, fontWeight: '900', color: '#ffc94d' },
   overlayRoot: { zIndex: 50, elevation: 50 },
-  backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.55)' },
+  backdrop: { ...StyleSheet.absoluteFill, backgroundColor: 'rgba(0,0,0,0.55)' },
   overlayWrap: { flex: 1, justifyContent: 'center', paddingHorizontal: 12 },
   panel: { backgroundColor: 'rgba(14,17,30,0.96)', borderRadius: radii.lg, padding: 14, borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)' },
   panelHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 },

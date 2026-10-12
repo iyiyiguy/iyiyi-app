@@ -169,7 +169,7 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
   },
   badgeText: { color: '#fff', fontSize: 12, ...font.bold },
-  backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.28)' },
+  backdrop: { ...StyleSheet.absoluteFill, backgroundColor: 'rgba(0,0,0,0.28)' },
   panel: {
     position: 'absolute', borderRadius: radii.lg, backgroundColor: colors.inkSurface, overflow: 'hidden',
     borderWidth: StyleSheet.hairlineWidth, borderColor: colors.hairline,

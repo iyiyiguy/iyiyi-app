@@ -834,7 +834,7 @@ const styles = StyleSheet.create({
   rarity: { flexDirection: 'row', alignItems: 'center', gap: 5, alignSelf: 'flex-start', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
   rarityDot: { width: 5, height: 5, borderRadius: 3 },
   rarityText: { fontSize: 10, ...font.heavy, letterSpacing: 1.2 },
-  glowWrap: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center' },
+  glowWrap: { ...StyleSheet.absoluteFill, alignItems: 'center', justifyContent: 'center' },
 
   gCard: { flexDirection: 'row', alignItems: 'center', gap: 14, padding: 16, borderRadius: 24, overflow: 'hidden', borderWidth: 1, borderColor: 'rgba(255,154,60,0.35)', marginBottom: 12 },
   gArt: { width: 96, height: 96, alignItems: 'center', justifyContent: 'center' },

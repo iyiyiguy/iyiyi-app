@@ -95,7 +95,7 @@ const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.ink },
   loading: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   // Pin tip sits on the map center: icon is 44 tall, so lift it by ~half.
-  pinWrap: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', paddingBottom: 40 },
+  pinWrap: { ...StyleSheet.absoluteFill, alignItems: 'center', justifyContent: 'center', paddingBottom: 40 },
   top: { position: 'absolute', top: 0, left: 16, right: 16, flexDirection: 'row', alignItems: 'center', gap: 10 },
   hint: { ...type.caption, color: colors.text, fontWeight: '600', paddingHorizontal: 14, paddingVertical: 10 },
   iconCenter: { flex: 1, alignItems: 'center', justifyContent: 'center' },

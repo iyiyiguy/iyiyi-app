@@ -1260,12 +1260,12 @@ const styles = StyleSheet.create({
   keyFace: { position: 'absolute', left: 0, right: 0, borderRadius: 9, alignItems: 'center', justifyContent: 'center' },
   keyText: { fontSize: 18, ...font.heavy, ...textGlow },
 
-  countdown: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(4,5,13,0.55)' },
+  countdown: { ...StyleSheet.absoluteFill, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(4,5,13,0.55)' },
   countText: { fontSize: 120, ...font.heavy, color: AC.text, textShadowColor: 'rgba(124,140,255,0.9)', textShadowOffset: { width: 0, height: 0 }, textShadowRadius: 30 },
   countSub: { fontSize: 16, ...font.bold, color: AC.muted, letterSpacing: 2, marginTop: -6 },
 
   // Results
-  resultsOverlay: { ...StyleSheet.absoluteFillObject },
+  resultsOverlay: { ...StyleSheet.absoluteFill },
   resultsDim: { backgroundColor: 'rgba(4,5,13,0.78)' },
   resultsBurst: { position: 'absolute', top: '22%', left: 0, right: 0, height: 0 },
   resultsScroll: { flexGrow: 1, justifyContent: 'center', padding: 16 },

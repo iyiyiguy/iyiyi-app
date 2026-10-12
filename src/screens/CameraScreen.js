@@ -1405,7 +1405,7 @@ const styles = StyleSheet.create({
   },
   sideButtonArmed: { backgroundColor: 'rgba(255, 57, 48, 0.6)', borderColor: 'rgba(255, 100, 80, 0.5)' },
   overlayCenter: {
-    ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center',
+    ...StyleSheet.absoluteFill, alignItems: 'center', justifyContent: 'center',
     backgroundColor: 'transparent', gap: 8,
   },
   countdownText: { fontSize: 96, fontWeight: '800', color: '#fff', textShadowColor: 'rgba(0,0,0,0.55)', textShadowRadius: 14 },

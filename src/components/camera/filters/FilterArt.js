@@ -220,7 +220,7 @@ const styles = StyleSheet.create({
   tagWrap: { width: NAMETAG_W, height: NAMETAG_H, marginBottom: 4 },
   tagImg: { position: 'absolute', left: 0, top: 0, width: NAMETAG_W, height: NAMETAG_H },
   tagTextWrap: {
-    ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center',
+    ...StyleSheet.absoluteFill, alignItems: 'center', justifyContent: 'center',
     paddingHorizontal: NAMETAG_H * 0.45,
   },
   tagNameStrip: {

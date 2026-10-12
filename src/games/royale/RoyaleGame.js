@@ -561,13 +561,13 @@ function RoyaleMatch({ room, snap, onExit }) {
 
 const styles = StyleSheet.create({
   fill: { flex: 1, backgroundColor: '#000', overflow: 'hidden' },
-  vignette: { ...StyleSheet.absoluteFillObject, borderWidth: 40, borderColor: 'rgba(224,79,79,0.7)', backgroundColor: 'rgba(224,79,79,0.18)' },
-  gasTint: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(140,60,255,0.18)', borderWidth: 6, borderColor: 'rgba(161,77,255,0.6)' },
+  vignette: { ...StyleSheet.absoluteFill, borderWidth: 40, borderColor: 'rgba(224,79,79,0.7)', backgroundColor: 'rgba(224,79,79,0.18)' },
+  gasTint: { ...StyleSheet.absoluteFill, backgroundColor: 'rgba(140,60,255,0.18)', borderWidth: 6, borderColor: 'rgba(161,77,255,0.6)' },
   topCol: { position: 'absolute', gap: 6 },
   topRow: { maxWidth: 220 },
   dock: { position: 'absolute', alignItems: 'flex-end', justifyContent: 'space-between' },
   mini: { overflow: 'hidden', backgroundColor: '#141826' },
-  miniRim: { ...StyleSheet.absoluteFillObject, borderWidth: 2, borderColor: 'rgba(255,255,255,0.55)' },
+  miniRim: { ...StyleSheet.absoluteFill, borderWidth: 2, borderColor: 'rgba(255,255,255,0.55)' },
   miniTag: { position: 'absolute', top: 18, alignSelf: 'center', paddingHorizontal: 5, paddingVertical: 2, borderRadius: 6, backgroundColor: 'rgba(0,0,0,0.5)' },
   pickDock: { position: 'absolute', alignItems: 'center' },
 })

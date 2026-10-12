@@ -73,7 +73,7 @@ export default function PhotoGridBackground() {
 }
 
 const styles = StyleSheet.create({
-  wrap: { ...StyleSheet.absoluteFillObject, flexDirection: 'row', overflow: 'hidden' },
+  wrap: { ...StyleSheet.absoluteFill, flexDirection: 'row', overflow: 'hidden' },
   column: { flex: 1, overflow: 'hidden' },
   tile: { width: '100%', height: TILE_H },
 })

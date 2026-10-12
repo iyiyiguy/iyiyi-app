@@ -73,7 +73,7 @@ const styles = StyleSheet.create({
   center: { alignItems: 'center', justifyContent: 'center', padding: 24 },
   overlay: { flex: 1, justifyContent: 'space-between', padding: 16 },
   topRow: { flexDirection: 'row', gap: 12, alignItems: 'flex-start' },
-  ghostWrap: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center' },
+  ghostWrap: { ...StyleSheet.absoluteFill, alignItems: 'center', justifyContent: 'center' },
   ghost: { width: '86%', aspectRatio: 1, opacity: 0.35, borderRadius: radii.lg },
   refCard: { width: 96, alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.5)', borderRadius: radii.sm, padding: 6 },
   refImg: { width: 84, height: 84 },

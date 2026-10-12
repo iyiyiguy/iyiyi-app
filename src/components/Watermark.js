@@ -22,7 +22,7 @@ export default function Watermark() {
 }
 
 const styles = StyleSheet.create({
-  wrap: { ...StyleSheet.absoluteFillObject, justifyContent: 'flex-end', alignItems: 'flex-end' },
+  wrap: { ...StyleSheet.absoluteFill, justifyContent: 'flex-end', alignItems: 'flex-end' },
   badge: {
     margin: MARGIN,
     shadowColor: '#000', shadowOpacity: 0.45, shadowRadius: 6, shadowOffset: { width: 0, height: 2 },

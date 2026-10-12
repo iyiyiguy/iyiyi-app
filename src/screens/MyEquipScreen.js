@@ -311,7 +311,7 @@ const styles = StyleSheet.create({
   pill: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, height: 26, borderRadius: 13, maxWidth: '100%' },
   pillText: { fontSize: 12, ...font.heavy, letterSpacing: 0.2 },
 
-  glowWrap: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center' },
+  glowWrap: { ...StyleSheet.absoluteFill, alignItems: 'center', justifyContent: 'center' },
 
   shopLink: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 18, height: 44, borderRadius: 22, backgroundColor: AC.card, borderWidth: 1, borderColor: AC.border },
   shopLinkText: { fontSize: 14, ...font.bold, color: AC.accent },

@@ -224,7 +224,7 @@ function Segmented({ label, value, options, onChange }) {
 
 const styles = StyleSheet.create({
   root: { zIndex: 100, elevation: 100 },
-  backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.45)' },
+  backdrop: { ...StyleSheet.absoluteFill, backgroundColor: 'rgba(0,0,0,0.45)' },
   closeBtn: { position: 'absolute', top: 12, right: 12, zIndex: 2, width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.glassFillStrong, borderWidth: 1, borderColor: colors.hairline },
   sheetWrap: { flex: 1, justifyContent: 'flex-end', paddingHorizontal: 10 },
   sheet: { maxHeight: '88%' },

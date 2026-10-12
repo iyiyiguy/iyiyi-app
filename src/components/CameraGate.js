@@ -63,7 +63,7 @@ export function CameraOff({ what, onBack, backLabel, dark = true, compact = fals
 }
 
 const styles = StyleSheet.create({
-  center: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', padding: 24 },
+  center: { ...StyleSheet.absoluteFill, alignItems: 'center', justifyContent: 'center', padding: 24 },
   card: { width: '100%', maxWidth: 360 },
   inner: { alignItems: 'center', paddingHorizontal: 24, paddingVertical: 26 },
   iconWrap: { width: 56, height: 56, borderRadius: 28, alignItems: 'center', justifyContent: 'center' },

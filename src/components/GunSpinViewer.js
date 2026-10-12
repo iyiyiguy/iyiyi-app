@@ -235,7 +235,7 @@ function GunSpinViewer({ gun, frames, height = 280, autoRotate = true, style }) 
 
 const st = StyleSheet.create({
   root: { overflow: 'hidden', justifyContent: 'center' },
-  center: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center' },
+  center: { ...StyleSheet.absoluteFill, alignItems: 'center', justifyContent: 'center' },
   floor: { position: 'absolute', left: 0, right: 0, alignItems: 'center', height: 1, justifyContent: 'center' },
   ellipse: {},
   abs: { position: 'absolute' },

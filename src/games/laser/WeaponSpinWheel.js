@@ -202,7 +202,7 @@ function Stat({ label, v }) {
 
 const st = StyleSheet.create({
   root: { zIndex: 60, elevation: 60 },
-  backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.5)' },
+  backdrop: { ...StyleSheet.absoluteFill, backgroundColor: 'rgba(0,0,0,0.5)' },
   dock: { position: 'absolute', left: 0, right: 0, bottom: 0 },
   info: { marginHorizontal: 16, marginBottom: 8, padding: 14, borderRadius: 20, backgroundColor: 'rgba(12,14,26,0.92)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)' },
   infoHead: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 },

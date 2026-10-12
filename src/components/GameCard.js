@@ -48,7 +48,7 @@ const styles = StyleSheet.create({
   card: { overflow: 'hidden' },
   cover: { height: 104, alignItems: 'center', justifyContent: 'center' },
   coverImage: { resizeMode: 'cover' },
-  coverShade: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.15)' },
+  coverShade: { ...StyleSheet.absoluteFill, backgroundColor: 'rgba(0,0,0,0.15)' },
   coverIcon: { fontSize: 44 },
   body: { padding: 12 },
   name: { ...type.title, fontSize: 16 },
