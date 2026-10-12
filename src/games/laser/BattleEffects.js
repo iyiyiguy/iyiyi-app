@@ -436,11 +436,14 @@ export function useBattleEffects() {
 
   // Your own shot. leftHanded puts the gun (and the bullet's start) on the left.
   // target: optional { x, y } on screen (an enemy you're aiming at); default the crosshair.
-  const addOutgoing = useCallback((leftHanded = false, target = null) => {
+  // from: optional { x, y } where the round leaves (the gun's muzzle).
+  const addOutgoing = useCallback((leftHanded = false, target = null, from = null) => {
     const toX = Number.isFinite(target?.x) ? target.x : screenW / 2
     const toY = Number.isFinite(target?.y) ? target.y : screenH / 2
+    const fromX = Number.isFinite(from?.x) ? from.x : screenW * (leftHanded ? 0.3 : 0.7)
+    const fromY = Number.isFinite(from?.y) ? from.y : screenH * 0.8
     setOuts((a) => {
-      const n = [...a, { id: nextId++, fromX: screenW * (leftHanded ? 0.3 : 0.7), fromY: screenH * 0.8, toX, toY }]
+      const n = [...a, { id: nextId++, fromX, fromY, toX, toY }]
       return n.length > OUT_MAX ? n.slice(-OUT_MAX) : n
     })
   }, [screenW, screenH])

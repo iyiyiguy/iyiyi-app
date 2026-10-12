@@ -48,11 +48,13 @@ import { DOCK_GAP, TOP_BUTTONS_W, useHudMetrics, useMeasuredHeight } from './las
 import { BINOCULAR_MAX_ZOOM, formatZoom, maxZoomFor, useScopeZoom } from './laser/useScopeZoom'
 import { BinocularFrame, BinocularMarkers, binocularMarkers } from './laser/Binoculars'
 import { GroundExplosives, groundMarkers } from './laser/GroundExplosives'
-import { DualCameraView, isDualCameraSupported } from '../../modules/dual-camera'
+import { DualCameraView, isDualCameraSupported, isRecordingSupported, startRecording, stopRecording } from '../../modules/dual-camera'
+import * as MediaLibrary from 'expo-media-library/legacy'
 import { GRENADE_FUSE_MS, GrenadeBlast, GrenadeButton, destinationPoint } from './laser/Grenade'
 import { StickyBombButton, LandMineButton } from './laser/Consumables'
 import { useBattleEffects, directionToAngle } from './laser/BattleEffects'
-import GunViewModel from './laser/GunViewModel'
+import GunViewModel, { muzzlePoint } from './laser/GunViewModel'
+import FpsCrosshair from './laser/FpsCrosshair'
 import { spendGrenade, useGrenadeInventory } from '../lib/grenades'
 import { spendStickyBomb, useStickyBombInventory } from '../lib/stickyBombs'
 import { spendLandMine, useLandMineInventory } from '../lib/landMines'
@@ -205,6 +207,47 @@ export function LaserTagGame({ room, onExit }) {
   // both cameras at once; otherwise the toggle never shows.
   const dualOk = isDualCameraSupported()
   const [selfieOn, setSelfieOn] = useState(false)
+  // Gameplay recording: screen + game sound + your voice, saved to Photos.
+  const recOk = isRecordingSupported()
+  const [recAt, setRecAt] = useState(null) // start time while recording
+  const [recNow, setRecNow] = useState(0)
+  useEffect(() => {
+    if (!recAt) return undefined
+    const t = setInterval(() => setRecNow(Date.now()), 500)
+    return () => clearInterval(t)
+  }, [recAt])
+  const recBusy = useRef(false)
+  const toggleRecording = async () => {
+    if (recBusy.current) return
+    recBusy.current = true
+    try {
+      if (!recAt) {
+        buzz('medium')
+        const ok = await startRecording(true)
+        if (ok) { setRecAt(Date.now()); setRecNow(Date.now()) }
+      } else {
+        buzz('select')
+        setRecAt(null)
+        const uri = await stopRecording()
+        if (uri) {
+          const perm = await MediaLibrary.requestPermissionsAsync(true)
+          if (perm?.granted) {
+            await MediaLibrary.saveToLibraryAsync(uri)
+            flash('🎬 Gameplay saved to Photos', true)
+          } else {
+            flash('Allow Photos access to save recordings', false)
+          }
+        }
+      }
+    } catch (e) {
+      setRecAt(null)
+      flash(String(e?.message || 'Recording failed').slice(0, 60), false)
+    } finally {
+      recBusy.current = false
+    }
+  }
+  // Stop a recording if you leave the game.
+  useEffect(() => () => { stopRecording().catch(() => {}) }, [])
   const scope = useScopeZoom(bino ? BINOCULAR_MAX_ZOOM : maxZoomFor(getWeapon(weaponId)), { enabled: !!camPerm?.granted, onChange: () => buzz('select') })
   const toggleBino = () => {
     buzz('select')
@@ -242,6 +285,8 @@ export function LaserTagGame({ room, onExit }) {
   const myPosRef = useRef(null)
   const headingRef = useRef(null)
   const [shotTick, setShotTick] = useState(0)
+  const [hitTick, setHitTick] = useState(0) // a shot of yours connected (hit marker)
+  const [killTick, setKillTick] = useState(0)
   const [blastKey, setBlastKey] = useState(0)
   const grenadeTimers = useRef([])
   useEffect(() => () => grenadeTimers.current.forEach(clearTimeout), [])
@@ -292,6 +337,8 @@ export function LaserTagGame({ room, onExit }) {
     if (!room) return undefined
     const offs = [
       room.onMessage('hit_ok', (d) => {
+        setHitTick(Date.now())
+        if (d?.killed) setKillTick(Date.now())
         playSfx('hit')
         buzz(d?.killed ? 'success' : 'medium')
         const dmg = d?.damage ? ` −${d.damage}` : ''
@@ -717,16 +764,9 @@ export function LaserTagGame({ room, onExit }) {
     shotsRef.current += shots
     setShotTick((n) => n + 1)
     try {
-      // Fly toward the tagged enemy nearest the crosshair, if there is one close to it.
-      const cx = (view.width || 0) / 2
-      const cy = (view.height || 0) / 2
-      let best = null
-      for (const m of [...(enemyMarkersRef.current || []), ...(revealedRef.current || []).filter((r) => r.inView)]) {
-        const y = m.y + 40 // tags sit above the head; aim at the body
-        const d = Math.hypot(m.x - cx, y - cy)
-        if (d < 140 && (!best || d < best.d)) best = { x: m.x, y, d }
-      }
-      battle.addOutgoing(leftHanded, best)
+      // The round leaves the gun's barrel and flies to the enemy you're aiming at (if any).
+      const from = aim.mode === 'camera' ? muzzlePoint({ gun, width: view.width || 0, height: view.height || 0, bottom: dockH || 0, leftHanded }) : null
+      battle.addOutgoing(leftHanded, aimPointRef.current, from)
     } catch {}
     playShot(gun)
     buzz(gun.automatic ? 'light' : 'medium') // recoil rumble (respects the Vibration setting)
@@ -948,6 +988,21 @@ export function LaserTagGame({ room, onExit }) {
       return binocularMarkers({ players: out, headingDeg: heading.deg, zoom: scope.zoom, view })
     } catch { return [] }
   }, [intelPoints, enemies, enemyMarkers, myPos, heading?.deg, scope.zoom, view, state])
+  // What you're aiming at: the tagged enemy (camera lock or map-revealed) nearest the
+  // crosshair, if it's reasonably close. The gun swings toward it and shots fly to it.
+  const aimPoint = useMemo(() => {
+    const cx = (view.width || 0) / 2
+    const cy = (view.height || 0) / 2
+    let best = null
+    for (const m of [...enemyMarkers, ...revealedMarkers.filter((r) => r.inView)]) {
+      const y = m.y + 40 // tags sit above the head; aim at the body
+      const d = Math.hypot(m.x - cx, y - cy)
+      if (d < Math.max(140, (view.width || 0) * 0.42) && (!best || d < best.d)) best = { x: m.x, y, d }
+    }
+    return best
+  }, [enemyMarkers, revealedMarkers, view])
+  const aimPointRef = useRef(null)
+  aimPointRef.current = aimPoint
   const enemyMarkersRef = useRef([])
   enemyMarkersRef.current = enemyMarkers
   const revealedRef = useRef([])
@@ -1088,7 +1143,7 @@ export function LaserTagGame({ room, onExit }) {
       ) : null}
 
       {camPerm?.granted && !topMode && !bino && aim.mode === 'camera' ? (
-        <GunViewModel gun={gun} shotTick={shotTick} bottom={dockH || 0} hidden={dead} leftHanded={leftHanded} />
+        <GunViewModel gun={gun} shotTick={shotTick} bottom={dockH || 0} hidden={dead} leftHanded={leftHanded} aim={aimPoint} />
       ) : null}
       <GrenadeBlast key={blastKey} visible={!!blastKey} />
       {battle.overlay}
@@ -1158,10 +1213,7 @@ export function LaserTagGame({ room, onExit }) {
             <Text style={styles.sightText}>Point the top edge at a player · tap anywhere to fire</Text>
           </View>
         ) : (
-          <View style={[styles.cross, (inSights || enemyMarkers.length > 0) && { borderColor: colors.danger }]}>
-            <View style={[styles.crossH, inSights && { backgroundColor: colors.danger }]} />
-            <View style={[styles.crossV, inSights && { backgroundColor: colors.danger }]} />
-          </View>
+          <FpsCrosshair onTarget={!!inSights || enemyMarkers.length > 0} shotTick={shotTick} hitTick={hitTick} killTick={killTick} />
         )}
         {!triggerMode && <Text style={styles.sightText} numberOfLines={2}>
           {visionAim
@@ -1263,6 +1315,18 @@ export function LaserTagGame({ room, onExit }) {
                 <Text style={{ fontSize: 14 }}>🔭</Text>
                 <Text style={[styles.zoomText, bino && { color: colors.onGold }]}>{bino ? 'Lower' : 'Scout'}</Text>
               </Pressable>
+              {recOk ? (
+                <Pressable
+                  onPress={toggleRecording}
+                  hitSlop={6}
+                  style={({ pressed }) => [styles.zoomBtn, recAt && styles.recOn, pressed && { opacity: 0.75 }]}
+                  accessibilityRole="button"
+                  accessibilityLabel={recAt ? 'Stop recording and save to Photos' : 'Record gameplay with your voice'}
+                >
+                  <View style={[styles.recDot, recAt && { borderRadius: 2 }]} />
+                  {recAt ? <Text style={styles.zoomText}>{(() => { const s = Math.max(0, Math.floor((recNow - recAt) / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}` })()}</Text> : <Text style={styles.zoomText}>REC</Text>}
+                </Pressable>
+              ) : null}
               {dualOk ? (
                 <Pressable
                   onPress={() => { buzz('select'); setSelfieOn((v) => !v) }}
@@ -1413,6 +1477,8 @@ const styles = StyleSheet.create({
   consumablesRow: { flexDirection: 'row', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' },
   opticsRow: { flexDirection: 'row', gap: 6 },
   zoomBtn: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 12, height: 36, borderRadius: 18, backgroundColor: 'rgba(10,12,22,0.65)', borderWidth: 1.5, borderColor: 'rgba(100,200,255,0.4)', shadowColor: '#4dc9f6', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.3, shadowRadius: 6 },
+  recOn: { backgroundColor: 'rgba(212,32,47,0.85)', borderColor: '#ff4d5e', shadowColor: '#ff2d3d', shadowOpacity: 0.7, shadowRadius: 10 },
+  recDot: { width: 11, height: 11, borderRadius: 6, backgroundColor: '#ff2d3d', borderWidth: 1.5, borderColor: '#fff' },
   zoomBtnOn: { backgroundColor: colors.gold, borderColor: colors.gold, shadowColor: colors.gold, shadowOpacity: 0.6, shadowRadius: 10 },
   zoomText: { color: '#fff', fontWeight: '800', fontSize: 13, textShadowColor: 'rgba(0,0,0,0.5)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 3 },
   fireCompact: { width: 88, height: 88, borderRadius: 44 },

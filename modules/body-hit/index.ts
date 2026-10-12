@@ -55,7 +55,7 @@ export type BrandVideoOptions = {
 
 const Native = requireOptionalNativeModule<NativeBodyHit>('BodyHit')
 
-// Body pose (Laser Tag) is iOS-only; Android's module only does faces.
+// Body pose (Laser Tag): Apple Vision on iOS, ML Kit pose detection on Android (newer binaries).
 export const isBodyHitAvailable = !!Native && typeof (Native as any).detectBodies === 'function'
 
 export async function detectBodies(uri: string, deleteAfter = true): Promise<DetectedBody[] | null> {

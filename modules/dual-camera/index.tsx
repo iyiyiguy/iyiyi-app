@@ -5,7 +5,13 @@ import { forwardRef, useImperativeHandle, useRef } from 'react'
 import type { ViewStyle } from 'react-native'
 import { requireNativeView, requireOptionalNativeModule } from 'expo'
 
-type NativeDualCamera = { isSupported(): boolean }
+type NativeDualCamera = {
+  isSupported(): boolean
+  // Missing in binaries built before gameplay recording was added.
+  isRecordingSupported?: () => boolean
+  startRecording?: (mic: boolean) => Promise<boolean>
+  stopRecording?: () => Promise<string | null>
+}
 const native = requireOptionalNativeModule<NativeDualCamera>('DualCamera')
 
 let supported = false
@@ -13,6 +19,21 @@ try { supported = !!native?.isSupported?.() } catch { supported = false }
 
 export function isDualCameraSupported(): boolean {
   return supported
+}
+
+// ---- gameplay recording (screen + game sound + your voice) ----
+export function isRecordingSupported(): boolean {
+  try { return !!native?.isRecordingSupported?.() } catch { return false }
+}
+
+export async function startRecording(mic = true): Promise<boolean> {
+  if (!native?.startRecording) return false
+  return !!(await native.startRecording(mic))
+}
+
+export async function stopRecording(): Promise<string | null> {
+  if (!native?.stopRecording) return null
+  return (await native.stopRecording()) || null
 }
 
 const NativeView: any = supported ? requireNativeView('DualCamera') : null

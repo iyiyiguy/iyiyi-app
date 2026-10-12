@@ -1,6 +1,7 @@
 import AVFoundation
 import AudioToolbox
 import ExpoModulesCore
+import ReplayKit
 import UIKit
 
 // Laser Tag "selfie bubble": the back camera fills the view (aim + shoot) while the front
@@ -12,6 +13,53 @@ public class DualCameraModule: Module {
 
     Function("isSupported") { () -> Bool in
       return AVCaptureMultiCamSession.isMultiCamSupported
+    }
+
+    // Gameplay recording (ReplayKit): the app's screen + game sound, plus your voice when
+    // mic is true. iOS asks the player once to allow screen recording.
+    Function("isRecordingSupported") { () -> Bool in
+      return RPScreenRecorder.shared().isAvailable
+    }
+
+    AsyncFunction("startRecording") { (mic: Bool, promise: Promise) in
+      DispatchQueue.main.async {
+        let rec = RPScreenRecorder.shared()
+        guard rec.isAvailable else {
+          promise.reject("E_REC_UNAVAILABLE", "Screen recording isn't available right now")
+          return
+        }
+        if rec.isRecording {
+          promise.resolve(true)
+          return
+        }
+        rec.isMicrophoneEnabled = mic
+        rec.startRecording { error in
+          if let error = error {
+            promise.reject("E_REC_START", error.localizedDescription)
+          } else {
+            promise.resolve(true)
+          }
+        }
+      }
+    }
+
+    // Stops and writes the clip to a temp .mp4; resolves its file URL (JS saves it to Photos).
+    AsyncFunction("stopRecording") { (promise: Promise) in
+      DispatchQueue.main.async {
+        let rec = RPScreenRecorder.shared()
+        guard rec.isRecording else {
+          promise.resolve(nil)
+          return
+        }
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("iyiyi-gameplay-\(UUID().uuidString).mp4")
+        rec.stopRecording(withOutput: url) { error in
+          if let error = error {
+            promise.reject("E_REC_STOP", error.localizedDescription)
+          } else {
+            promise.resolve(url.absoluteString)
+          }
+        }
+      }
     }
 
     View(DualCameraView.self) {
