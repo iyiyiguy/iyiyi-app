@@ -31,6 +31,19 @@ export const GRENADE_RADIUS_M = 7
 export const GRENADE_MAX_DAMAGE = 90
 export const GRENADE_MIN_DAMAGE = 35
 export const GRENADE_COOLDOWN_MS = 2500
+// Sticky bombs: placed at the player's current position, detonated remotely by pressing again.
+// Damage falls off from the centre like a grenade but the blast radius is bigger.
+export const STICKY_BOMB_RADIUS_M = 10
+export const STICKY_BOMB_MAX_DAMAGE = 100
+export const STICKY_BOMB_MIN_DAMAGE = 30
+export const STICKY_BOMB_COOLDOWN_MS = 3000
+// Land mines: placed at the player's current position, triggered automatically when an enemy
+// walks within LAND_MINE_TRIGGER_M. Blast radius is smaller but damage is high.
+export const LAND_MINE_TRIGGER_M = 3
+export const LAND_MINE_RADIUS_M = 5
+export const LAND_MINE_MAX_DAMAGE = 110
+export const LAND_MINE_MIN_DAMAGE = 40
+export const LAND_MINE_COOLDOWN_MS = 2000
 // Rocket launcher: splash damage in a radius around the target on a direct hit.
 export const ROCKET_RADIUS_M = 25
 export const ROCKET_SPLASH_MAX = 70
@@ -147,12 +160,12 @@ export function tick(state, { now, presentIds, posOf }) {
   if (state.phase === 'countdown') {
     return now >= state.startsAt ? { ...state, phase: 'playing' } : state
   }
-  if (state.mode !== 'snd') return tickDeathmatch(state, now, presentIds)
+  if (state.mode !== 'snd') return tickDeathmatch(state, now, presentIds, posOf)
   if (state.phase === 'roundEnd') return now >= state.startsAt ? nextSndRound(state, now, presentIds) : state
   return tickSnd(state, now, presentIds, posOf)
 }
 
-function tickDeathmatch(state, now, presentIds) {
+function tickDeathmatch(state, now, presentIds, posOf) {
   let players = state.players
   for (const id of Object.keys(players)) {
     const p = players[id]
@@ -162,12 +175,72 @@ function tickDeathmatch(state, now, presentIds) {
     }
   }
   let next = players === state.players ? state : { ...state, players }
+  // Trigger land mines
+  if (next.landMines?.length && posOf) next = tickLandMines(next, now, posOf)
   if (next.endless) return next // the public arena never ends
   const present = Object.keys(next.players).filter((id) => presentIds.has(id))
   const teamsPresent = new Set(present.map((id) => next.players[id].team))
   const tooFew = present.length < 2 || (next.mode === 'tdm' && teamsPresent.size < 2)
   if (now >= next.endsAt || tooFew) next = finishDeathmatch(next)
   return next
+}
+
+// Check every placed land mine: if an enemy is within LAND_MINE_TRIGGER_M, detonate it.
+function tickLandMines(state, now, posOf) {
+  if (!state.landMines?.length) return state
+  let players = { ...state.players }
+  let feed = state.feed
+  let teamScore = state.teamScore
+  const remaining = []
+  const snd = state.mode === 'snd'
+  let sndState = state.snd
+  for (const mine of state.landMines) {
+    const placer = players[mine.by]
+    if (!placer) { remaining.push(mine); continue }
+    let triggered = false
+    for (const [id, target] of Object.entries(players)) {
+      if (id === mine.by || !target.alive) continue
+      if (state.mode !== 'ffa' && target.team === placer.team) continue
+      if ((target.protectedUntil || 0) > now) continue
+      const pos = posOf(id)
+      if (!pos) continue
+      const d = distanceMeters(pos, mine)
+      if (d > LAND_MINE_TRIGGER_M + Math.min(3, gpsSlack(pos.acc))) continue
+      // Triggered! Damage everyone in blast radius.
+      triggered = true
+      break
+    }
+    if (!triggered) { remaining.push(mine); continue }
+    // Detonate — damage all enemies in LAND_MINE_RADIUS_M
+    for (const [id, target] of Object.entries(players)) {
+      if (id === mine.by || !target.alive) continue
+      if (state.mode !== 'ffa' && target.team === placer.team) continue
+      if ((target.protectedUntil || 0) > now) continue
+      const pos = posOf(id)
+      if (!pos) continue
+      const d = distanceMeters(pos, mine)
+      const reach = LAND_MINE_RADIUS_M + Math.min(3, gpsSlack(pos.acc))
+      if (d > reach) continue
+      const damage = Math.round(LAND_MINE_MAX_DAMAGE - (LAND_MINE_MAX_DAMAGE - LAND_MINE_MIN_DAMAGE) * Math.min(1, d / reach))
+      const hp = Math.max(0, target.hp - damage)
+      const killed = hp <= 0
+      players[id] = { ...target, hp, alive: !killed, deaths: target.deaths + (killed ? 1 : 0), respawnAt: killed && !snd ? now + RESPAWN_MS : null }
+      const me = players[mine.by]
+      players[mine.by] = { ...me, hits: (me.hits || 0) + 1, score: (me.score || 0) + 10 + (killed ? 100 : 0), kills: (me.kills || 0) + (killed ? 1 : 0) }
+      if (killed) {
+        feed = pushFeed({ feed }, `${placer.name} 💥 ${target.name} (land mine)`, now)
+        if (state.mode === 'tdm') teamScore = { ...teamScore, [placer.team]: teamScore[placer.team] + 1 }
+      }
+      if (snd) {
+        if (sndState?.act?.by === id) sndState = { ...sndState, act: null }
+        if (killed && sndState?.bomb?.state === 'carried' && sndState.bomb.carrier === id) {
+          sndState = { ...sndState, bomb: dropBomb(sndState.bomb, pos) }
+          feed = pushFeed({ feed }, `${target.name} dropped the bomb`, now)
+        }
+      }
+    }
+  }
+  return { ...state, players, feed, teamScore, landMines: remaining, ...(snd && sndState !== state.snd ? { snd: sndState } : {}) }
 }
 
 function finishDeathmatch(state) {
@@ -297,6 +370,8 @@ export function applyAction(state, action, from, { now, posOf }) {
     case 'hit': return applyHit(state, action, from, now, posOf)
     case 'bystander': return applyBystander(state, action, from, now)
     case 'grenade': return applyGrenade(state, action, from, now, posOf)
+    case 'sticky_bomb': return applyStickyBomb(state, action, from, now, posOf)
+    case 'land_mine': return applyLandMine(state, action, from, now, posOf)
     case 'plant_start': {
       if (state.mode !== 'snd' || !me.alive || state.snd.act) return { state }
       const b = state.snd.bomb
@@ -417,6 +492,66 @@ function applyGrenade(state, action, from, now, posOf) {
   }
   const next = { ...state, players, feed, teamScore, ...(snd ? { snd: sndState } : {}) }
   return { state: next, reply: { type: 'grenade_ok', data: { hits, by: thrower.name } } }
+}
+
+// Sticky bomb: detonated at a previously placed location. The placer sends the lat/lng where
+// they placed it and the host checks everyone nearby.
+function applyStickyBomb(state, action, from, now, posOf) {
+  const placer = state.players[from]
+  if (!placer?.alive) return { state }
+  if (now - (placer.lastStickyBombAt || 0) < STICKY_BOMB_COOLDOWN_MS) return { state }
+  const land = { lat: Number(action.lat), lng: Number(action.lng) }
+  if (!Number.isFinite(land.lat) || !Number.isFinite(land.lng)) return { state }
+  const players = { ...state.players, [from]: { ...placer, lastStickyBombAt: now } }
+  const snd = state.mode === 'snd'
+  const hits = []
+  let feed = state.feed
+  let teamScore = state.teamScore
+  let sndState = state.snd
+  for (const [id, target] of Object.entries(state.players)) {
+    if (id === from || !target.alive) continue
+    if (state.mode !== 'ffa' && target.team === placer.team) continue
+    if ((target.protectedUntil || 0) > now) continue
+    const pos = posOf(id)
+    if (!pos) continue
+    const d = distanceMeters(pos, land)
+    const reach = STICKY_BOMB_RADIUS_M + Math.min(4, gpsSlack(pos.acc))
+    if (d > reach) continue
+    const damage = Math.round(STICKY_BOMB_MAX_DAMAGE - (STICKY_BOMB_MAX_DAMAGE - STICKY_BOMB_MIN_DAMAGE) * Math.min(1, d / reach))
+    const hp = Math.max(0, target.hp - damage)
+    const killed = hp <= 0
+    players[id] = { ...target, hp, alive: !killed, deaths: target.deaths + (killed ? 1 : 0), respawnAt: killed && !snd ? now + RESPAWN_MS : null }
+    const me = players[from]
+    players[from] = { ...me, hits: me.hits + 1, score: me.score + 10 + (killed ? 100 : 0), kills: me.kills + (killed ? 1 : 0) }
+    hits.push({ id, name: target.name, damage: Math.min(damage, target.hp), killed })
+    if (killed) {
+      feed = pushFeed({ feed }, `${placer.name} 💥 ${target.name} (sticky bomb)`, now)
+      if (state.mode === 'tdm') teamScore = { ...teamScore, [placer.team]: teamScore[placer.team] + 1 }
+    }
+    if (snd) {
+      if (sndState.act?.by === id) sndState = { ...sndState, act: null }
+      if (killed && sndState.bomb?.state === 'carried' && sndState.bomb.carrier === id) {
+        sndState = { ...sndState, bomb: dropBomb(sndState.bomb, pos) }
+        feed = pushFeed({ feed }, `${target.name} dropped the bomb`, now)
+      }
+    }
+  }
+  const next = { ...state, players, feed, teamScore, ...(snd ? { snd: sndState } : {}) }
+  return { state: next, reply: { type: 'sticky_bomb_ok', data: { hits, by: placer.name } } }
+}
+
+// Land mine: placed at the player's location. The host stores it and checks every tick whether
+// an enemy has wandered within LAND_MINE_TRIGGER_M; when one does, it detonates.
+function applyLandMine(state, action, from, now, posOf) {
+  const placer = state.players[from]
+  if (!placer?.alive) return { state }
+  if (now - (placer.lastLandMineAt || 0) < LAND_MINE_COOLDOWN_MS) return { state }
+  const pos = posOf(from)
+  if (!pos) return { state, reply: notice('Waiting for GPS to place mine.') }
+  const mine = { lat: pos.lat, lng: pos.lng, by: from, placedAt: now }
+  const mines = [...(state.landMines || []), mine]
+  const players = { ...state.players, [from]: { ...placer, lastLandMineAt: now } }
+  return { state: { ...state, players, landMines: mines }, reply: { type: 'land_mine_ok', data: { placed: true } } }
 }
 
 function applyHit(state, action, from, now, posOf) {

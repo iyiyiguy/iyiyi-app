@@ -48,8 +48,11 @@ import { DOCK_GAP, TOP_BUTTONS_W, useHudMetrics, useMeasuredHeight } from './las
 import { BINOCULAR_MAX_ZOOM, formatZoom, maxZoomFor, useScopeZoom } from './laser/useScopeZoom'
 import { BinocularFrame, BinocularMarkers, binocularMarkers } from './laser/Binoculars'
 import { GRENADE_FUSE_MS, GrenadeBlast, GrenadeButton, destinationPoint } from './laser/Grenade'
+import { StickyBombButton, LandMineButton } from './laser/Consumables'
 import GunViewModel from './laser/GunViewModel'
 import { spendGrenade, useGrenadeInventory } from '../lib/grenades'
+import { spendStickyBomb, useStickyBombInventory } from '../lib/stickyBombs'
+import { spendLandMine, useLandMineInventory } from '../lib/landMines'
 
 function normalizeGun(g) {
   const gun = g || getWeapon('pistol')
@@ -182,8 +185,11 @@ export function LaserTagGame({ room, onExit }) {
     return () => releaseWeaponSounds()
   }, [])
 
-  // ---- grenades + first-person gun ----
+  // ---- grenades, sticky bombs, land mines + first-person gun ----
   const grenadeInv = useGrenadeInventory()
+  const stickyBombInv = useStickyBombInventory()
+  const landMineInv = useLandMineInventory()
+  const stickyBombPos = useRef(null) // lat/lng of the placed sticky bomb
   const [shotTick, setShotTick] = useState(0)
   const [blastKey, setBlastKey] = useState(0)
   const grenadeTimers = useRef([])
@@ -252,12 +258,30 @@ export function LaserTagGame({ room, onExit }) {
         if (kills.length) flash(`💥 Grenade tagged out ${kills.map((k) => k.name).join(', ')}!`, true)
         else flash(`💥 Grenade hit ${hits.map((h) => `${h.name} −${h.damage}`).join(', ')}`, true)
       }),
+      room.onMessage('sticky_bomb_ok', (d) => {
+        const hits = Array.isArray(d?.hits) ? d.hits : []
+        const kills = hits.filter((h) => h.killed)
+        if (!hits.length) { flash('💥 Sticky bomb missed', false); return }
+        playSfx('explosion')
+        buzz('success')
+        setBlastKey(Date.now())
+        if (kills.length) flash(`💥 Sticky bomb tagged out ${kills.map((k) => k.name).join(', ')}!`, true)
+        else flash(`💥 Sticky bomb hit ${hits.map((h) => `${h.name} −${h.damage}`).join(', ')}`, true)
+      }),
+      room.onMessage('land_mine_ok', () => {
+        buzz('medium')
+        flash('⚠️ Land mine placed!', true)
+      }),
       room.onMessage('got_hit', (d) => {
         const by = String(d?.by || 'Someone').slice(0, 24)
         const dmg = d?.damage ? ` −${d.damage}` : ''
-        if (d?.zone === 'grenade') { playSfx('explosion'); setBlastKey(Date.now()) }
-        if (d?.killed) flash(`💀 Tagged out by ${by}${d?.zone === 'grenade' ? '’s grenade' : ''}`, false)
-        else flash(`${d?.zone === 'head' ? '🎯 Headshot' : d?.zone === 'grenade' ? '💥 Grenade' : 'Hit'} by ${by}${dmg}`, false)
+        const isExplosive = d?.zone === 'grenade' || d?.zone === 'sticky_bomb' || d?.zone === 'land_mine'
+        if (isExplosive) { playSfx('explosion'); buzz('heavy'); setBlastKey(Date.now()) }
+        else { playSfx('hit'); buzz('heavy') }
+        const zoneLabel = d?.zone === 'grenade' ? 'Grenade' : d?.zone === 'sticky_bomb' ? 'Sticky bomb' : d?.zone === 'land_mine' ? 'Land mine' : d?.zone === 'head' ? 'Headshot' : d?.zone === 'rocket' ? 'Rocket' : 'Hit'
+        const suffix = d?.zone === 'grenade' ? "'s grenade" : d?.zone === 'sticky_bomb' ? "'s sticky bomb" : d?.zone === 'land_mine' ? "'s land mine" : ''
+        if (d?.killed) flash(`💀 Tagged out by ${by}${suffix}`, false)
+        else flash(`${isExplosive ? '💥' : d?.zone === 'head' ? '🎯' : ''} ${zoneLabel} by ${by}${dmg}`, false)
       }),
       room.onMessage('bystander_ok', (d) => {
         try {
@@ -378,7 +402,25 @@ export function LaserTagGame({ room, onExit }) {
       const presentIds = room.presentIds()
       const synced = engine.syncEndlessPlayers(s, room.roster, presentIds, t)
       const next = engine.tick(synced, { now: t, presentIds, posOf })
-      if (next !== s) room.publishState(next)
+      if (next !== s) {
+        room.publishState(next)
+        // Notify victims of land mine detonations (detected by mines being removed from the list).
+        if (synced.landMines?.length && next.landMines?.length < synced.landMines.length) {
+          for (const [id, p] of Object.entries(next.players)) {
+            const old = synced.players[id]
+            if (!old || old.hp === p.hp) continue
+            const damage = old.hp - p.hp
+            if (damage <= 0) continue
+            // Find who placed the mine that hit them
+            const removedMines = synced.landMines.filter((m) => !next.landMines.includes(m))
+            const miner = removedMines[0]?.by
+            const minerName = synced.players[miner]?.name || 'Someone'
+            const victimMsg = { by: minerName, zone: 'land_mine', damage, killed: !p.alive }
+            if (id === meId) room.emitter.emit('msg:got_hit', victimMsg, miner)
+            else room.send('got_hit', victimMsg, { to: id })
+          }
+        }
+      }
     },
     onAction: (action, from) => {
       const s = room.getState()
@@ -394,6 +436,13 @@ export function LaserTagGame({ room, onExit }) {
       if (action?.type === 'grenade' && reply?.type === 'grenade_ok') {
         for (const h of reply.data?.hits || []) {
           const victimMsg = { by: s.players?.[from]?.name || 'Someone', zone: 'grenade', damage: h.damage, killed: h.killed }
+          if (h.id === meId) room.emitter.emit('msg:got_hit', victimMsg, from)
+          else room.send('got_hit', victimMsg, { to: h.id })
+        }
+      }
+      if (action?.type === 'sticky_bomb' && reply?.type === 'sticky_bomb_ok') {
+        for (const h of reply.data?.hits || []) {
+          const victimMsg = { by: s.players?.[from]?.name || 'Someone', zone: 'sticky_bomb', damage: h.damage, killed: h.killed }
           if (h.id === meId) room.emitter.emit('msg:got_hit', victimMsg, from)
           else room.send('got_hit', victimMsg, { to: h.id })
         }
@@ -616,6 +665,45 @@ export function LaserTagGame({ room, onExit }) {
       }
     }, GRENADE_FUSE_MS)
     grenadeTimers.current.push(t)
+  }
+
+  // Place a sticky bomb at the player's current location.
+  const placeStickyBomb = async () => {
+    if (dead || !playing) return
+    const h = aimRef.current
+    if (!h.pos) { flash('No GPS fix yet', false); return }
+    if (!stickyBombInv.owner && !(stickyBombInv.balance > 0)) { flash('No sticky bombs left', false); return }
+    const ok = await spendStickyBomb()
+    if (!ok) { flash('No sticky bombs left', false); return }
+    stickyBombPos.current = { lat: h.pos.lat, lng: h.pos.lng }
+    buzz('medium')
+    flash('🧨 Sticky bomb placed! Tap again to detonate', true)
+  }
+
+  // Detonate the placed sticky bomb.
+  const detonateStickyBomb = () => {
+    if (!stickyBombPos.current) return
+    const pos = stickyBombPos.current
+    stickyBombPos.current = null
+    playSfx('explosion')
+    buzz('heavy')
+    setBlastKey(Date.now())
+    try {
+      room.sendAction({ type: 'sticky_bomb', lat: Math.round(pos.lat * 1e6) / 1e6, lng: Math.round(pos.lng * 1e6) / 1e6 })
+    } catch {}
+  }
+
+  // Drop a land mine at the player's current location.
+  const dropLandMine = async () => {
+    if (dead || !playing) return
+    const h = aimRef.current
+    if (!h.pos) { flash('No GPS fix yet', false); return }
+    if (!landMineInv.owner && !(landMineInv.balance > 0)) { flash('No land mines left', false); return }
+    const ok = await spendLandMine()
+    if (!ok) { flash('No land mines left', false); return }
+    buzz('medium')
+    flash('⚠️ Land mine dropped! It triggers when an enemy walks near', true)
+    room.sendAction({ type: 'land_mine' })
   }
 
   const tagBystander = (user) => {
@@ -925,6 +1013,21 @@ export function LaserTagGame({ room, onExit }) {
             size={hud.compact ? 48 : 54}
             onThrow={throwGrenade}
             onEmpty={() => flash('No grenades — get 10 in the Arcade Shop', false)}
+          />
+          <StickyBombButton
+            count={stickyBombInv.owner ? Infinity : stickyBombInv.balance}
+            disabled={!playing || dead || bino}
+            size={hud.compact ? 44 : 50}
+            onPlace={placeStickyBomb}
+            onDetonate={detonateStickyBomb}
+            onEmpty={() => flash('No sticky bombs — get more in the Arcade Shop', false)}
+          />
+          <LandMineButton
+            count={landMineInv.owner ? Infinity : landMineInv.balance}
+            disabled={!playing || dead || bino}
+            size={hud.compact ? 44 : 50}
+            onDrop={dropLandMine}
+            onEmpty={() => flash('No land mines — get more in the Arcade Shop', false)}
           />
           {camPerm?.granted && !topMode ? (
             <Pressable
