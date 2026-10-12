@@ -48,6 +48,7 @@ import { DOCK_GAP, TOP_BUTTONS_W, useHudMetrics, useMeasuredHeight } from './las
 import { BINOCULAR_MAX_ZOOM, formatZoom, maxZoomFor, useScopeZoom } from './laser/useScopeZoom'
 import { BinocularFrame, BinocularMarkers, binocularMarkers } from './laser/Binoculars'
 import { GroundExplosives, groundMarkers } from './laser/GroundExplosives'
+import { DualCameraView, isDualCameraSupported } from '../../modules/dual-camera'
 import { GRENADE_FUSE_MS, GrenadeBlast, GrenadeButton, destinationPoint } from './laser/Grenade'
 import { StickyBombButton, LandMineButton } from './laser/Consumables'
 import { useBattleEffects, directionToAngle } from './laser/BattleEffects'
@@ -200,6 +201,10 @@ export function LaserTagGame({ room, onExit }) {
   // Scope zoom (pinch or the zoom button). Precision guns (sniper, DMR, railgun) go to 4×.
   // Binoculars: look up to 8× with GPS name tags on every enemy; shooting is off while they're up.
   const [bino, setBino] = useState(false)
+  // Selfie bubble (front camera) while the back camera aims. Only on phones that can run
+  // both cameras at once; otherwise the toggle never shows.
+  const dualOk = isDualCameraSupported()
+  const [selfieOn, setSelfieOn] = useState(false)
   const scope = useScopeZoom(bino ? BINOCULAR_MAX_ZOOM : maxZoomFor(getWeapon(weaponId)), { enabled: !!camPerm?.granted, onChange: () => buzz('select') })
   const toggleBino = () => {
     buzz('select')
@@ -711,7 +716,18 @@ export function LaserTagGame({ room, onExit }) {
     const shots = gun.shotsPerClick
     shotsRef.current += shots
     setShotTick((n) => n + 1)
-    try { battle.addOutgoing(leftHanded) } catch {}
+    try {
+      // Fly toward the tagged enemy nearest the crosshair, if there is one close to it.
+      const cx = (view.width || 0) / 2
+      const cy = (view.height || 0) / 2
+      let best = null
+      for (const m of [...(enemyMarkersRef.current || []), ...(revealedRef.current || []).filter((r) => r.inView)]) {
+        const y = m.y + 40 // tags sit above the head; aim at the body
+        const d = Math.hypot(m.x - cx, y - cy)
+        if (d < 140 && (!best || d < best.d)) best = { x: m.x, y, d }
+      }
+      battle.addOutgoing(leftHanded, best)
+    } catch {}
     playShot(gun)
     buzz(gun.automatic ? 'light' : 'medium') // recoil rumble (respects the Vibration setting)
     const h = aimRef.current
@@ -932,6 +948,10 @@ export function LaserTagGame({ room, onExit }) {
       return binocularMarkers({ players: out, headingDeg: heading.deg, zoom: scope.zoom, view })
     } catch { return [] }
   }, [intelPoints, enemies, enemyMarkers, myPos, heading?.deg, scope.zoom, view, state])
+  const enemyMarkersRef = useRef([])
+  enemyMarkersRef.current = enemyMarkers
+  const revealedRef = useRef([])
+  revealedRef.current = revealedMarkers
   const allMapPoints = useMemo(() => (intelPoints.length ? [...mapPoints, ...intelPoints] : mapPoints), [mapPoints, intelPoints])
 
   // ---- render ----
@@ -984,7 +1004,25 @@ export function LaserTagGame({ room, onExit }) {
       {camPerm?.granted ? (
         <View style={[StyleSheet.absoluteFill, { overflow: 'hidden' }]} onLayout={(e) => setView(e.nativeEvent.layout)}>
           <Animated.View style={[StyleSheet.absoluteFill, { transform: [{ scale: scope.scaleAnim }] }]}>
-            <CameraView ref={cameraRef} style={StyleSheet.absoluteFill} facing="back" animateShutter={false} />
+            {dualOk && selfieOn ? (
+              <DualCameraView
+                ref={cameraRef}
+                style={StyleSheet.absoluteFill}
+                selfieEnabled
+                selfieFrame={(() => {
+                  // The preview is scaled by the zoom around its centre; place the bubble so it
+                  // lands on the same spot (and size) on screen at any zoom.
+                  const z = Math.max(1, scope.zoom || 1)
+                  const W = view.width || 390
+                  const H = view.height || 844
+                  const r = { x: 12, y: H * 0.3, w: 104, h: 140 }
+                  return [W / 2 + (r.x - W / 2) / z, H / 2 + (r.y - H / 2) / z, r.w / z, r.h / z]
+                })()}
+                onCameraError={() => { setSelfieOn(false); flash('Selfie camera unavailable', false) }}
+              />
+            ) : (
+              <CameraView ref={cameraRef} style={StyleSheet.absoluteFill} facing="back" animateShutter={false} />
+            )}
           </Animated.View>
         </View>
       ) : (
@@ -1225,6 +1263,17 @@ export function LaserTagGame({ room, onExit }) {
                 <Text style={{ fontSize: 14 }}>🔭</Text>
                 <Text style={[styles.zoomText, bino && { color: colors.onGold }]}>{bino ? 'Lower' : 'Scout'}</Text>
               </Pressable>
+              {dualOk ? (
+                <Pressable
+                  onPress={() => { buzz('select'); setSelfieOn((v) => !v) }}
+                  hitSlop={6}
+                  style={({ pressed }) => [styles.zoomBtn, selfieOn && styles.zoomBtnOn, pressed && { opacity: 0.75 }]}
+                  accessibilityRole="button"
+                  accessibilityLabel={selfieOn ? 'Hide selfie camera' : 'Show selfie camera'}
+                >
+                  <Text style={{ fontSize: 14 }}>🤳</Text>
+                </Pressable>
+              ) : null}
               <Pressable
                 onPress={scope.cycle}
                 hitSlop={6}

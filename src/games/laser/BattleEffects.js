@@ -171,28 +171,52 @@ function MegaExplosion({ id, label, angle, dist, by, onDone }) {
   )
 }
 
-// ─── Your own shot: a glowing round flying from the gun into the crosshair ───
-const OUT_MS = 230
+// ─── Your own shot: glowing rounds with a trail flying from the gun to the target ───
+const OUT_MS = 320
 const OUT_MAX = 8
 
 function OutgoingBullet({ id, fromX, fromY, toX, toY, onDone }) {
   const t = useRef(new Animated.Value(0)).current
   useEffect(() => {
-    Animated.timing(t, { toValue: 1, duration: OUT_MS, easing: Easing.out(Easing.quad), useNativeDriver: true }).start(() => onDone(id))
+    Animated.timing(t, { toValue: 1, duration: OUT_MS + 160, easing: Easing.linear, useNativeDriver: true }).start(() => onDone(id))
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  const flightEnd = OUT_MS / (OUT_MS + 160)
+  // Head of the round plus two trailing ghosts a few frames behind it.
+  const dot = (lag, size, op, key) => {
+    const a = Math.min(flightEnd, lag)
+    const p = t.interpolate({ inputRange: [0, a, flightEnd + lag, 1], outputRange: [0, 0, 1, 1], extrapolate: 'clamp' })
+    return (
+      <Animated.View
+        key={key}
+        pointerEvents="none"
+        style={[st.outBullet, {
+          width: size, height: size, borderRadius: size / 2,
+          left: fromX - size / 2, top: fromY - size / 2,
+          opacity: t.interpolate({ inputRange: [0, flightEnd, flightEnd + 0.01, 1], outputRange: [op, op, 0, 0] }),
+          transform: [
+            { translateX: p.interpolate({ inputRange: [0, 1], outputRange: [0, toX - fromX] }) },
+            { translateY: p.interpolate({ inputRange: [0, 1], outputRange: [0, toY - fromY] }) },
+            { scale: p.interpolate({ inputRange: [0, 1], outputRange: [1.2, 0.35] }) },
+          ],
+        }]}
+      />
+    )
+  }
   return (
-    <Animated.View
-      pointerEvents="none"
-      style={[st.outBullet, {
-        left: fromX - 9, top: fromY - 9,
-        opacity: t.interpolate({ inputRange: [0, 0.8, 1], outputRange: [1, 1, 0] }),
-        transform: [
-          { translateX: t.interpolate({ inputRange: [0, 1], outputRange: [0, toX - fromX] }) },
-          { translateY: t.interpolate({ inputRange: [0, 1], outputRange: [0, toY - fromY] }) },
-          { scale: t.interpolate({ inputRange: [0, 1], outputRange: [1.3, 0.2] }) },
-        ],
-      }]}
-    />
+    <>
+      {dot(0.12, 12, 0.35, 'g2')}
+      {dot(0.06, 15, 0.6, 'g1')}
+      {dot(0, 18, 1, 'h')}
+      {/* impact spark at the target */}
+      <Animated.View
+        pointerEvents="none"
+        style={[st.outSpark, {
+          left: toX - 22, top: toY - 22,
+          opacity: t.interpolate({ inputRange: [0, flightEnd, flightEnd + 0.05, 1], outputRange: [0, 0, 1, 0] }),
+          transform: [{ scale: t.interpolate({ inputRange: [0, flightEnd, 1], outputRange: [0.2, 0.2, 1.6] }) }],
+        }]}
+      />
+    </>
   )
 }
 
@@ -411,9 +435,12 @@ export function useBattleEffects() {
   }, [])
 
   // Your own shot. leftHanded puts the gun (and the bullet's start) on the left.
-  const addOutgoing = useCallback((leftHanded = false) => {
+  // target: optional { x, y } on screen (an enemy you're aiming at); default the crosshair.
+  const addOutgoing = useCallback((leftHanded = false, target = null) => {
+    const toX = Number.isFinite(target?.x) ? target.x : screenW / 2
+    const toY = Number.isFinite(target?.y) ? target.y : screenH / 2
     setOuts((a) => {
-      const n = [...a, { id: nextId++, fromX: screenW * (leftHanded ? 0.3 : 0.7), fromY: screenH * 0.8, toX: screenW / 2, toY: screenH / 2 }]
+      const n = [...a, { id: nextId++, fromX: screenW * (leftHanded ? 0.3 : 0.7), fromY: screenH * 0.8, toX, toY }]
       return n.length > OUT_MAX ? n.slice(-OUT_MAX) : n
     })
   }, [screenW, screenH])
@@ -490,6 +517,7 @@ const st = StyleSheet.create({
     borderWidth: 3,
     borderColor: '#ff6600',
   },
+  outSpark: { position: 'absolute', width: 44, height: 44, borderRadius: 22, borderWidth: 3, borderColor: '#ffd23f', backgroundColor: 'rgba(255,240,180,0.35)' },
   outBullet: { position: 'absolute', width: 18, height: 18, borderRadius: 9, backgroundColor: '#fff6c2', borderWidth: 3, borderColor: '#ffb300', shadowColor: '#ff8a00', shadowOpacity: 1, shadowRadius: 10, shadowOffset: { width: 0, height: 0 }, elevation: 8 },
   megaLabelWrap: { position: 'absolute', top: '18%', left: 0, right: 0, alignItems: 'center' },
   megaLabel: { fontSize: 22, fontWeight: '900', letterSpacing: 1.5, textShadowColor: '#000', textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 8 },

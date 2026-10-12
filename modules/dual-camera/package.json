@@ -1,0 +1,7 @@
+{
+  "name": "dual-camera",
+  "version": "1.0.0",
+  "private": true,
+  "main": "index.tsx",
+  "description": "Back camera + front-camera selfie bubble at the same time (AVCaptureMultiCamSession) for Laser Tag."
+}
