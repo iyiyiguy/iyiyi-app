@@ -11,7 +11,7 @@ import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-nati
 import { Avatar, Btn, Card, Pill, PlayerRow, PlayerTap, ProgressRing, Spectating, formatClock } from './MultiplayerUI'
 import {
   recordRoundResult,
-  useHostLoop, useRoomClock, useRoomSnapshot,
+  useHostLoop, useRoomClock, useRoomSnapshot, useSharedLocation,
 } from '../lib/multiplayer'
 import { buzz } from '../lib/gamePrefs'
 import { colors, radii, type } from '../theme'
@@ -98,6 +98,7 @@ function checkWin(players, roles) {
 export function MafiaGame({ room, onExit }) {
   const snap = useRoomSnapshot(room)
   const now = useRoomClock(room, 500)
+  useSharedLocation(room) // share GPS so nearby invite + proximity features work
   const [myRole, setMyRole] = useState(null) // { round, role }
   const [showRole, setShowRole] = useState(false)
   const [investigateMsg, setInvestigateMsg] = useState(null)

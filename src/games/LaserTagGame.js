@@ -366,6 +366,7 @@ export function LaserTagGame({ room, onExit }) {
         const angle = directionToAngle(myPosRef.current, headingRef.current, shooterPos)
         battle.addFlash(angle)
         battle.addTracer(angle)
+        battle.addBullet(angle)
       } catch {}
     })
     return off
@@ -900,7 +901,7 @@ export function LaserTagGame({ room, onExit }) {
     <View style={styles.fill} {...scope.panHandlers}>
       {camPerm?.granted ? (
         <View style={[StyleSheet.absoluteFill, { overflow: 'hidden' }]} onLayout={(e) => setView(e.nativeEvent.layout)}>
-          <View style={[StyleSheet.absoluteFill, scope.zoom !== 1 && { transform: [{ scale: scope.zoom }] }]}>
+          <View style={[StyleSheet.absoluteFill, scope.zoom !== 1 && { transform: [{ scale: Math.min(scope.zoom, 8) }] }]}>
             <CameraView ref={cameraRef} style={StyleSheet.absoluteFill} facing="back" animateShutter={false} />
           </View>
         </View>
@@ -924,21 +925,25 @@ export function LaserTagGame({ room, onExit }) {
 
       {/* Target-lock brackets around people the camera sees */}
       {visionAim && bodies && view.width > 0 && bodies.map((b, i) => {
-        const r = scope.zoomRect(photoRectToScreen(b.box, b, view), view)
-        const locked = !!classifyHit([b])
-        return (
-          <View key={i} pointerEvents="none" style={[styles.bracket, { left: r.left, top: r.top, width: r.width, height: r.height, borderColor: locked ? colors.danger : 'rgba(255,255,255,0.4)' }]} />
-        )
+        try {
+          if (!b?.box) return null
+          const r = scope.zoomRect(photoRectToScreen(b.box, b, view), view)
+          if (!Number.isFinite(r?.left) || !Number.isFinite(r?.top)) return null
+          const locked = !!classifyHit([b])
+          return (
+            <View key={i} pointerEvents="none" style={[styles.bracket, { left: r.left, top: r.top, width: Math.max(0, r.width), height: Math.max(0, r.height), borderColor: locked ? colors.danger : 'rgba(255,255,255,0.4)' }]} />
+          )
+        } catch { return null }
       })}
       {bino ? <BinocularFrame zoom={scope.zoom} view={view} /> : null}
       {bino ? (
         <BinocularMarkers
-          markers={binocularMarkers({
+          markers={(() => { try { return binocularMarkers({
             players: enemies.filter((e) => e.alive).map((e) => ({ id: e.id, name: e.name, d: e.d, bearing: e.bearing, color: state?.mode === 'ffa' ? colors.danger : TEAMS[e.team]?.color || colors.danger })),
             headingDeg: heading?.deg,
             zoom: scope.zoom,
             view,
-          })}
+          }) } catch { return [] } })()}
         />
       ) : <EnemyMarkers markers={enemyMarkers} />}
       <BystanderMarkers markers={bystanderMarkers} />
@@ -1080,52 +1085,56 @@ export function LaserTagGame({ room, onExit }) {
           />
         ) : <View />}
         <View style={[styles.fireCol, hud.landscape && { flexDirection: leftHanded ? 'row-reverse' : 'row', alignItems: 'flex-end' }, !hud.landscape && { alignItems: leftHanded ? 'flex-start' : 'flex-end' }, { maxWidth: hud.landscape ? hud.width - hud.side * 2 - hud.mapSize - DOCK_GAP : hud.chipMaxW }]} pointerEvents="box-none">
-          <UavButton count={uav.count} activeMsLeft={uav.myMs} disabled={!playing && !uav.empty} onPress={uav.callUav} size={hud.compact ? 48 : 54} />
-          <GrenadeButton
-            count={grenadeInv.owner ? Infinity : grenadeInv.balance}
-            disabled={!playing || dead || bino}
-            size={hud.compact ? 48 : 54}
-            onThrow={throwGrenade}
-            onEmpty={() => flash('No grenades — get 10 in the Arcade Shop', false)}
-          />
-          <StickyBombButton
-            count={stickyBombInv.owner ? Infinity : stickyBombInv.balance}
-            disabled={!playing || dead || bino}
-            size={hud.compact ? 44 : 50}
-            onPlace={placeStickyBomb}
-            onDetonate={detonateStickyBomb}
-            onEmpty={() => flash('No sticky bombs — get more in the Arcade Shop', false)}
-          />
-          <LandMineButton
-            count={landMineInv.owner ? Infinity : landMineInv.balance}
-            disabled={!playing || dead || bino}
-            size={hud.compact ? 44 : 50}
-            onDrop={dropLandMine}
-            onEmpty={() => flash('No land mines — get more in the Arcade Shop', false)}
-          />
+          {/* Consumables row: UAV + grenade + sticky bomb + land mine side by side */}
+          <View style={styles.consumablesRow} pointerEvents="box-none">
+            <UavButton count={uav.count} activeMsLeft={uav.myMs} disabled={!playing && !uav.empty} onPress={uav.callUav} size={hud.compact ? 40 : 46} />
+            <GrenadeButton
+              count={grenadeInv.owner ? Infinity : grenadeInv.balance}
+              disabled={!playing || dead || bino}
+              size={hud.compact ? 40 : 46}
+              onThrow={throwGrenade}
+              onEmpty={() => flash('No grenades — get 10 in the Arcade Shop', false)}
+            />
+            <StickyBombButton
+              count={stickyBombInv.owner ? Infinity : stickyBombInv.balance}
+              disabled={!playing || dead || bino}
+              size={hud.compact ? 38 : 44}
+              onPlace={placeStickyBomb}
+              onDetonate={detonateStickyBomb}
+              onEmpty={() => flash('No sticky bombs — get more in the Arcade Shop', false)}
+            />
+            <LandMineButton
+              count={landMineInv.owner ? Infinity : landMineInv.balance}
+              disabled={!playing || dead || bino}
+              size={hud.compact ? 38 : 44}
+              onDrop={dropLandMine}
+              onEmpty={() => flash('No land mines — get more in the Arcade Shop', false)}
+            />
+          </View>
+          {/* Optics row: binoculars + scope zoom side by side */}
           {camPerm?.granted && !topMode ? (
-            <Pressable
-              onPress={toggleBino}
-              hitSlop={6}
-              style={({ pressed }) => [styles.zoomBtn, bino && styles.zoomBtnOn, pressed && { opacity: 0.75 }]}
-              accessibilityRole="button"
-              accessibilityLabel={bino ? 'Lower binoculars' : 'Binoculars: look far and see enemy names. You can’t shoot while they’re up.'}
-            >
-              <Text style={{ fontSize: 14 }}>🔭</Text>
-              <Text style={[styles.zoomText, bino && { color: colors.onGold }]}>{bino ? 'Lower' : 'Scout'}</Text>
-            </Pressable>
-          ) : null}
-          {camPerm?.granted && !topMode ? (
-            <Pressable
-              onPress={scope.cycle}
-              hitSlop={6}
-              style={({ pressed }) => [styles.zoomBtn, scope.zoom > 1 && styles.zoomBtnOn, pressed && { opacity: 0.75 }]}
-              accessibilityRole="button"
-              accessibilityLabel={`Scope zoom ${formatZoom(scope.zoom)}. Tap to change, or pinch the screen.`}
-            >
-              <Ionicons name="scan" size={14} color={scope.zoom > 1 ? colors.onGold : '#fff'} />
-              <Text style={[styles.zoomText, scope.zoom > 1 && { color: colors.onGold }]}>{formatZoom(scope.zoom)}</Text>
-            </Pressable>
+            <View style={styles.opticsRow} pointerEvents="box-none">
+              <Pressable
+                onPress={toggleBino}
+                hitSlop={6}
+                style={({ pressed }) => [styles.zoomBtn, bino && styles.zoomBtnOn, pressed && { opacity: 0.75 }]}
+                accessibilityRole="button"
+                accessibilityLabel={bino ? 'Lower binoculars' : 'Binoculars: scout enemies. Cannot shoot.'}
+              >
+                <Text style={{ fontSize: 14 }}>🔭</Text>
+                <Text style={[styles.zoomText, bino && { color: colors.onGold }]}>{bino ? 'Lower' : 'Scout'}</Text>
+              </Pressable>
+              <Pressable
+                onPress={scope.cycle}
+                hitSlop={6}
+                style={({ pressed }) => [styles.zoomBtn, scope.zoom > 1 && styles.zoomBtnOn, pressed && { opacity: 0.75 }]}
+                accessibilityRole="button"
+                accessibilityLabel={`Scope zoom ${formatZoom(scope.zoom)}. Tap to change, or pinch the screen.`}
+              >
+                <Ionicons name="scan" size={14} color={scope.zoom > 1 ? colors.onGold : '#fff'} />
+                <Text style={[styles.zoomText, scope.zoom > 1 && { color: colors.onGold }]}>{formatZoom(scope.zoom)}</Text>
+              </Pressable>
+            </View>
           ) : null}
           <WeaponChip weapon={gun} count={loadout.length} onWheel={openWheel} maxWidth={hud.landscape ? 240 : hud.chipMaxW} />
           {aim.mode === 'camera' && (
@@ -1251,6 +1260,8 @@ const styles = StyleSheet.create({
   aboveDock: { position: 'absolute', gap: 8 },
   dock: { position: 'absolute', alignItems: 'flex-end', justifyContent: 'space-between' },
   fireCol: { gap: DOCK_GAP },
+  consumablesRow: { flexDirection: 'row', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' },
+  opticsRow: { flexDirection: 'row', gap: 6 },
   zoomBtn: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 12, height: 36, borderRadius: 18, backgroundColor: 'rgba(10,12,22,0.65)', borderWidth: 1.5, borderColor: 'rgba(100,200,255,0.4)', shadowColor: '#4dc9f6', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.3, shadowRadius: 6 },
   zoomBtnOn: { backgroundColor: colors.gold, borderColor: colors.gold, shadowColor: colors.gold, shadowOpacity: 0.6, shadowRadius: 10 },
   zoomText: { color: '#fff', fontWeight: '800', fontSize: 13, textShadowColor: 'rgba(0,0,0,0.5)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 3 },

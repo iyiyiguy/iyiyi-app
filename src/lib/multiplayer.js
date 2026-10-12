@@ -178,7 +178,7 @@ export const MP_GAMES = {
     icon: '🔪',
     minPlayers: 5,
     maxPlayers: 15,
-    usesLocation: false,
+    usesLocation: true,
     blurb: 'Classic social deduction. The Town sleeps while the Mafia secretly eliminates someone each night. By day, discuss and vote — find the Mafia before they outnumber you.',
     settings: {
       nightSeconds: { label: 'Night length', options: [20, 30, 45], default: 30, unit: 's' },

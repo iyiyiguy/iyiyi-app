@@ -42,7 +42,9 @@ export function useScopeZoom(maxZoom, { enabled = true, onChange } = {}) {
   onChangeRef.current = onChange
 
   const setZoom = useCallback((z) => {
-    const next = Math.round(clamp(z, 1, maxRef.current) * 10) / 10
+    const n = Number(z)
+    if (!Number.isFinite(n)) return
+    const next = Math.round(clamp(n, 1, maxRef.current) * 10) / 10
     if (next === zoomRef.current) return
     zoomRef.current = next
     setZoomState(next)
@@ -77,12 +79,14 @@ export function useScopeZoom(maxZoom, { enabled = true, onChange } = {}) {
     onPanResponderMove: (e) => {
       try {
         const d = touchDistance(e.nativeEvent.touches)
-        if (!d) return
-        if (!pinch.current.startDist) {
+        if (!d || d < 1) return
+        if (!pinch.current.startDist || pinch.current.startDist < 1) {
           pinch.current = { startDist: d, startZoom: zoomRef.current }
           return
         }
-        setZoom(pinch.current.startZoom * (d / pinch.current.startDist))
+        const ratio = d / pinch.current.startDist
+        if (!Number.isFinite(ratio) || ratio <= 0) return
+        setZoom(pinch.current.startZoom * ratio)
       } catch {}
     },
     onPanResponderRelease: () => {
