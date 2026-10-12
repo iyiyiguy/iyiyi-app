@@ -13,11 +13,70 @@
 //   (`arcade:lobbies`) with a coarse (~1 km) location, so nearby players can
 //   find them; joining by 5-character code always works.
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
-import { AppState } from 'react-native'
+import { AppState, Platform } from 'react-native'
 import * as Location from 'expo-location'
+import * as TaskManager from 'expo-task-manager'
 import { supabase } from './supabase'
 import { apiJson } from './api'
 import { recordGameResult } from './arcadeStats'
+
+// ---------------------------------------------------------------------------
+// Background location task – keeps iOS from suspending our WebSocket while
+// the player is in a laser tag game and switches to another app briefly.
+// The task itself is a no-op: we only need the OS to think we are using GPS
+// so it keeps our process (and network) alive.
+// ---------------------------------------------------------------------------
+
+const BG_LOCATION_TASK = 'arcade-bg-location'
+
+TaskManager.defineTask(BG_LOCATION_TASK, () => {
+  // Nothing to do — the foreground location watcher handles position sharing.
+  // We only need the OS to keep our process (and network) alive.
+})
+
+let _bgLocationRunning = false
+
+async function startBackgroundLocation() {
+  if (_bgLocationRunning) return
+  try {
+    // Need "always" permission for background location on iOS
+    const { status } = await Location.requestBackgroundPermissionsAsync()
+    if (status !== 'granted') {
+      console.log('background location permission not granted — lobby may disconnect in background')
+      return
+    }
+    const running = await Location.hasStartedLocationUpdatesAsync(BG_LOCATION_TASK)
+    if (running) { _bgLocationRunning = true; return }
+    await Location.startLocationUpdatesAsync(BG_LOCATION_TASK, {
+      accuracy: Location.Accuracy.Balanced,
+      // Low frequency — we only need this to keep the process alive
+      timeInterval: 10000,
+      distanceInterval: 0,
+      // iOS-specific: show a subtle indicator that location is in use
+      showsBackgroundLocationIndicator: true,
+      foregroundService: {
+        // Android: required foreground service notification
+        notificationTitle: 'iYiYi Laser Tag',
+        notificationBody: 'Staying connected to your game',
+        notificationColor: '#6c1fc9',
+      },
+    })
+    _bgLocationRunning = true
+  } catch (e) {
+    console.warn('startBackgroundLocation failed', e?.message ?? e)
+  }
+}
+
+async function stopBackgroundLocation() {
+  if (!_bgLocationRunning) return
+  try {
+    const running = await Location.hasStartedLocationUpdatesAsync(BG_LOCATION_TASK)
+    if (running) await Location.stopLocationUpdatesAsync(BG_LOCATION_TASK)
+  } catch (e) {
+    console.warn('stopBackgroundLocation', e?.message ?? e)
+  }
+  _bgLocationRunning = false
+}
 
 // ---------------------------------------------------------------------------
 // Game catalogue (multiplayer games only)
@@ -698,8 +757,26 @@ export class Room {
     this._snap = null
     this._posSnap = this.positions
     this._appStateSub = AppState.addEventListener('change', (s) => {
-      if (s === 'active' && !this.left && this.status !== 'connected' && this.status !== 'error') this._rebuild(0)
+      if (this.left) return
+      if (s === 'active') {
+        // Coming back to foreground — if disconnected, reconnect immediately;
+        // if still connected, re-track presence so others know we are back.
+        if (this.status !== 'connected' && this.status !== 'error') {
+          this._rebuild(0)
+        } else if (this.channel) {
+          this._track()
+        }
+      }
+      // We intentionally do NOT disconnect or tear down on 'background' —
+      // the background location task keeps the process and network alive.
     })
+    // For games that use location (laser tag), start background location so
+    // the OS keeps our WebSocket alive while the player checks another app.
+    this._bgLocationStarted = false
+    if (this.gameId === 'lasertag') {
+      this._bgLocationStarted = true
+      startBackgroundLocation()
+    }
     this._safeOpen()
   }
 
@@ -1179,6 +1256,7 @@ export class Room {
     this.left = true
     this._appStateSub?.remove?.()
     this._teardown()
+    if (this._bgLocationStarted) stopBackgroundLocation()
     if (this.status !== 'error') this.status = 'closed'
     this._changed()
     if (activeRoom === this) activeRoom = null
