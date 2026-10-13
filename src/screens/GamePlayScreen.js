@@ -15,7 +15,9 @@ import { RoyaleGame } from '../games/royale/RoyaleGame'
 import { MafiaGame } from '../games/MafiaGame'
 import { HeadsUp7UpGame } from '../games/HeadsUp7UpGame'
 import { GameMenu } from '../games/GameMenu'
-import { Btn, Card, ConnectionBanner, Pill, PlayerRow, PlayerTapContext, useTint } from '../games/MultiplayerUI'
+import { Ionicons } from '@expo/vector-icons'
+import { HUD } from '../games/laser/HudPro'
+import { Btn, ConnectionBanner, Pill, PlayerRow, PlayerTapContext, useTint } from '../games/MultiplayerUI'
 import ProfilePreviewSheet from '../components/ProfilePreviewSheet'
 import {
   MP_GAMES, getActiveRoom, getMyProfile, isArenaCode, isMultiplayerGame, openRoom, resolveGameId, useRoomPositions, useRoomSnapshot,
@@ -30,7 +32,8 @@ export default function GamePlayScreen({ navigation, route }) {
   const multiplayer = isMultiplayerGame(gameId)
   const immersive = gameId === 'lasertag' || gameId === 'royale' // camera fills the whole screen
   const scheme = useColorScheme()
-  const tint = useTint()
+  const schemeTint = useTint()
+  const tint = immersive ? 'dark' : schemeTint // shooters: dark glass over the camera whatever the system theme
   const insets = useSafeAreaInsets()
 
   const [room, setRoom] = useState(() => (multiplayer ? getActiveRoom(gameId, code) : null))
@@ -192,16 +195,16 @@ export default function GamePlayScreen({ navigation, route }) {
   const buttons = (
     <View style={styles.btnRow}>
       <Pressable onPress={() => setPanel((p) => (p === 'players' ? null : 'players'))} style={[styles.iconBtn, immersive && styles.iconBtnDark]} accessibilityRole="button" accessibilityLabel="Players">
-        <Text style={styles.iconText}>👥</Text>
+        <Ionicons name="people" size={18} color={immersive ? '#fff' : colors.text} />
       </Pressable>
       {gameId !== 'chess' ? (
         <Pressable onPress={() => setPanel((p) => (p === 'chat' ? null : 'chat'))} style={[styles.iconBtn, immersive && styles.iconBtnDark]} accessibilityRole="button" accessibilityLabel="Chat">
-          <Text style={styles.iconText}>💬</Text>
-          {unread > 0 && <View style={styles.badge}><Text style={styles.badgeText}>{unread > 9 ? '9+' : unread}</Text></View>}
+          <Ionicons name="chatbubble-ellipses" size={18} color={immersive ? '#fff' : colors.text} />
+          {unread > 0 && <View style={[styles.badge, immersive && styles.badgeDark]}><Text style={styles.badgeText}>{unread > 9 ? '9+' : unread}</Text></View>}
         </Pressable>
       ) : null}
       <Pressable onPress={() => { setPanel(null); setMenuOpen(true) }} style={[styles.iconBtn, immersive && styles.iconBtnDark]} accessibilityRole="button" accessibilityLabel="Menu">
-        <Text style={[styles.iconText, immersive && { color: colors.onBrand }]}>☰</Text>
+        <Ionicons name="menu" size={20} color={immersive ? '#fff' : colors.text} />
       </Pressable>
     </View>
   )
@@ -210,7 +213,7 @@ export default function GamePlayScreen({ navigation, route }) {
     <>
       {panel === 'players' && snap && (
         <View style={[styles.overlay, { top: insets.top + 56 }]}>
-          <Card>
+          <GlassCard tint={tint} intensity={70} radius={radii.md} padding={14} style={{ marginBottom: 12 }}>
             <Text style={[type.label, { marginBottom: 4 }]}>Players · code {snap.code}</Text>
             {snap.roster.map((p) => (
               <PlayerRow
@@ -223,7 +226,7 @@ export default function GamePlayScreen({ navigation, route }) {
               />
             ))}
             <Text style={[type.caption, { marginTop: 6 }]}>Muting hides that player’s chat messages on your phone.</Text>
-          </Card>
+          </GlassCard>
         </View>
       )}
       {panel === 'chat' && (
@@ -286,7 +289,7 @@ export default function GamePlayScreen({ navigation, route }) {
         {body}
         {/* Battle Royale's lobby (shown in this screen) has its own header and Leave button. */}
         {!(gameId === 'royale' && snap?.info?.phase !== 'playing') && (
-          <View style={[styles.floating, { top: insets.top + 6 }]}>{buttons}</View>
+          <View style={[styles.floating, { top: insets.top + 6, right: 12 + (insets.right || 0) }]}>{buttons}</View>
         )}
         {snap && snap.status !== 'connected' && snap.status !== 'error' && (
           <View style={[styles.floatBanner, { top: insets.top + 54 }]}><ConnectionBanner status={snap.status} /></View>
@@ -318,15 +321,15 @@ export default function GamePlayScreen({ navigation, route }) {
 }
 
 const styles = StyleSheet.create({
-  immersive: { flex: 1, backgroundColor: colors.ink },
+  immersive: { flex: 1, backgroundColor: HUD.bg },
   topBar: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 8, gap: 6 },
   btnRow: { flexDirection: 'row', gap: 8 },
   iconBtn: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.glassFill, borderWidth: 1, borderColor: colors.glassBorderDark },
-  iconBtnDark: { backgroundColor: 'rgba(0,0,0,0.45)', borderColor: 'rgba(255,255,255,0.25)' },
-  iconText: { fontSize: 18, color: colors.text },
+  iconBtnDark: { backgroundColor: HUD.panelStrong, borderColor: HUD.border },
   badge: { position: 'absolute', top: -2, right: -2, minWidth: 18, height: 18, borderRadius: 9, backgroundColor: colors.magenta, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4 },
+  badgeDark: { backgroundColor: HUD.red, borderWidth: 1.5, borderColor: HUD.bg },
   badgeText: { fontSize: 10, fontWeight: '700', color: colors.onBrand },
-  floating: { position: 'absolute', right: 12 },
+  floating: { position: 'absolute' },
   floatBanner: { position: 'absolute', left: 12, right: 12 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
   overlay: { position: 'absolute', left: 12, right: 12 },

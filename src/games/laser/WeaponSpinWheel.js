@@ -7,6 +7,7 @@
 // JS work while spinning is a slot-change tick.
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { Animated, Easing, PanResponder, Pressable, StyleSheet, Text, View, useWindowDimensions, Image } from 'react-native'
+import { HUD, hudSheet, hudType } from './HudPro'
 import { buzz } from '../../lib/gamePrefs'
 import { fireRateLabel, gunRatings } from '../../lib/guns'
 import { gunArt } from '../../lib/gunArt'
@@ -204,19 +205,19 @@ const st = StyleSheet.create({
   root: { zIndex: 60, elevation: 60 },
   backdrop: { ...StyleSheet.absoluteFill, backgroundColor: 'rgba(0,0,0,0.5)' },
   dock: { position: 'absolute', left: 0, right: 0, bottom: 0 },
-  info: { marginHorizontal: 16, marginBottom: 8, padding: 14, borderRadius: 20, backgroundColor: 'rgba(12,14,26,0.92)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)' },
+  info: { marginHorizontal: 16, marginBottom: 8, padding: 14, ...hudSheet, borderRadius: 14 },
   infoHead: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 },
-  infoName: { flexShrink: 1, fontSize: 18, fontWeight: '800', color: '#fff' },
+  infoName: { flexShrink: 1, fontSize: 16, fontWeight: '900', color: '#fff', letterSpacing: 1.2, textTransform: 'uppercase' },
   badge: { paddingHorizontal: 7, paddingVertical: 2, borderRadius: 6, backgroundColor: 'rgba(255,255,255,0.16)' },
-  badgeAuto: { backgroundColor: 'rgba(255,77,94,0.85)' },
+  badgeAuto: { backgroundColor: HUD.red },
   rate: { flexShrink: 1, fontSize: 11, fontWeight: '700', color: GOLD },
   badgeText: { fontSize: 10, fontWeight: '900', color: '#fff', letterSpacing: 0.8 },
   stats: { flexDirection: 'row', flexWrap: 'wrap', rowGap: 6, columnGap: 14 },
   stat: { width: '46%', flexDirection: 'row', alignItems: 'center', gap: 6 },
-  statLabel: { width: 58, fontSize: 11, fontWeight: '600', color: 'rgba(255,255,255,0.62)' },
+  statLabel: { ...hudType.label, fontSize: 9, width: 58 },
   track: { flex: 1, height: 5, borderRadius: 3, backgroundColor: 'rgba(255,255,255,0.1)', overflow: 'hidden' },
   fill: { height: 5, borderRadius: 3, backgroundColor: GOLD },
-  hint: { fontSize: 11, color: 'rgba(255,255,255,0.55)', marginTop: 10, textAlign: 'center' },
+  hint: { ...hudType.label, fontSize: 9, textAlign: 'center', marginTop: 10 },
   wheel: { width: '100%', paddingBottom: 30 },
   slotRing: { position: 'absolute', width: 100, height: 100, borderRadius: 50, borderWidth: 2, borderColor: 'rgba(255,201,77,0.55)' },
   item: { position: 'absolute', top: 10, width: 88, alignItems: 'center' },

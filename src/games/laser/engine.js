@@ -210,9 +210,10 @@ function tickLandMines(state, now, posOf) {
   const remaining = []
   const snd = state.mode === 'snd'
   let sndState = state.snd
+  let changed = false
   for (const mine of state.landMines) {
     const placer = players[mine.by]
-    if (!placer) continue // owner left the match: the mine goes with them
+    if (!placer) { changed = true; continue } // owner left the match: the mine goes with them
     let triggered = false
     for (const [id, target] of Object.entries(players)) {
       if (id === mine.by || !target.alive) continue
@@ -227,6 +228,7 @@ function tickLandMines(state, now, posOf) {
       break
     }
     if (!triggered) { remaining.push(mine); continue }
+    changed = true
     const blastHits = []
     // Detonate — damage all enemies in LAND_MINE_RADIUS_M
     for (const [id, target] of Object.entries(players)) {
@@ -259,6 +261,7 @@ function tickLandMines(state, now, posOf) {
     }
     blasts = [...blasts, { id: `${now}-${Math.random().toString(36).slice(2, 6)}`, kind: 'land_mine', lat: mine.lat, lng: mine.lng, by: mine.by, byName: placer.name, at: now, hits: blastHits }].slice(-BLAST_MAX)
   }
+  if (!changed) return state
   return { ...state, players, feed, teamScore, blasts, landMines: remaining, ...(snd && sndState !== state.snd ? { snd: sndState } : {}) }
 }
 

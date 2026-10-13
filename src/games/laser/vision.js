@@ -69,8 +69,12 @@ export function pickVisionTarget({ opponents, myPos, headingDeg, headingAcc, bod
   }
   const matched = cands.filter((c) => c.diff <= c.tol).sort((a, b) => a.diff / a.tol - b.diff / b.tol)[0]
   if (matched) return { target: matched.o, distance: matched.d }
-  // The camera definitely sees a person: with exactly one enemy in reach it's them.
-  const fallback = cands.length === 1 ? cands[0] : cands.filter((c) => c.diff <= FALLBACK_WINDOW_DEG).sort((a, b) => a.d - b.d)[0]
+  // The camera definitely sees a person: with exactly one enemy and the two of you inside GPS
+  // noise (same room) it's them; otherwise they must be roughly in that direction.
+  const only = cands.length === 1 ? cands[0] : null
+  const fallback = only && only.d <= (myPos.acc ?? 10) + (only.o.pos.acc ?? 10)
+    ? only
+    : cands.filter((c) => c.diff <= Math.max(FALLBACK_WINDOW_DEG, c.tol)).sort((a, b) => a.d - b.d)[0]
   return fallback ? { target: fallback.o, distance: fallback.d } : null
 }
 

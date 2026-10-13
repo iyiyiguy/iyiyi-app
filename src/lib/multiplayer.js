@@ -91,8 +91,8 @@ export const LASER_MODES = {
 }
 
 export const TEAMS = {
-  A: { id: 'A', name: 'Red', color: '#b3123f' },
-  B: { id: 'B', name: 'Blue', color: '#6c1fc9' },
+  A: { id: 'A', name: 'Red', color: '#ff3b5c' },
+  B: { id: 'B', name: 'Blue', color: '#3a8dff' },
 }
 
 const SAFETY = 'Play outside in an open area away from traffic, and watch where you are going.'
@@ -232,10 +232,10 @@ export function howToPlay(gameId, settings = {}) {
   if (gameId === 'lasertag') {
     const mode = LASER_MODES[settings?.mode] ? settings.mode : 'ffa'
     const aim = [
-      `Portrait (phone upright) = Trigger mode: raise your phone like a camera and put the crosshair on a player. The whole screen is the trigger — tap for one shot, hold to keep firing at your gun's rate. Your phone checks what is actually under the crosshair; other players can keep their phones in their pockets.`,
+      'AIM (hold the phone upright, like a camera): put the crosshair on a player. The whole screen is the trigger — tap for one shot, hold for automatic fire. Your phone checks what is actually under the crosshair; other players can keep their phones in their pockets.',
+      'HIP FIRE (hold the phone flat or sideways): point the top edge of the phone at a player and tap anywhere. It uses GPS and the compass only, so it is faster but less precise.',
       'Head shots do double damage (about 50), body shots about 25, arms and legs about 15. Your gun changes these. Damage drops off past 20 m and camera aim reaches about 30 m.',
-      'Landscape or flat = Top-edge mode: point the top of the phone at a player and tap anywhere to fire. It uses GPS and the compass only, so it is less precise.',
-      'The mode switches automatically as you rotate the phone (shown at the top of the screen). You can force one — or the classic crosshair with a FIRE button — in the menu ☰. On phones without on-device detection, aiming uses the compass.',
+      'The mode switches automatically as you rotate the phone (shown at the top of the screen). You can force one — or the classic crosshair with a FIRE button — in the menu under Settings → Aim & fire.',
     ]
     const byMode = {
       ffa: ['Every hit scores 10 points (+10 for a headshot) and a tag-out scores 100.', 'Tagged-out players are back in after 8 seconds, with 2 seconds of spawn protection.', 'Most points when time runs out wins.'],
@@ -839,6 +839,8 @@ export class Room {
           this.failures = 0
           this._setStatus('connected')
           this._track()
+          // Host: whatever changed while the link was down goes out now.
+          if (this.isHost() && this.state) { this._stateDirty = true; if (!this._pubTimer) this._flushState() }
           if (this.mode === 'join' && !this.everSynced) {
             clearTimeout(this.joinCheckTimer)
             this.joinCheckTimer = setTimeout(() => this._checkJoined(), 8000)
@@ -1186,6 +1188,12 @@ export class Room {
 
   _flushState() {
     if (this.left) return
+    if (!this._linkUp()) {
+      // Link is down: keep the dirty flag and the outbox, try again shortly.
+      clearTimeout(this._pubTimer)
+      this._pubTimer = setTimeout(() => { this._pubTimer = null; if (!this.left) this._flushState() }, STATE_FLUSH_MS * 2)
+      return
+    }
     if (this._stateDirty && this.isHost() && this.state) {
       this._stateDirty = false
       this.stateSeq += 1

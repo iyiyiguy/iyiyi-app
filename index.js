@@ -32,13 +32,23 @@ try {
     const [App, setApp] = React.useState(null);
     React.useEffect(() => {
       let alive = true;
-      const load = () => { if (alive) setApp(() => require('./App').default); };
+      // An import-time error in the app must still surface (red box / Sentry), never a blank screen.
+      const load = () => {
+        if (!alive) return;
+        try { setApp(() => require('./App').default); } catch (e) { setTimeout(() => { throw e; }, 0); }
+      };
       if (Platform.OS === 'ios') { load(); return () => { alive = false; }; }
-      const AsyncStorage = require('@react-native-async-storage/async-storage').default;
-      AsyncStorage.getItem('iyiyi_theme_pref').catch(() => null).then((pref) => {
-        try { if (pref === 'light' || pref === 'dark') Appearance.setColorScheme(pref); } catch (e) { /* ignore */ }
-        load();
-      });
+      let AsyncStorage = null;
+      try { AsyncStorage = require('@react-native-async-storage/async-storage').default; } catch (e) { AsyncStorage = null; }
+      if (!AsyncStorage) { load(); return () => { alive = false; }; }
+      Promise.resolve()
+        .then(() => AsyncStorage.getItem('iyiyi_theme_pref'))
+        .catch(() => null)
+        .then((pref) => {
+          try { if (pref === 'light' || pref === 'dark') Appearance.setColorScheme(pref); } catch (e) { /* ignore */ }
+          load();
+        })
+        .catch((e) => setTimeout(() => { throw e; }, 0));
       return () => { alive = false; };
     }, []);
     return App ? React.createElement(App) : null;

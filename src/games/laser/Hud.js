@@ -1,12 +1,17 @@
 // Laser Tag heads-up display pieces: minimap, countdown, round-break and
 // end-of-match summary.
-import React from 'react'
-import { ScrollView, StyleSheet, Text, View } from 'react-native'
+import React, { useEffect, useRef } from 'react'
+import { ActivityIndicator, Animated, Easing, ScrollView, StyleSheet, Text, View } from 'react-native'
+import { Ionicons } from '@expo/vector-icons'
+import { LinearGradient } from 'expo-linear-gradient'
 import GlassPanel from '../../components/GlassPanel'
-import { Avatar, Btn, Card, Pill, PlayerTap } from '../MultiplayerUI'
+import { Avatar, Pill, PlayerTap } from '../MultiplayerUI'
 import { ScoreTable } from './HudExtras'
+import { HUD, HudCta, hudGlow, hudPanel, hudSheet, hudType } from './HudPro'
+import { ROUND_BREAK_MS } from './engine'
 import { LASER_MODES, TEAMS, offsetMeters } from '../../lib/multiplayer'
-import { colors, radii, type } from '../../theme'
+import { withAlpha } from '../GameMap'
+import { colors } from '../../theme'
 
 export const hudShadow = { textShadowColor: 'rgba(0,0,0,0.85)', textShadowRadius: 4, textShadowOffset: { width: 0, height: 1 } }
 
@@ -62,19 +67,28 @@ export function Minimap({ size = 140, rangeM = 75, me, headingDeg = 0, points = 
 export function CountdownOverlay({ state, now, meTeam }) {
   const left = Math.max(0, Math.ceil((state.startsAt - now) / 1000))
   const mode = LASER_MODES[state.mode]
-  let sub = mode?.blurb
-  if (state.mode === 'snd') {
-    const side = state.snd.sides[meTeam]
-    sub = `Round ${state.snd.roundNo} of ${state.snd.totalRounds} · ${TEAMS[meTeam]?.name} is ${side === 'attack' ? 'ATTACKING' : 'DEFENDING'}`
-  } else if (state.mode === 'tdm' && meTeam) {
-    sub = `You are on ${TEAMS[meTeam].name}`
-  }
+  const pop = useRef(new Animated.Value(1)).current
+  useEffect(() => {
+    pop.setValue(1.35)
+    Animated.timing(pop, { toValue: 1, duration: 320, easing: Easing.out(Easing.cubic), useNativeDriver: true }).start()
+  }, [left, pop])
+  const go = left === 0
+  const side = state.mode === 'snd' ? state.snd.sides[meTeam] : null
   return (
     <View style={styles.overlay} pointerEvents="none">
+      <View style={styles.letterboxTop} />
+      <View style={styles.letterboxBottom} />
+      <Text style={[hudType.kicker, hudShadow]}>MATCH STARTING</Text>
       <Text style={[styles.overTitle, hudShadow]}>{mode?.name}</Text>
-      <Text style={[styles.big, hudShadow]}>{left > 0 ? left : 'GO'}</Text>
-      {!!sub && <Text style={[styles.overSub, hudShadow]}>{sub}</Text>}
-      {state.mode === 'snd' && state.snd.swapped && state.snd.roundNo > 1 && <Text style={[styles.overSub, hudShadow, { color: colors.gold }]}>Sides swapped</Text>}
+      <Animated.Text style={[styles.big, go && { color: HUD.green, textShadowColor: HUD.green }, { transform: [{ scale: pop }] }]}>{go ? 'GO' : left}</Animated.Text>
+      {state.mode === 'snd' ? (
+        <Text style={[styles.overSub, hudShadow]}>
+          ROUND {state.snd.roundNo}/{state.snd.totalRounds}  ·  <Text style={{ color: TEAMS[meTeam]?.color }}>{TEAMS[meTeam]?.name}</Text>  ·  <Text style={{ color: side === 'attack' ? HUD.red : HUD.accent }}>{side === 'attack' ? 'ATTACK' : 'DEFEND'}</Text>
+        </Text>
+      ) : state.mode === 'tdm' && meTeam ? (
+        <Text style={[styles.overSub, hudShadow]}>YOU ARE <Text style={{ color: TEAMS[meTeam].color }}>{TEAMS[meTeam].name}</Text></Text>
+      ) : !!mode?.blurb && <Text style={[styles.overSub, hudShadow]}>{mode.blurb}</Text>}
+      {state.mode === 'snd' && state.snd.swapped && state.snd.roundNo > 1 && <Text style={[styles.overSub, hudShadow, { color: HUD.gold }]}>SIDES SWAPPED</Text>}
     </View>
   )
 }
@@ -89,20 +103,24 @@ const REASONS = {
 export function RoundBreak({ state, now }) {
   const r = state.snd.lastResult
   const left = Math.max(0, Math.ceil((state.startsAt - now) / 1000))
+  const win = TEAMS[r?.winner]
+  const pct = Math.max(0, Math.min(1, (state.startsAt - now) / ROUND_BREAK_MS))
+  const half = state.snd.roundNo === Math.ceil(state.snd.totalRounds / 2)
   return (
-    <View style={styles.overlayDim}>
-      <Card style={{ width: '88%' }}>
-        <Text style={[type.label, { textAlign: 'center' }]}>Round {r?.roundNo} of {state.snd.totalRounds}</Text>
-        <Text style={[type.display, { textAlign: 'center', color: TEAMS[r?.winner]?.color }]}>{TEAMS[r?.winner]?.name} wins</Text>
-        <Text style={[type.body, { textAlign: 'center', marginBottom: 10 }]}>{REASONS[r?.reason]}</Text>
-        <View style={styles.scoreRow}>
+    <View style={styles.overlayDim} pointerEvents="none">
+      <View style={[styles.breakCard, { borderTopColor: win?.color || HUD.gold }]}>
+        <Text style={[hudType.kicker, { textAlign: 'center' }]}>ROUND {r?.roundNo} OF {state.snd.totalRounds}</Text>
+        <Text style={[styles.breakTitle, { color: win?.color || '#fff', textShadowColor: win?.color || HUD.accent }]}>{win?.name} WINS</Text>
+        <Text style={[hudType.label, { textAlign: 'center', marginTop: 4 }]}>{REASONS[r?.reason]}</Text>
+        <View style={[styles.scoreRow, { marginTop: 14 }]}>
           <TeamScore team="A" value={state.snd.wins.A} />
-          <Text style={type.title}>–</Text>
+          <Text style={styles.dash}>–</Text>
           <TeamScore team="B" value={state.snd.wins.B} />
         </View>
-        {state.snd.roundNo === Math.floor(state.snd.totalRounds / 2) && <Text style={[type.caption, { textAlign: 'center', marginTop: 8 }]}>Half time: sides swap next round.</Text>}
-        <Text style={[type.caption, { textAlign: 'center', marginTop: 8 }]}>Next round in {left}s</Text>
-      </Card>
+        {half && <Text style={[hudType.label, { color: HUD.gold, textAlign: 'center', marginTop: 10 }]}>HALF TIME · SIDES SWAP</Text>}
+        <View style={styles.breakTrack}><View style={[styles.breakFill, { width: `${pct * 100}%` }]} /></View>
+        <Text style={[hudType.label, { textAlign: 'center', marginTop: 6 }]}>NEXT ROUND IN {left}S</Text>
+      </View>
     </View>
   )
 }
@@ -110,22 +128,22 @@ export function RoundBreak({ state, now }) {
 function TeamScore({ team, value }) {
   return (
     <View style={{ alignItems: 'center', minWidth: 80 }}>
-      <Text style={[type.label, { color: TEAMS[team].color }]}>{TEAMS[team].name}</Text>
-      <Text style={type.display}>{value}</Text>
+      <Text style={[hudType.label, { color: TEAMS[team].color, letterSpacing: 1.8 }]}>{TEAMS[team].name}</Text>
+      <Text style={[hudType.num, { fontSize: 44 }]}>{value}</Text>
     </View>
   )
 }
 
 // End-of-match results screen: result banner, team score, MVP, sorted (team-grouped)
 // table, Rematch (host) / Leave.
-export function MatchSummary({ state, meId, roster, shotsBy, isHost, onPlayAgain, onExit }) {
+export function MatchSummary({ state, meId, roster, shotsBy, isHost, onPlayAgain, onExit, bottomInset = 0 }) {
   const avatarOf = (id) => roster.find((r) => r.id === id)?.avatar
   const me = state.players[meId]
   const iWon = state.winners?.includes(meId)
   let title = iWon ? 'Victory' : 'Defeat'
-  let tone = iWon ? '#2fdc8f' : '#ff4d5e'
+  let tone = iWon ? HUD.green : HUD.red
   if (state.mode !== 'ffa') {
-    if (!state.winnerTeam) { title = 'Draw'; tone = '#ffc94d' } else if (state.winnerTeam === me?.team) { title = 'Victory'; tone = '#2fdc8f' } else { title = 'Defeat'; tone = '#ff4d5e' }
+    if (!state.winnerTeam) { title = 'Draw'; tone = HUD.gold } else if (state.winnerTeam === me?.team) { title = 'Victory'; tone = HUD.green } else { title = 'Defeat'; tone = HUD.red }
   }
   const sub = state.mode === 'ffa'
     ? `${LASER_MODES.ffa.name} · you placed #${1 + Object.values(state.players).filter((p) => p.score > (me?.score || 0)).length} of ${Object.keys(state.players).length}`
@@ -133,12 +151,19 @@ export function MatchSummary({ state, meId, roster, shotsBy, isHost, onPlayAgain
   const mvp = state.mvp ? state.players[state.mvp] : null
   const scoreA = state.mode === 'snd' ? state.snd?.wins?.A : state.teamScore?.A
   const scoreB = state.mode === 'snd' ? state.snd?.wins?.B : state.teamScore?.B
+  const mvpStats = [
+    `${mvp?.score || 0} PTS`, `${mvp?.kills || 0} K / ${mvp?.deaths || 0} D`, `${mvp?.hits || 0} HITS`,
+    mvp?.headshots ? `${mvp.headshots} HS` : null, mvp?.plants ? `${mvp.plants} PLANTS` : null, mvp?.defuses ? `${mvp.defuses} DEFUSES` : null,
+  ].filter(Boolean).join('  ·  ')
   return (
-    <ScrollView style={{ flex: 1, backgroundColor: '#07080f' }} contentContainerStyle={styles.summary}>
-      <Text style={[styles.resultTitle, { color: tone }]}>{title}</Text>
+    <ScrollView style={{ flex: 1, backgroundColor: HUD.bg }} contentContainerStyle={[styles.summary, { paddingBottom: 48 + bottomInset }]}>
+      <LinearGradient pointerEvents="none" colors={[withAlpha(tone, 0.26), 'rgba(7,8,15,0)']} style={styles.summaryWash} />
+      <Text style={[hudType.kicker, { textAlign: 'center' }]}>MATCH COMPLETE</Text>
+      <Text style={[styles.resultTitle, { color: tone, textShadowColor: tone }]}>{title}</Text>
+      <View style={[styles.rule, { backgroundColor: tone, ...hudGlow(tone, 10) }]} />
       <Text style={styles.resultSub}>{sub}</Text>
       {state.mode !== 'ffa' && (
-        <View style={[styles.scoreRow, { marginTop: 12 }]}>
+        <View style={[hudPanel, styles.scorePanel]}>
           <DarkTeamScore team="A" value={scoreA ?? 0} />
           <Text style={styles.dash}>–</Text>
           <DarkTeamScore team="B" value={scoreB ?? 0} />
@@ -146,12 +171,17 @@ export function MatchSummary({ state, meId, roster, shotsBy, isHost, onPlayAgain
       )}
       {mvp && (
         <View style={styles.mvpCard}>
-          <Text style={styles.mvpLabel}>⭐ MVP</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            <Ionicons name="trophy" size={12} color={HUD.gold} />
+            <Text style={[hudType.kicker, { color: HUD.gold }]}>MATCH MVP</Text>
+          </View>
           <PlayerTap player={{ id: state.mvp, username: mvp.name, avatar: avatarOf(state.mvp) }} style={styles.mvpRow}>
-            <Avatar uri={avatarOf(state.mvp)} name={mvp.name} size={56} />
+            <View style={styles.mvpAvatar}>
+              <Avatar uri={avatarOf(state.mvp)} name={mvp.name} size={52} />
+            </View>
             <View style={{ flex: 1, marginLeft: 12 }}>
               <Text style={styles.mvpName} numberOfLines={1}>{mvp.name}{state.mvp === meId ? ' (you)' : ''}</Text>
-              <Text style={styles.mvpStats}>{mvp.score} pts · {mvp.kills} K / {mvp.deaths} D · {mvp.hits} hits{mvp.headshots ? ` · ${mvp.headshots} HS` : ''}{mvp.plants ? ` · ${mvp.plants} plants` : ''}{mvp.defuses ? ` · ${mvp.defuses} defuses` : ''}</Text>
+              <Text style={styles.mvpStats} numberOfLines={2}>{mvpStats}</Text>
             </View>
           </PlayerTap>
         </View>
@@ -160,9 +190,14 @@ export function MatchSummary({ state, meId, roster, shotsBy, isHost, onPlayAgain
         <ScoreTable state={state} meId={meId} shotsBy={shotsBy} />
       </View>
       {isHost
-        ? <Btn title="Rematch" variant="primary" onPress={onPlayAgain} />
-        : <Text style={styles.waitText}>Waiting for the host to start a rematch…</Text>}
-      <Btn title="Leave" onPress={onExit} style={{ marginTop: 12 }} />
+        ? <HudCta title="Rematch" icon="refresh" onPress={onPlayAgain} />
+        : (
+          <View style={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8 }}>
+            <ActivityIndicator color={HUD.muted} size="small" />
+            <Text style={styles.waitText}>WAITING FOR THE HOST…</Text>
+          </View>
+        )}
+      <HudCta tone="ghost" title="Leave" icon="exit" onPress={onExit} style={{ marginTop: 12 }} />
     </ScrollView>
   )
 }
@@ -191,29 +226,32 @@ const styles = StyleSheet.create({
   areaLabel: { fontSize: 10, fontWeight: '800' },
   north: { position: 'absolute', width: 12, textAlign: 'center', fontSize: 10, fontWeight: '800', color: colors.gold, ...hudShadow },
   scale: { position: 'absolute', bottom: 6, alignSelf: 'center', fontSize: 9, color: colors.onBrandMuted, ...hudShadow },
-  overlay: { ...StyleSheet.absoluteFill, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.35)', padding: 24 },
-  overlayDim: { ...StyleSheet.absoluteFill, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.45)' },
-  overTitle: { ...type.title, color: colors.onBrand },
-  big: { fontSize: 110, fontWeight: '800', color: colors.onBrand },
-  overSub: { ...type.body, color: colors.onBrand, textAlign: 'center', marginTop: 6 },
+  overlay: { ...StyleSheet.absoluteFill, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.42)', padding: 24 },
+  letterboxTop: { position: 'absolute', top: 0, left: 0, right: 0, height: 72, backgroundColor: 'rgba(0,0,0,0.55)', borderBottomWidth: 1, borderColor: HUD.border },
+  letterboxBottom: { position: 'absolute', bottom: 0, left: 0, right: 0, height: 72, backgroundColor: 'rgba(0,0,0,0.55)', borderTopWidth: 1, borderColor: HUD.border },
+  overlayDim: { ...StyleSheet.absoluteFill, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.55)' },
+  overTitle: { ...hudType.title, fontSize: 16, color: 'rgba(255,255,255,0.92)', marginTop: 4 },
+  big: { fontSize: 128, lineHeight: 136, fontWeight: '900', color: '#fff', fontVariant: ['tabular-nums'], includeFontPadding: false, letterSpacing: -2, textShadowColor: HUD.accent, textShadowRadius: 24, textShadowOffset: { width: 0, height: 0 } },
+  overSub: { ...hudType.label, fontSize: 12, color: 'rgba(255,255,255,0.92)', textAlign: 'center', marginTop: 8 },
+  breakCard: { width: '88%', maxWidth: 420, ...hudSheet, borderTopWidth: 3, padding: 18 },
+  breakTitle: { ...hudType.display, fontSize: 36, textAlign: 'center', marginTop: 4, textShadowRadius: 18, textShadowOffset: { width: 0, height: 0 } },
+  breakTrack: { height: 4, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.14)', marginTop: 14, overflow: 'hidden' },
+  breakFill: { height: 4, borderRadius: 2, backgroundColor: HUD.accent },
   scoreRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 16 },
-  summary: { padding: 16, paddingBottom: 48 },
-  resultTitle: { fontSize: 46, fontWeight: '900', textAlign: 'center', letterSpacing: -1 },
-  resultSub: { fontSize: 14, color: 'rgba(255,255,255,0.7)', textAlign: 'center', marginTop: 2 },
-  dash: { fontSize: 28, fontWeight: '800', color: 'rgba(255,255,255,0.5)' },
-  teamLabel: { fontSize: 12, fontWeight: '900', letterSpacing: 1 },
-  teamValue: { fontSize: 40, fontWeight: '900', color: '#fff' },
-  mvpCard: { marginTop: 18, borderRadius: 22, padding: 14, backgroundColor: 'rgba(255,201,77,0.12)', borderWidth: 1, borderColor: 'rgba(255,201,77,0.45)' },
-  mvpLabel: { fontSize: 12, fontWeight: '900', color: '#ffc94d', letterSpacing: 1 },
-  mvpName: { fontSize: 20, fontWeight: '800', color: '#fff' },
-  mvpStats: { fontSize: 12, color: 'rgba(255,255,255,0.75)', marginTop: 2 },
-  tableCard: { marginTop: 14, marginBottom: 16, borderRadius: 22, padding: 12, backgroundColor: 'rgba(255,255,255,0.05)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' },
-  waitText: { fontSize: 13, color: 'rgba(255,255,255,0.65)', textAlign: 'center' },
+  scorePanel: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 16, alignSelf: 'center', paddingHorizontal: 22, paddingVertical: 10, marginTop: 14 },
+  summary: { padding: 16, paddingTop: 20 },
+  summaryWash: { position: 'absolute', top: 0, left: 0, right: 0, height: 260 },
+  resultTitle: { fontSize: 56, fontWeight: '900', letterSpacing: 6, textAlign: 'center', textTransform: 'uppercase', includeFontPadding: false, textShadowRadius: 22, textShadowOffset: { width: 0, height: 0 }, marginTop: 2 },
+  rule: { height: 2, width: 72, alignSelf: 'center', marginTop: 8, borderRadius: 1 },
+  resultSub: { ...hudType.label, fontSize: 11, textAlign: 'center', marginTop: 10 },
+  dash: { fontSize: 24, fontWeight: '900', color: HUD.muted },
+  teamLabel: { ...hudType.label, letterSpacing: 1.8 },
+  teamValue: { ...hudType.num, fontSize: 48, letterSpacing: -1 },
+  mvpCard: { marginTop: 20, borderRadius: 14, padding: 14, backgroundColor: 'rgba(255,201,77,0.10)', borderWidth: 1, borderColor: 'rgba(255,201,77,0.45)', borderLeftWidth: 3, borderLeftColor: HUD.gold },
+  mvpAvatar: { borderWidth: 2, borderColor: HUD.gold, borderRadius: 30, padding: 2 },
+  mvpName: { fontSize: 20, fontWeight: '900', color: '#fff', letterSpacing: 0.5 },
+  mvpStats: { ...hudType.label, letterSpacing: 1, marginTop: 3, fontVariant: ['tabular-nums'] },
+  tableCard: { marginTop: 14, marginBottom: 16, ...hudPanel, borderRadius: 14, padding: 12 },
+  waitText: { ...hudType.label, textAlign: 'center' },
   mvpRow: { flexDirection: 'row', alignItems: 'center', marginTop: 8 },
-  tableHead: { flexDirection: 'row', alignItems: 'center', paddingBottom: 6, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.hairline },
-  tableRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 8 },
-  col: { width: 30, textAlign: 'center' },
-  colW: { width: 46, textAlign: 'right' },
-  teamDot: { width: 8, height: 8, borderRadius: 4, marginRight: 6 },
-  radii: { borderRadius: radii.md },
 })

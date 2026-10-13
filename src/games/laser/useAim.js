@@ -35,9 +35,15 @@ const STRONG = 0.75 // |axis| above this → gravity is mostly along that axis
 const STABLE_SAMPLES = 2
 
 export const AIM_MODE_LABELS = {
-  trigger: 'Trigger · tap to fire, hold for auto',
-  top: 'Top-edge aim · tap anywhere',
-  camera: 'Camera aim · FIRE button',
+  trigger: 'AIM · tap screen to fire, hold for auto',
+  top: 'HIP FIRE · point the top edge, tap anywhere',
+  camera: 'AIM · FIRE button',
+}
+// One-line coaching shown at the start of a match.
+export const AIM_MODE_TIPS = {
+  trigger: 'Hold upright to AIM with the camera · tap the screen to fire, hold for auto · hold the phone flat for HIP FIRE',
+  top: 'HIP FIRE: point the TOP EDGE of the phone at a player and tap · hold the phone upright to aim with the camera',
+  camera: 'Put the crosshair on a player and press FIRE · hold the phone flat for HIP FIRE',
 }
 
 function holdFrom({ x, y, z }) {

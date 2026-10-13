@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { Alert, Pressable, ScrollView, StyleSheet, Switch, Text, View, useColorScheme, useWindowDimensions } from 'react-native'
 import { useFocusEffect } from '@react-navigation/native'
 import { LinearGradient } from 'expo-linear-gradient'
+import { HUD, HudCta } from '../games/laser/HudPro'
 import * as Location from 'expo-location'
 import { Avatar, ConnectionBanner, Pill, PlayerTap, PlayerTapContext } from '../games/MultiplayerUI'
 import InvitePeopleSheet from '../components/InvitePeopleSheet'
@@ -226,7 +227,7 @@ export default function GameLobbyScreen({ navigation, route }) {
     <PlayerTapContext.Provider value={openPlayer}>
     <View style={styles.screen}>
       <ArcadeBackground />
-      <ScrollView contentContainerStyle={{ paddingBottom: insets.bottom + 60 }} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={{ paddingBottom: insets.bottom + (inRoom && snap?.isHost ? 128 : 60) }} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
         {/* Hero art header */}
         {/* The whole cover sits between the top bar and the title block - nothing is drawn over it. */}
         <CoverArt game={meta || { icon: game.icon }} style={styles.hero} artStyle={{ height: heroArtH, marginTop: insets.top + HERO_BAR_H }} glyphSize={Math.round(heroArtH * 0.5)}>
@@ -333,20 +334,25 @@ export default function GameLobbyScreen({ navigation, route }) {
               <Card><HowTo gameId={gameId} settings={snap.info.settings} /></Card>
               <FeedbackPrefs laser={gameId === 'lasertag'} />
 
-              {snap.isHost ? (
-                <>
-                  {readiness && !readiness.ok && enough && <Text style={[type.caption, { textAlign: 'center', marginBottom: 8 }]}>{readiness.reason}</Text>}
-                  <PlayButton title="Start game" icon="flag" disabled={!enough || snap.status !== 'connected' || (readiness && !readiness.ok)} onPress={start} />
-                </>
-              ) : (
-                <Text style={[type.caption, { textAlign: 'center', marginVertical: 8 }]}>Waiting for the host to start…</Text>
-              )}
+              {!snap.isHost && <Text style={[type.caption, { textAlign: 'center', marginVertical: 8 }]}>Waiting for the host to start…</Text>}
               <View style={{ height: 12 }} />
               <Btn title="Leave lobby" onPress={leave} />
             </>
           )}
         </View>
       </ScrollView>
+      {/* Host: the Start button is always within reach instead of at the bottom of the page. */}
+      {inRoom && snap.isHost && (
+        <View style={[styles.startBar, { paddingBottom: insets.bottom + 10 }]}>
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Text style={styles.startKicker}>{roster.length}/{game.maxPlayers} PLAYERS{visibility ? `  ·  ${visibility.toUpperCase()}` : ''}</Text>
+            <Text style={styles.startNote} numberOfLines={1}>
+              {!enough ? `Need ${game.minPlayers - roster.length} more player${game.minPlayers - roster.length === 1 ? '' : 's'}` : readiness && !readiness.ok ? readiness.reason : snap.status !== 'connected' ? 'Connecting…' : 'Ready to start'}
+            </Text>
+          </View>
+          <HudCta title="Start" icon="flag" compact disabled={!enough || snap.status !== 'connected' || (readiness && !readiness.ok)} onPress={start} style={{ minWidth: 130 }} />
+        </View>
+      )}
       {/* Keeps scrolled content from running under the clock / Dynamic Island. */}
       <StatusBarScrim height={insets.top} />
       {inRoom && (
@@ -482,6 +488,9 @@ function Settings({ game, info, editable, onChange }) {
 const HERO_BAR_H = 56 // back button row above the art
 
 const styles = StyleSheet.create({
+  startBar: { position: 'absolute', left: 0, right: 0, bottom: 0, flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingTop: 12, backgroundColor: 'rgba(4,5,13,0.94)', borderTopWidth: 1, borderTopColor: HUD.border },
+  startKicker: { fontSize: 10, fontWeight: '900', letterSpacing: 1.6, color: HUD.accent },
+  startNote: { fontSize: 13, fontWeight: '700', color: AC.text, marginTop: 2 },
   screen: { flex: 1, backgroundColor: AC.bg[0] },
   pRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 8 },
   pRowTap: { flex: 1, flexDirection: 'row', alignItems: 'center' },

@@ -27,7 +27,7 @@ import {
 import { CompassTape, FireButton, HUD, HudButton, KillFeed, MatchBar, Nameplates, ScorePops, StatusPanel, WeaponCard } from './laser/HudPro'
 import { mapsAvailable } from '../components/SafeMapView'
 import { DEFAULT_MAP_RANGE, MapMinimap, MapOverlay, allowedRanges, rangeById } from './laser/MapMinimap'
-import { AIM_MODE_LABELS, useAim } from './laser/useAim'
+import { AIM_MODE_LABELS, AIM_MODE_TIPS, useAim } from './laser/useAim'
 import * as engine from './laser/engine'
 import { classifyHit, photoRectToScreen, pickVisionTarget, useVisionCapture, visionAvailable, VISION_RANGE_M } from './laser/vision'
 import {
@@ -85,14 +85,16 @@ function DeathOverlay({ respawnSecs, snd }) {
   return (
     <Animated.View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(120,0,20,0.65)', opacity: flash.interpolate({ inputRange: [0.55, 1], outputRange: [1, 1] }) }]} pointerEvents="none">
       <Animated.View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', opacity: skull }}>
-        <Animated.Text style={{ fontSize: 64, transform: [{ scale: pulse }] }}>{'💀'}</Animated.Text>
-        <Text style={{ color: '#fff', fontSize: 28, fontWeight: '900', letterSpacing: 3, marginTop: 12, textShadowColor: '#000', textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 8 }}>TAGGED OUT</Text>
-        <Text style={{ color: 'rgba(255,255,255,0.8)', fontSize: 15, fontWeight: '700', marginTop: 10 }}>
-          {snd ? "You're back next round" : respawnSecs != null ? `Respawning in ${respawnSecs}s` : ''}
+        <Animated.View style={{ transform: [{ scale: pulse }] }}>
+          <Ionicons name="skull" size={72} color="#fff" style={{ textShadowColor: HUD.red, textShadowRadius: 24, textShadowOffset: { width: 0, height: 0 } }} />
+        </Animated.View>
+        <Text style={{ color: '#fff', fontSize: 30, fontWeight: '900', letterSpacing: 5, marginTop: 14, textShadowColor: '#000', textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 8 }}>TAGGED OUT</Text>
+        <Text style={{ color: 'rgba(255,255,255,0.85)', fontSize: 11, fontWeight: '900', letterSpacing: 1.6, marginTop: 10 }}>
+          {snd ? "BACK NEXT ROUND" : respawnSecs != null ? `RESPAWNING IN ${respawnSecs}S` : ''}
         </Text>
         {respawnSecs != null && !snd && (
-          <View style={{ marginTop: 16, width: 120, height: 6, borderRadius: 3, backgroundColor: 'rgba(255,255,255,0.2)', overflow: 'hidden' }}>
-            <View style={{ width: `${Math.max(0, 100 - (respawnSecs / 5) * 100)}%`, height: '100%', backgroundColor: '#ff4444', borderRadius: 3 }} />
+          <View style={{ marginTop: 16, width: 140, height: 5, borderRadius: 3, backgroundColor: 'rgba(255,255,255,0.2)', overflow: 'hidden' }}>
+            <View style={{ width: `${Math.max(0, Math.min(100, 100 - (respawnSecs / 8) * 100))}%`, height: '100%', backgroundColor: HUD.red, borderRadius: 3 }} />
           </View>
         )}
       </Animated.View>
@@ -310,6 +312,8 @@ export function LaserTagGame({ room, onExit }) {
   const battle = useBattleEffects()
   const myPosRef = useRef(null)
   const headingRef = useRef(null)
+  const positionsRef = useRef(null)
+  positionsRef.current = positions
   const [shotTick, setShotTick] = useState(0)
   const [hitTick, setHitTick] = useState(0) // a shot of yours connected (hit marker)
   const [killTick, setKillTick] = useState(0)
@@ -357,6 +361,13 @@ export function LaserTagGame({ room, onExit }) {
   })
   const uavActive = uav.uavActive
   const overlayOpen = wheelOpen || scoresOpen || !!miniGame || uav.sheetOpen
+
+  // Coaching line under the crosshair: how to fire in the current hold, for the first seconds
+  // of a match and for a moment whenever the hold changes.
+  const [tipUntil, setTipUntil] = useState(0)
+  useEffect(() => { if (playing) setTipUntil(Date.now() + 12000) }, [playing, roundKeyForTip(state)])
+  useEffect(() => { setTipUntil((t) => Math.max(t, Date.now() + 4500)) }, [aim.mode])
+  const showTip = playing && !dead && now < tipUntil + (room?.clockOffset || 0)
 
   // New round/match: fresh shot counter, close round-specific overlays.
   const roundKey = `${state?.round}:${state?.snd?.roundNo ?? 0}`
@@ -422,9 +433,11 @@ export function LaserTagGame({ room, onExit }) {
           if (d?.zone !== 'land_mine') battle.addExplosion(d?.zone === 'rocket' ? 'Rocket' : d?.zone === 'grenade' ? 'Grenade' : 'Sticky bomb')
         }
         else { playSfx('hit'); buzz('heavy') }
-        // Directional hit indicator (from shooter's position if available)
+        // Directional hit indicator (from the shooter's position if available; `from` is the
+        // host when the message was relayed, so prefer the id the host put in the message).
         try {
-          const shooterPos = from ? positions?.[from] : null
+          const shooterId = d?.byId || from
+          const shooterPos = shooterId ? positionsRef.current?.[shooterId] : null
           const angle = directionToAngle(myPosRef.current, headingRef.current, shooterPos)
           battle.addHit(angle)
         } catch {}
@@ -607,7 +620,7 @@ export function LaserTagGame({ room, onExit }) {
           for (const b of next.blasts) {
             if (old.has(b.id)) continue
             for (const h of b.hits || []) {
-              const victimMsg = { by: b.byName || 'Someone', zone: 'land_mine', damage: h.damage, killed: h.killed }
+              const victimMsg = { by: b.byName || 'Someone', byId: b.by, zone: 'land_mine', damage: h.damage, killed: h.killed }
               if (h.id === meId) room.emitter.emit('msg:got_hit', victimMsg, b.by)
               else room.queue('got_hit', victimMsg, { to: h.id })
             }
@@ -620,8 +633,8 @@ export function LaserTagGame({ room, onExit }) {
       if (!s || s.game !== 'lasertag') return
       const t = room.now()
       if (action?.type === 'hit') {
-        // Rate-limit by the sender's own clock (monotonic per phone); arrival times are bursty.
-        const key = Number.isFinite(sentAt) ? sentAt : t
+        // Rate-limit by the sender's own trigger time (monotonic per phone); arrival times are bursty.
+        const key = Number.isFinite(action.firedAt) ? action.firedAt : Number.isFinite(sentAt) ? sentAt : t
         if (key - (lastShotByPlayer.current[from] || 0) < HOST_HIT_MIN_MS) return
         lastShotByPlayer.current[from] = key
       }
@@ -631,25 +644,25 @@ export function LaserTagGame({ room, onExit }) {
       // Tell the person who got hit who shot them (their phone already rumbles from the HP drop).
       if (action?.type === 'grenade' && reply?.type === 'grenade_ok') {
         for (const h of reply.data?.hits || []) {
-          const victimMsg = { by: s.players?.[from]?.name || 'Someone', zone: 'grenade', damage: h.damage, killed: h.killed }
+          const victimMsg = { by: s.players?.[from]?.name || 'Someone', byId: from, zone: 'grenade', damage: h.damage, killed: h.killed }
           if (h.id === meId) room.emitter.emit('msg:got_hit', victimMsg, from)
           else room.queue('got_hit', victimMsg, { to: h.id })
         }
       }
       if (action?.type === 'sticky_bomb' && reply?.type === 'sticky_bomb_ok') {
         for (const h of reply.data?.hits || []) {
-          const victimMsg = { by: s.players?.[from]?.name || 'Someone', zone: 'sticky_bomb', damage: h.damage, killed: h.killed }
+          const victimMsg = { by: s.players?.[from]?.name || 'Someone', byId: from, zone: 'sticky_bomb', damage: h.damage, killed: h.killed }
           if (h.id === meId) room.emitter.emit('msg:got_hit', victimMsg, from)
           else room.queue('got_hit', victimMsg, { to: h.id })
         }
       }
       if (action?.type === 'hit' && reply?.type === 'hit_ok' && action.target) {
-        const victimMsg = { by: s.players?.[from]?.name || 'Someone', zone: reply.data.zone, damage: reply.data.damage, killed: reply.data.killed }
+        const victimMsg = { by: s.players?.[from]?.name || 'Someone', byId: from, zone: reply.data.zone, damage: reply.data.damage, killed: reply.data.killed }
         if (action.target === meId) room.emitter.emit('msg:got_hit', victimMsg, from)
         else room.queue('got_hit', victimMsg, { to: action.target })
         // Rocket splash: notify everyone caught in the blast
         for (const sh of reply.data?.splash || []) {
-          const splashMsg = { by: s.players?.[from]?.name || 'Someone', zone: 'rocket', damage: sh.damage, killed: sh.killed }
+          const splashMsg = { by: s.players?.[from]?.name || 'Someone', byId: from, zone: 'rocket', damage: sh.damage, killed: sh.killed }
           if (sh.id === meId) room.emitter.emit('msg:got_hit', splashMsg, from)
           else room.queue('got_hit', splashMsg, { to: sh.id })
         }
@@ -804,12 +817,12 @@ export function LaserTagGame({ room, onExit }) {
     q.key = null
     q.action = null
   }, [room])
-  useEffect(() => () => clearTimeout(hitQueue.current.timer), [])
-  const sendHit = (targetId, hits, zone, method) => {
-    const action = { type: 'hit', target: targetId, hits, zone, method, weapon: gun.id }
+  useEffect(() => () => { try { flushHits() } catch {} }, [flushHits]) // a pending batch still counts when you leave
+  const sendHit = (targetId, hits, zone, method, firedAt = Date.now()) => {
+    const action = { type: 'hit', target: targetId, hits, zone, method, weapon: gun.id, firedAt }
     if (!gun.automatic) { room.sendAction(action); return }
     const q = hitQueue.current
-    const key = `${targetId}:${zone}`
+    const key = `${targetId}:${zone}:${gun.id}`
     if (q.action && q.key === key) {
       q.action.hits = Math.min(5, q.action.hits + hits)
       return
@@ -822,14 +835,14 @@ export function LaserTagGame({ room, onExit }) {
 
   // Compass / GPS aim: the enemy nearest your heading, hit chance by distance and gun.
   // `snap` = camera mode with no person under the crosshair (lower chance).
-  const fireCompass = (shots, snap = false) => {
+  const fireCompass = (shots, snap = false, firedAt = Date.now()) => {
     const target = inSightsRef.current
     if (!target) { flash(snap ? 'Miss' : 'No one in your sights', false); return }
     const chance = target.chance * (snap ? 0.6 : 1)
     let hits = 0
     for (let i = 0; i < shots; i++) if (Math.random() < chance) hits += 1
     if (!hits) { flash('Miss', false); return }
-    sendHit(target.id, hits, 'body', 'compass')
+    sendHit(target.id, hits, 'body', 'compass', firedAt)
   }
 
   // One trigger pull. Unlimited ammo; semi-auto has no rate cap (useTrigger handles holds).
@@ -849,20 +862,21 @@ export function LaserTagGame({ room, onExit }) {
     const h = aimRef.current
     broadcastShot(h.pos)
     if (!h.pos || !h.heading) { flash('No GPS/compass fix yet', false); return }
-    if (visionAim) { fireVision(shots).catch(() => fireCompass(shots, true)); return }
-    fireCompass(shots)
+    const firedAt = Date.now() // the host rate-limits on this, not on when the camera frame resolved
+    if (visionAim) { fireVision(shots, firedAt).catch(() => fireCompass(shots, true, firedAt)); return }
+    fireCompass(shots, false, firedAt)
   }
 
   // Camera aim: what's actually under the crosshair decides the hit. Rapid shots share
   // the in-flight camera frame instead of queueing more captures. When the camera sees no
   // person under the crosshair the shot falls back to compass aim at a lower chance, so a
   // player right next to you (inside GPS error) can still be hit.
-  const fireVision = async (shots) => {
+  const fireVision = async (shots, firedAt) => {
     const frame = await vision.capture()
-    if (!frame) { fireCompass(shots, true); return }
+    if (!frame) { fireCompass(shots, true, firedAt); return }
     setBodies(frame.bodies)
     const hit = classifyHit(frame.bodies)
-    if (!hit) { fireCompass(shots, true); return }
+    if (!hit) { fireCompass(shots, true, firedAt); return }
     const h = aimRef.current
     let by = null
     try {
@@ -882,11 +896,11 @@ export function LaserTagGame({ room, onExit }) {
     if (!picked) {
       // A person, but nobody in the match matches that direction: if one enemy is in your
       // sights by compass, count it as them; otherwise it was a bystander.
-      if (inSightsRef.current) { sendHit(inSightsRef.current.id, shots, hit.zone, 'vision'); return }
+      if (inSightsRef.current) { sendHit(inSightsRef.current.id, shots, hit.zone, 'vision', firedAt); return }
       flash('That’s not a player in this game', false)
       return
     }
-    sendHit(picked.target.id, shots, hit.zone, 'vision')
+    sendHit(picked.target.id, shots, hit.zone, 'vision', firedAt)
   }
 
   // Throw along the compass heading; it goes off after the fuse, where it landed.
@@ -1134,7 +1148,7 @@ export function LaserTagGame({ room, onExit }) {
 
   if (state.phase === 'ended') {
     return (
-      <View style={{ flex: 1, paddingTop: insets.top + 44, backgroundColor: '#07080f' }}>
+      <View style={{ flex: 1, paddingTop: insets.top + 44, backgroundColor: HUD.bg }}>
         <MatchSummary
           state={state}
           meId={meId}
@@ -1143,6 +1157,7 @@ export function LaserTagGame({ room, onExit }) {
           isHost={isHost}
           onPlayAgain={() => room.setInfo({ round: (snap.info.round || 0) + 1 })}
           onExit={onExit}
+          bottomInset={insets.bottom}
         />
       </View>
     )
@@ -1345,6 +1360,12 @@ export function LaserTagGame({ room, onExit }) {
         </Text>}
         {!visionAim && !triggerMode && <Text style={styles.aimMode}>COMPASS AIM · {formatDistance(Math.min(gun.range, COMPASS_MAX_RANGE_M))}</Text>}
         {!!marker && <Text style={[styles.marker, { color: marker.good ? HUD.green : '#fff' }]} numberOfLines={2}>{marker.text}</Text>}
+        {showTip && !marker ? (
+          <View style={styles.tip} pointerEvents="none">
+            <Ionicons name="information-circle" size={13} color={HUD.accent} />
+            <Text style={styles.tipText} numberOfLines={3}>{AIM_MODE_TIPS[aim.mode] || AIM_MODE_TIPS.trigger}</Text>
+          </View>
+        ) : null}
       </View>
 
       {/* Above the dock: S&D objective + GPS/compass warnings. */}
@@ -1426,7 +1447,7 @@ export function LaserTagGame({ room, onExit }) {
           {/* Optics row: binoculars, REC, selfie, scope zoom */}
           {camPerm?.granted && !topMode ? (
             <View style={styles.opticsRow} pointerEvents="box-none">
-              <HudButton onPress={toggleBino} on={bino} emoji="🔭" text={bino ? 'LOWER' : 'SCOUT'} accessibilityLabel={bino ? 'Lower binoculars' : 'Binoculars: scout enemies. Cannot shoot.'} />
+              <HudButton onPress={toggleBino} on={bino} icon="telescope" text={bino ? 'LOWER' : 'SCOUT'} accessibilityLabel={bino ? 'Lower binoculars' : 'Binoculars: scout enemies. Cannot shoot.'} />
               {recOk ? (
                 <HudButton onPress={toggleRecording} on={!!recAt} onColor="#d4202f" accessibilityLabel={recAt ? 'Stop recording and save to Photos' : 'Record gameplay with your voice'}
                   text={recAt ? (() => { const sec = Math.max(0, Math.floor((recNow - recAt) / 1000)); return `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}` })() : 'REC'}>
@@ -1434,7 +1455,7 @@ export function LaserTagGame({ room, onExit }) {
                 </HudButton>
               ) : null}
               {dualOk ? (
-                <HudButton onPress={() => { buzz('select'); setSelfieOn((v) => !v) }} on={selfieOn} emoji="🤳" accessibilityLabel={selfieOn ? 'Hide selfie camera' : 'Show selfie camera'} />
+                <HudButton onPress={() => { buzz('select'); setSelfieOn((v) => !v) }} on={selfieOn} icon="camera-reverse" accessibilityLabel={selfieOn ? 'Hide selfie camera' : 'Show selfie camera'} />
               ) : null}
               <HudButton onPress={scope.cycle} on={scope.zoom > 1} icon="scan" text={formatZoom(scope.zoom)} accessibilityLabel={`Scope zoom ${formatZoom(scope.zoom)}. Tap to change, or pinch the screen.`} />
             </View>
@@ -1456,7 +1477,8 @@ export function LaserTagGame({ room, onExit }) {
       <EnemyUavPill msLeft={uav.enemyMs} top={(topH ? hud.top + topH : hud.top + 120) + 6} />
       {outsideArea && (
         <View style={[styles.areaWarn, { top: (topH ? hud.top + topH : hud.top + 120) + (uav.enemyMs > 0 ? 40 : 6) }]} pointerEvents="none">
-          <Text style={styles.areaWarnText} numberOfLines={2}>⚠️ You’re outside the play area — head back in</Text>
+          <Ionicons name="warning" size={14} color="#fff" />
+          <Text style={styles.areaWarnText} numberOfLines={2}>OUTSIDE THE PLAY AREA — HEAD BACK</Text>
         </View>
       )}
 
@@ -1511,6 +1533,8 @@ export function LaserTagGame({ room, onExit }) {
     </View>
   )
 }
+
+const roundKeyForTip = (state) => `${state?.round}:${state?.snd?.roundNo ?? 0}`
 
 // What an S&D player should be doing right now, plus a contextual action.
 function sndObjective(state, meId, myPos, now) {
@@ -1571,12 +1595,14 @@ const styles = StyleSheet.create({
   topEdge: { alignSelf: 'center', marginTop: 4, fontSize: 12, fontWeight: '800', letterSpacing: 3, color: colors.gold, ...hudShadow },
   sightText: { fontSize: 11, fontWeight: '900', letterSpacing: 1.2, color: '#fff', marginTop: 12, textAlign: 'center', ...hudShadow },
   marker: { fontSize: 17, fontWeight: '900', marginTop: 6, textAlign: 'center', ...hudShadow },
+  tip: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 10, maxWidth: 320, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 10, backgroundColor: HUD.panel, borderWidth: 1, borderColor: HUD.border },
+  tipText: { flexShrink: 1, fontSize: 11, fontWeight: '700', color: '#fff', lineHeight: 15 },
   objective: { alignItems: 'center', gap: 10 },
   objectiveText: { ...type.body, fontWeight: '700', color: colors.onBrand, textAlign: 'center', ...hudShadow },
   warn: { fontSize: 11, fontWeight: '800', color: colors.gold, ...hudShadow, maxWidth: 220 },
   bracket: { position: 'absolute', borderWidth: 1.5, borderRadius: 6 },
-  areaWarn: { position: 'absolute', alignSelf: 'center', backgroundColor: 'rgba(224,79,79,0.85)', paddingHorizontal: 14, paddingVertical: 8, borderRadius: radii.pill },
-  areaWarnText: { ...type.caption, color: '#fff', fontWeight: '700' },
+  areaWarn: { position: 'absolute', alignSelf: 'center', flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: 'rgba(255,51,70,0.88)', paddingHorizontal: 14, paddingVertical: 8, borderRadius: radii.pill },
+  areaWarnText: { fontSize: 10.5, fontWeight: '900', letterSpacing: 1.2, color: '#fff' },
   vignette: { ...StyleSheet.absoluteFill, borderWidth: 40, borderColor: 'rgba(224,79,79,0.7)', backgroundColor: 'rgba(224,79,79,0.18)' },
   modePill: { flexShrink: 1, maxWidth: 190, backgroundColor: HUD.panel, paddingHorizontal: 10, paddingVertical: 5, borderRadius: radii.pill, borderWidth: 1, borderColor: HUD.border },
   modePillText: { fontSize: 10, fontWeight: '800', color: '#fff', letterSpacing: 0.4 },

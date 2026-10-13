@@ -7,7 +7,7 @@
 // GOLD, RED, plus the team colours from multiplayer.js. Glows use CSS boxShadow so they
 // look the same on iOS and Android.
 import React, { memo, useEffect, useRef } from 'react'
-import { Animated, Easing, Image, Pressable, StyleSheet, Text, View } from 'react-native'
+import { ActivityIndicator, Animated, Easing, Image, Pressable, StyleSheet, Text, View } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { TEAMS, angleDiff, formatDistance } from '../../lib/multiplayer'
 import { gunArt } from '../../lib/gunArt'
@@ -16,6 +16,8 @@ import { glowFor } from './gunGlow'
 export const HUD = {
   panel: 'rgba(8,10,18,0.58)',
   panelStrong: 'rgba(8,10,18,0.78)',
+  sheet: 'rgba(8,10,18,0.93)', // menus and sheets over the camera
+  bg: '#07080f',
   border: 'rgba(255,255,255,0.16)',
   accent: '#3ad1ff',
   gold: '#ffc94d',
@@ -26,6 +28,47 @@ export const HUD = {
 }
 export const hudShadow = { textShadowColor: 'rgba(0,0,0,0.9)', textShadowRadius: 4, textShadowOffset: { width: 0, height: 1 } }
 const glow = (color, px = 10) => ({ boxShadow: `0 0 ${px}px ${color}` })
+export const hudGlow = glow
+
+// Type scale shared by every Laser Tag surface (HUD, menu, summary, lobby pieces).
+export const hudType = {
+  kicker: { fontSize: 10, fontWeight: '900', letterSpacing: 2.4, color: HUD.accent, textTransform: 'uppercase' },
+  label: { fontSize: 9.5, fontWeight: '900', letterSpacing: 1.4, color: HUD.muted, textTransform: 'uppercase' },
+  title: { fontSize: 18, fontWeight: '900', letterSpacing: 1.6, color: '#fff', textTransform: 'uppercase' },
+  display: { fontSize: 44, fontWeight: '900', letterSpacing: 3, color: '#fff', textTransform: 'uppercase', fontVariant: ['tabular-nums'], includeFontPadding: false },
+  body: { fontSize: 14, fontWeight: '600', lineHeight: 20, color: 'rgba(255,255,255,0.85)' },
+  num: { fontWeight: '900', color: '#fff', fontVariant: ['tabular-nums'], includeFontPadding: false },
+}
+export const hudPanel = { backgroundColor: HUD.panel, borderWidth: 1, borderColor: HUD.border, borderRadius: 12 }
+export const hudSheet = { backgroundColor: HUD.sheet, borderWidth: 1, borderColor: HUD.border, borderRadius: 16, overflow: 'hidden' }
+
+/** One call-to-action for menus and the summary. tone: 'accent' | 'danger' | 'gold' | 'ghost' */
+export function HudCta({ title, onPress, tone = 'accent', icon, disabled, busy, style, compact = false }) {
+  const fill = tone === 'accent' ? HUD.accent : tone === 'danger' ? HUD.red : tone === 'gold' ? HUD.gold : 'transparent'
+  const fg = tone === 'ghost' ? '#fff' : HUD.bg
+  return (
+    <Pressable
+      onPress={onPress}
+      disabled={disabled || busy}
+      accessibilityRole="button"
+      accessibilityState={{ disabled: !!disabled }}
+      style={({ pressed }) => [
+        s.cta, compact && s.ctaCompact,
+        { backgroundColor: fill, borderColor: tone === 'ghost' ? HUD.border : fill, opacity: disabled ? 0.45 : pressed ? 0.85 : 1 },
+        tone !== 'ghost' && !disabled && glow(fill, 14),
+        pressed && { transform: [{ scale: 0.98 }] },
+        style,
+      ]}
+    >
+      {busy ? <ActivityIndicator color={fg} /> : (
+        <>
+          {icon ? <Ionicons name={icon} size={16} color={fg} style={{ marginRight: 8 }} /> : null}
+          <Text style={[s.ctaText, { color: fg }]} numberOfLines={1}>{String(title).toUpperCase()}</Text>
+        </>
+      )}
+    </Pressable>
+  )
+}
 
 // ---------------------------------------------------------------------------
 // Compass tape: bearings scroll under a fixed centre caret; enemies show as pips.
@@ -310,6 +353,9 @@ export const FireButton = memo(function FireButton({ onPressIn, onPressOut, disa
 })
 
 const s = StyleSheet.create({
+  cta: { height: 50, borderRadius: 12, borderWidth: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 20 },
+  ctaCompact: { height: 42, paddingHorizontal: 14 },
+  ctaText: { fontSize: 14, fontWeight: '900', letterSpacing: 2 },
   // tape
   tape: { alignSelf: 'center', alignItems: 'center', justifyContent: 'flex-end', overflow: 'hidden', borderRadius: 10, backgroundColor: HUD.panel, borderWidth: 1, borderColor: HUD.border },
   tapeInner: { position: 'absolute', left: 0, right: 0, top: 4, bottom: 14 },

@@ -374,7 +374,7 @@ export function MapOverlay({ visible, onClose, insets, me, rangeId, allowed, onR
             sizePx={340}
             interactive
             large
-            style={s.bigMap}
+            style={available ? s.bigMap : s.bigRadar}
           />
           <Text style={s.panelNote}>
             {allowed.length < MAP_RANGES.length ? 'Larger ranges are limited by this lobby’s play area.' : 'Pinch and drag to look around.'}
@@ -423,6 +423,7 @@ const s = StyleSheet.create({
   rangeOn: { backgroundColor: '#fff', borderColor: '#fff' },
   rangeText: { fontSize: 12, fontWeight: '700', color: '#fff' },
   bigMap: { height: 360, borderRadius: radii.md, overflow: 'hidden' },
+  bigRadar: { width: 340, height: 340, alignSelf: 'center', borderRadius: radii.md, overflow: 'hidden' },
   uavTag: { fontSize: 10, fontWeight: '900', letterSpacing: 1, color: '#fff', backgroundColor: '#d4202f', paddingHorizontal: 7, paddingVertical: 2, borderRadius: 6, overflow: 'hidden' },
   panelNote: { fontSize: 11, color: 'rgba(255,255,255,0.6)', marginTop: 8, textAlign: 'center' },
 })

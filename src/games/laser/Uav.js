@@ -1,9 +1,10 @@
 // Laser Tag UAV UI: the glassy HUD button, the in-game "Get more" sheet, the Shop card,
 // and the minimap radar sweep. Purchase logic lives in src/lib/uav.js + src/lib/iap.js.
 import React, { useEffect, useRef } from 'react'
-import { Animated, Easing, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
+import { Animated, Easing, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native'
 import { MaterialCommunityIcons, Ionicons } from '@expo/vector-icons'
 import { LinearGradient } from 'expo-linear-gradient'
+import { HUD, hudSheet, hudType } from './HudPro'
 import Glass from '../../components/Glass'
 import { AC } from '../arcadeUI'
 import { UavPackCard, UavStorePanel, useUavBuyFlow } from '../UavStore'
@@ -124,21 +125,26 @@ export function UavSheet(props) {
 }
 
 function UavSheetBody({ onClose, balance, owner, freeLeft, insets }) {
+  const { height: winH } = useWindowDimensions()
+  const maxH = Math.max(200, Math.min(560, winH - (insets?.top || 0) - (insets?.bottom || 0) - 120))
   return (
     <View style={[StyleSheet.absoluteFill, st.sheetRoot]}>
-      <Pressable style={st.backdrop} onPress={onClose} accessibilityLabel="Close" />
+      <Pressable style={st.backdrop} onPress={onClose} accessibilityRole="button" accessibilityLabel="Close" />
       <View style={[st.sheetWrap, { paddingBottom: (insets?.bottom || 0) + 10 }]} pointerEvents="box-none">
-        <LinearGradient colors={['#141a36', '#0b0d1c']} style={st.sheet}>
+        <View style={[st.sheet, hudSheet, { borderRadius: 20, borderTopWidth: 2, borderTopColor: HUD.accent }]}>
           <View style={st.sheetHead}>
-            <Text style={st.sheetTitle}>UAV Store</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={hudType.kicker}>KILLSTREAK</Text>
+              <Text style={st.sheetTitle}>UAV STORE</Text>
+            </View>
             <Pressable onPress={onClose} hitSlop={10} style={st.close} accessibilityRole="button" accessibilityLabel="Close">
               <Ionicons name="close" size={20} color="#fff" />
             </Pressable>
           </View>
-          <ScrollView style={{ maxHeight: 560 }} showsVerticalScrollIndicator={false}>
+          <ScrollView style={{ maxHeight: maxH }} showsVerticalScrollIndicator={false}>
             <UavStorePanel variant="sheet" balance={balance} owner={owner} freeLeft={freeLeft} />
           </ScrollView>
-        </LinearGradient>
+        </View>
       </View>
     </View>
   )
@@ -192,7 +198,7 @@ const st = StyleSheet.create({
   sheet: { padding: 16, gap: 12, borderRadius: 28, borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)' },
   sheetHead: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   sheetIcon: { width: 48, height: 48, borderRadius: 24, backgroundColor: 'rgba(255,59,79,0.35)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.3)', alignItems: 'center', justifyContent: 'center' },
-  sheetTitle: { flex: 1, fontSize: 20, ...font.heavy, color: AC.text },
+  sheetTitle: { ...hudType.title },
   sheetSub: { fontSize: 13, color: AC.muted, marginTop: 2 },
   sheetBal: { fontSize: 14, ...font.bold, color: AC.text },
   close: { width: 34, height: 34, borderRadius: 17, backgroundColor: 'rgba(255,255,255,0.14)', alignItems: 'center', justifyContent: 'center' },

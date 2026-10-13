@@ -340,6 +340,36 @@ function IncomingBolt({ id, angle, screenW, screenH, onDone }) {
   useEffect(() => {
     Animated.timing(t, { toValue: 1, duration: IN_MS, easing: Easing.linear, useNativeDriver: true }).start(() => onDone(id))
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  // Geometry is rolled once per bolt (the parent re-renders ~11×/s; the bolt must not jump).
+  const geo = useRef(null)
+  if (!geo.current) geo.current = incomingGeometry(angle, screenW, screenH)
+  const { sx, sy, dx, dy, rot, fromBehind } = geo.current
+  const inputRange = perspInput
+  const px = perspInput.map((u) => dx * (fromBehind ? u : approachAt(u)))
+  const py = perspInput.map((u) => dy * (fromBehind ? u : approachAt(u)))
+  const sc = perspInput.map((u) => (fromBehind ? 0.9 : Math.max(0.08, growAt(u) * 1.1)))
+  return (
+    <Animated.View
+      pointerEvents="none"
+      style={[st.boltWrap, {
+        left: sx - BOLT_LEN / 2, top: sy - BOLT_W / 2,
+        opacity: t.interpolate({ inputRange: [0, 0.1, 0.85, 1], outputRange: [0.3, 1, 1, 0] }),
+        transform: [
+          { translateX: t.interpolate({ inputRange, outputRange: px }) },
+          { translateY: t.interpolate({ inputRange, outputRange: py }) },
+          { rotate: `${rot}deg` },
+          { scale: t.interpolate({ inputRange, outputRange: sc }) },
+        ],
+      }]}
+    >
+      <View style={[st.boltGlow, { backgroundColor: ENEMY_BOLT, boxShadow: `0 0 18px 6px ${ENEMY_BOLT}` }]} />
+      <View style={[st.boltBody, { backgroundColor: ENEMY_BOLT }]} />
+      <View style={st.boltCore} />
+    </Animated.View>
+  )
+}
+
+function incomingGeometry(angle, screenW, screenH) {
   const a = ((angle % 360) + 360) % 360
   const signed = a > 180 ? a - 360 : a // -180..180, + = right of straight ahead
   const fromBehind = Math.abs(signed) > 100
@@ -364,29 +394,7 @@ function IncomingBolt({ id, angle, screenW, screenH, onDone }) {
   const dx = ex - sx
   const dy = ey - sy
   const rot = (Math.atan2(dy, dx) * 180) / Math.PI
-  const inputRange = perspInput
-  const px = perspInput.map((u) => dx * (fromBehind ? u : approachAt(u)))
-  const py = perspInput.map((u) => dy * (fromBehind ? u : approachAt(u)))
-  const sc = perspInput.map((u) => (fromBehind ? 0.9 : Math.max(0.08, growAt(u) * 1.1)))
-  return (
-    <Animated.View
-      pointerEvents="none"
-      style={[st.boltWrap, {
-        left: sx - BOLT_LEN / 2, top: sy - BOLT_W / 2,
-        opacity: t.interpolate({ inputRange: [0, 0.1, 0.85, 1], outputRange: [0.3, 1, 1, 0] }),
-        transform: [
-          { translateX: t.interpolate({ inputRange, outputRange: px }) },
-          { translateY: t.interpolate({ inputRange, outputRange: py }) },
-          { rotate: `${rot}deg` },
-          { scale: t.interpolate({ inputRange, outputRange: sc }) },
-        ],
-      }]}
-    >
-      <View style={[st.boltGlow, { backgroundColor: ENEMY_BOLT, boxShadow: `0 0 18px 6px ${ENEMY_BOLT}` }]} />
-      <View style={[st.boltBody, { backgroundColor: ENEMY_BOLT }]} />
-      <View style={st.boltCore} />
-    </Animated.View>
-  )
+  return { sx, sy, dx, dy, rot, fromBehind }
 }
 
 // ─── Main battle effects overlay ───

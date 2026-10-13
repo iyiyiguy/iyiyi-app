@@ -3,21 +3,22 @@
 // Views (never native Modals) so they can't get stuck, and every one of them swallows
 // touches so a tap on the HUD never fires the gun.
 import React, { memo, useEffect, useRef, useState } from 'react'
-import { Animated, Easing, Pressable, ScrollView, StyleSheet, Text, View, Image } from 'react-native'
+import { Animated, Easing, Pressable, ScrollView, StyleSheet, Text, View, Image, useWindowDimensions } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { TEAMS } from '../../lib/multiplayer'
 import { buzz } from '../../lib/gamePrefs'
 import { playSfx } from '../../lib/gunAudio'
 import { WeaponSpinWheel } from './WeaponSpinWheel'
 import { gunArt } from '../../lib/gunArt'
+import { HUD, hudSheet, hudType } from './HudPro'
 
 const hudShadow = { textShadowColor: 'rgba(0,0,0,0.85)', textShadowRadius: 4, textShadowOffset: { width: 0, height: 1 } }
 const W = '#fff'
-const PANEL = 'rgba(12,14,26,0.94)'
-const BORDER = 'rgba(255,255,255,0.12)'
-const MUTED = 'rgba(255,255,255,0.62)'
-const GOLD = '#ffc94d'
-const RED = '#ff4d5e'
+const PANEL = HUD.sheet
+const BORDER = HUD.border
+const MUTED = HUD.muted
+const GOLD = HUD.gold
+const RED = HUD.red
 
 // ---------------------------------------------------------------------------
 // Weapon switcher
@@ -83,12 +84,12 @@ export function ScoreTable({ state, meId, shotsBy }) {
             )}
             <View style={s.tHead}>
               <Text style={[s.th, { width: 22 }]}>#</Text>
-              <Text style={[s.th, { flex: 1 }]}>Player</Text>
+              <Text style={[s.th, { flex: 1 }]}>PLAYER</Text>
               <Text style={[s.th, s.c]}>K</Text>
               <Text style={[s.th, s.c]}>D</Text>
               {showBt && <Text style={[s.th, s.c]}>BT</Text>}
-              {shotsBy && <Text style={[s.th, s.cw]}>Acc</Text>}
-              <Text style={[s.th, s.cw]}>Score</Text>
+              {shotsBy && <Text style={[s.th, s.cw]}>ACC</Text>}
+              <Text style={[s.th, s.cw]}>SCORE</Text>
             </View>
             {g.rows.map((r, i) => (
               <View key={r.id} style={[s.tRow, r.id === meId && s.tRowMe]}>
@@ -114,19 +115,24 @@ export function ScoreTable({ state, meId, shotsBy }) {
 
 /** In-match scoreboard overlay (X or tap outside to close). */
 export function ScoreboardOverlay({ visible, state, meId, onClose, insets }) {
+  const { height: winH } = useWindowDimensions()
   if (!visible || !state) return null
+  const maxH = Math.max(160, Math.min(460, winH - (insets?.top || 0) - (insets?.bottom || 0) - 140))
   return (
     <View style={[StyleSheet.absoluteFill, s.overlayRoot]}>
-      <Pressable style={s.backdrop} onPress={onClose} accessibilityLabel="Close scoreboard" />
+      <Pressable style={s.backdrop} onPress={onClose} accessibilityRole="button" accessibilityLabel="Close scoreboard" />
       <View style={[s.centerWrap, { paddingTop: (insets?.top || 0) + 16, paddingBottom: (insets?.bottom || 0) + 16 }]} pointerEvents="box-none">
         <View style={s.panel}>
           <View style={s.panelHead}>
-            <Text style={s.panelTitle}>Scoreboard</Text>
+            <View>
+              <Text style={hudType.kicker}>LIVE STANDINGS</Text>
+              <Text style={s.panelTitle}>SCOREBOARD</Text>
+            </View>
             <Pressable onPress={onClose} hitSlop={12} style={s.close} accessibilityRole="button" accessibilityLabel="Close scoreboard">
               <Ionicons name="close" size={20} color={W} />
             </Pressable>
           </View>
-          <ScrollView style={{ maxHeight: 460 }}>
+          <ScrollView style={{ maxHeight: maxH }}>
             <ScoreTable state={state} meId={meId} />
           </ScrollView>
         </View>
@@ -235,12 +241,15 @@ export function TapMiniGame({ kind, durationMs, needed, onStart, onSuccess, onFa
   return (
     <View style={[StyleSheet.absoluteFill, s.overlayRoot, s.gameRoot, { paddingTop: (insets?.top || 0) + 14, paddingBottom: (insets?.bottom || 0) + 14 }]}>
       <View style={s.gameHead}>
-        <Text style={s.gameTitle}>{kind === 'plant' ? '💣 Planting' : '🛠 Defusing'}</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <Ionicons name={kind === 'plant' ? 'flame' : 'build'} size={20} color={GOLD} />
+          <Text style={s.gameTitle}>{kind === 'plant' ? 'PLANTING' : 'DEFUSING'}</Text>
+        </View>
         <Pressable onPress={onClose} hitSlop={12} style={s.close} accessibilityRole="button" accessibilityLabel="Cancel">
           <Ionicons name="close" size={20} color={W} />
         </Pressable>
       </View>
-      <Text style={s.gameSub}>Tap the targets! {hits}/{needed}</Text>
+      <Text style={s.gameSub}>TAP THE TARGETS  ·  {hits}/{needed}</Text>
       <View style={s.timeTrack}><View style={[s.timeFill, { width: `${pct * 100}%`, backgroundColor: pct < 0.3 ? RED : GOLD }]} /></View>
       {/* The play box swallows every touch (no accidental shots). */}
       <Pressable style={s.playBox} onLayout={(e) => setBox(e.nativeEvent.layout)} onPress={() => { if (phase === 'running') buzz('select') }}>
@@ -320,7 +329,7 @@ export function BombCountdown({ msLeft, top, inline }) {
   }, [secs, pulse])
   return (
     <Animated.View pointerEvents="none" style={[s.bomb, inline ? s.bombInline : { top }, { transform: [{ scale: pulse }] }]}>
-      <Text style={s.bombLabel}>💣 BOMB</Text>
+      <Text style={s.bombLabel}>BOMB</Text>
       <Text style={[s.bombTime, secs <= 10 && { color: RED }]}>{secs}</Text>
     </Animated.View>
   )
@@ -372,9 +381,9 @@ const s = StyleSheet.create({
   overlayRoot: { zIndex: 60, elevation: 60 },
   backdrop: { ...StyleSheet.absoluteFill, backgroundColor: 'rgba(0,0,0,0.55)' },
   centerWrap: { flex: 1, justifyContent: 'center', paddingHorizontal: 12 },
-  panel: { backgroundColor: PANEL, borderRadius: 24, padding: 16, borderWidth: 1, borderColor: BORDER },
+  panel: { ...hudSheet, padding: 16 },
   panelHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 },
-  panelTitle: { fontSize: 20, fontWeight: '800', color: W },
+  panelTitle: { ...hudType.title },
   close: { width: 34, height: 34, borderRadius: 17, backgroundColor: 'rgba(255,255,255,0.14)', alignItems: 'center', justifyContent: 'center' },
   chip: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 18, backgroundColor: 'rgba(0,0,0,0.55)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.25)', maxWidth: 210 },
   chipIcon: { fontSize: 24 },
@@ -388,20 +397,20 @@ const s = StyleSheet.create({
   wheelItemOn: { borderColor: GOLD, backgroundColor: 'rgba(255,201,77,0.18)' },
   wheelName: { fontSize: 9, fontWeight: '700', color: W, textAlign: 'center' },
   teamHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderLeftWidth: 4, paddingLeft: 8, marginBottom: 4 },
-  teamName: { fontSize: 15, fontWeight: '900', letterSpacing: 0.5 },
+  teamName: { fontSize: 13, fontWeight: '900', letterSpacing: 1.6, textTransform: 'uppercase' },
   teamTotal: { fontSize: 12, fontWeight: '700', color: MUTED },
   tHead: { flexDirection: 'row', alignItems: 'center', paddingVertical: 6, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: BORDER },
-  th: { fontSize: 10, fontWeight: '800', color: MUTED, letterSpacing: 0.8 },
-  tRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 8, paddingHorizontal: 2, borderRadius: 8 },
-  tRowMe: { backgroundColor: 'rgba(255,255,255,0.08)' },
-  td: { fontSize: 14, color: W },
+  th: { ...hudType.label, fontSize: 9.5 },
+  tRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 8, paddingHorizontal: 4, borderRadius: 6, borderLeftWidth: 2, borderLeftColor: 'transparent' },
+  tRowMe: { backgroundColor: 'rgba(58,209,255,0.10)', borderLeftColor: HUD.accent },
+  td: { fontSize: 14, fontWeight: '700', color: W, fontVariant: ['tabular-nums'] },
   c: { width: 30, textAlign: 'center' },
   cw: { width: 52, textAlign: 'right' },
   deadTag: { fontSize: 12, color: RED, fontWeight: '900' },
   gameRoot: { backgroundColor: 'rgba(6,8,16,0.82)', paddingHorizontal: 16 },
   gameHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  gameTitle: { fontSize: 24, fontWeight: '900', color: W },
-  gameSub: { fontSize: 15, fontWeight: '700', color: GOLD, marginTop: 4 },
+  gameTitle: { ...hudType.title, fontSize: 22 },
+  gameSub: { ...hudType.label, color: GOLD, fontSize: 12, marginTop: 6 },
   timeTrack: { height: 8, borderRadius: 4, backgroundColor: 'rgba(255,255,255,0.15)', marginTop: 10, overflow: 'hidden' },
   timeFill: { height: 8, borderRadius: 4 },
   playBox: { flex: 1, marginTop: 14, borderRadius: 22, borderWidth: 1, borderColor: BORDER, backgroundColor: 'rgba(255,255,255,0.04)' },

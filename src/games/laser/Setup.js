@@ -12,6 +12,8 @@ import { buzz } from '../../lib/gamePrefs'
 import { SITE_RADIUS_M, balanceTeams } from './engine'
 import { generateBombSites } from './bombSites'
 import { colors as themeColors, radii } from '../../theme'
+import { HUD, hudGlow } from './HudPro'
+import { withAlpha } from '../GameMap'
 
 // Lobby panels use the always-dark arcade look.
 const type = arcadeType
@@ -151,9 +153,9 @@ export function LaserTagSetup({ room, snap }) {
   }
 
   const circles = []
-  if (area) circles.push({ id: 'area', lat: area.lat, lng: area.lng, radius: area.r, color: colors.magenta })
-  if (mode === 'snd') for (const x of sites) circles.push({ id: `site-${x.id}`, lat: x.lat, lng: x.lng, radius: x.r || SITE_RADIUS_M, color: colors.gold })
-  const markers = mode === 'snd' ? sites.map((x) => ({ id: x.id, lat: x.lat, lng: x.lng, label: `💣 Site ${x.id}`, color: colors.crimson })) : []
+  if (area) circles.push({ id: 'area', lat: area.lat, lng: area.lng, radius: area.r, color: HUD.accent })
+  if (mode === 'snd') for (const x of sites) circles.push({ id: `site-${x.id}`, lat: x.lat, lng: x.lng, radius: x.r || SITE_RADIUS_M, color: HUD.gold })
+  const markers = mode === 'snd' ? sites.map((x) => ({ id: x.id, lat: x.lat, lng: x.lng, label: `SITE ${x.id}`, color: HUD.red })) : []
   const mapCenter = area || sites[0] || null
   const hint = !isHost ? null : tapMode === 'area' ? 'Tap the map to move the play area' : `Tap the map to place site ${tapMode}`
 
@@ -176,7 +178,7 @@ export function LaserTagSetup({ room, snap }) {
                 accessibilityRole="button"
                 accessibilityState={{ selected: on, disabled: !isHost }}
               >
-                <Text style={[type.caption, { color: on ? colors.onBrand : colors.text, fontWeight: '700' }]}>{p.label}</Text>
+                <Text style={[styles.chipText, on && { color: HUD.bg }]}>{p.label}</Text>
               </Pressable>
             )
           })}
@@ -185,7 +187,7 @@ export function LaserTagSetup({ room, snap }) {
           <View style={[styles.chipRow, { marginTop: 0 }]}>
             {[['area', 'Move area'], ['A', 'Place A'], ['B', 'Place B']].map(([id, label]) => (
               <Pressable key={id} onPress={() => setTapMode(id)} style={[styles.chipSm, tapMode === id && styles.chipOn]} accessibilityRole="button" accessibilityState={{ selected: tapMode === id }}>
-                <Text style={[type.caption, { color: tapMode === id ? colors.onBrand : colors.text }]}>{label}</Text>
+                <Text style={[styles.chipText, tapMode === id && { color: HUD.bg }]}>{label}</Text>
               </Pressable>
             ))}
           </View>
@@ -225,7 +227,7 @@ export function LaserTagSetup({ room, snap }) {
             {area && area.r > 600 && <Text style={[type.caption, { marginTop: 4 }]}>For big areas, sites are placed within walking distance of the area’s centre.</Text>}
             {isHost && (
               <View style={{ flexDirection: 'row', gap: 8, marginTop: 10 }}>
-                <Btn title={generating ? 'Rolling…' : '🎲 Re-roll site'} size="sm" disabled={generating || !area} onPress={() => { buzz('medium'); regenerate() }} style={{ flex: 1 }} />
+                <Btn title={generating ? 'Rolling…' : 'Re-roll site'} size="sm" disabled={generating || !area} onPress={() => { buzz('medium'); regenerate() }} style={{ flex: 1 }} />
                 {sites.some((x) => x.id === 'B') && <Btn title="Remove B" size="sm" onPress={() => patchSettings({ sites: sites.filter((x) => x.id !== 'B') })} />}
               </View>
             )}
@@ -240,7 +242,7 @@ export function LaserTagSetup({ room, snap }) {
             {isHost ? (
               <View style={styles.lockRow}>
                 <Text style={type.caption}>Lock teams</Text>
-                <Switch value={locked} onValueChange={(v) => room.setInfo({ teamsLocked: v })} trackColor={{ true: colors.magenta }} />
+                <Switch value={locked} onValueChange={(v) => room.setInfo({ teamsLocked: v })} trackColor={{ false: 'rgba(255,255,255,0.14)', true: HUD.accent }} thumbColor="#fff" ios_backgroundColor="rgba(255,255,255,0.14)" />
               </View>
             ) : locked ? <Text style={type.caption}>Teams locked by host</Text> : null}
           </View>
@@ -248,15 +250,19 @@ export function LaserTagSetup({ room, snap }) {
             {['A', 'B'].map((t) => {
               const members = snap.roster.filter((p) => teams[p.id] === t)
               return (
-                <View key={t} style={[styles.teamCol, { borderColor: TEAMS[t].color }]}>
-                  <Text style={[type.title, { color: TEAMS[t].color }]}>{TEAMS[t].name}</Text>
-                  {members.length === 0 && <Text style={type.caption}>No one yet</Text>}
+                <View key={t} style={[styles.teamCol, { borderColor: TEAMS[t].color, backgroundColor: withAlpha(TEAMS[t].color, 0.1) }]}>
+                  <View style={styles.teamHead}>
+                    <View style={[styles.teamDot, { backgroundColor: TEAMS[t].color, ...hudGlow(TEAMS[t].color, 6) }]} />
+                    <Text style={[styles.teamName, { color: TEAMS[t].color }]}>{TEAMS[t].name}</Text>
+                    <Text style={styles.teamCount}>{members.length}</Text>
+                  </View>
+                  {members.length === 0 && <Text style={styles.emptyTeam}>EMPTY</Text>}
                   {members.map((p) => (
                     <Pressable
                       key={p.id}
                       disabled={!isHost}
                       onPress={() => move(p.id, t === 'A' ? 'B' : 'A')}
-                      style={styles.member}
+                      style={({ pressed }) => [styles.member, pressed && isHost && { backgroundColor: 'rgba(255,255,255,0.08)' }]}
                       accessibilityRole={isHost ? 'button' : undefined}
                       accessibilityHint={isHost ? 'Moves this player to the other team' : undefined}
                     >
@@ -278,7 +284,7 @@ export function LaserTagSetup({ room, snap }) {
               <Btn title="Shuffle teams" size="sm" onPress={() => room.setInfo({ teams: balanceTeams(snap.roster.map((p) => p.id)) })} style={{ flex: 1 }} />
             </View>
           )}
-          {isHost && <Text style={[type.caption, { marginTop: 6 }]}>Tap a player to move them.</Text>}
+          {isHost && <Text style={styles.hint}>TAP A PLAYER TO MOVE THEM</Text>}
         </Card>
       )}
     </>
@@ -289,11 +295,18 @@ const styles = StyleSheet.create({
   headRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
   lockRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   teams: { flexDirection: 'row', gap: 10 },
-  teamCol: { flex: 1, borderWidth: 1.5, borderRadius: radii.sm, padding: 10, gap: 4 },
-  member: { flexDirection: 'row', alignItems: 'center', paddingVertical: 4 },
+  teamCol: { flex: 1, borderWidth: 1.5, borderRadius: 12, padding: 10, gap: 2 },
+  teamHead: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 6 },
+  teamDot: { width: 8, height: 8, borderRadius: 4 },
+  teamName: { flex: 1, fontSize: 13, fontWeight: '900', letterSpacing: 1.6, textTransform: 'uppercase' },
+  teamCount: { fontSize: 13, fontWeight: '900', color: AC.text, fontVariant: ['tabular-nums'] },
+  emptyTeam: { fontSize: 10, fontWeight: '900', letterSpacing: 1.4, color: AC.faint },
+  member: { flexDirection: 'row', alignItems: 'center', paddingVertical: 6, paddingHorizontal: 4, borderRadius: 8 },
+  hint: { fontSize: 10, fontWeight: '900', letterSpacing: 1.4, color: AC.faint, marginTop: 8 },
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 10 },
   chip: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: radii.pill, borderWidth: 1, borderColor: colors.hairline },
   chipSm: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: radii.pill, borderWidth: 1, borderColor: colors.hairline },
-  chipOn: { backgroundColor: colors.magenta, borderColor: colors.magenta },
+  chipOn: { backgroundColor: HUD.accent, borderColor: HUD.accent },
+  chipText: { fontSize: 12, fontWeight: '800', letterSpacing: 0.6, color: AC.text, textTransform: 'uppercase' },
   sitesBox: { marginTop: 14, paddingTop: 12, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.hairline },
 })
