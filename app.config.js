@@ -1,5 +1,5 @@
 // Adds build-time secrets to app.json without committing them (the repo is public).
-//   GOOGLE_MAPS_ANDROID_API_KEY  Google Maps key for Android maps (iOS uses Apple Maps).
+//   GOOGLE_MAPS_ANDROID_API_KEY  Google Maps key for Android maps (repo secret; iOS uses Apple Maps).
 //   ANDROID_VERSION_CODE         set by CI so every Play upload gets a higher number.
 module.exports = ({ config }) => {
   const mapsKey = process.env.GOOGLE_MAPS_ANDROID_API_KEY || ''
