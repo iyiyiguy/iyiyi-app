@@ -9,6 +9,7 @@ Steps (App Store Connect API, same key as the iOS build):
 5. Push the listing text (and screenshots) from store-assets/ via asc_metadata.py.
 6. Submit the version for review again.
 """
+import json
 import os, sys, time, pathlib
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
@@ -124,7 +125,14 @@ def main():
         raise RuntimeError("BUILD_NUMBER is required")
     v = find_version()
     if not v:
-        raise RuntimeError("No App Store version in progress")
+        # Every version is live: start the next one, numbered from app.json ("version").
+        here = os.path.dirname(os.path.abspath(__file__))
+        with open(os.path.join(here, "..", "app.json")) as f:
+            want = json.load(f)["expo"]["version"]
+        print(f"No version in progress; creating App Store version {want}")
+        v = M.call("POST", "/appStoreVersions", json={"data": {"type": "appStoreVersions",
+            "attributes": {"platform": "IOS", "versionString": want, "releaseType": "MANUAL"},
+            "relationships": {"app": {"data": {"type": "apps", "id": M.APP_ID}}}}})["data"]
     print(f"Version {v['attributes']['versionString']} is {state_of(v)}")
 
     if state_of(v) in IN_FLIGHT:

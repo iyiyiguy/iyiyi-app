@@ -37,7 +37,7 @@
         "@type": "SoftwareApplication",
         "name": "iYiYi",
         "applicationCategory": "SocialNetworkingApplication",
-        "operatingSystem": "iOS",
+        "operatingSystem": "iOS, Android",
         "offers": {
           "@type": "Offer",
           "price": "0",
@@ -45,7 +45,7 @@
         },
         "description": "iYiYi is a social media growth app that helps small businesses and creators get followers on Instagram, TikTok, YouTube and Snapchat from people nearby. It also features real-world games like Laser Tag and Battle Royale played with GPS and your phone camera.",
         "url": "https://iyiyi.xyz",
-        "downloadUrl": "https://apps.apple.com/app/id6445996160",
+        "downloadUrl": ["https://apps.apple.com/app/id6445996160", "https://play.google.com/store/apps/details?id=com.iyiyi.app"],
         "screenshot": "https://iyiyi.xyz/img/shot-follow.webp",
         "aggregateRating": {
           "@type": "AggregateRating",
@@ -358,10 +358,10 @@
           <svg viewBox="0 0 24 24"><path d="M16.37 12.6c0-2.3 1.9-3.4 2-3.5-1.1-1.6-2.8-1.8-3.4-1.8-1.4-.1-2.8.9-3.5.9s-1.9-.9-3.1-.9c-1.6 0-3.1.9-3.9 2.4-1.7 2.9-.4 7.3 1.2 9.7.8 1.2 1.8 2.5 3 2.4 1.2 0 1.7-.8 3.1-.8s1.9.8 3.1.8 2.1-1.2 2.9-2.4c.9-1.3 1.3-2.6 1.3-2.7-.1 0-2.7-1-2.7-4.1zM14.1 5.9c.6-.8 1.1-1.9 1-3-.9 0-2.1.6-2.7 1.4-.6.7-1.1 1.8-1 2.9 1 .1 2.1-.5 2.7-1.3z"/></svg>
           <span><small>Download on the</small><b>App Store</b></span>
         </a>
-        <span class="glass store soon" aria-disabled="true">
+        <a class="glass store" href="https://play.google.com/store/apps/details?id=com.iyiyi.app" aria-label="Get iYiYi on Google Play">
           <svg viewBox="0 0 24 24"><path d="M3.6 2.3c-.3.3-.5.8-.5 1.4v16.6c0 .6.2 1.1.5 1.4l9.4-9.7-9.4-9.7zm10.6 10.9 2.9-3-3.6-2.1-9-5.1 9.7 10.2zm3.9-2 3-1.7c.9-.5.9-1.4 0-1.9l-3-1.8-3.2 3.3 3.2 2.1zm-9.6 10.5 9-5.1 3.6-2.1-2.9-3-9.7 10.2z"/></svg>
-          <span><small>Coming soon on</small><b>Google Play</b></span>
-        </span>
+          <span><small>Get it on</small><b>Google Play</b></span>
+        </a>
         <a class="glass store" href="https://app.iyiyi.xyz" aria-label="Open iYiYi on the web">
           <svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm6.9 9h-3a15.6 15.6 0 0 0-1.3-5.8A8 8 0 0 1 18.9 11zM12 4c1 1.2 2 3.6 2.4 7H9.6C10 7.6 11 5.2 12 4zM5.1 11a8 8 0 0 1 4.3-5.8A15.6 15.6 0 0 0 8.1 11h-3zm0 2h3a15.6 15.6 0 0 0 1.3 5.8A8 8 0 0 1 5.1 13zM12 20c-1-1.2-2-3.6-2.4-7h4.8c-.4 3.4-1.4 5.8-2.4 7zm2.6-1.2A15.6 15.6 0 0 0 15.9 13h3a8 8 0 0 1-4.3 5.8z"/></svg>
           <span><small>No download</small><b>Open on the web</b></span>
@@ -557,7 +557,7 @@
         </details>
         <details class="glass lift faq-item">
           <summary>Is iYiYi available on Android?</summary>
-          <p>iYiYi is currently available on iOS (iPhone) through the App Store and on the web at app.iyiyi.xyz. The Android version for Google Play is coming soon. The web version works on any device with a browser, so Android users can access most features right now without downloading anything.</p>
+          <p>Yes. iYiYi is available on Android through <a href="https://play.google.com/store/apps/details?id=com.iyiyi.app">Google Play</a>, on iPhone through the <a href="https://apps.apple.com/app/id6445996160">App Store</a>, and on the web at app.iyiyi.xyz. The web version works on any device with a browser.</p>
         </details>
       </div>
     </section>
@@ -571,6 +571,7 @@
         <p class="sub" style="margin:0 auto">Download iYiYi and start growing your social media following from the people around you. Free for small businesses, creators and everyone else.</p>
         <div class="cta">
           <a class="btn btn-launch btn-lg" href="https://apps.apple.com/app/id6445996160">Download for iPhone</a>
+          <a class="btn btn-launch btn-lg" href="https://play.google.com/store/apps/details?id=com.iyiyi.app">Get it on Android</a>
           <a class="glass btn btn-lg" href="https://app.iyiyi.xyz">Open on the web</a>
         </div>
       </div>
@@ -591,5 +592,13 @@
       </nav>
     </div>
   </footer>
+<script>
+  // Android visitors: send the generic "Get the app" links to Google Play instead of the App Store.
+  if (/Android/i.test(navigator.userAgent)) {
+    document.querySelectorAll('a[href^="https://apps.apple.com/"]').forEach(function (a) {
+      if (!a.classList.contains('store') && !/iPhone/.test(a.textContent)) a.href = 'https://play.google.com/store/apps/details?id=com.iyiyi.app';
+    });
+  }
+</script>
 </body>
 </html>
