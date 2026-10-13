@@ -578,6 +578,7 @@ async function openDiscoveryInner() {
   ch.subscribe((status) => {
     if (discovery.channel !== ch) return
     if (status === 'SUBSCRIBED') {
+      clearTimeout(discovery.retryTimer)
       discovery.ready = true
       discovery.status = 'connected'
       if (discovery.advert) ch.track(discovery.advert).catch(() => {})
@@ -586,8 +587,10 @@ async function openDiscoveryInner() {
       discovery.ready = false
       discovery.status = status === 'CLOSED' ? 'connecting' : 'error'
       discovery.emitter.emit('change', discoverySnapshot())
+      // CLOSED: the server shut the channel, we must reopen. Otherwise phoenix rejoins by
+      // itself (SUBSCRIBED fires again); only rebuild if it's still down after a while.
       clearTimeout(discovery.retryTimer)
-      discovery.retryTimer = setTimeout(() => { if (discovery.refs > 0) reopenDiscovery() }, 4000)
+      discovery.retryTimer = setTimeout(() => { if (discovery.refs > 0 && !discovery.ready) reopenDiscovery() }, status === 'CLOSED' ? 1000 : 20000)
     }
   })
 }
@@ -719,6 +722,7 @@ function useDiscoveredRooms(gameId, { maxDistance, publicOnly }) {
 
 const MAX_CHAT = 100
 const POSITION_STALE_MS = 15000
+const STATE_FLUSH_MS = 150 // host: minimum gap between state broadcasts (and reply batches)
 
 export class Room {
   constructor({ gameId, code, me, mode }) {
@@ -754,23 +758,28 @@ export class Room {
     this._assetReqAt = {}
     this.joinCheckTimer = null
     this.reconnectTimer = null
+    this.degradeTimer = null
+    this._pubTimer = null
+    this._stateDirty = false
+    this._outbox = []
+    this._opening = false
     this.failures = 0
     this.handedOff = false
     this._snap = null
     this._posSnap = this.positions
     this._appStateSub = AppState.addEventListener('change', (s) => {
-      if (this.left) return
-      if (s === 'active') {
-        // Coming back to foreground — if disconnected, reconnect immediately;
-        // if still connected, re-track presence so others know we are back.
-        if (this.status !== 'connected' && this.status !== 'error') {
-          this._rebuild(0)
-        } else if (this.channel) {
-          this._track()
-        }
+      if (this.left || s !== 'active' || this.status === 'error') return
+      // Back in the foreground. If the socket died while we were away, phoenix's own
+      // reconnect may still be sleeping in its backoff: cycle it now. Errored channels
+      // rejoin by themselves when the socket opens.
+      if (!supabase.realtime.isConnected()) {
+        Promise.resolve(supabase.realtime.disconnect()).catch(() => {}).then(() => { if (!this.left) supabase.realtime.connect() })
+      } else if (this._linkUp()) {
+        this._track() // tell everyone we're back
+      } else if (!this.reconnectTimer) {
+        this._rebuild(0)
       }
-      // We intentionally do NOT disconnect or tear down on 'background' —
-      // the background location task keeps the process and network alive.
+      // Nothing is torn down on 'background'.
     })
     // For games that use location (laser tag), start background location so
     // the OS keeps our WebSocket alive while the player checks another app.
@@ -794,49 +803,73 @@ export class Room {
   // ---- connection ----------------------------------------------------------
 
   async _open() {
-    if (this.left) return
-    const topic = `arcade:${this.gameId}:${this.code}`
-    // supabase.channel() reuses a channel with the same topic, so make sure a
-    // previous one (from a quick leave + rejoin) is fully removed first.
-    const stale = supabase.getChannels().find((c) => c.topic === `realtime:${topic}`)
-    if (stale) {
-      try { await supabase.removeChannel(stale) } catch { /* ignore */ }
-    }
-    if (this.left || this.channel) return
-    const ch = supabase.channel(topic, {
-      config: { broadcast: { self: false, ack: false }, presence: { key: this.me.id } },
-    })
-    this.channel = ch
-    ch.on('presence', { event: 'sync' }, () => { if (this.channel === ch) this._syncRoster() })
-    ch.on('broadcast', { event: 'msg' }, ({ payload }) => { if (this.channel === ch) this._onMsg(payload) })
-    ch.subscribe((status, err) => {
-      if (this.channel !== ch || this.left) return
-      if (status === 'SUBSCRIBED') {
-        // After a real drop, rejoin at the back of the line so whoever stayed
-        // connected (and has the freshest game state) keeps the host role.
-        if (this.failures > 0 && this.everSyncedWithOthers) this.joinedAt = Date.now()
-        this.failures = 0
-        this._setStatus('connected')
-        this._track()
-        if (this.mode === 'join' && !this.everSynced) {
-          clearTimeout(this.joinCheckTimer)
-          this.joinCheckTimer = setTimeout(() => this._checkJoined(), 6000)
-        }
-        // Ask the host for the latest game state after any (re)connect.
-        if (this.hostId && this.hostId !== this.me.id) this.send('state_req', {})
-      } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
-        if (err) console.warn('arcade channel', status, err?.message ?? err)
-        this.failures += 1
-        this._setStatus('reconnecting')
-        this._rebuild(Math.min(15000, 1000 * 2 ** Math.min(this.failures, 4)))
+    if (this.left || this.channel || this._opening) return
+    this._opening = true
+    try {
+      // Make sure the join carries a valid JWT (refreshes it if it expired while offline).
+      try { await supabase.realtime.setAuth() } catch { /* offline: join with what we have */ }
+      const topic = `arcade:${this.gameId}:${this.code}`
+      // supabase.channel() reuses a channel with the same topic, so make sure a
+      // previous one (from a quick leave + rejoin) is fully removed first.
+      const stale = supabase.getChannels().find((c) => c.topic === `realtime:${topic}`)
+      if (stale) {
+        try { await supabase.removeChannel(stale) } catch { /* ignore */ }
       }
-    })
+      if (this.left || this.channel) return
+      const ch = supabase.channel(topic, {
+        config: { broadcast: { self: false, ack: false }, presence: { key: this.me.id } },
+      })
+      this.channel = ch
+      ch.on('presence', { event: 'sync' }, () => { if (this.channel === ch) this._syncRoster() })
+      ch.on('broadcast', { event: 'msg' }, ({ payload }) => { if (this.channel === ch) this._onMsg(payload) })
+      // Why the server is about to close us (rate limit, auth) arrives here first.
+      ch.on('system', {}, (p) => { if (this.channel === ch && p?.status === 'error') console.warn('arcade channel system', p?.message) })
+      ch.subscribe((status, err) => {
+        if (this.channel !== ch || this.left) return
+        if (status === 'SUBSCRIBED') {
+          // Joined (or re-joined by the library after a blip): cancel any pending teardown.
+          clearTimeout(this.reconnectTimer); this.reconnectTimer = null
+          clearTimeout(this.degradeTimer); this.degradeTimer = null
+          if (this.failures > 0 && this.everSyncedWithOthers) {
+            // After a real drop, rejoin at the back of the line so whoever stayed connected
+            // (and has the freshest game state) keeps the host role.
+            const others = this.roster.filter((p) => p.id !== this.me.id).map((p) => (p.joinedAt || 0) + 1)
+            this.joinedAt = Math.max(Date.now(), ...others)
+          }
+          this.failures = 0
+          this._setStatus('connected')
+          this._track()
+          if (this.mode === 'join' && !this.everSynced) {
+            clearTimeout(this.joinCheckTimer)
+            this.joinCheckTimer = setTimeout(() => this._checkJoined(), 8000)
+          }
+          // Ask the host for the latest game state after any (re)connect.
+          if (this.hostId && this.hostId !== this.me.id) this.send('state_req', {})
+        } else if (status === 'CLOSED') {
+          // The server closed the channel (rate limit, token…): the library will NOT rejoin
+          // this one, so we must build a fresh channel.
+          this.failures += 1
+          this._markDegraded()
+          this._rebuild(this.failures === 1 ? 250 : Math.min(15000, 1000 * 2 ** Math.min(this.failures, 4)))
+        } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+          // Transient: phoenix reconnects the socket and rejoins the channel on its own
+          // (SUBSCRIBED fires again). Only tear down if it hasn't come back in a while.
+          if (err) console.warn('arcade channel', status, err?.message ?? err)
+          this.failures += 1
+          this._markDegraded()
+          if (!this.reconnectTimer) this._rebuild(20000)
+        }
+      })
+    } finally {
+      this._opening = false
+    }
   }
 
   _rebuild(delay) {
     clearTimeout(this.reconnectTimer)
     this.reconnectTimer = setTimeout(async () => {
-      if (this.left) return
+      this.reconnectTimer = null
+      if (this.left || this._opening) return
       const old = this.channel
       this.channel = null
       if (old) {
@@ -844,6 +877,21 @@ export class Room {
       }
       if (!this.left) this._safeOpen()
     }, delay)
+  }
+
+  // Show "reconnecting" only if the link is still down after a short grace period, so a
+  // 300 ms blip never flashes a banner over the game.
+  _markDegraded(graceMs = 2500) {
+    if (this.degradeTimer || this.status !== 'connected') return
+    this.degradeTimer = setTimeout(() => {
+      this.degradeTimer = null
+      if (!this.left && !this._linkUp()) this._setStatus('reconnecting')
+    }, graceMs)
+  }
+
+  // The channel is really joined and the socket is up (not just our own status flag).
+  _linkUp() {
+    return !!this.channel && this.channel.state === 'joined' && supabase.realtime.isConnected()
   }
 
   _checkJoined() {
@@ -871,7 +919,7 @@ export class Room {
   }
 
   _track() {
-    if (!this.channel || this.status !== 'connected') return
+    if (!this._linkUp()) return
     this.channel.track(this._presenceMeta()).catch((e) => console.warn('presence track failed', e?.message ?? e))
   }
 
@@ -1033,10 +1081,22 @@ export class Room {
   // ---- messaging ----------------------------------------------------------
 
   send(type, data, { to } = {}) {
-    if (!this.channel || this.left) return
-    const msg = { type, from: this.me.id, to: to || null, data, ts: Date.now() }
-    if (this.status !== 'connected') return
-    this.channel.send({ type: 'broadcast', event: 'msg', payload: msg }).catch(() => {})
+    // Gate on the channel's real state: while it's down a send would either go out as one
+    // HTTP POST per message or pile up and replay as a stale burst on rejoin.
+    if (this.left || !this._linkUp()) return
+    const msg = { type, from: this.me.id, data }
+    if (to) msg.to = to
+    if (type !== 'pos') msg.ts = Date.now()
+    this.channel.send({ type: 'broadcast', event: 'msg', payload: msg }, { timeout: 2000 }).catch(() => {})
+  }
+
+  // Host replies (hit confirmations, "you got hit", notices) ride together in one message
+  // with the next state flush instead of one broadcast each: with automatic weapons that is
+  // the difference between ~4 and ~50 messages a second on the room.
+  queue(type, data, { to } = {}) {
+    if (!this.isHost()) { this.send(type, data, { to }); return }
+    this._outbox.push({ t: type, to: to || null, d: data })
+    if (!this._pubTimer) this._flushState()
   }
 
   _onMsg(msg) {
@@ -1053,7 +1113,13 @@ export class Room {
         this.emitter.emit('state_req', msg.from)
         return
       case 'action':
-        if (this.isHost()) this.emitter.emit('action', msg.data, msg.from)
+        if (this.isHost()) this.emitter.emit('action', msg.data, msg.from, msg.ts)
+        return
+      case 'batch':
+        for (const it of Array.isArray(msg.data) ? msg.data : []) {
+          if (!it || typeof it !== 'object') continue
+          this._onMsg({ type: it.t, to: it.to || null, data: it.d, from: msg.from, ts: msg.ts })
+        }
         return
       case 'pos':
         this._setPosition(msg.from, msg.data)
@@ -1104,16 +1170,36 @@ export class Room {
     this._changed()
   }
 
-  // Host: replace the authoritative state and broadcast it.
+  // Host: replace the authoritative state and broadcast it. The local UI updates at once;
+  // the broadcast goes out immediately the first time and then at most once per
+  // STATE_FLUSH_MS while changes keep coming (12 shots a second ≠ 12 state broadcasts).
   publishState(next) {
     if (!this.isHost()) return
-    this.stateSeq += 1
     this.lastStateFrom = this.me.id
     this.state = next
     this.clockOffset = 0
-    this.send('state', this._stateEnvelope())
     this.emitter.emit('state', this.state)
     this._changed()
+    this._stateDirty = true
+    if (!this._pubTimer) this._flushState()
+  }
+
+  _flushState() {
+    if (this.left) return
+    if (this._stateDirty && this.isHost() && this.state) {
+      this._stateDirty = false
+      this.stateSeq += 1
+      this.send('state', this._stateEnvelope())
+    }
+    if (this._outbox.length) {
+      const out = this._outbox
+      this._outbox = []
+      this.send('batch', out)
+    }
+    this._pubTimer = setTimeout(() => {
+      this._pubTimer = null
+      if ((this._stateDirty || this._outbox.length) && !this.left) this._flushState()
+    }, STATE_FLUSH_MS)
   }
 
   getState() {
@@ -1127,7 +1213,7 @@ export class Room {
   // Players send actions to the host; the host handles its own locally.
   sendAction(action) {
     if (this.isHost()) {
-      this.emitter.emit('action', action, this.me.id)
+      this.emitter.emit('action', action, this.me.id, Date.now())
     } else {
       this.send('action', action)
     }
@@ -1168,14 +1254,14 @@ export class Room {
   // ---- positions ----------------------------------------------------------
 
   sendPosition(p) {
-    if (!p) return
-    const data = { lat: p.lat, lng: p.lng, acc: p.acc ?? null }
+    if (!p || !Number.isFinite(p.lat) || !Number.isFinite(p.lng)) return
+    const data = { lat: Math.round(p.lat * 1e6) / 1e6, lng: Math.round(p.lng * 1e6) / 1e6, acc: Number.isFinite(p.acc) ? Math.round(p.acc) : null }
     this._setPosition(this.me.id, data)
     this.send('pos', data)
   }
 
   _setPosition(id, data) {
-    if (!data || typeof data.lat !== 'number' || typeof data.lng !== 'number') return
+    if (!data || !Number.isFinite(data.lat) || !Number.isFinite(data.lng)) return
     this.positions = { ...this.positions, [id]: { lat: data.lat, lng: data.lng, acc: data.acc ?? null, at: Date.now() } }
     this._positionsChanged()
   }
@@ -1244,6 +1330,10 @@ export class Room {
   _teardown() {
     clearTimeout(this.joinCheckTimer)
     clearTimeout(this.reconnectTimer)
+    clearTimeout(this.degradeTimer)
+    clearTimeout(this._pubTimer)
+    this._pubTimer = null
+    this._outbox = []
     if (discovery.advert?.code === this.code) setAdvert(null)
     const ch = this.channel
     this.channel = null
@@ -1386,14 +1476,19 @@ export function useSharedLocation(room, { heading = false, enabled = true } = {}
     let headSub = null
     let last = null
     let lastSent = 0
+    let lastSentPos = null
     const share = (force) => {
       if (!last) return
       const now = Date.now()
       if (!force && now - lastSent < 900) return
+      // Standing still: nothing new to say (the keep-alive below still refreshes us).
+      if (!force && lastSentPos && distanceMeters(lastSentPos, last) < 1 && lastSentPos.acc === last.acc) return
       lastSent = now
+      lastSentPos = last
       room.sendPosition(last)
     }
-    const keepAlive = setInterval(() => share(true), 3000)
+    // Keep-alive only when a fix wasn't sent recently (positions go stale after 15 s).
+    const keepAlive = setInterval(() => { if (Date.now() - lastSent >= 2500) share(true) }, 1000)
     ;(async () => {
       try {
         const perm = await Location.requestForegroundPermissionsAsync()
@@ -1443,7 +1538,7 @@ export function useHostLoop(room, isHost, handlers, tickMs = 1000) {
     const run = (name, ...args) => {
       try { ref.current[name]?.(...args) } catch (e) { console.warn(`host ${name} failed`, e?.message ?? e) }
     }
-    const off = room.onAction((action, from) => run('onAction', action, from))
+    const off = room.onAction((action, from, sentAt) => run('onAction', action, from, sentAt))
     run('onTick')
     const t = setInterval(() => run('onTick'), tickMs)
     return () => { off(); clearInterval(t) }

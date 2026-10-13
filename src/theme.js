@@ -35,6 +35,11 @@ function surface(key) {
   if (Platform.OS === 'ios') return DynamicColorIOS({ dark: dark[key], light: light[key] })
   return (Appearance.getColorScheme() === 'light' ? light : dark)[key]
 }
+// Same for the glass fills (previously always the light values on Android).
+function glass(lightValue, darkValue) {
+  if (Platform.OS === 'ios') return DynamicColorIOS({ light: lightValue, dark: darkValue })
+  return Appearance.getColorScheme() === 'light' ? lightValue : darkValue
+}
 
 export const colors = {
   ink: surface('ink'),
@@ -64,10 +69,10 @@ export const colors = {
   // Ethereal frosted glass: translucent fills over blurred backdrop
   // Dark mode: deep frosted glass with 0.1 opacity for frosted appearance
   // Light mode: 0.38 opacity for visible but transparent cards
-  glassFill: Platform.OS === 'ios' ? DynamicColorIOS({ light: 'rgba(255,255,255,0.38)', dark: 'rgba(255,255,255,0.1)' }) : 'rgba(255,255,255,0.38)',
-  glassFillStrong: Platform.OS === 'ios' ? DynamicColorIOS({ light: 'rgba(255,255,255,0.48)', dark: 'rgba(255,255,255,0.16)' }) : 'rgba(255,255,255,0.48)',
-  glassBorderLight: Platform.OS === 'ios' ? DynamicColorIOS({ light: 'rgba(255,255,255,0.7)', dark: 'rgba(255,255,255,0.25)' }) : 'rgba(255,255,255,0.7)',
-  glassBorderDark: Platform.OS === 'ios' ? DynamicColorIOS({ light: 'rgba(255,255,255,0.35)', dark: 'rgba(255,255,255,0.08)' }) : 'rgba(255,255,255,0.35)',
+  glassFill: glass('rgba(255,255,255,0.38)', 'rgba(255,255,255,0.1)'),
+  glassFillStrong: glass('rgba(255,255,255,0.48)', 'rgba(255,255,255,0.16)'),
+  glassBorderLight: glass('rgba(255,255,255,0.7)', 'rgba(255,255,255,0.25)'),
+  glassBorderDark: glass('rgba(255,255,255,0.35)', 'rgba(255,255,255,0.08)'),
   glassShadow: 'rgba(0,0,0,0.2)',
 }
 

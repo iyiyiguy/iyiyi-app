@@ -4,9 +4,23 @@
 // All effects are purely cosmetic overlays keyed off Realtime messages the player already
 // receives (lt_shot, got_hit, grenade/sticky_bomb/land_mine detonations). They use
 // Animated for GPU-driven opacity/scale so the camera stays smooth.
-import React, { memo, useCallback, useEffect, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { Animated, Easing, StyleSheet, Text, View, useWindowDimensions } from 'react-native'
-import { bearingDeg, distanceMeters } from '../../lib/multiplayer'
+import { bearingDeg } from '../../lib/multiplayer'
+import { ENEMY_BOLT, glowFor } from './gunGlow'
+
+// ─── Perspective helpers for the laser bolts ───
+// A bolt moving at constant speed away from the camera covers less and less of the screen
+// per frame and shrinks as 1/depth. `persp(t)` is the screen-space fraction of the way from
+// the muzzle to the vanishing point at time t (0..1); `shrink(t)` the 1/depth scale.
+const PERSP_K = 7 // how far "into" the scene the bolt flies (bigger = deeper)
+const PERSP_STEPS = 12
+const perspInput = Array.from({ length: PERSP_STEPS + 1 }, (_, i) => i / PERSP_STEPS)
+const perspAt = (t) => (1 - 1 / (1 + PERSP_K * t)) / (1 - 1 / (1 + PERSP_K))
+const shrinkAt = (t) => 1 / (1 + PERSP_K * t)
+// Growing toward the camera is the reverse: the same curve mirrored in time.
+const approachAt = (t) => 1 - perspAt(1 - t)
+const growAt = (t) => shrinkAt(1 - t)
 
 // ─── Muzzle flash: brief yellow/white starburst at the edge of the screen ───
 const FLASH_DURATION = 280
@@ -171,51 +185,61 @@ function MegaExplosion({ id, label, angle, dist, by, onDone }) {
   )
 }
 
-// ─── Your own shot: glowing rounds with a trail flying from the gun to the target ───
-const OUT_MS = 320
-const OUT_MAX = 8
+// ─── Your own shot: a laser bolt (blaster style) flying from the muzzle into the scene ───
+// An elongated glowing capsule oriented along its line of travel. It starts big at the
+// barrel and shrinks with 1/depth as it races toward the target (or straight down the
+// crosshair into the distance), so it reads as a projectile in 3D, not a sprite sliding
+// across the glass. A small impact flare blooms where it lands.
+const OUT_MS = 300
+const OUT_MAX = 10
+const BOLT_LEN = 120
+const BOLT_W = 13
 
-function OutgoingBullet({ id, fromX, fromY, toX, toY, onDone }) {
+function LaserBolt({ id, fromX, fromY, toX, toY, color, onDone }) {
   const t = useRef(new Animated.Value(0)).current
   useEffect(() => {
-    Animated.timing(t, { toValue: 1, duration: OUT_MS + 160, easing: Easing.linear, useNativeDriver: true }).start(() => onDone(id))
+    Animated.timing(t, { toValue: 1, duration: OUT_MS + 140, easing: Easing.linear, useNativeDriver: true }).start(() => onDone(id))
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
-  const flightEnd = OUT_MS / (OUT_MS + 160)
-  // Head of the round plus two trailing ghosts a few frames behind it.
-  const dot = (lag, size, op, key) => {
-    const a = Math.min(flightEnd, lag)
-    const p = t.interpolate({ inputRange: [0, a, flightEnd + lag, 1], outputRange: [0, 0, 1, 1], extrapolate: 'clamp' })
-    return (
-      <Animated.View
-        key={key}
-        pointerEvents="none"
-        style={[st.outBullet, {
-          width: size, height: size, borderRadius: size / 2,
-          left: fromX - size / 2, top: fromY - size / 2,
-          opacity: t.interpolate({ inputRange: [0, flightEnd, flightEnd + 0.01, 1], outputRange: [op, op, 0, 0] }),
-          transform: [
-            { translateX: p.interpolate({ inputRange: [0, 1], outputRange: [0, toX - fromX] }) },
-            { translateY: p.interpolate({ inputRange: [0, 1], outputRange: [0, toY - fromY] }) },
-            { scale: p.interpolate({ inputRange: [0, 1], outputRange: [1.2, 0.35] }) },
-          ],
-        }]}
-      />
-    )
-  }
+  const flightEnd = OUT_MS / (OUT_MS + 140)
+  const dx = toX - fromX
+  const dy = toY - fromY
+  const angle = (Math.atan2(dy, dx) * 180) / Math.PI
+  // Keyframes along the perspective curve (position + scale), then hold at the target.
+  const inputRange = [...perspInput.map((u) => u * flightEnd), 1]
+  const px = [...perspInput.map((u) => dx * perspAt(u)), dx]
+  const py = [...perspInput.map((u) => dy * perspAt(u)), dy]
+  const sc = [...perspInput.map((u) => Math.max(0.06, shrinkAt(u))), 0.06]
+  const translateX = t.interpolate({ inputRange, outputRange: px })
+  const translateY = t.interpolate({ inputRange, outputRange: py })
+  const scale = t.interpolate({ inputRange, outputRange: sc })
+  const opacity = t.interpolate({ inputRange: [0, 0.05, flightEnd, flightEnd + 0.02, 1], outputRange: [0.4, 1, 1, 0, 0] })
+  const flare = t.interpolate({ inputRange: [0, flightEnd, flightEnd + 0.08, 1], outputRange: [0, 0, 1, 0] })
+  const flareScale = t.interpolate({ inputRange: [0, flightEnd, 1], outputRange: [0.2, 0.2, 1.8] })
   return (
     <>
-      {dot(0.12, 12, 0.35, 'g2')}
-      {dot(0.06, 15, 0.6, 'g1')}
-      {dot(0, 18, 1, 'h')}
-      {/* impact spark at the target */}
       <Animated.View
         pointerEvents="none"
-        style={[st.outSpark, {
-          left: toX - 22, top: toY - 22,
-          opacity: t.interpolate({ inputRange: [0, flightEnd, flightEnd + 0.05, 1], outputRange: [0, 0, 1, 0] }),
-          transform: [{ scale: t.interpolate({ inputRange: [0, flightEnd, 1], outputRange: [0.2, 0.2, 1.6] }) }],
+        style={[st.boltWrap, {
+          left: fromX - BOLT_LEN / 2, top: fromY - BOLT_W / 2,
+          opacity,
+          transform: [{ translateX }, { translateY }, { rotate: `${angle}deg` }, { scale }],
         }]}
-      />
+      >
+        {/* outer glow, coloured body, white-hot core */}
+        <View style={[st.boltGlow, { backgroundColor: color, boxShadow: `0 0 18px 6px ${color}` }]} />
+        <View style={[st.boltBody, { backgroundColor: color }]} />
+        <View style={st.boltCore} />
+      </Animated.View>
+      <Animated.View
+        pointerEvents="none"
+        style={[st.boltFlare, {
+          left: toX - 24, top: toY - 24, borderColor: color,
+          opacity: flare,
+          transform: [{ scale: flareScale }],
+        }]}
+      >
+        <View style={[st.boltFlareCore, { backgroundColor: color }]} />
+      </Animated.View>
     </>
   )
 }
@@ -304,77 +328,63 @@ function Tracer({ id, angle, onDone }) {
   )
 }
 
-// ─── Bullet projectile: a bright round flying across the full screen ───
-// Enters from the edge at the shooter's angle, flies past the centre and off
-// the far side. Much bigger and more visible than the tracer streak.
-const BULLET_DURATION = 500
-const BULLET_MAX = 10
+// ─── Incoming bolt: an enemy's shot coming out of the scene toward you ───
+// Appears as a speck near the horizon in the shooter's direction, grows with 1/depth as
+// it closes and streaks past one side of the crosshair. Shots from behind (angle > 100°
+// off your heading) cross the bottom of the screen instead.
+const IN_MS = 420
+const IN_MAX = 10
 
-function BulletProjectile({ id, angle, screenW, screenH, onDone }) {
-  const progress = useRef(new Animated.Value(0)).current
+function IncomingBolt({ id, angle, screenW, screenH, onDone }) {
+  const t = useRef(new Animated.Value(0)).current
   useEffect(() => {
-    Animated.timing(progress, {
-      toValue: 1,
-      duration: BULLET_DURATION,
-      easing: Easing.linear,
-      useNativeDriver: true,
-    }).start(() => onDone(id))
+    Animated.timing(t, { toValue: 1, duration: IN_MS, easing: Easing.linear, useNativeDriver: true }).start(() => onDone(id))
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Compute a start and end point: the bullet enters from the edge at `angle`
-  // and exits on the opposite side, passing roughly through the centre with a
-  // small random lateral offset so successive shots don't stack.
-  const rad = (angle - 90) * (Math.PI / 180)
-  const diag = Math.hypot(screenW, screenH) * 0.55
-  // Entry point: just outside the screen edge in the direction of the shooter
-  const startX = screenW / 2 + Math.cos(rad) * diag
-  const startY = screenH / 2 + Math.sin(rad) * diag
-  // Exit point: opposite side, with slight jitter
-  const jitter = (Math.random() - 0.5) * 60
-  const exitRad = rad + Math.PI + jitter * (Math.PI / 180)
-  const endX = screenW / 2 + Math.cos(exitRad) * diag
-  const endY = screenH / 2 + Math.sin(exitRad) * diag
-
-  const translateX = progress.interpolate({
-    inputRange: [0, 1],
-    outputRange: [startX - screenW / 2, endX - screenW / 2],
-  })
-  const translateY = progress.interpolate({
-    inputRange: [0, 1],
-    outputRange: [startY - screenH / 2, endY - screenH / 2],
-  })
-  // Bullet is brightest mid-flight, fades in/out at edges
-  const opacity = progress.interpolate({
-    inputRange: [0, 0.15, 0.5, 0.85, 1],
-    outputRange: [0, 1, 1, 0.6, 0],
-  })
-  // Trail stretches in the direction of travel
-  const scaleX = progress.interpolate({
-    inputRange: [0, 0.2, 0.8, 1],
-    outputRange: [0.4, 1, 1, 0.6],
-  })
-
+  const a = ((angle % 360) + 360) % 360
+  const signed = a > 180 ? a - 360 : a // -180..180, + = right of straight ahead
+  const fromBehind = Math.abs(signed) > 100
+  const cx = screenW / 2
+  const horizonY = screenH * 0.42
+  let sx, sy, ex, ey
+  if (!fromBehind) {
+    // Start on the horizon, offset by the bearing; end low on the opposite side so it passes you.
+    const spread = Math.max(-1, Math.min(1, signed / 70))
+    sx = cx + spread * screenW * 0.45
+    sy = horizonY + (Math.random() - 0.5) * 30
+    ex = cx + (spread >= 0 ? 1 : -1) * screenW * (0.55 + Math.random() * 0.25) * (Math.abs(spread) < 0.15 ? (Math.random() < 0.5 ? -1 : 1) : 1)
+    ey = screenH * (0.95 + Math.random() * 0.2)
+  } else {
+    // From behind: streak across the bottom third from one edge to the other.
+    const ltr = signed < 0
+    sx = ltr ? -60 : screenW + 60
+    sy = screenH * (0.6 + Math.random() * 0.25)
+    ex = ltr ? screenW + 60 : -60
+    ey = sy - 40 + Math.random() * 80
+  }
+  const dx = ex - sx
+  const dy = ey - sy
+  const rot = (Math.atan2(dy, dx) * 180) / Math.PI
+  const inputRange = perspInput
+  const px = perspInput.map((u) => dx * (fromBehind ? u : approachAt(u)))
+  const py = perspInput.map((u) => dy * (fromBehind ? u : approachAt(u)))
+  const sc = perspInput.map((u) => (fromBehind ? 0.9 : Math.max(0.08, growAt(u) * 1.1)))
   return (
     <Animated.View
-      style={[
-        st.bullet,
-        {
-          left: '50%',
-          top: '50%',
-          opacity,
-          transform: [
-            { translateX },
-            { translateY },
-            { rotate: `${angle}deg` },
-            { scaleX },
-          ],
-        },
-      ]}
       pointerEvents="none"
+      style={[st.boltWrap, {
+        left: sx - BOLT_LEN / 2, top: sy - BOLT_W / 2,
+        opacity: t.interpolate({ inputRange: [0, 0.1, 0.85, 1], outputRange: [0.3, 1, 1, 0] }),
+        transform: [
+          { translateX: t.interpolate({ inputRange, outputRange: px }) },
+          { translateY: t.interpolate({ inputRange, outputRange: py }) },
+          { rotate: `${rot}deg` },
+          { scale: t.interpolate({ inputRange, outputRange: sc }) },
+        ],
+      }]}
     >
-      {/* Glowing bullet core + trail */}
-      <View style={st.bulletTrail} />
-      <View style={st.bulletCore} />
+      <View style={[st.boltGlow, { backgroundColor: ENEMY_BOLT, boxShadow: `0 0 18px 6px ${ENEMY_BOLT}` }]} />
+      <View style={[st.boltBody, { backgroundColor: ENEMY_BOLT }]} />
+      <View style={st.boltCore} />
     </Animated.View>
   )
 }
@@ -437,13 +447,15 @@ export function useBattleEffects() {
   // Your own shot. leftHanded puts the gun (and the bullet's start) on the left.
   // target: optional { x, y } on screen (an enemy you're aiming at); default the crosshair.
   // from: optional { x, y } where the round leaves (the gun's muzzle).
-  const addOutgoing = useCallback((leftHanded = false, target = null, from = null) => {
-    const toX = Number.isFinite(target?.x) ? target.x : screenW / 2
-    const toY = Number.isFinite(target?.y) ? target.y : screenH / 2
+  const addOutgoing = useCallback((leftHanded = false, target = null, from = null, gunId = null) => {
+    // No target: the bolt flies down the crosshair into the distance (a little scatter so a
+    // burst doesn't stack into one line).
+    const toX = Number.isFinite(target?.x) ? target.x : screenW / 2 + (Math.random() - 0.5) * 14
+    const toY = Number.isFinite(target?.y) ? target.y : screenH / 2 + (Math.random() - 0.5) * 10
     const fromX = Number.isFinite(from?.x) ? from.x : screenW * (leftHanded ? 0.3 : 0.7)
     const fromY = Number.isFinite(from?.y) ? from.y : screenH * 0.8
     setOuts((a) => {
-      const n = [...a, { id: nextId++, fromX, fromY, toX, toY }]
+      const n = [...a, { id: nextId++, fromX, fromY, toX, toY, color: glowFor(gunId) }]
       return n.length > OUT_MAX ? n.slice(-OUT_MAX) : n
     })
   }, [screenW, screenH])
@@ -467,7 +479,7 @@ export function useBattleEffects() {
   const addBullet = useCallback((angle) => {
     setBullets((a) => {
       const n = [...a, { id: nextId++, angle }]
-      return n.length > BULLET_MAX ? n.slice(-BULLET_MAX) : n
+      return n.length > IN_MAX ? n.slice(-IN_MAX) : n
     })
   }, [])
 
@@ -478,8 +490,8 @@ export function useBattleEffects() {
       {explosions.map((e) => <Explosion key={e.id} id={e.id} label={e.label} onDone={removeExplosion} />)}
       {hits.map((h) => <HitIndicator key={h.id} id={h.id} angle={h.angle} onDone={removeHit} />)}
       {tracers.map((t) => <Tracer key={t.id} id={t.id} angle={t.angle} onDone={removeTracer} />)}
-      {outs.map((o) => <OutgoingBullet key={o.id} id={o.id} fromX={o.fromX} fromY={o.fromY} toX={o.toX} toY={o.toY} onDone={removeOut} />)}
-      {bullets.map((b) => <BulletProjectile key={b.id} id={b.id} angle={b.angle} screenW={screenW} screenH={screenH} onDone={removeBullet} />)}
+      {outs.map((o) => <LaserBolt key={o.id} id={o.id} fromX={o.fromX} fromY={o.fromY} toX={o.toX} toY={o.toY} color={o.color} onDone={removeOut} />)}
+      {bullets.map((b) => <IncomingBolt key={b.id} id={b.id} angle={b.angle} screenW={screenW} screenH={screenH} onDone={removeBullet} />)}
       <View style={st.killWrap} pointerEvents="none">
         {kills.map((k, i) => <KillBanner key={k.id} id={k.id} index={i} victim={k.victim} weapon={k.weapon} points={k.points} onDone={removeKill} />)}
       </View>
@@ -520,8 +532,12 @@ const st = StyleSheet.create({
     borderWidth: 3,
     borderColor: '#ff6600',
   },
-  outSpark: { position: 'absolute', width: 44, height: 44, borderRadius: 22, borderWidth: 3, borderColor: '#ffd23f', backgroundColor: 'rgba(255,240,180,0.35)' },
-  outBullet: { position: 'absolute', width: 18, height: 18, borderRadius: 9, backgroundColor: '#fff6c2', borderWidth: 3, borderColor: '#ffb300', shadowColor: '#ff8a00', shadowOpacity: 1, shadowRadius: 10, shadowOffset: { width: 0, height: 0 }, elevation: 8 },
+  boltWrap: { position: 'absolute', width: BOLT_LEN, height: BOLT_W, alignItems: 'center', justifyContent: 'center' },
+  boltGlow: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, borderRadius: BOLT_W / 2, opacity: 0.55 },
+  boltBody: { position: 'absolute', left: 6, right: 6, top: 2, bottom: 2, borderRadius: BOLT_W / 2 },
+  boltCore: { position: 'absolute', left: 14, right: 14, top: BOLT_W / 2 - 2, height: 4, borderRadius: 2, backgroundColor: '#ffffff' },
+  boltFlare: { position: 'absolute', width: 48, height: 48, borderRadius: 24, borderWidth: 2, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.12)' },
+  boltFlareCore: { width: 16, height: 16, borderRadius: 8, opacity: 0.9 },
   megaLabelWrap: { position: 'absolute', top: '18%', left: 0, right: 0, alignItems: 'center' },
   megaLabel: { fontSize: 22, fontWeight: '900', letterSpacing: 1.5, textShadowColor: '#000', textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 8 },
   megaBy: { marginTop: 2, fontSize: 13, fontWeight: '800', color: '#fff', textShadowColor: '#000', textShadowRadius: 6 },
@@ -568,32 +584,5 @@ const st = StyleSheet.create({
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.9,
     shadowRadius: 6,
-  },
-  // ─── Bullet projectile styles ───
-  bullet: {
-    position: 'absolute',
-    width: 36, height: 12,
-    marginLeft: -18, marginTop: -6,
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  bulletCore: {
-    width: 12, height: 12,
-    borderRadius: 6,
-    backgroundColor: '#ffe44d',
-    shadowColor: '#ffaa00',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 1,
-    shadowRadius: 10,
-    elevation: 8,
-  },
-  bulletTrail: {
-    width: 24, height: 6,
-    borderRadius: 3,
-    backgroundColor: 'rgba(255,200,60,0.7)',
-    shadowColor: '#ff6600',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.8,
-    shadowRadius: 8,
   },
 })

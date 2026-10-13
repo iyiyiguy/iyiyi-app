@@ -7,21 +7,22 @@
 import React, { useEffect, useRef } from 'react'
 import { Animated, Easing, Image, StyleSheet, View, useWindowDimensions } from 'react-native'
 import { gunArt } from '../../lib/gunArt'
+import { glowFor } from './gunGlow'
 
 // Art: square renders, hand enters bottom-right, barrel points up-left. muzzle = barrel tip
-// as a fraction of the square; glow = the gun's accent colour for its flash.
+// as a fraction of the square. The flash takes the gun's accent colour (gunGlow.js).
 const FPS = {
-  pistol: { img: require('../../../assets/guns/fps/pistol.png'), muzzle: [0.389, 0.246], glow: '#3df5ff', kick: 1 },
-  uzi: { img: require('../../../assets/guns/fps/uzi.png'), muzzle: [0.346, 0.234], glow: '#4dff9a', kick: 0.6 },
-  burst: { img: require('../../../assets/guns/fps/burst.png'), muzzle: [0.381, 0.301], glow: '#ffd23f', kick: 0.8 },
-  smg: { img: require('../../../assets/guns/fps/smg.png'), muzzle: [0.4, 0.324], glow: '#4d8bff', kick: 0.6 },
-  sniper: { img: require('../../../assets/guns/fps/sniper.png'), muzzle: [0.361, 0.285], glow: '#9b6bff', kick: 1.8 },
-  scatter: { img: require('../../../assets/guns/fps/scatter.png'), muzzle: [0.34, 0.264], glow: '#ff9a2e', kick: 1.7 },
-  assault: { img: require('../../../assets/guns/fps/assault.png'), muzzle: [0.414, 0.328], glow: '#ff3b3b', kick: 0.75 },
-  marksman: { img: require('../../../assets/guns/fps/marksman.png'), muzzle: [0.424, 0.324], glow: '#7b7bff', kick: 1.3 },
-  minigun: { img: require('../../../assets/guns/fps/minigun.png'), muzzle: [0.367, 0.312], glow: '#ffd000', kick: 0.45 },
-  railgun: { img: require('../../../assets/guns/fps/railgun.png'), muzzle: [0.322, 0.312], glow: '#ffb03a', kick: 1.6 },
-  rocket: { img: require('../../../assets/guns/fps/rocket.png'), muzzle: [0.344, 0.289], glow: '#ff5a1f', kick: 2 },
+  pistol: { img: require('../../../assets/guns/fps/pistol.png'), muzzle: [0.389, 0.246], kick: 1 },
+  uzi: { img: require('../../../assets/guns/fps/uzi.png'), muzzle: [0.346, 0.234], kick: 0.6 },
+  burst: { img: require('../../../assets/guns/fps/burst.png'), muzzle: [0.381, 0.301], kick: 0.8 },
+  smg: { img: require('../../../assets/guns/fps/smg.png'), muzzle: [0.4, 0.324], kick: 0.6 },
+  sniper: { img: require('../../../assets/guns/fps/sniper.png'), muzzle: [0.361, 0.285], kick: 1.8 },
+  scatter: { img: require('../../../assets/guns/fps/scatter.png'), muzzle: [0.34, 0.264], kick: 1.7 },
+  assault: { img: require('../../../assets/guns/fps/assault.png'), muzzle: [0.414, 0.328], kick: 0.75 },
+  marksman: { img: require('../../../assets/guns/fps/marksman.png'), muzzle: [0.424, 0.324], kick: 1.3 },
+  minigun: { img: require('../../../assets/guns/fps/minigun.png'), muzzle: [0.367, 0.312], kick: 0.45 },
+  railgun: { img: require('../../../assets/guns/fps/railgun.png'), muzzle: [0.322, 0.312], kick: 1.6 },
+  rocket: { img: require('../../../assets/guns/fps/rocket.png'), muzzle: [0.344, 0.289], kick: 2 },
 }
 
 // Size and placement of the view model (shared with the bullet effect so rounds leave the barrel).
@@ -38,7 +39,7 @@ export function muzzlePoint({ gun, width, height, bottom = 0, leftHanded = false
   if (!art) return null
   const f = frameFor({ width, height, bottom, leftHanded })
   const mx = leftHanded ? 1 - art.muzzle[0] : art.muzzle[0]
-  return { x: f.left + mx * f.size, y: f.top + art.muzzle[1] * f.size, color: art.glow }
+  return { x: f.left + mx * f.size, y: f.top + art.muzzle[1] * f.size, color: glowFor(gun?.id) }
 }
 
 export default function GunViewModel({ gun, shotTick = 0, bottom = 0, hidden = false, leftHanded = false, aim = null }) {
@@ -50,6 +51,7 @@ export default function GunViewModel({ gun, shotTick = 0, bottom = 0, hidden = f
   const aimX = useRef(new Animated.Value(0)).current
   const aimY = useRef(new Animated.Value(0)).current
   const art = FPS[gun?.id]
+  const glow = glowFor(gun?.id)
   const auto = gun?.fireMode === 'automatic'
 
   useEffect(() => {
@@ -126,7 +128,7 @@ export default function GunViewModel({ gun, shotTick = 0, bottom = 0, hidden = f
       ]}
     >
       {/* light from the flash spilling over the hand + gun */}
-      <Animated.View style={[styles.spill, { left: mx - size * 0.45, top: my - size * 0.3, width: size * 0.9, height: size * 0.9, borderRadius: size * 0.45, backgroundColor: art.glow, opacity: flash.interpolate({ inputRange: [0, 1], outputRange: [0, 0.22] }) }]} />
+      <Animated.View style={[styles.spill, { left: mx - size * 0.45, top: my - size * 0.3, width: size * 0.9, height: size * 0.9, borderRadius: size * 0.45, backgroundColor: glow, opacity: flash.interpolate({ inputRange: [0, 1], outputRange: [0, 0.22] }) }]} />
       <Image source={art.img} style={[styles.img, leftHanded && { transform: [{ scaleX: -1 }] }]} resizeMode="contain" fadeDuration={0} />
       {/* muzzle flash at the barrel tip */}
       <Animated.View
@@ -136,9 +138,9 @@ export default function GunViewModel({ gun, shotTick = 0, bottom = 0, hidden = f
           transform: [{ scale: flash.interpolate({ inputRange: [0, 1], outputRange: [0.5, 1.15] }) }, { rotate: `${(shotTick * 37) % 90}deg` }],
         }]}
       >
-        <View style={[styles.flashGlow, { backgroundColor: art.glow, borderRadius: flashSize / 2 }]} />
+        <View style={[styles.flashGlow, { backgroundColor: glow, borderRadius: flashSize / 2 }]} />
         {[0, 45, 90, 135].map((r) => (
-          <View key={r} style={[styles.ray, { backgroundColor: art.glow, transform: [{ rotate: `${r}deg` }], width: flashSize, left: 0, top: flashSize / 2 - flashSize * 0.04, height: flashSize * 0.08 }]} />
+          <View key={r} style={[styles.ray, { backgroundColor: glow, transform: [{ rotate: `${r}deg` }], width: flashSize, left: 0, top: flashSize / 2 - flashSize * 0.04, height: flashSize * 0.08 }]} />
         ))}
         <View style={[styles.flashCore, { width: flashSize * 0.42, height: flashSize * 0.42, borderRadius: flashSize * 0.21, left: flashSize * 0.29, top: flashSize * 0.29 }]} />
       </Animated.View>

@@ -6,12 +6,31 @@
 // most about once a second.
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { Image, Platform, Pressable, StyleSheet, Text, View } from 'react-native'
-import MapView from '../../components/SafeMapView'
+import MapView, { mapsAvailable } from '../../components/SafeMapView'
 import { Circle, Marker } from 'react-native-maps'
 import { Ionicons } from '@expo/vector-icons'
 import { isValidCoord, withAlpha } from '../GameMap'
 import { colors, radii } from '../../theme'
 import { PulseDot, RadarSweep, ShotPing } from './Uav'
+import { angleDiff, bearingDeg, distanceMeters } from '../../lib/multiplayer'
+
+// Google Maps (Android) in the game's dark palette: no POI clutter, muted roads, dark water.
+const DARK_MAP = [
+  { elementType: 'geometry', stylers: [{ color: '#141a2a' }] },
+  { elementType: 'labels.text.fill', stylers: [{ color: '#8a93ad' }] },
+  { elementType: 'labels.text.stroke', stylers: [{ color: '#0b0e18' }] },
+  { elementType: 'labels.icon', stylers: [{ visibility: 'off' }] },
+  { featureType: 'administrative', elementType: 'geometry', stylers: [{ color: '#2a3148' }] },
+  { featureType: 'poi', stylers: [{ visibility: 'off' }] },
+  { featureType: 'poi.park', elementType: 'geometry', stylers: [{ color: '#162233' }] },
+  { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#2c3550' }] },
+  { featureType: 'road', elementType: 'geometry.stroke', stylers: [{ color: '#1a2036' }] },
+  { featureType: 'road.highway', elementType: 'geometry', stylers: [{ color: '#3a4466' }] },
+  { featureType: 'road', elementType: 'labels.text.fill', stylers: [{ color: '#9aa3bf' }] },
+  { featureType: 'transit', stylers: [{ visibility: 'off' }] },
+  { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#0d1630' }] },
+  { featureType: 'landscape.man_made', elementType: 'geometry', stylers: [{ color: '#182036' }] },
+]
 
 // Map ranges (radius shown around the player, metres).
 export const MAP_RANGES = [
@@ -139,13 +158,14 @@ function LaserMap({ me, headingDeg, rangeM, points, areas, boundary, rangeRingM,
         initialCamera={initial}
         mapType={Platform.OS === 'ios' ? 'mutedStandard' : 'standard'}
         userInterfaceStyle="dark"
+        customMapStyle={Platform.OS === 'android' ? DARK_MAP : undefined}
         scrollEnabled={!!interactive}
         zoomEnabled={!!interactive}
         pitchEnabled={false}
         rotateEnabled={!!interactive}
         showsCompass={false}
         showsScale={false}
-        showsPointsOfInterests={false}
+        showsPointsOfInterest={false}
         showsBuildings={false}
         showsUserLocation={false}
         toolbarEnabled={false}
@@ -170,7 +190,7 @@ function LaserMap({ me, headingDeg, rangeM, points, areas, boundary, rangeRingM,
           <Marker
             key={`p-${p.id}`}
             coordinate={{ latitude: p.pos.lat, longitude: p.pos.lng }}
-            tracksViewChanges={p.kind === 'uav' || p.kind === 'c4' || p.kind === 'mine'}
+            tracksViewChanges={Platform.OS === 'ios' && (p.kind === 'uav' || p.kind === 'c4' || p.kind === 'mine')}
             opacity={Number.isFinite(p.opacity) ? Math.max(0, Math.min(1, p.opacity)) : 1}
             anchor={{ x: 0.5, y: 0.5 }}
           >
@@ -187,11 +207,81 @@ function LaserMap({ me, headingDeg, rangeM, points, areas, boundary, rangeRingM,
   )
 }
 
+// ---------------------------------------------------------------------------
+// Radar: a drawn tactical map used when no map provider is available (Android build
+// without a Google Maps key). Heading-up, range rings, same points/areas as the real map.
+// ---------------------------------------------------------------------------
+function RadarMap({ me, headingDeg, rangeM, points, areas, boundary, rangeRingM, sizePx, headingUp, style, large }) {
+  const hasMe = !!me && isValidCoord(me.lat, me.lng)
+  const half = sizePx / 2
+  const pxPerM = (half - 4) / Math.max(20, rangeM)
+  const hdg = headingUp ? headingDeg || 0 : 0
+  const place = (pos) => {
+    if (!hasMe || !pos || !isValidCoord(pos.lat, pos.lng)) return null
+    const d = distanceMeters(me, pos)
+    const rel = (angleDiff(bearingDeg(me, pos), hdg) * Math.PI) / 180
+    return { x: half + Math.sin(rel) * d * pxPerM, y: half - Math.cos(rel) * d * pxPerM, d }
+  }
+  const rings = [0.33, 0.66, 1]
+  return (
+    <View style={[style, s.radar]} pointerEvents="none">
+      {/* grid + rings */}
+      <View style={[s.radarLine, { left: half - 0.5, top: 0, width: 1, height: sizePx }]} />
+      <View style={[s.radarLine, { top: half - 0.5, left: 0, height: 1, width: sizePx }]} />
+      {rings.map((f) => (
+        <View key={f} style={[s.radarRing, { width: (half - 4) * 2 * f, height: (half - 4) * 2 * f, borderRadius: (half - 4) * f, left: half - (half - 4) * f, top: half - (half - 4) * f }]} />
+      ))}
+      {hasMe && rangeRingM > 0 && rangeRingM * pxPerM < half ? (
+        <View style={[s.radarRange, { width: rangeRingM * pxPerM * 2, height: rangeRingM * pxPerM * 2, borderRadius: rangeRingM * pxPerM, left: half - rangeRingM * pxPerM, top: half - rangeRingM * pxPerM }]} />
+      ) : null}
+      {/* play area */}
+      {boundary ? (() => {
+        const c = place(boundary)
+        if (!c) return null
+        const r = boundary.r * pxPerM
+        return <View style={[s.radarBoundary, { width: r * 2, height: r * 2, borderRadius: r, left: c.x - r, top: c.y - r }]} />
+      })() : null}
+      {/* S&D sites */}
+      {(areas || []).map((a) => {
+        const c = place(a.pos)
+        if (!c) return null
+        const r = Math.max(6, (a.r || 12) * pxPerM)
+        return (
+          <View key={`a-${a.id}`} style={[s.radarArea, { width: r * 2, height: r * 2, borderRadius: r, left: c.x - r, top: c.y - r, borderColor: a.color || colors.gold, backgroundColor: withAlpha(a.color || colors.gold, 0.2) }]}>
+            <Text style={s.siteText}>{a.label}</Text>
+          </View>
+        )
+      })}
+      {/* points: clamp to the rim when out of range */}
+      {(points || []).map((p) => {
+        const c = place(p.pos)
+        if (!c) return null
+        let { x, y } = c
+        const dx = x - half
+        const dy = y - half
+        const dist = Math.hypot(dx, dy)
+        const out = dist > half - 8
+        if (out) { x = half + (dx / dist) * (half - 8); y = half + (dy / dist) * (half - 8) }
+        const size = large ? 14 : 10
+        const kind = p.kind
+        const color = kind === 'uav' || kind === 'ping' ? colors.danger : kind === 'c4' || kind === 'mine' ? colors.gold : p.color || colors.danger
+        return (
+          <View key={`p-${p.id}`} style={[s.radarDot, { width: size, height: size, borderRadius: kind === 'c4' || kind === 'mine' ? 2 : size / 2, left: x - size / 2, top: y - size / 2, backgroundColor: color, opacity: out ? 0.6 : Number.isFinite(p.opacity) ? p.opacity : 1, boxShadow: `0 0 6px ${color}` }, p.ring && s.dotRing]}>
+            {!!p.label && large ? <Text style={s.dotLabel}>{p.label}</Text> : null}
+          </View>
+        )
+      })}
+      {!hasMe ? <Text style={s.noFixText}>Waiting for GPS…</Text> : null}
+    </View>
+  )
+}
+
 /**
  * Small heading-up minimap. Single taps do nothing (and never reach the fire handler);
  * a double tap calls onOpen.
  */
-export const MapMinimap = React.memo(function MapMinimap({ size = 140, me, headingDeg = 0, rangeM, points, areas, boundary, rangeRingM, onOpen, rangeLabel, uavActive }) {
+export const MapMinimap = React.memo(function MapMinimap({ size = 140, me, headingDeg = 0, rangeM, points, areas, boundary, rangeRingM, onOpen, rangeLabel, uavActive, available = mapsAvailable }) {
+  const Body = available ? LaserMap : RadarMap
   const lastTap = useRef(0)
   const onPress = () => {
     const t = Date.now()
@@ -210,7 +300,7 @@ export const MapMinimap = React.memo(function MapMinimap({ size = 140, me, headi
   return (
     <Pressable onPress={onPress} style={{ width: size, height: size }} accessibilityRole="button" accessibilityLabel="Minimap. Double-tap to open the large map" accessibilityHint="Double-tap to open the map">
       <View style={[s.mini, { width: size, height: size, borderRadius: half }]}>
-        <LaserMap
+        <Body
           me={me}
           headingDeg={headingDeg}
           rangeM={rangeM}
@@ -227,7 +317,8 @@ export const MapMinimap = React.memo(function MapMinimap({ size = 140, me, headi
         <View style={[s.meArrowWrap, { left: half - 8, top: half - 9 }]} pointerEvents="none">
           <Ionicons name="navigate" size={16} color="#3ad1ff" style={{ transform: [{ rotate: '-45deg' }] }} />
         </View>
-        {uavActive ? <RadarSweep size={size} /> : <View style={s.rim} pointerEvents="none" />}
+        {uavActive ? <RadarSweep size={size} /> : <View style={[s.rim, { borderColor: 'rgba(58,209,255,0.7)' }]} pointerEvents="none" />}
+        <View style={s.rimOuter} pointerEvents="none" />
         <Text style={[s.north, { left: half + Math.sin(nRad) * (half - 11) - 6, top: half - Math.cos(nRad) * (half - 11) - 8 }]} pointerEvents="none">N</Text>
         {!!rangeLabel && <Text style={s.scale} pointerEvents="none">{rangeLabel}</Text>}
       </View>
@@ -236,9 +327,10 @@ export const MapMinimap = React.memo(function MapMinimap({ size = 140, me, headi
 })
 
 /** Full-screen map overlay (not a native Modal, so it can never get stuck over the game). */
-export function MapOverlay({ visible, onClose, insets, me, rangeId, allowed, onRange, points, areas, boundary, rangeRingM, uavActive }) {
+export function MapOverlay({ visible, onClose, insets, me, rangeId, allowed, onRange, points, areas, boundary, rangeRingM, uavActive, available = mapsAvailable }) {
   if (!visible) return null
   const range = rangeById(rangeId)
+  const Body = available ? LaserMap : RadarMap
   return (
     <View style={[StyleSheet.absoluteFill, s.overlayRoot]}>
       <Pressable style={s.backdrop} onPress={onClose} accessibilityLabel="Close map" />
@@ -271,7 +363,7 @@ export function MapOverlay({ visible, onClose, insets, me, rangeId, allowed, onR
               )
             })}
           </View>
-          <LaserMap
+          <Body
             me={me}
             headingDeg={0}
             rangeM={range.r}
@@ -281,6 +373,7 @@ export function MapOverlay({ visible, onClose, insets, me, rangeId, allowed, onR
             rangeRingM={rangeRingM}
             sizePx={340}
             interactive
+            large
             style={s.bigMap}
           />
           <Text style={s.panelNote}>
@@ -294,8 +387,16 @@ export function MapOverlay({ visible, onClose, insets, me, rangeId, allowed, onR
 }
 
 const s = StyleSheet.create({
-  mini: { overflow: 'hidden', backgroundColor: '#1a1f2e' },
-  rim: { ...StyleSheet.absoluteFill, borderRadius: 999, borderWidth: 2, borderColor: 'rgba(255,255,255,0.55)' },
+  mini: { overflow: 'hidden', backgroundColor: '#10141f' },
+  rim: { ...StyleSheet.absoluteFill, borderRadius: 999, borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.55)' },
+  rimOuter: { ...StyleSheet.absoluteFill, borderRadius: 999, borderWidth: 4, borderColor: 'rgba(8,10,18,0.6)' },
+  radar: { backgroundColor: '#0f1420', overflow: 'hidden' },
+  radarLine: { position: 'absolute', backgroundColor: 'rgba(58,209,255,0.12)' },
+  radarRing: { position: 'absolute', borderWidth: 1, borderColor: 'rgba(58,209,255,0.22)' },
+  radarRange: { position: 'absolute', borderWidth: 1, borderColor: 'rgba(255,255,255,0.4)', borderStyle: 'dashed' },
+  radarBoundary: { position: 'absolute', borderWidth: 2, borderColor: 'rgba(124,140,255,0.9)', backgroundColor: 'rgba(124,140,255,0.06)' },
+  radarArea: { position: 'absolute', borderWidth: 1.5, alignItems: 'center', justifyContent: 'center' },
+  radarDot: { position: 'absolute', borderWidth: 1.5, borderColor: '#fff', alignItems: 'center', justifyContent: 'center' },
   c4: { width: 54, height: 54 },
   mine: { width: 56, height: 32 },
   north: { position: 'absolute', width: 12, textAlign: 'center', fontSize: 11, fontWeight: '900', color: '#ff5d6c', textShadowColor: 'rgba(0,0,0,0.9)', textShadowRadius: 3 },

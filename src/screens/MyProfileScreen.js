@@ -350,7 +350,7 @@ export default function MyProfileScreen({ navigation }) {
         <Pressable onPress={pickAvatar} disabled={uploading} accessibilityRole="button" accessibilityLabel={t('changePhotoA11y')}>
           <Image source={avatarSource(profile?.avatar_url)} style={styles.avatar} />
           <View style={styles.editBadge}>
-            {uploading ? <ActivityIndicator size="small" color={colors.onBrand} /> : <Text style={{ fontSize: 16 }}>📷</Text>}
+            {uploading ? <ActivityIndicator size="small" color={colors.onBrand} /> : <Ionicons name="camera" size={16} color={colors.onBrand} />}
           </View>
         </Pressable>
       </View>
@@ -503,7 +503,7 @@ export default function MyProfileScreen({ navigation }) {
           </View>
           <TextInput
             placeholderTextColor={colors.textFaint}
-            style={[styles.input, { minHeight: 60 }]}
+            style={[styles.input, { minHeight: 60, textAlignVertical: 'top' }]}
             placeholder={t('bioPlaceholder')}
             multiline
             maxLength={200}
@@ -663,7 +663,7 @@ export default function MyProfileScreen({ navigation }) {
       )}
 
       <Modal visible={importOpen} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setImportOpen(false)} onDismiss={() => setImportOpen(false)}>
-        <View style={styles.screen}>
+        <View style={[styles.screen, { backgroundColor: colors.ink }]}>
           <View style={{ paddingTop: 24, paddingHorizontal: 20, paddingBottom: 12, flexDirection: 'row', justifyContent: 'space-between' }}>
             <Text style={type.title}>{t('importTitle')}</Text>
             <Pressable onPress={() => setImportOpen(false)} hitSlop={12}>
@@ -763,7 +763,8 @@ const styles = StyleSheet.create({
     marginHorizontal: 20, marginBottom: 12, backgroundColor: colors.inkSurface,
     borderRadius: radii.md, borderWidth: 1, borderColor: colors.hairline, padding: 12,
   },
-  input: { ...type.body, marginTop: 4, padding: 0 },
+  // No lineHeight here: Android squeezes EditText glyphs into a fixed line box and clips them.
+  input: { fontSize: 16, fontWeight: '400', color: colors.text, marginTop: 4, padding: 0, paddingVertical: 0, minHeight: 24, includeFontPadding: false, textAlignVertical: 'center' },
   tagWrap: {
     flexDirection: 'row', flexWrap: 'wrap', gap: 10,
     marginHorizontal: 20, marginBottom: 24,

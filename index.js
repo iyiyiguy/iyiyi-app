@@ -23,8 +23,27 @@ Sentry.init({
 // future build's crash does turn out to be a catchable JS import-time error.
 try {
   const { registerRootComponent } = require('expo');
-  const App = require('./App').default;
-  registerRootComponent(App);
+  const React = require('react');
+  const { Appearance, Platform } = require('react-native');
+  // Android/web read the colour scheme ONCE when src/theme.js is evaluated, so the saved
+  // light/dark preference has to be applied before the app module (and theme.js) load.
+  // iOS uses dynamic colours and doesn't need this; it loads the app immediately.
+  function Root() {
+    const [App, setApp] = React.useState(null);
+    React.useEffect(() => {
+      let alive = true;
+      const load = () => { if (alive) setApp(() => require('./App').default); };
+      if (Platform.OS === 'ios') { load(); return () => { alive = false; }; }
+      const AsyncStorage = require('@react-native-async-storage/async-storage').default;
+      AsyncStorage.getItem('iyiyi_theme_pref').catch(() => null).then((pref) => {
+        try { if (pref === 'light' || pref === 'dark') Appearance.setColorScheme(pref); } catch (e) { /* ignore */ }
+        load();
+      });
+      return () => { alive = false; };
+    }, []);
+    return App ? React.createElement(App) : null;
+  }
+  registerRootComponent(Root);
 } catch (err) {
   try {
     const { supabase } = require('./src/lib/supabase');

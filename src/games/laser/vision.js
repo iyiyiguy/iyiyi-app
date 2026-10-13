@@ -59,14 +59,18 @@ export function pickVisionTarget({ opponents, myPos, headingDeg, headingAcc, bod
   for (const o of opponents) {
     if (!o.alive || !o.pos) continue
     const d = distanceMeters(myPos, o.pos)
-    const reach = VISION_RANGE_M + Math.min(15, ((myPos.acc ?? 10) + (o.pos.acc ?? 10)) / 2)
+    // Two phones closer together than their combined GPS error are "in reach" whatever the
+    // noisy distance says (indoors GPS can put two people in one room 40 m apart).
+    const gpsErr = (myPos.acc ?? 10) + (o.pos.acc ?? 10)
+    const reach = Math.max(VISION_RANGE_M + Math.min(15, gpsErr / 2), gpsErr)
     if (d > reach) continue
     const diff = Math.abs(angleDiff(bearingDeg(myPos, o.pos), aimBearing))
     cands.push({ o, d, diff, tol: tolerance(d, myPos.acc, o.pos.acc, headingAcc) })
   }
   const matched = cands.filter((c) => c.diff <= c.tol).sort((a, b) => a.diff / a.tol - b.diff / b.tol)[0]
   if (matched) return { target: matched.o, distance: matched.d }
-  const fallback = cands.filter((c) => c.diff <= FALLBACK_WINDOW_DEG).sort((a, b) => a.d - b.d)[0]
+  // The camera definitely sees a person: with exactly one enemy in reach it's them.
+  const fallback = cands.length === 1 ? cands[0] : cands.filter((c) => c.diff <= FALLBACK_WINDOW_DEG).sort((a, b) => a.d - b.d)[0]
   return fallback ? { target: fallback.o, distance: fallback.d } : null
 }
 

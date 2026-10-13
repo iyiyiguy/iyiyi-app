@@ -2,6 +2,8 @@
 // Pure functions: (state, input) → next state. Only the host runs these; the
 // result is broadcast as the authoritative state.
 import { distanceMeters, shuffled } from '../../lib/multiplayer'
+import { getWeapon } from '../../lib/guns'
+import { zoneDamage } from './vision'
 
 export const MAX_HP = 100
 export const RESPAWN_MS = 8000
@@ -153,6 +155,13 @@ export function syncEndlessPlayers(state, roster, presentIds, now) {
   return { ...state, players, feed }
 }
 
+// Detonations every client should see (big explosion in its direction, kill banner for the owner).
+const BLAST_KEEP_MS = 10000
+const BLAST_MAX = 8
+// A private match only ends for lack of players once they've been gone this long (a locked
+// phone or a dropped connection comes back; presence alone flickers).
+const TOO_FEW_GRACE_MS = 30000
+
 // ---- tick --------------------------------------------------------------------
 
 export function tick(state, { now, presentIds, posOf }) {
@@ -182,16 +191,14 @@ function tickDeathmatch(state, now, presentIds, posOf) {
     next = { ...next, blasts: next.blasts.filter((b) => now - b.at <= BLAST_KEEP_MS) }
   }
   if (next.endless) return next // the public arena never ends
+  if (now >= next.endsAt) return finishDeathmatch(next)
   const present = Object.keys(next.players).filter((id) => presentIds.has(id))
   const teamsPresent = new Set(present.map((id) => next.players[id].team))
   const tooFew = present.length < 2 || (next.mode === 'tdm' && teamsPresent.size < 2)
-  if (now >= next.endsAt || tooFew) next = finishDeathmatch(next)
-  return next
+  if (!tooFew) return next.tooFewSince ? { ...next, tooFewSince: null } : next
+  if (!next.tooFewSince) return { ...next, tooFewSince: now }
+  return now - next.tooFewSince >= TOO_FEW_GRACE_MS ? finishDeathmatch(next) : next
 }
-
-// Detonations every client should see (big explosion in its direction, kill banner for the owner).
-const BLAST_KEEP_MS = 10000
-const BLAST_MAX = 8
 
 // Check every placed land mine: if an enemy is within LAND_MINE_TRIGGER_M, detonate it.
 function tickLandMines(state, now, posOf) {
@@ -205,7 +212,7 @@ function tickLandMines(state, now, posOf) {
   let sndState = state.snd
   for (const mine of state.landMines) {
     const placer = players[mine.by]
-    if (!placer) { remaining.push(mine); continue }
+    if (!placer) continue // owner left the match: the mine goes with them
     let triggered = false
     for (const [id, target] of Object.entries(players)) {
       if (id === mine.by || !target.alive) continue
@@ -273,16 +280,21 @@ function withMvp(state) {
 }
 
 function tickSnd(state, now, presentIds, posOf) {
-  const snd = state.snd
   let next = state
-  // Plant / defuse in progress (the mini-game runs on the player's phone).
+  if (next.landMines?.length && posOf) next = tickLandMines(next, now, posOf)
+  if (next.blasts?.length && next.blasts.some((b) => now - b.at > BLAST_KEEP_MS)) {
+    next = { ...next, blasts: next.blasts.filter((b) => now - b.at <= BLAST_KEEP_MS) }
+  }
+  const snd = next.snd
+  // Plant / defuse in progress (the mini-game runs on the player's phone). A missing GPS fix
+  // (stale for a moment) is "unknown", not "outside".
   if (snd.act) {
     const a = snd.act
-    const p = state.players[a.by]
+    const p = next.players[a.by]
     const pos = posOf(a.by)
     const center = actCenter(snd, a)
     const limit = (a.kind === 'plant' ? PLANT_MS : DEFUSE_MS) + ACT_GRACE_MS
-    const ok = p?.alive && presentIds.has(a.by) && center && insideRadius(pos, center, center.r || SITE_RADIUS_M) && now - a.startedAt <= limit
+    const ok = p?.alive && presentIds.has(a.by) && center && (pos ? insideRadius(pos, center, center.r || SITE_RADIUS_M) : true) && now - a.startedAt <= limit
     if (!ok) next = { ...next, snd: { ...snd, act: null } }
   }
   const s2 = next.snd
@@ -354,7 +366,7 @@ function endSndRound(state, winner, reason, now) {
 
 function nextSndRound(state, now, presentIds) {
   const snd = state.snd
-  const swap = snd.roundNo === Math.floor(snd.totalRounds / 2)
+  const swap = snd.roundNo === Math.ceil(snd.totalRounds / 2)
   const sides = swap ? { A: snd.sides.B, B: snd.sides.A } : snd.sides
   const players = {}
   for (const id of Object.keys(state.players)) players[id] = { ...state.players[id], hp: MAX_HP, alive: true, respawnAt: null }
@@ -365,6 +377,8 @@ function nextSndRound(state, now, presentIds) {
     startsAt,
     endsAt: startsAt + snd.roundMs,
     players,
+    landMines: [],
+    blasts: [],
     snd: { ...snd, roundNo: snd.roundNo + 1, sides, act: null, swapped: swap },
     feed: swap ? pushFeed(state, '🔄 Half time — sides swapped', now) : state.feed,
   }
@@ -385,7 +399,8 @@ export function applyAction(state, action, from, { now, posOf }) {
     case 'sticky_bomb': return applyStickyBomb(state, action, from, now, posOf)
     case 'land_mine': return applyLandMine(state, action, from, now, posOf)
     case 'plant_start': {
-      if (state.mode !== 'snd' || !me.alive || state.snd.act) return { state }
+      if (state.mode !== 'snd' || !me.alive) return { state }
+      if (state.snd.act) return { state, reply: state.snd.act.by === from ? undefined : notice('Someone else is already at the bomb.') }
       const b = state.snd.bomb
       if (b?.state !== 'carried' || b.carrier !== from) return { state, reply: notice('You don’t have the bomb.') }
       const site = state.snd.sites.find((x) => x.id === action.site)
@@ -393,7 +408,8 @@ export function applyAction(state, action, from, { now, posOf }) {
       return { state: { ...state, snd: { ...state.snd, act: { kind: 'plant', by: from, startedAt: now, site: site.id } } } }
     }
     case 'defuse_start': {
-      if (state.mode !== 'snd' || !me.alive || state.snd.act) return { state }
+      if (state.mode !== 'snd' || !me.alive) return { state }
+      if (state.snd.act) return { state, reply: state.snd.act.by === from ? undefined : notice('Someone else is already at the bomb.') }
       const b = state.snd.bomb
       if (b?.state !== 'planted' || me.team !== defendingTeam(state)) return { state }
       if (!insideRadius(posOf(from), b, b.r || SITE_RADIUS_M)) return { state, reply: notice('Get closer to the bomb to defuse.') }
@@ -569,17 +585,26 @@ function applyLandMine(state, action, from, now, posOf) {
 function applyHit(state, action, from, now, posOf) {
   const shooter = state.players[from]
   const target = state.players[action.target]
-  if (!shooter || !target || action.target === from || !shooter.alive || !target.alive) return { state }
-  if (state.mode !== 'ffa' && shooter.team === target.team) return { state }
+  if (!shooter || !target || action.target === from) return { state, reply: notice('That player isn’t in this match.') }
+  if (!shooter.alive) return { state }
+  if (!target.alive) return { state, reply: notice(`${target.name} is already tagged out.`) }
+  if (state.mode !== 'ffa' && shooter.team === target.team) return { state, reply: notice('Friendly fire is off.') }
   if ((target.protectedUntil || 0) > now) return { state, reply: notice(`${target.name} just respawned — protected for a moment.`) }
   const a = posOf(from)
   const b = posOf(action.target)
-  if (!a || !b) return { state, reply: notice('Shot not counted — waiting for GPS.') }
+  if (!a || !b) return { state, reply: notice(!a ? 'Shot not counted — waiting for your GPS.' : `Shot not counted — ${target.name} has no GPS fix.`) }
+  const dist = distanceMeters(a, b)
+  const gpsErr = (a.acc ?? 10) + (b.acc ?? 10)
   const maxRange = action.method === 'vision' ? VISION_MAX_M : MAX_RANGE_M + 30
-  if (distanceMeters(a, b) > maxRange) return { state, reply: notice('Out of range.') }
+  if (dist > maxRange && dist > gpsErr) return { state, reply: notice('Out of range.') }
   const zone = action.zone === 'head' || action.zone === 'limb' ? action.zone : 'body'
-  const hits = Math.max(1, Math.min(5, Math.floor(Number(action.hits) || 1)))
-  const damage = Math.max(1, Math.min(MAX_HP, Math.floor(Number(action.damage) || 0)))
+  // Damage is the host's call: weapon + zone + distance (never the client's number).
+  const gun = getWeapon(action.weapon) || getWeapon('pistol')
+  // Automatics batch a few rounds per action (client HIT_BATCH_MS); others send one pull.
+  const cap = gun.fireMode === 'automatic' ? 5 : Math.max(1, Math.min(5, gun.shotsPerClick || 1))
+  const hits = Math.max(1, Math.min(cap, Math.floor(Number(action.hits) || 1)))
+  const per = zoneDamage(zone, { damageMultiplier: Math.max(0.3, Math.min(3, gun.damageMultiplier || 1)) }, dist)
+  const damage = Math.max(1, Math.min(MAX_HP, per * hits))
   const hp = Math.max(0, target.hp - damage)
   const killed = hp <= 0
   const snd = state.mode === 'snd'
@@ -618,7 +643,7 @@ function applyHit(state, action, from, now, posOf) {
 
   // Rocket launcher splash damage: hit everyone near the target within ROCKET_RADIUS_M.
   const splashHits = []
-  if (action.weapon === 'rocket') {
+  if (gun.id === 'rocket') {
     const updPlayers = { ...next.players }
     const me = updPlayers[from]
     let splashKills = 0
@@ -657,5 +682,5 @@ function applyHit(state, action, from, now, posOf) {
     next.players = updPlayers
   }
 
-  return { state: next, reply: { type: 'hit_ok', data: { name: target.name, killed, zone, damage: Math.min(damage, target.hp), splash: splashHits.length ? splashHits : undefined } } }
+  return { state: next, reply: { type: 'hit_ok', data: { name: target.name, killed, zone, hits, damage: Math.min(damage, target.hp), splash: splashHits.length ? splashHits : undefined } } }
 }

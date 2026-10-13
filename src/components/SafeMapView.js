@@ -1,4 +1,4 @@
-import { forwardRef, useImperativeHandle } from 'react'
+import { forwardRef, useImperativeHandle, useState } from 'react'
 import { Platform, StyleSheet, Text, View } from 'react-native'
 import Constants from 'expo-constants'
 import MapView from 'react-native-maps'
@@ -23,10 +23,11 @@ const MapPlaceholder = forwardRef(function MapPlaceholder({ style }, ref) {
     pointForCoordinate: () => Promise.resolve({ x: 0, y: 0 }),
     coordinateForPoint: () => Promise.resolve({ latitude: 0, longitude: 0 }),
   }), [])
+  const [small, setSmall] = useState(false)
   return (
-    <View style={[style, styles.box]}>
-      <Text style={styles.icon}>🗺️</Text>
-      <Text style={styles.text}>Map coming soon on Android</Text>
+    <View style={[style, styles.box]} onLayout={(e) => setSmall(e.nativeEvent.layout.width < 180)}>
+      <Text style={[styles.icon, small && { fontSize: 20, marginBottom: 0 }]}>🗺️</Text>
+      {small ? null : <Text style={styles.text}>Map unavailable in this build</Text>}
     </View>
   )
 })

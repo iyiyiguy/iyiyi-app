@@ -19,12 +19,12 @@ const GOLD = '#ffc94d'
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v))
 const modeLabel = (w) => (w?.fireMode === 'automatic' ? 'AUTO' : (w?.shotsPerClick || 1) > 1 ? 'BURST' : 'SEMI')
 
-export function WeaponSpinWheel({ visible, loadout, currentId, onPick, onClose }) {
+export function WeaponSpinWheel({ visible, loadout, currentId, onPick, onClose, insets }) {
   if (!visible || !Array.isArray(loadout) || loadout.length === 0) return null
-  return <Wheel loadout={loadout} currentId={currentId} onPick={onPick} onClose={onClose} />
+  return <Wheel loadout={loadout} currentId={currentId} onPick={onPick} onClose={onClose} bottomInset={insets?.bottom || 0} />
 }
 
-function Wheel({ loadout, currentId, onPick, onClose }) {
+function Wheel({ loadout, currentId, onPick, onClose, bottomInset = 0 }) {
   const { width } = useWindowDimensions()
   const n = loadout.length
   const startIdx = Math.max(0, loadout.findIndex((w) => w.id === currentId))
@@ -129,7 +129,7 @@ function Wheel({ loadout, currentId, onPick, onClose }) {
   return (
     <View style={[StyleSheet.absoluteFill, st.root]}>
       <Pressable style={st.backdrop} onPress={() => finish('close')} accessibilityLabel="Close weapon wheel" />
-      <Animated.View style={[st.dock, { opacity, transform: [{ translateY: lift }] }]} pointerEvents="box-none">
+      <Animated.View style={[st.dock, { paddingBottom: bottomInset, opacity, transform: [{ translateY: lift }] }]} pointerEvents="box-none">
         {/* Centred weapon details */}
         <View style={st.info} pointerEvents="none">
           <View style={st.infoHead}>

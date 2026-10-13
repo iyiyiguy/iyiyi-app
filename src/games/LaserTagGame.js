@@ -13,20 +13,23 @@
 // automatic fires continuously while held (useTrigger). Your phone decides who is in
 // your sights; the host validates hits and runs the rules (laser/engine.js).
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Animated, Pressable, StyleSheet, Text, View } from 'react-native'
+import { Animated, BackHandler, Platform, Pressable, StyleSheet, Text, View } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { Camera, CameraView } from 'expo-camera'
+import { useKeepAwake } from 'expo-keep-awake'
 import { CameraOff, useCameraGate } from '../components/CameraGate'
 import { setAudioModeAsync } from 'expo-audio'
 import { Btn, LocationGate, Spectating, formatClock } from './MultiplayerUI'
 import { CountdownOverlay, MatchSummary, RoundBreak, hudShadow } from './laser/Hud'
 import {
-  AlertBanner, BigActionButton, BombCountdown, EnemyMarkers, ScoreboardOverlay, TapMiniGame, WeaponChip, WeaponWheel,
+  AlertBanner, BigActionButton, BombCountdown, EnemyMarkers, ScoreboardOverlay, TapMiniGame, WeaponWheel,
 } from './laser/HudExtras'
+import { CompassTape, FireButton, HUD, HudButton, KillFeed, MatchBar, Nameplates, ScorePops, StatusPanel, WeaponCard } from './laser/HudPro'
+import { mapsAvailable } from '../components/SafeMapView'
 import { DEFAULT_MAP_RANGE, MapMinimap, MapOverlay, allowedRanges, rangeById } from './laser/MapMinimap'
 import { AIM_MODE_LABELS, useAim } from './laser/useAim'
 import * as engine from './laser/engine'
-import { classifyHit, photoRectToScreen, pickVisionTarget, useVisionCapture, visionAvailable, zoneDamage, VISION_RANGE_M } from './laser/vision'
+import { classifyHit, photoRectToScreen, pickVisionTarget, useVisionCapture, visionAvailable, VISION_RANGE_M } from './laser/vision'
 import {
   TEAMS, angleDiff, bearingDeg, compassLabel, distanceMeters, formatDistance, recordRoundResult,
   useHostLoop, useRoomClock, useRoomPositions, useRoomSnapshot, useSharedLocation,
@@ -126,10 +129,24 @@ const COMPASS_SLACK = { 3: 4, 2: 8, 1: 12, 0: 15 }
 
 // Half-angle (degrees) within which a player counts as "in your sights". GPS
 // error matters more up close, so the window widens as distance shrinks.
+// Combined GPS error of two phones (m). Closer than this, the bearing between them is noise.
+const gpsErr = (myAcc, theirAcc) => Math.min(30, Math.max(3, Math.hypot(myAcc ?? 10, theirAcc ?? 10)))
+
 function aimTolerance(d, myAcc, theirAcc, headingAcc) {
-  const err = Math.min(30, Math.max(3, Math.hypot(myAcc ?? 10, theirAcc ?? 10)))
+  const err = gpsErr(myAcc, theirAcc)
+  // Point blank (inside the GPS error): any heading counts — the two of you are in the same spot.
+  if (d <= err) return 180
+  // Just outside it the bearing is still rough: widen smoothly from 90° down to the normal window.
   const deg = (Math.atan2(err * 0.6 + 0.5, Math.max(d, 1)) * 180) / Math.PI
-  return Math.min(35, Math.max(3, deg) + (COMPASS_SLACK[headingAcc] ?? 10))
+  const normal = Math.min(35, Math.max(3, deg) + (COMPASS_SLACK[headingAcc] ?? 10))
+  if (d <= err * 2) return Math.max(normal, 90 - (45 * (d - err)) / err)
+  return normal
+}
+
+// Can this enemy be shot at all right now? Within the gun's reach, or so close that GPS can't
+// tell you apart (same room).
+function withinReach(o, myPos, maxRange) {
+  return o.d <= maxRange || o.d <= gpsErr(myPos?.acc, o.pos?.acc)
 }
 
 function hitChance(d, gun, offCenter) {
@@ -139,7 +156,10 @@ function hitChance(d, gun, offCenter) {
 }
 
 const FREE_LOADOUT = FREE_GUN_IDS.map((id) => getWeapon(id))
-const HOST_HIT_MIN_MS = 55 // per-player spam guard on the host (autos fire up to 12/s; semi-auto has no client cap)
+const HOST_HIT_MIN_MS = 55 // per-player spam guard on the host, by the SENDER's clock (autos fire up to 12/s)
+const PLATE_RANGE_M = 45 // GPS nameplates show for enemies this close (or anyone the map reveals)
+const HIT_BATCH_MS = 140 // automatic fire: rounds on one target inside this window travel as one action
+const ENDLESS_PRESENCE_GRACE_MS = 120000 // arena: keep a player's score through a 2-minute drop (lock screen, call)
 
 // The player's loadout (owned guns + free SMG) and the active weapon; switching persists
 // the choice as the equipped gun.
@@ -170,6 +190,9 @@ function useLoadout() {
 }
 
 export function LaserTagGame({ room, onExit }) {
+  // The screen stays on for the whole match: a phone that dims mid-game backgrounds the app
+  // (Android then drops the connection).
+  useKeepAwake(undefined, { suppressDeactivateWarnings: true })
   const insets = useArcadeInsets()
   const snap = useRoomSnapshot(room)
   const positions = useRoomPositions(room)
@@ -290,6 +313,12 @@ export function LaserTagGame({ room, onExit }) {
   const [shotTick, setShotTick] = useState(0)
   const [hitTick, setHitTick] = useState(0) // a shot of yours connected (hit marker)
   const [killTick, setKillTick] = useState(0)
+  const [pops, setPops] = useState([]) // floating "+10 HIT" score pops
+  const popId = useRef(0)
+  const addPop = useCallback((points, label, color) => {
+    setPops((a) => [...a, { id: ++popId.current, points, label, color }].slice(-4))
+  }, [])
+  const removePop = useCallback((id) => setPops((a) => a.filter((p) => p.id !== id)), [])
   const [blastKey, setBlastKey] = useState(0)
   const grenadeTimers = useRef([])
   useEffect(() => () => grenadeTimers.current.forEach(clearTimeout), [])
@@ -345,6 +374,8 @@ export function LaserTagGame({ room, onExit }) {
         playSfx('hit')
         buzz(d?.killed ? 'success' : 'medium')
         const dmg = d?.damage ? ` −${d.damage}` : ''
+        if (d?.killed) addPop(100, 'TAGGED OUT', HUD.red)
+        else addPop((d?.hits || 1) * 10 + (d?.zone === 'head' ? 10 : 0), d?.zone === 'head' ? 'HEADSHOT' : 'HIT', d?.zone === 'head' ? HUD.gold : '#fff')
         if (d?.killed) battle.addKill({ victim: d.name, weapon: d.zone === 'head' ? `${gunNameRef.current} · Headshot` : gunNameRef.current, points: 100 })
         for (const sh of Array.isArray(d?.splash) ? d.splash : []) {
           if (sh?.killed) battle.addKill({ victim: sh.name, weapon: `${gunNameRef.current} · Splash`, points: 100 })
@@ -423,7 +454,7 @@ export function LaserTagGame({ room, onExit }) {
       }),
     ]
     return () => offs.forEach((off) => off())
-  }, [room, flash])
+  }, [room, flash, addPop])
 
   // Arena blasts (land mines): every player sees a huge explosion in the direction it went off,
   // and the mine's owner gets a kill banner / hit notice.
@@ -565,68 +596,67 @@ export function LaserTagGame({ room, onExit }) {
         return
       }
       if (!s) return
-      const presentIds = room.presentIds()
+      const presentIds = room.presentIds(s.endless ? ENDLESS_PRESENCE_GRACE_MS : undefined)
       const synced = engine.syncEndlessPlayers(s, room.roster, presentIds, t)
       const next = engine.tick(synced, { now: t, presentIds, posOf })
       if (next !== s) {
         room.publishState(next)
-        // Notify victims of land mine detonations (detected by mines being removed from the list).
-        if (synced.landMines?.length && next.landMines?.length < synced.landMines.length) {
-          for (const [id, p] of Object.entries(next.players)) {
-            const old = synced.players[id]
-            if (!old || old.hp === p.hp) continue
-            const damage = old.hp - p.hp
-            if (damage <= 0) continue
-            // Find who placed the mine that hit them
-            const removedMines = synced.landMines.filter((m) => !next.landMines.includes(m))
-            const miner = removedMines[0]?.by
-            const minerName = synced.players[miner]?.name || 'Someone'
-            const victimMsg = { by: minerName, zone: 'land_mine', damage, killed: !p.alive }
-            if (id === meId) room.emitter.emit('msg:got_hit', victimMsg, miner)
-            else room.send('got_hit', victimMsg, { to: id })
+        // Tell each land-mine victim whose mine it was (one blast entry per detonation).
+        if (next.blasts?.length && next.blasts !== synced.blasts) {
+          const old = new Set((synced.blasts || []).map((b) => b.id))
+          for (const b of next.blasts) {
+            if (old.has(b.id)) continue
+            for (const h of b.hits || []) {
+              const victimMsg = { by: b.byName || 'Someone', zone: 'land_mine', damage: h.damage, killed: h.killed }
+              if (h.id === meId) room.emitter.emit('msg:got_hit', victimMsg, b.by)
+              else room.queue('got_hit', victimMsg, { to: h.id })
+            }
           }
         }
       }
     },
-    onAction: (action, from) => {
+    onAction: (action, from, sentAt) => {
       const s = room.getState()
       if (!s || s.game !== 'lasertag') return
       const t = room.now()
       if (action?.type === 'hit') {
-        if (t - (lastShotByPlayer.current[from] || 0) < HOST_HIT_MIN_MS) return
-        lastShotByPlayer.current[from] = t
+        // Rate-limit by the sender's own clock (monotonic per phone); arrival times are bursty.
+        const key = Number.isFinite(sentAt) ? sentAt : t
+        if (key - (lastShotByPlayer.current[from] || 0) < HOST_HIT_MIN_MS) return
+        lastShotByPlayer.current[from] = key
       }
       const { state: next, reply } = engine.applyAction(s, action, from, { now: t, posOf })
       if (next !== s) room.publishState(next)
+      if (__DEV__ && action?.type === 'hit' && next === s && !reply) console.warn('[lasertag] hit dropped', from, action.target, s.phase)
       // Tell the person who got hit who shot them (their phone already rumbles from the HP drop).
       if (action?.type === 'grenade' && reply?.type === 'grenade_ok') {
         for (const h of reply.data?.hits || []) {
           const victimMsg = { by: s.players?.[from]?.name || 'Someone', zone: 'grenade', damage: h.damage, killed: h.killed }
           if (h.id === meId) room.emitter.emit('msg:got_hit', victimMsg, from)
-          else room.send('got_hit', victimMsg, { to: h.id })
+          else room.queue('got_hit', victimMsg, { to: h.id })
         }
       }
       if (action?.type === 'sticky_bomb' && reply?.type === 'sticky_bomb_ok') {
         for (const h of reply.data?.hits || []) {
           const victimMsg = { by: s.players?.[from]?.name || 'Someone', zone: 'sticky_bomb', damage: h.damage, killed: h.killed }
           if (h.id === meId) room.emitter.emit('msg:got_hit', victimMsg, from)
-          else room.send('got_hit', victimMsg, { to: h.id })
+          else room.queue('got_hit', victimMsg, { to: h.id })
         }
       }
       if (action?.type === 'hit' && reply?.type === 'hit_ok' && action.target) {
         const victimMsg = { by: s.players?.[from]?.name || 'Someone', zone: reply.data.zone, damage: reply.data.damage, killed: reply.data.killed }
         if (action.target === meId) room.emitter.emit('msg:got_hit', victimMsg, from)
-        else room.send('got_hit', victimMsg, { to: action.target })
+        else room.queue('got_hit', victimMsg, { to: action.target })
         // Rocket splash: notify everyone caught in the blast
         for (const sh of reply.data?.splash || []) {
           const splashMsg = { by: s.players?.[from]?.name || 'Someone', zone: 'rocket', damage: sh.damage, killed: sh.killed }
           if (sh.id === meId) room.emitter.emit('msg:got_hit', splashMsg, from)
-          else room.send('got_hit', splashMsg, { to: sh.id })
+          else room.queue('got_hit', splashMsg, { to: sh.id })
         }
       }
       if (reply) {
         if (from === meId) room.emitter.emit(`msg:${reply.type}`, reply.data, meId)
-        else room.send(reply.type, reply.data, { to: from })
+        else room.queue(reply.type, reply.data, { to: from })
       }
     },
   }, 300)
@@ -654,7 +684,7 @@ export function LaserTagGame({ room, onExit }) {
     if (!heading || !myPos) return null
     let best = null
     for (const o of enemies) {
-      if (!o.alive || o.d > (visionAim ? gun.range : Math.min(gun.range, COMPASS_MAX_RANGE_M))) continue
+      if (!o.alive || !withinReach(o, myPos, visionAim ? gun.range : Math.min(gun.range, COMPASS_MAX_RANGE_M))) continue
       const tol = aimTolerance(o.d, myPos.acc, o.pos.acc, heading.accuracy)
       const off = Math.abs(angleDiff(o.bearing, heading.deg))
       if (off > tol) continue
@@ -760,6 +790,48 @@ export function LaserTagGame({ room, onExit }) {
     }
   }
 
+  // Hits go to the host as one action per trigger pull, except automatic fire, where rounds
+  // on the same target within a short window are sent together (fewer messages per second
+  // on the room; the host counts `hits`).
+  const hitQueue = useRef({ key: null, action: null, timer: null })
+  const flushHits = useCallback(() => {
+    const q = hitQueue.current
+    clearTimeout(q.timer)
+    q.timer = null
+    if (q.action) {
+      try { room.sendAction(q.action) } catch {}
+    }
+    q.key = null
+    q.action = null
+  }, [room])
+  useEffect(() => () => clearTimeout(hitQueue.current.timer), [])
+  const sendHit = (targetId, hits, zone, method) => {
+    const action = { type: 'hit', target: targetId, hits, zone, method, weapon: gun.id }
+    if (!gun.automatic) { room.sendAction(action); return }
+    const q = hitQueue.current
+    const key = `${targetId}:${zone}`
+    if (q.action && q.key === key) {
+      q.action.hits = Math.min(5, q.action.hits + hits)
+      return
+    }
+    if (q.action) flushHits()
+    q.key = key
+    q.action = action
+    q.timer = setTimeout(flushHits, HIT_BATCH_MS)
+  }
+
+  // Compass / GPS aim: the enemy nearest your heading, hit chance by distance and gun.
+  // `snap` = camera mode with no person under the crosshair (lower chance).
+  const fireCompass = (shots, snap = false) => {
+    const target = inSightsRef.current
+    if (!target) { flash(snap ? 'Miss' : 'No one in your sights', false); return }
+    const chance = target.chance * (snap ? 0.6 : 1)
+    let hits = 0
+    for (let i = 0; i < shots; i++) if (Math.random() < chance) hits += 1
+    if (!hits) { flash('Miss', false); return }
+    sendHit(target.id, hits, 'body', 'compass')
+  }
+
   // One trigger pull. Unlimited ammo; semi-auto has no rate cap (useTrigger handles holds).
   const fireShot = () => {
     if (dead || !playing) return
@@ -767,34 +839,30 @@ export function LaserTagGame({ room, onExit }) {
     shotsRef.current += shots
     setShotTick((n) => n + 1)
     try {
-      // The round leaves the gun's barrel and flies to the enemy you're aiming at (if any).
+      // The bolt leaves the gun's barrel and flies into the scene toward the enemy you're
+      // aiming at (or straight down the crosshair into the distance).
       const from = aim.mode === 'camera' ? muzzlePoint({ gun, width: view.width || 0, height: view.height || 0, bottom: dockH || 0, leftHanded }) : null
-      battle.addOutgoing(leftHanded, aimPointRef.current, from)
+      battle.addOutgoing(leftHanded, aimPointRef.current, from, gun.id)
     } catch {}
     playShot(gun)
     buzz(gun.automatic ? 'light' : 'medium') // recoil rumble (respects the Vibration setting)
     const h = aimRef.current
     broadcastShot(h.pos)
     if (!h.pos || !h.heading) { flash('No GPS/compass fix yet', false); return }
-    if (visionAim) { fireVision(shots).catch(() => {}); return }
-    // Compass aim (top-edge mode or no on-device detection): probabilistic.
-    const target = inSightsRef.current
-    if (!target) return
-    let hits = 0
-    for (let i = 0; i < shots; i++) if (Math.random() < target.chance) hits += 1
-    if (!hits) return
-    const per = zoneDamage('body', gun, target.d)
-    room.sendAction({ type: 'hit', target: target.id, hits, zone: 'body', damage: hits * per, method: 'compass', weapon: gun.id })
+    if (visionAim) { fireVision(shots).catch(() => fireCompass(shots, true)); return }
+    fireCompass(shots)
   }
 
   // Camera aim: what's actually under the crosshair decides the hit. Rapid shots share
-  // the in-flight camera frame instead of queueing more captures.
+  // the in-flight camera frame instead of queueing more captures. When the camera sees no
+  // person under the crosshair the shot falls back to compass aim at a lower chance, so a
+  // player right next to you (inside GPS error) can still be hit.
   const fireVision = async (shots) => {
     const frame = await vision.capture()
-    if (!frame) { flash('Camera not ready — try again', false); return }
+    if (!frame) { fireCompass(shots, true); return }
     setBodies(frame.bodies)
     const hit = classifyHit(frame.bodies)
-    if (!hit) { flash('Miss', false); return }
+    if (!hit) { fireCompass(shots, true); return }
     const h = aimRef.current
     let by = null
     try {
@@ -811,9 +879,14 @@ export function LaserTagGame({ room, onExit }) {
       body: hit.body,
       tolerance: aimTolerance,
     })
-    if (!picked) { flash('That’s not a player in this game', false); return }
-    const per = zoneDamage(hit.zone, gun, picked.distance)
-    room.sendAction({ type: 'hit', target: picked.target.id, hits: shots, zone: hit.zone, damage: per * shots, method: 'vision', weapon: gun.id })
+    if (!picked) {
+      // A person, but nobody in the match matches that direction: if one enemy is in your
+      // sights by compass, count it as them; otherwise it was a bystander.
+      if (inSightsRef.current) { sendHit(inSightsRef.current.id, shots, hit.zone, 'vision'); return }
+      flash('That’s not a player in this game', false)
+      return
+    }
+    sendHit(picked.target.id, shots, hit.zone, 'vision')
   }
 
   // Throw along the compass heading; it goes off after the fuse, where it landed.
@@ -922,6 +995,21 @@ export function LaserTagGame({ room, onExit }) {
   const effectiveRangeId = allowedMapRanges.includes(mapRangeId) ? mapRangeId : allowedMapRanges[allowedMapRanges.length - 1]
   const openMap = useCallback(() => { trigger.stop(); buzz('select'); setMapOpen(true) }, [trigger])
 
+  // Android back: close whatever overlay is open first; with nothing open GamePlayScreen's
+  // beforeRemove opens the game menu (never exits the match by accident).
+  useEffect(() => {
+    if (Platform.OS !== 'android') return undefined
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (uav.sheetOpen) { uav.setSheetOpen(false); return true }
+      if (mapOpen) { setMapOpen(false); return true }
+      if (scoresOpen) { setScoresOpen(false); return true }
+      if (wheelOpen) { setWheelOpen(false); return true }
+      if (bino) { setBino(false); return true }
+      return false
+    })
+    return () => sub.remove()
+  }, [uav.sheetOpen, mapOpen, scoresOpen, wheelOpen, bino]) // eslint-disable-line react-hooks/exhaustive-deps
+
   // Minimap contents (memoized so sensor-driven re-renders don't rebuild markers).
   const { mapPoints, mapAreas } = useMemo(() => {
     const pts = []
@@ -963,6 +1051,8 @@ export function LaserTagGame({ room, onExit }) {
   )
   const mapHeading = Math.round((heading?.deg ?? 0) / 4) * 4 // coarse: fewer minimap re-renders
 
+  const topMode = aim.mode === 'top'
+  const triggerMode = aim.mode === 'trigger'
   const intelPoints = useEnemyIntel({ room, state, positions, meId, myTeam, uavActive, color: colors.danger })
   // Enemies the map is currently revealing (UAV sweep or a recent shot ping) also get a
   // target tag over their head in the camera view, placed from GPS + compass.
@@ -991,19 +1081,43 @@ export function LaserTagGame({ room, onExit }) {
       return binocularMarkers({ players: out, headingDeg: heading.deg, zoom: scope.zoom, view })
     } catch { return [] }
   }, [intelPoints, enemies, enemyMarkers, myPos, heading?.deg, scope.zoom, view, state])
-  // What you're aiming at: the tagged enemy (camera lock or map-revealed) nearest the
+  // Nameplates: every enemy close enough to matter (inside the gun's reach, or inside GPS
+  // error = same room) plus anyone the map has revealed, placed from GPS + compass. An
+  // enemy the camera has locked on gets the camera marker instead. Point blank, the
+  // bearing is noise, so the plate sits on the crosshair instead of jumping around.
+  const plateMarkers = useMemo(() => {
+    try {
+      if (!myPos || heading?.deg == null || !(view.width > 0) || topMode) return []
+      const seenByVision = new Set(enemyMarkers.map((m) => m.id))
+      const revealed = new Set(revealedMarkers.map((m) => m.id.replace(/^rev-/, '')))
+      const list = []
+      for (const e of enemies) {
+        if (!e.alive || seenByVision.has(e.id)) continue
+        const err = gpsErr(myPos.acc, e.pos?.acc)
+        const close = e.d <= err
+        if (!close && e.d > PLATE_RANGE_M && !revealed.has(e.id)) continue
+        list.push({ id: `plate-${e.id}`, name: e.name, d: e.d, bearing: e.bearing, hp: e.hp, close, color: state?.mode === 'ffa' ? HUD.red : TEAMS[e.team]?.color || HUD.red })
+      }
+      const placed = binocularMarkers({ players: list, headingDeg: heading.deg, zoom: scope.zoom, view })
+      return placed.map((m) => (m.close ? { ...m, x: view.width / 2, y: view.height * 0.42, inView: true, side: null } : m))
+    } catch { return [] }
+  }, [enemies, enemyMarkers, revealedMarkers, myPos, heading?.deg, scope.zoom, view, state?.mode, topMode])
+  // Compass tape pips: the same enemies, by bearing.
+  const compassPips = useMemo(() => plateMarkers.filter((m) => !m.close).map((m) => ({ id: m.id, bearing: m.bearing, color: m.color })), [plateMarkers])
+
+  // What you're aiming at: the tagged enemy (camera lock or nameplate) nearest the
   // crosshair, if it's reasonably close. The gun swings toward it and shots fly to it.
   const aimPoint = useMemo(() => {
     const cx = (view.width || 0) / 2
     const cy = (view.height || 0) / 2
     let best = null
-    for (const m of [...enemyMarkers, ...revealedMarkers.filter((r) => r.inView)]) {
+    for (const m of [...enemyMarkers, ...plateMarkers.filter((r) => r.inView)]) {
       const y = m.y + 40 // tags sit above the head; aim at the body
       const d = Math.hypot(m.x - cx, y - cy)
       if (d < Math.max(140, (view.width || 0) * 0.42) && (!best || d < best.d)) best = { x: m.x, y, d }
     }
     return best
-  }, [enemyMarkers, revealedMarkers, view])
+  }, [enemyMarkers, plateMarkers, view])
   const aimPointRef = useRef(null)
   aimPointRef.current = aimPoint
   const enemyMarkersRef = useRef([])
@@ -1034,8 +1148,6 @@ export function LaserTagGame({ room, onExit }) {
     )
   }
 
-  const topMode = aim.mode === 'top'
-  const triggerMode = aim.mode === 'trigger'
   const fullScreenTrigger = topMode || triggerMode
   const objective = snd ? sndObjective(state, meId, myPos, now) : null
 
@@ -1048,8 +1160,8 @@ export function LaserTagGame({ room, onExit }) {
   const outsideArea = !!(mapBoundary && myPos && distanceMeters(myPos, mapBoundary) > mapBoundary.r + engine.gpsSlack(myPos.acc))
 
   const timerMs = state.endsAt - Math.max(now, state.startsAt)
-  const side = leftHanded ? 'right' : 'left'
-  const otherSide = leftHanded ? 'left' : 'right'
+  // iOS reports heading accuracy 0–3; Android's SensorManager sits at 1 on most phones.
+  const compassLow = !!heading && heading.accuracy < (Platform.OS === 'android' ? 1 : 2)
 
   const startMiniGame = (action) => {
     trigger.stop()
@@ -1126,7 +1238,7 @@ export function LaserTagGame({ room, onExit }) {
       ) : (
         <>
           <EnemyMarkers markers={enemyMarkers} />
-          {camPerm?.granted && !topMode ? <BinocularMarkers markers={revealedMarkers} /> : null}
+          {camPerm?.granted && !topMode ? <Nameplates markers={plateMarkers} /> : null}
         </>
       )}
       <BystanderMarkers markers={bystanderMarkers} />
@@ -1150,59 +1262,65 @@ export function LaserTagGame({ room, onExit }) {
       ) : null}
       <GrenadeBlast key={blastKey} visible={!!blastKey} />
       {battle.overlay}
+      <ScorePops pops={pops} onDone={removePop} />
       <Animated.View pointerEvents="none" style={[styles.vignette, { opacity: vignette }]} />
 
       {/* HUD — top: explicit rows in normal flow (see laser/hudLayout.js). The right edge
           leaves room for GamePlayScreen's floating 👥 💬 ☰ buttons. */}
       <View style={[styles.topCol, { top: hud.top, left: hud.side, right: hud.side }]} pointerEvents="box-none" onLayout={onTopLayout}>
-        {/* Row 1: status */}
+        {/* Row 1: status panel · clock (the right edge leaves room for the floating buttons) */}
         <View style={[styles.row1, { marginRight: TOP_BUTTONS_W - 12 }]} pointerEvents="none">
-          <View style={[styles.statusBlock, hud.compact && { width: 96 }]}>
-            <View style={styles.hpTrack}>
-              <View style={[styles.hpFill, { width: `${Math.max(0, Math.min(100, myState.hp))}%`, backgroundColor: myState.hp > 34 ? colors.success : colors.danger }]} />
-            </View>
-            <Text style={styles.hudText} numberOfLines={1}>{myState.hp} HP · {myState.score} pts</Text>
-            <Text style={styles.hudText} numberOfLines={1}>{myState.kills || 0} K · {myState.deaths || 0} D</Text>
-            {myTeam && <Text style={styles.hudText} numberOfLines={1}><Text style={{ color: TEAMS[myTeam].color }}>●</Text> {TEAMS[myTeam].name}{snd ? ` · ${snd.sides[myTeam] === 'attack' ? 'Atk' : 'Def'}` : ''}</Text>}
-          </View>
+          <StatusPanel
+            hp={myState.hp}
+            score={myState.score}
+            kills={myState.kills || 0}
+            deaths={myState.deaths || 0}
+            team={myTeam}
+            side={snd && myTeam ? snd.sides[myTeam] : null}
+            protectedNow={isProtected}
+            compact={hud.compact}
+            width={hud.compact ? 104 : 120}
+          />
           <View style={styles.centerBlock}>
-            {state.endless ? (
-              <>
-                <Text style={[styles.timer, hud.compact && { fontSize: 17 }]} numberOfLines={1}><Text style={{ color: colors.danger }}>●</Text> LIVE</Text>
-                <Text style={styles.hudText} numberOfLines={1}>Arena · #{arenaRank.rank}/{arenaRank.of}</Text>
-              </>
-            ) : bombState !== 'planted' ? (
-              <Text style={[styles.timer, hud.compact && { fontSize: 18 }]} numberOfLines={1}>{formatClock(timerMs)}</Text>
-            ) : null}
-            {state.mode === 'tdm' && <Text style={styles.hudText} numberOfLines={1}>{state.teamScore.A} – {state.teamScore.B}</Text>}
-            {snd && <Text style={styles.hudText} numberOfLines={1}>R{snd.roundNo}/{snd.totalRounds} · {snd.wins.A}–{snd.wins.B}</Text>}
+            {bombState === 'planted' ? (
+              <BombCountdown msLeft={(snd.bomb.explodesAt || now) - now} inline />
+            ) : (
+              <MatchBar
+                clock={formatClock(timerMs)}
+                live={!!state.endless}
+                rank={arenaRank?.rank}
+                of={arenaRank?.of}
+                mode={state.mode}
+                teamScore={state.teamScore}
+                snd={snd}
+                compact={hud.compact || hud.width < 400}
+              />
+            )}
           </View>
         </View>
 
-        {bombState === 'planted' && (
+        {/* Row 2: compass tape, full width (below the floating buttons) */}
+        {!topMode ? (
           <View style={styles.rowCenter} pointerEvents="none">
-            <BombCountdown msLeft={(snd.bomb.explodesAt || now) - now} inline />
+            <CompassTape heading={heading?.deg} pips={compassPips} width={Math.min(300, hud.width - hud.side * 2 - 8)} compact={hud.compact} />
           </View>
-        )}
+        ) : null}
 
-        {/* Row 2: fire mode pill + Scores */}
-        <View style={styles.row2} pointerEvents="box-none">
-          <Pressable onPress={() => { trigger.stop(); buzz('select'); setScoresOpen(true) }} hitSlop={8} style={styles.scoreBtn} accessibilityRole="button" accessibilityLabel="Open scoreboard">
-            <Ionicons name="podium" size={13} color="#fff" />
-            <Text style={styles.scoreBtnText}>Scores</Text>
-          </Pressable>
-          <View style={styles.modePill} pointerEvents="none">
-            <Text style={styles.modePillText} numberOfLines={1}>
-              {aim.mode === 'trigger' ? '☝︎' : aim.mode === 'top' ? '▲' : '⌖'} {AIM_MODE_LABELS[aim.mode] || ''}{aim.autoDetected ? ' · auto' : ''}
-            </Text>
+        {/* Row 3: scores + fire-mode pill on the left, kill feed on the right */}
+        <View style={styles.row3} pointerEvents="box-none">
+          <View style={styles.row3Left} pointerEvents="box-none">
+            <Pressable onPress={() => { trigger.stop(); buzz('select'); setScoresOpen(true) }} hitSlop={8} style={styles.scoreBtn} accessibilityRole="button" accessibilityLabel="Open scoreboard">
+              <Ionicons name="podium" size={12} color="#fff" />
+              <Text style={styles.scoreBtnText}>SCORES</Text>
+            </Pressable>
+            <View style={styles.modePill} pointerEvents="none">
+              <Text style={styles.modePillText} numberOfLines={1}>
+                {aim.mode === 'trigger' ? '☝︎' : aim.mode === 'top' ? '▲' : '⌖'} {AIM_MODE_LABELS[aim.mode] || ''}{aim.autoDetected ? ' · AUTO' : ''}
+              </Text>
+            </View>
           </View>
+          {!triggerMode && state.feed.length > 0 ? <KillFeed feed={state.feed} max={hud.compact ? 2 : 3} /> : null}
         </View>
-
-        {!triggerMode && state.feed.length > 0 && (
-          <View style={styles.feed} pointerEvents="none">
-            {state.feed.slice(0, hud.compact ? 2 : 3).map((f) => <Text key={f.id} style={styles.feedText} numberOfLines={1}>{f.text}</Text>)}
-          </View>
-        )}
 
         {/* Row 3: top-edge AIM marker */}
         {topMode && <Text style={styles.topEdge} pointerEvents="none">▲ AIM ▲</Text>}
@@ -1218,16 +1336,15 @@ export function LaserTagGame({ room, onExit }) {
         ) : (
           <FpsCrosshair onTarget={!!inSights || enemyMarkers.length > 0} shotTick={shotTick} hitTick={hitTick} killTick={killTick} />
         )}
-        {!triggerMode && <Text style={styles.sightText} numberOfLines={2}>
+        {!triggerMode && <Text style={[styles.sightText, (bodies?.some((b) => classifyHit([b])) || inSights) && { color: HUD.red }]} numberOfLines={2}>
           {visionAim
-            ? (bodies?.some((b) => classifyHit([b])) ? 'Target locked' : enemies.some((e) => e.alive) ? `Camera aim · range ${formatDistance(VISION_RANGE_M)}` : 'Waiting for other players’ GPS…')
+            ? (bodies?.some((b) => classifyHit([b])) ? 'TARGET LOCKED' : inSights ? `${inSights.name.toUpperCase()} · ${formatDistance(inSights.d)}` : enemies.some((e) => e.alive) ? `CAMERA AIM · ${formatDistance(VISION_RANGE_M)}` : 'WAITING FOR PLAYERS’ GPS…')
             : inSights
-              ? `${inSights.name} · ${formatDistance(inSights.d)} · ~${Math.round(inSights.chance * 100)}% hit`
-              : enemies.some((e) => e.alive) ? 'No one in your sights' : 'Waiting for other players’ GPS…'}
+              ? `${inSights.name.toUpperCase()} · ${formatDistance(inSights.d)} · ${Math.round(inSights.chance * 100)}%`
+              : enemies.some((e) => e.alive) ? 'NO TARGET' : 'WAITING FOR PLAYERS’ GPS…'}
         </Text>}
-        {!visionAim && !triggerMode && <Text style={styles.aimMode}>Compass aim — can’t see cover · {formatDistance(Math.min(gun.range, COMPASS_MAX_RANGE_M))} range</Text>}
-        {isProtected && <Text style={[styles.aimMode, { color: colors.success }]}>Spawn protection</Text>}
-        {!!marker && <Text style={[styles.marker, { color: marker.good ? colors.success : colors.onBrand }]} numberOfLines={2}>{marker.text}</Text>}
+        {!visionAim && !triggerMode && <Text style={styles.aimMode}>COMPASS AIM · {formatDistance(Math.min(gun.range, COMPASS_MAX_RANGE_M))}</Text>}
+        {!!marker && <Text style={[styles.marker, { color: marker.good ? HUD.green : '#fff' }]} numberOfLines={2}>{marker.text}</Text>}
       </View>
 
       {/* Above the dock: S&D objective + GPS/compass warnings. */}
@@ -1249,7 +1366,7 @@ export function LaserTagGame({ room, onExit }) {
             )}
           </View>
         )}
-        {(myPos?.acc > 20 || (heading && heading.accuracy < 2)) && (
+        {(myPos?.acc > 20 || compassLow) && (
           <Text style={[styles.warn, { alignSelf: leftHanded ? 'flex-end' : 'flex-start' }]} pointerEvents="none" numberOfLines={2}>
             {myPos?.acc > 20 ? `Weak GPS (±${Math.round(myPos.acc)} m)` : 'Compass needs calibrating — move your phone in a figure 8'}
           </Text>
@@ -1265,6 +1382,7 @@ export function LaserTagGame({ room, onExit }) {
         {/* Minimap (double-tap opens the large map; swallows taps so it never fires) */}
         {prefs.minimap ? (
           <MapMinimap
+            available={mapsAvailable}
             size={hud.mapSize}
             me={myPos}
             headingDeg={mapHeading}
@@ -1305,66 +1423,32 @@ export function LaserTagGame({ room, onExit }) {
               onEmpty={() => flash('No land mines — get more in the Arcade Shop', false)}
             />
           </View>
-          {/* Optics row: binoculars + scope zoom side by side */}
+          {/* Optics row: binoculars, REC, selfie, scope zoom */}
           {camPerm?.granted && !topMode ? (
             <View style={styles.opticsRow} pointerEvents="box-none">
-              <Pressable
-                onPress={toggleBino}
-                hitSlop={6}
-                style={({ pressed }) => [styles.zoomBtn, bino && styles.zoomBtnOn, pressed && { opacity: 0.75 }]}
-                accessibilityRole="button"
-                accessibilityLabel={bino ? 'Lower binoculars' : 'Binoculars: scout enemies. Cannot shoot.'}
-              >
-                <Text style={{ fontSize: 14 }}>🔭</Text>
-                <Text style={[styles.zoomText, bino && { color: colors.onGold }]}>{bino ? 'Lower' : 'Scout'}</Text>
-              </Pressable>
+              <HudButton onPress={toggleBino} on={bino} emoji="🔭" text={bino ? 'LOWER' : 'SCOUT'} accessibilityLabel={bino ? 'Lower binoculars' : 'Binoculars: scout enemies. Cannot shoot.'} />
               {recOk ? (
-                <Pressable
-                  onPress={toggleRecording}
-                  hitSlop={6}
-                  style={({ pressed }) => [styles.zoomBtn, recAt && styles.recOn, pressed && { opacity: 0.75 }]}
-                  accessibilityRole="button"
-                  accessibilityLabel={recAt ? 'Stop recording and save to Photos' : 'Record gameplay with your voice'}
-                >
-                  <View style={[styles.recDot, recAt && { borderRadius: 2 }]} />
-                  {recAt ? <Text style={styles.zoomText}>{(() => { const s = Math.max(0, Math.floor((recNow - recAt) / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}` })()}</Text> : <Text style={styles.zoomText}>REC</Text>}
-                </Pressable>
+                <HudButton onPress={toggleRecording} on={!!recAt} onColor="#d4202f" accessibilityLabel={recAt ? 'Stop recording and save to Photos' : 'Record gameplay with your voice'}
+                  text={recAt ? (() => { const sec = Math.max(0, Math.floor((recNow - recAt) / 1000)); return `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}` })() : 'REC'}>
+                  <View style={[styles.recDot, recAt && { borderRadius: 2, backgroundColor: '#fff' }]} />
+                </HudButton>
               ) : null}
               {dualOk ? (
-                <Pressable
-                  onPress={() => { buzz('select'); setSelfieOn((v) => !v) }}
-                  hitSlop={6}
-                  style={({ pressed }) => [styles.zoomBtn, selfieOn && styles.zoomBtnOn, pressed && { opacity: 0.75 }]}
-                  accessibilityRole="button"
-                  accessibilityLabel={selfieOn ? 'Hide selfie camera' : 'Show selfie camera'}
-                >
-                  <Text style={{ fontSize: 14 }}>🤳</Text>
-                </Pressable>
+                <HudButton onPress={() => { buzz('select'); setSelfieOn((v) => !v) }} on={selfieOn} emoji="🤳" accessibilityLabel={selfieOn ? 'Hide selfie camera' : 'Show selfie camera'} />
               ) : null}
-              <Pressable
-                onPress={scope.cycle}
-                hitSlop={6}
-                style={({ pressed }) => [styles.zoomBtn, scope.zoom > 1 && styles.zoomBtnOn, pressed && { opacity: 0.75 }]}
-                accessibilityRole="button"
-                accessibilityLabel={`Scope zoom ${formatZoom(scope.zoom)}. Tap to change, or pinch the screen.`}
-              >
-                <Ionicons name="scan" size={14} color={scope.zoom > 1 ? colors.onGold : '#fff'} />
-                <Text style={[styles.zoomText, scope.zoom > 1 && { color: colors.onGold }]}>{formatZoom(scope.zoom)}</Text>
-              </Pressable>
+              <HudButton onPress={scope.cycle} on={scope.zoom > 1} icon="scan" text={formatZoom(scope.zoom)} accessibilityLabel={`Scope zoom ${formatZoom(scope.zoom)}. Tap to change, or pinch the screen.`} />
             </View>
           ) : null}
-          <WeaponChip weapon={gun} count={loadout.length} onWheel={openWheel} maxWidth={hud.landscape ? 240 : hud.chipMaxW} />
+          <WeaponCard weapon={gun} count={loadout.length} onWheel={openWheel} maxWidth={hud.landscape ? 240 : hud.chipMaxW} compact={hud.compact} />
           {aim.mode === 'camera' && (
-            <Pressable
+            <FireButton
               onPressIn={trigger.onPressIn}
               onPressOut={trigger.onPressOut}
               disabled={dead || !playing}
-              style={({ pressed }) => [styles.fire, hud.compact && styles.fireCompact, { opacity: dead || !playing ? 0.4 : pressed ? 0.75 : 1 }]}
-              accessibilityRole="button"
-              accessibilityLabel="Fire"
-            >
-              <Text style={styles.fireText}>FIRE</Text>
-            </Pressable>
+              compact={hud.compact}
+              locked={!!inSights || enemyMarkers.length > 0}
+              auto={gun.automatic}
+            />
           )}
         </View>
       </View>
@@ -1400,7 +1484,7 @@ export function LaserTagGame({ room, onExit }) {
           onClose={() => { room.sendAction({ type: 'act_cancel' }); setMiniGame(null) }}
         />
       )}
-      <WeaponWheel visible={wheelOpen} loadout={loadout} currentId={weaponId} onPick={pickWeapon} onClose={() => setWheelOpen(false)} />
+      <WeaponWheel visible={wheelOpen} loadout={loadout} currentId={weaponId} onPick={pickWeapon} onClose={() => setWheelOpen(false)} insets={insets} />
       <ScoreboardOverlay visible={scoresOpen} state={state} meId={meId} insets={insets} onClose={() => setScoresOpen(false)} />
       <MapOverlay
         visible={mapOpen}
@@ -1469,49 +1553,33 @@ const styles = StyleSheet.create({
   fill: { flex: 1, backgroundColor: '#000', overflow: 'hidden' },
   noCam: { alignItems: 'center', justifyContent: 'center', padding: 24, backgroundColor: '#111' },
   topCol: { position: 'absolute', gap: 6 },
-  row1: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, minHeight: 40 },
-  statusBlock: { width: 112 },
+  row1: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, minHeight: 48 },
   centerBlock: { flex: 1, minWidth: 0, alignItems: 'center' },
   rowCenter: { alignItems: 'center' },
-  row2: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
+  row3: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 },
+  row3Left: { flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 1 },
   aboveDock: { position: 'absolute', gap: 8 },
   dock: { position: 'absolute', alignItems: 'flex-end', justifyContent: 'space-between' },
   fireCol: { gap: DOCK_GAP },
   consumablesRow: { flexDirection: 'row', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' },
   opticsRow: { flexDirection: 'row', gap: 6 },
-  zoomBtn: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 12, height: 36, borderRadius: 18, backgroundColor: 'rgba(10,12,22,0.65)', borderWidth: 1.5, borderColor: 'rgba(100,200,255,0.4)', shadowColor: '#4dc9f6', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.3, shadowRadius: 6 },
-  recOn: { backgroundColor: 'rgba(212,32,47,0.85)', borderColor: '#ff4d5e', shadowColor: '#ff2d3d', shadowOpacity: 0.7, shadowRadius: 10 },
   recDot: { width: 11, height: 11, borderRadius: 6, backgroundColor: '#ff2d3d', borderWidth: 1.5, borderColor: '#fff' },
-  zoomBtnOn: { backgroundColor: colors.gold, borderColor: colors.gold, shadowColor: colors.gold, shadowOpacity: 0.6, shadowRadius: 10 },
-  zoomText: { color: '#fff', fontWeight: '800', fontSize: 13, textShadowColor: 'rgba(0,0,0,0.5)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 3 },
-  fireCompact: { width: 88, height: 88, borderRadius: 44 },
-  hpTrack: { height: 10, borderRadius: 5, backgroundColor: 'rgba(255,255,255,0.25)', overflow: 'hidden' },
-  hpFill: { height: 10, borderRadius: 5 },
-  hudText: { fontSize: 11.5, fontWeight: '600', color: colors.onBrand, marginTop: 2, ...hudShadow },
-  scoreBtn: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 5, borderRadius: radii.pill, backgroundColor: 'rgba(0,0,0,0.5)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.25)' },
-  scoreBtnText: { fontSize: 11, fontWeight: '800', color: '#fff' },
-  timer: { fontSize: 20, fontWeight: '800', color: colors.onBrand, letterSpacing: -0.3, ...hudShadow },
-  feed: { alignSelf: 'flex-end', alignItems: 'flex-end', maxWidth: '70%' },
-  feedText: { fontSize: 11.5, color: colors.onBrand, ...hudShadow },
+  scoreBtn: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 5, borderRadius: radii.pill, backgroundColor: HUD.panel, borderWidth: 1, borderColor: HUD.border },
+  scoreBtnText: { fontSize: 10, fontWeight: '900', color: '#fff', letterSpacing: 1 },
   center: { position: 'absolute', left: 0, right: 0, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 30, overflow: 'hidden' },
-  cross: { width: 68, height: 68, borderRadius: 34, borderWidth: 2, borderColor: colors.onBrand, alignItems: 'center', justifyContent: 'center' },
-  crossH: { position: 'absolute', width: 30, height: 2, backgroundColor: colors.onBrand },
-  crossV: { position: 'absolute', width: 2, height: 30, backgroundColor: colors.onBrand },
   arrow: { fontSize: 64, color: colors.onBrand, ...hudShadow },
   topEdge: { alignSelf: 'center', marginTop: 4, fontSize: 12, fontWeight: '800', letterSpacing: 3, color: colors.gold, ...hudShadow },
-  sightText: { ...type.caption, color: colors.onBrand, marginTop: 10, textAlign: 'center', ...hudShadow },
-  marker: { ...type.title, marginTop: 6, ...hudShadow },
+  sightText: { fontSize: 11, fontWeight: '900', letterSpacing: 1.2, color: '#fff', marginTop: 12, textAlign: 'center', ...hudShadow },
+  marker: { fontSize: 17, fontWeight: '900', marginTop: 6, textAlign: 'center', ...hudShadow },
   objective: { alignItems: 'center', gap: 10 },
   objectiveText: { ...type.body, fontWeight: '700', color: colors.onBrand, textAlign: 'center', ...hudShadow },
-  fire: { width: 104, height: 104, borderRadius: 52, backgroundColor: colors.crimson, alignItems: 'center', justifyContent: 'center', borderWidth: 3, borderColor: colors.onBrand, shadowColor: '#ff2244', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.8, shadowRadius: 12, elevation: 12 },
-  fireText: { ...type.title, color: colors.onBrand, letterSpacing: 3, fontSize: 18, fontWeight: '900', textShadowColor: 'rgba(0,0,0,0.5)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 4 },
-  warn: { ...type.caption, color: colors.gold, ...hudShadow, maxWidth: 220 },
+  warn: { fontSize: 11, fontWeight: '800', color: colors.gold, ...hudShadow, maxWidth: 220 },
   bracket: { position: 'absolute', borderWidth: 1.5, borderRadius: 6 },
   areaWarn: { position: 'absolute', alignSelf: 'center', backgroundColor: 'rgba(224,79,79,0.85)', paddingHorizontal: 14, paddingVertical: 8, borderRadius: radii.pill },
   areaWarnText: { ...type.caption, color: '#fff', fontWeight: '700' },
   vignette: { ...StyleSheet.absoluteFill, borderWidth: 40, borderColor: 'rgba(224,79,79,0.7)', backgroundColor: 'rgba(224,79,79,0.18)' },
-  modePill: { flexShrink: 1, backgroundColor: 'rgba(0,0,0,0.5)', paddingHorizontal: 10, paddingVertical: 4, borderRadius: radii.pill },
-  modePillText: { fontSize: 11, fontWeight: '700', color: colors.onBrand, letterSpacing: 0.3 },
-  aimMode: { ...type.caption, color: colors.gold, marginTop: 4, textAlign: 'center', ...hudShadow },
+  modePill: { flexShrink: 1, maxWidth: 190, backgroundColor: HUD.panel, paddingHorizontal: 10, paddingVertical: 5, borderRadius: radii.pill, borderWidth: 1, borderColor: HUD.border },
+  modePillText: { fontSize: 10, fontWeight: '800', color: '#fff', letterSpacing: 0.4 },
+  aimMode: { fontSize: 10, fontWeight: '900', letterSpacing: 1.2, color: colors.gold, marginTop: 4, textAlign: 'center', ...hudShadow },
   deadOverlay: { ...StyleSheet.absoluteFill, backgroundColor: 'rgba(120,0,20,0.5)', alignItems: 'center', justifyContent: 'center' },
 })
