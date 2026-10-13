@@ -11,3 +11,5 @@
 /login                        https://app.iyiyi.xyz/  302
 /shop                         https://shop.iyiyi.xyz  302
 /cart                         https://shop.iyiyi.xyz/cart  302
+/apk                          https://github.com/iyiyiguy/iyiyi-app/releases/latest/download/iYiYi.apk  302
+/download/android             https://github.com/iyiyiguy/iyiyi-app/releases/latest/download/iYiYi.apk  302
