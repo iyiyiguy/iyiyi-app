@@ -3,6 +3,6 @@ iYiYi 1.4 — the biggest update yet:
 • New crosshair, hit markers and kill notifications
 • Huge explosions for grenades, C4, rockets and land mines
 • See your C4 and mines through the camera and on the map
-• Record gameplay with your voice, plus a selfie bubble (supported phones)
+• Show yourself in a selfie bubble while you play (supported phones)
 • Better body detection, redesigned Pro plans and Gun Shop
 • Fixes and polish throughout
