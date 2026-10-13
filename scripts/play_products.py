@@ -240,7 +240,7 @@ for sub in (PRO, BUSINESS):
         print(f"ERR {sub['id']}: {e}")
 
 # Store release (store-assets/play/release.json): promote that build, set listing title + icon,
-# send for review. Skipped when the track already has that build.
+# send for review (1.4.0 = 183). Skipped when the track already has that build.
 _rel = os.path.join(os.path.dirname(__file__), "..", "store-assets", "play")
 if os.path.exists(os.path.join(_rel, "release.json")):
     sys.path.insert(0, _rel)
