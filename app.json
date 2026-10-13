@@ -39,16 +39,16 @@
       },
       "permissions": [
         "ACCESS_FINE_LOCATION",
-        "ACCESS_COARSE_LOCATION",
-        "ACCESS_BACKGROUND_LOCATION",
-        "FOREGROUND_SERVICE",
-        "FOREGROUND_SERVICE_LOCATION"
+        "ACCESS_COARSE_LOCATION"
       ],
       "blockedPermissions": [
         "android.permission.ACTIVITY_RECOGNITION",
         "android.permission.READ_MEDIA_IMAGES",
         "android.permission.READ_MEDIA_VIDEO",
-        "android.permission.READ_MEDIA_VISUAL_USER_SELECTED"
+        "android.permission.READ_MEDIA_VISUAL_USER_SELECTED",
+        "android.permission.ACCESS_BACKGROUND_LOCATION",
+        "android.permission.FOREGROUND_SERVICE_LOCATION",
+        "android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION"
       ],
       "versionCode": 15
     },
@@ -89,7 +89,9 @@
       [
         "expo-location",
         {
-          "locationWhenInUsePermission": "iYiYi uses your location to show your profile to people within your chosen range and to show you who is nearby. For example, when you open Nearby, you see people within 150 ft of you, and in laser tag you see how far away other players are. Other people only see an approximate distance, never your exact location."
+          "locationWhenInUsePermission": "iYiYi uses your location to show your profile to people within your chosen range and to show you who is nearby. For example, when you open Nearby, you see people within 150 ft of you, and in laser tag you see how far away other players are. Other people only see an approximate distance, never your exact location.",
+          "isAndroidBackgroundLocationEnabled": false,
+          "isAndroidForegroundServiceEnabled": false
         }
       ],
       [

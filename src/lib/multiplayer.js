@@ -37,6 +37,8 @@ TaskManager.defineTask(BG_LOCATION_TASK, () => {
 let _bgLocationRunning = false
 
 async function startBackgroundLocation() {
+  // Android: no background location / foreground service (needs extra Play declarations).
+  if (Platform.OS === 'android') return
   if (_bgLocationRunning) return
   try {
     // Need "always" permission for background location on iOS
