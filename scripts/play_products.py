@@ -239,6 +239,17 @@ for sub in (PRO, BUSINESS):
         failures.append(sub["id"])
         print(f"ERR {sub['id']}: {e}")
 
+# Store release (store-assets/play/release.json): promote that build, set listing title + icon,
+# send for review. Skipped when the track already has that build.
+_rel = os.path.join(os.path.dirname(__file__), "..", "store-assets", "play")
+if os.path.exists(os.path.join(_rel, "release.json")):
+    sys.path.insert(0, _rel)
+    import play_release
+    _cfg = json.load(open(os.path.join(_rel, "release.json")))
+    print()
+    print("Google Play release:", _cfg)
+    play_release.main(_cfg["version_code"], _cfg.get("track"))
+
 print()
 if failures:
     print(f"{len(failures)} product(s) failed: {', '.join(failures)}")
