@@ -131,9 +131,17 @@ def main():
             want = json.load(f)["expo"]["version"]
         print(f"No version in progress; creating App Store version {want}")
         v = M.call("POST", "/appStoreVersions", json={"data": {"type": "appStoreVersions",
-            "attributes": {"platform": "IOS", "versionString": want, "releaseType": "MANUAL"},
+            "attributes": {"platform": "IOS", "versionString": want, "releaseType": "AFTER_APPROVAL"},
             "relationships": {"app": {"data": {"type": "apps", "id": M.APP_ID}}}}})["data"]
     print(f"Version {v['attributes']['versionString']} is {state_of(v)}")
+    # Colin wants approved versions to go live automatically (no manual Release step).
+    if v["attributes"].get("releaseType") != "AFTER_APPROVAL" and state_of(v) not in IN_FLIGHT:
+        try:
+            M.call("PATCH", f"/appStoreVersions/{v['id']}", json={"data": {"type": "appStoreVersions", "id": v["id"],
+                "attributes": {"releaseType": "AFTER_APPROVAL"}}})
+            print("  release type set to automatic after approval")
+        except RuntimeError as e:
+            print(f"  ! could not set automatic release: {str(e)[:200]}")
 
     if state_of(v) in IN_FLIGHT:
         cancel_open_submission()
