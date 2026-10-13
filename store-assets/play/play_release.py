@@ -76,6 +76,15 @@ def main(vc=None, track=None):
     ok(s.put(f"{E}/tracks/{track}", json=body), f"set {track} track")
     print(f"{track} -> version code {vc}")
 
+    # Replace older builds on the testing track too, so no active release still carries
+    # permissions that need Play declarations (foreground service, background location).
+    if track != "internal":
+        ok(s.put(f"{E}/tracks/internal", json={"track": "internal", "releases": [{
+            "versionCodes": [vc], "status": "completed",
+            "releaseNotes": [{"language": LANG, "text": notes}],
+        }]}), "set internal track")
+        print(f"internal -> version code {vc}")
+
     res = ok(s.post(f"{E}:commit"), "commit edit")
     print("committed edit", res.get("id"), "- sent to Google for review")
 
