@@ -6,11 +6,9 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import { CameraView } from 'expo-camera'
 import { CameraOff, useCameraGate } from '../../components/CameraGate'
 import * as Location from 'expo-location'
-import { Btn } from '../MultiplayerUI'
-import { hudShadow } from '../laser/Hud'
+import { FONT, ST, StButton, stShadow, stType } from '../studio'
 import { makeThumbnail, uploadStationPhoto } from '../../lib/arcadeMedia'
 import { distanceMeters } from '../../lib/multiplayer'
-import { colors, radii, type } from '../../theme'
 
 // onSave({ station, thumb }) — station: { id, name, lat, lng, url, by }
 export function StationScanner({ visible, onClose, onSave, area, meId }) {
@@ -67,8 +65,9 @@ export function StationScanner({ visible, onClose, onSave, area, meId }) {
         )}
         <SafeAreaView style={styles.overlay} edges={['top', 'bottom']} pointerEvents="box-none">
           <View>
-            <Text style={[type.title, { color: colors.onBrand }, hudShadow]}>Scan a task station</Text>
-            <Text style={[type.caption, { color: colors.onBrand, marginTop: 4 }, hudShadow]}>
+            <Text style={[stType.kicker, { color: ST.objective }, stShadow]}>Beside Them · new station</Text>
+            <Text style={[stType.title, stShadow]}>Scan a task station</Text>
+            <Text style={[stType.small, { color: ST.text, marginTop: 4 }, stShadow]}>
               Stand right next to a real object (a bench, door, sign, tree…) and fill the frame with it. Players will need to find and match it.
             </Text>
           </View>
@@ -78,16 +77,16 @@ export function StationScanner({ visible, onClose, onSave, area, meId }) {
               value={name}
               onChangeText={setName}
               placeholder="Name it (e.g. Red bench)"
-              placeholderTextColor={colors.onBrandMuted}
+              placeholderTextColor={ST.faint}
               style={styles.input}
               maxLength={40}
             />
-            {!!error && <Text style={[type.caption, { color: colors.gold, marginBottom: 8 }, hudShadow]}>{error}</Text>}
+            {!!error && <Text style={[stType.small, { color: ST.objective, marginBottom: 8 }, stShadow]}>{error}</Text>}
             <View style={{ flexDirection: 'row', gap: 10 }}>
-              <Btn title="Cancel" onPress={close} style={{ flex: 1 }} />
-              <Btn title={busy ? 'Saving…' : 'Capture station'} variant="primary" disabled={!perm?.granted || busy} onPress={capture} style={{ flex: 2 }} />
+              <StButton title="Cancel" tone="ghost" onPress={close} style={{ flex: 1, backgroundColor: ST.panelStrong }} />
+              <StButton title={busy ? 'Saving…' : 'Capture'} tone="objective" disabled={!perm?.granted || busy} onPress={capture} style={{ flex: 2 }} />
             </View>
-            {busy && <ActivityIndicator color={colors.onBrand} style={{ marginTop: 8 }} />}
+            {busy && <ActivityIndicator color={ST.objective} style={{ marginTop: 8 }} />}
           </View>
         </SafeAreaView>
       </View>
@@ -99,7 +98,7 @@ const styles = StyleSheet.create({
   fill: { flex: 1, backgroundColor: '#000' },
   center: { alignItems: 'center', justifyContent: 'center', padding: 24 },
   overlay: { flex: 1, justifyContent: 'space-between', padding: 16 },
-  frame: { alignSelf: 'center', width: '80%', aspectRatio: 1, borderWidth: 2, borderColor: colors.onBrand, borderRadius: radii.lg, borderStyle: 'dashed' },
+  frame: { alignSelf: 'center', width: '80%', aspectRatio: 1, borderWidth: 2, borderColor: ST.objective, borderRadius: ST.radius, borderStyle: 'dashed' },
   bottom: { },
-  input: { ...type.body, color: colors.onBrand, backgroundColor: 'rgba(0,0,0,0.55)', borderRadius: radii.md, paddingHorizontal: 14, paddingVertical: 12, marginBottom: 10 },
+  input: { fontFamily: FONT.uiSemi, fontSize: 16, color: ST.text, backgroundColor: ST.panelStrong, borderRadius: ST.radius, borderWidth: 1, borderColor: ST.lineStrong, paddingHorizontal: 14, paddingVertical: 12, marginBottom: 10 },
 })

@@ -5,12 +5,10 @@ import { Modal, Pressable, StyleSheet, Text, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { CameraView } from 'expo-camera'
 import { CameraOff, useCameraGate } from '../../components/CameraGate'
-import { Btn, Card } from '../MultiplayerUI'
-import { hudShadow } from '../laser/Hud'
+import { ST, StButton, StPanel, stShadow, stType } from '../studio'
 import { StationImage } from './StationImage'
 import { PUZZLES, Puzzle } from './Puzzles'
 import { buzz } from '../../lib/gamePrefs'
-import { colors, radii, type } from '../../theme'
 
 export function ScanTask({ visible, room, station, assets, puzzle, fake, onClose, onDone }) {
   const [perm] = useCameraGate(visible)
@@ -38,8 +36,9 @@ export function ScanTask({ visible, room, station, assets, puzzle, fake, onClose
           <SafeAreaView style={styles.overlay} edges={['top', 'bottom']} pointerEvents="box-none">
             <View style={styles.topRow}>
               <View style={{ flex: 1 }}>
-                <Text style={[type.title, { color: colors.onBrand }, hudShadow]}>Scan: {station.name}</Text>
-                <Text style={[type.caption, { color: colors.onBrand }, hudShadow]}>Line the camera up with the object in the photo.</Text>
+                <Text style={[stType.kicker, stShadow]}>Scan station</Text>
+                <Text style={[stType.title, stShadow]} numberOfLines={2}>{station.name}</Text>
+                <Text style={[stType.small, { color: ST.text }, stShadow]}>Line the camera up with the object in the photo.</Text>
               </View>
               <Pressable onPress={() => setOverlay((v) => !v)} style={styles.refCard} accessibilityRole="button" accessibilityLabel="Toggle reference overlay">
                 <StationImage room={room} station={station} assets={assets} style={styles.refImg} />
@@ -47,20 +46,20 @@ export function ScanTask({ visible, room, station, assets, puzzle, fake, onClose
               </Pressable>
             </View>
             <View style={{ flexDirection: 'row', gap: 10 }}>
-              <Btn title="Cancel" onPress={close} style={{ flex: 1 }} />
-              <Btn title="It matches" variant="primary" disabled={!perm?.granted} onPress={() => { buzz('medium'); setStep('puzzle') }} style={{ flex: 2 }} />
+              <StButton title="Cancel" tone="ghost" onPress={close} style={{ flex: 1, backgroundColor: ST.panelStrong }} />
+              <StButton title="It matches" disabled={!perm?.granted} onPress={() => { buzz('medium'); setStep('puzzle') }} style={{ flex: 2 }} />
             </View>
           </SafeAreaView>
         </View>
       ) : (
-        <View style={[styles.fill, { backgroundColor: colors.ink }]}>
+        <View style={[styles.fill, { backgroundColor: ST.ground }]}>
           <SafeAreaView style={{ flex: 1, padding: 16 }} edges={['top', 'bottom']}>
-            <Text style={type.label}>{station.name}{fake ? ' · cover task' : ''}</Text>
-            <Text style={[type.display, { marginBottom: 16 }]}>{PUZZLES[puzzle]}</Text>
-            <Card>
+            <Text style={[stType.kicker, { color: ST.objective }]}>{station.name}{fake ? ' · cover task' : ''}</Text>
+            <Text style={[stType.title, { fontSize: 26, marginBottom: 16 }]}>{PUZZLES[puzzle]}</Text>
+            <StPanel accent={ST.objective} style={{ marginBottom: 10, paddingVertical: 16 }}>
               <Puzzle kind={puzzle} onDone={() => { setStep('scan'); onDone() }} />
-            </Card>
-            <Btn title="Cancel task" onPress={close} style={{ marginTop: 8 }} />
+            </StPanel>
+            <StButton title="Cancel task" tone="ghost" onPress={close} />
           </SafeAreaView>
         </View>
       )}
@@ -74,8 +73,8 @@ const styles = StyleSheet.create({
   overlay: { flex: 1, justifyContent: 'space-between', padding: 16 },
   topRow: { flexDirection: 'row', gap: 12, alignItems: 'flex-start' },
   ghostWrap: { ...StyleSheet.absoluteFill, alignItems: 'center', justifyContent: 'center' },
-  ghost: { width: '86%', aspectRatio: 1, opacity: 0.35, borderRadius: radii.lg },
-  refCard: { width: 96, alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.5)', borderRadius: radii.sm, padding: 6 },
+  ghost: { width: '86%', aspectRatio: 1, opacity: 0.35, borderRadius: ST.radius },
+  refCard: { width: 96, alignItems: 'center', backgroundColor: ST.panelStrong, borderRadius: ST.radius, padding: 6, borderTopWidth: 2, borderTopColor: ST.objective },
   refImg: { width: 84, height: 84 },
-  refText: { fontSize: 10, color: colors.onBrand, marginTop: 4 },
+  refText: { ...stType.label, fontSize: 9, letterSpacing: 1, color: ST.text, marginTop: 4, textAlign: 'center' },
 })

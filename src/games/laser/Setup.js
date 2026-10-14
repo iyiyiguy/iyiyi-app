@@ -12,9 +12,10 @@ import { AREA_PRESETS, TEAMS, distanceMeters, formatDistance } from '../../lib/m
 import { buzz } from '../../lib/gamePrefs'
 import { MIN_SITE_GAP_M, SITE_RADIUS_M, balanceTeams } from './engine'
 import { generateBombSites } from './bombSites'
-import { colors as themeColors, radii } from '../../theme'
-import { HUD, hudGlow } from './HudPro'
+import { colors as themeColors } from '../../theme'
+import { HUD } from './HudPro'
 import { withAlpha } from '../GameMap'
+import { FONT, ST, useStudioFonts } from '../studio'
 
 // Lobby panels use the always-dark arcade look.
 const type = arcadeType
@@ -38,6 +39,7 @@ export function laserCanStart(info, roster) {
 }
 
 export function LaserTagSetup({ room, snap }) {
+  useStudioFonts()
   const info = snap.info
   const settings = info.settings || {}
   const mode = settings.mode || 'ffa'
@@ -211,7 +213,7 @@ export function LaserTagSetup({ room, snap }) {
   const circles = []
   if (area) circles.push({ id: 'area', lat: area.lat, lng: area.lng, radius: area.r, color: HUD.accent })
   if (mode === 'snd') for (const x of sites) circles.push({ id: `site-${x.id}`, lat: x.lat, lng: x.lng, radius: x.r || SITE_RADIUS_M, color: HUD.gold })
-  const markers = mode === 'snd' ? sites.map((x) => ({ id: x.id, lat: x.lat, lng: x.lng, label: `SITE ${x.id}`, color: HUD.red })) : []
+  const markers = mode === 'snd' ? sites.map((x) => ({ id: x.id, lat: x.lat, lng: x.lng, label: `SITE ${x.id}`, color: HUD.gold })) : []
   const mapCenter = area || sites[0] || null
   const hint = !isHost ? null : tapMode === 'area' ? 'Tap the map to move the play area' : `Tap the map to place site ${tapMode}`
   const siteA = sites.find((x) => x.id === 'A')
@@ -324,10 +326,11 @@ export function LaserTagSetup({ room, snap }) {
             {['A', 'B'].map((t) => {
               const members = snap.roster.filter((p) => teams[p.id] === t)
               return (
-                <View key={t} style={[styles.teamCol, { borderColor: TEAMS[t].color, backgroundColor: withAlpha(TEAMS[t].color, 0.1) }]}>
+                <View key={t} style={[styles.teamCol, { borderTopColor: TEAMS[t].color, backgroundColor: withAlpha(TEAMS[t].color, 0.1) }, teams[meId] === t && styles.teamColMine]}>
                   <View style={styles.teamHead}>
-                    <View style={[styles.teamDot, { backgroundColor: TEAMS[t].color, ...hudGlow(TEAMS[t].color, 6) }]} />
+                    <View style={[styles.teamDot, { backgroundColor: TEAMS[t].color }]} />
                     <Text style={[styles.teamName, { color: TEAMS[t].color }]}>{TEAMS[t].name}</Text>
+                    {teams[meId] === t ? <Text style={styles.yourTeam}>YOUR TEAM</Text> : null}
                     <Text style={styles.teamCount}>{members.length}</Text>
                   </View>
                   {members.length === 0 && <Text style={styles.emptyTeam}>EMPTY</Text>}
@@ -368,19 +371,21 @@ export function LaserTagSetup({ room, snap }) {
 const styles = StyleSheet.create({
   headRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
   lockRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  teams: { flexDirection: 'row', gap: 10 },
-  teamCol: { flex: 1, borderWidth: 1.5, borderRadius: 12, padding: 10, gap: 2 },
+  teams: { flexDirection: 'row', gap: 8 },
+  teamCol: { flex: 1, borderTopWidth: 3, borderRadius: ST.radius, padding: 10, gap: 2 },
+  teamColMine: { borderWidth: 1, borderColor: 'rgba(255,255,255,0.22)', borderTopWidth: 3 },
   teamHead: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 6 },
-  teamDot: { width: 8, height: 8, borderRadius: 4 },
-  teamName: { flex: 1, fontSize: 13, fontWeight: '900', letterSpacing: 1.6, textTransform: 'uppercase' },
-  teamCount: { fontSize: 13, fontWeight: '900', color: AC.text, fontVariant: ['tabular-nums'] },
-  emptyTeam: { fontSize: 10, fontWeight: '900', letterSpacing: 1.4, color: AC.faint },
-  member: { flexDirection: 'row', alignItems: 'center', paddingVertical: 6, paddingHorizontal: 4, borderRadius: 8 },
-  hint: { fontSize: 10, fontWeight: '900', letterSpacing: 1.4, color: AC.faint, marginTop: 8 },
-  chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 10 },
-  chip: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: radii.pill, borderWidth: 1, borderColor: colors.hairline },
-  chipSm: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: radii.pill, borderWidth: 1, borderColor: colors.hairline },
+  teamDot: { width: 8, height: 8 },
+  teamName: { flex: 1, fontFamily: FONT.display, fontSize: 14, letterSpacing: 1.6, textTransform: 'uppercase' },
+  yourTeam: { fontFamily: FONT.ui, fontSize: 9, letterSpacing: 1.4, color: AC.muted },
+  teamCount: { fontFamily: FONT.display, fontSize: 14, color: AC.text, fontVariant: ['tabular-nums'] },
+  emptyTeam: { fontFamily: FONT.ui, fontSize: 10, letterSpacing: 1.6, color: AC.faint },
+  member: { flexDirection: 'row', alignItems: 'center', paddingVertical: 6, paddingHorizontal: 4, borderRadius: ST.radius },
+  hint: { fontFamily: FONT.ui, fontSize: 10, letterSpacing: 1.6, color: AC.faint, marginTop: 8 },
+  chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 10 },
+  chip: { paddingHorizontal: 14, minHeight: 36, justifyContent: 'center', borderRadius: ST.radius, borderWidth: 1, borderColor: 'rgba(255,255,255,0.18)' },
+  chipSm: { paddingHorizontal: 12, minHeight: 32, justifyContent: 'center', borderRadius: ST.radius, borderWidth: 1, borderColor: 'rgba(255,255,255,0.18)' },
   chipOn: { backgroundColor: HUD.accent, borderColor: HUD.accent },
-  chipText: { fontSize: 12, fontWeight: '800', letterSpacing: 0.6, color: AC.text, textTransform: 'uppercase' },
+  chipText: { fontFamily: FONT.ui, fontSize: 12, letterSpacing: 1.2, color: AC.text, textTransform: 'uppercase' },
   sitesBox: { marginTop: 14, paddingTop: 12, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.hairline },
 })

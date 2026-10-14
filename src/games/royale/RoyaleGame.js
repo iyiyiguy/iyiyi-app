@@ -8,6 +8,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Animated, Pressable, StyleSheet, View } from 'react-native'
 import { useArcadeInsets } from '../arcadeUI'
+import { ST, useStudioFonts, withAlpha } from '../studio'
 import { DOCK_GAP, TOP_BUTTONS_W, useHudMetrics, useMeasuredHeight } from '../laser/hudLayout'
 import { setAudioModeAsync } from 'expo-audio'
 import { useKeepAwake } from 'expo-keep-awake'
@@ -27,7 +28,7 @@ import { CombatView } from './CombatView'
 import { RoyaleLobby } from './RoyaleLobby'
 import { RoyaleMap } from './RoyaleMap'
 import {
-  Banner, CountdownOverlay, Feed, Flash, MapPanel, PickupButton, ResultsView, SpectateView, StatusCard, TransitOverlay, WeaponSlots, ZonePill, fmtDuration,
+  Banner, CountdownOverlay, Feed, Flash, MapPanel, PickupButton, ResultsView, SpectateView, StatusCard, TransitOverlay, WeaponSlots, ZonePill, fmtDuration, royaleScore,
 } from './RoyaleHud'
 import { RARITY_COLORS, START_WEAPON_IDS, getWeapon, playSfx, preloadSounds, releaseSounds } from './weaponsAdapter'
 import { useUavControl } from '../laser/useUavControl'
@@ -42,6 +43,7 @@ const POS_FRESH_MS = 15000
 const PUBLISH_COALESCE_MS = 150
 
 export function RoyaleGame({ room, onExit }) {
+  useStudioFonts()
   const snap = useRoomSnapshot(room)
   if (!room || !snap) return null
   const inMatch = snap.info?.phase === 'playing'
@@ -81,16 +83,18 @@ function RoyaleMatch({ room, snap, onExit }) {
   const { banner, announce } = useAnnouncer()
   const [flash, setFlash] = useState(null)
   const flashTimer = useRef(null)
+  const weaponRef = useRef(null) // current weapon, for the elimination banner
   const [mapOpen, setMapOpen] = useState(false)
   const [weaponId, setWeaponId] = useState(START_WEAPON_IDS[0] || 'pistol')
   const [followId, setFollowId] = useState(null)
   const vignette = useRef(new Animated.Value(0)).current
 
   // ---- feedback helpers ----
-  const showFlash = useCallback((text, good) => {
-    setFlash({ text: String(text || ''), good: !!good })
+  // extra: { kind: 'kill' | 'hit', name, sub, head } (kill = elimination banner, hit = marker)
+  const showFlash = useCallback((text, good, extra) => {
+    setFlash({ text: String(text || ''), good: !!good, ...(extra || null) })
     clearTimeout(flashTimer.current)
-    flashTimer.current = setTimeout(() => setFlash(null), 1400)
+    flashTimer.current = setTimeout(() => setFlash(null), extra?.kind === 'kill' ? 2200 : 1400)
   }, [])
   useEffect(() => () => clearTimeout(flashTimer.current), [])
   useEffect(() => {
@@ -166,10 +170,12 @@ function RoyaleMatch({ room, snap, onExit }) {
       room.onMessage('hit_ok', (d) => {
         playSfx('hit')
         buzz(d?.killed ? 'success' : 'medium')
-        const dmg = d?.dmg ? ` −${d.dmg}` : ''
-        if (d?.killed) showFlash(`Eliminated ${String(d.name || '').slice(0, 24)}!`, true)
-        else if (d?.zone === 'head') showFlash(`HEADSHOT${dmg}`, true)
-        else showFlash(`Hit${dmg}`, true)
+        const dmg = d?.dmg ? `−${d.dmg}` : ''
+        const name = String(d?.name || '').slice(0, 24)
+        const wName = String(weaponRef.current?.short || '').toUpperCase()
+        if (d?.killed) showFlash(`Eliminated ${name}`, true, { kind: 'kill', name, sub: [wName, d?.zone === 'head' ? 'HEADSHOT' : null].filter(Boolean).join(' · ') })
+        else if (d?.zone === 'head') showFlash(`HEADSHOT ${dmg}`, true, { kind: 'hit', head: true })
+        else showFlash(dmg || 'HIT', true, { kind: 'hit' })
       }),
       room.onMessage('notice', (d) => showFlash(String(d?.text || ''), false)),
       room.onMessage('picked', (d) => {
@@ -178,7 +184,7 @@ function RoyaleMatch({ room, snap, onExit }) {
           const w = getWeapon(d.w)
           playSfx('tap')
           buzz('success')
-          showFlash(`${w.icon} Picked up ${w.name}`, true)
+          showFlash(`Picked up ${w.name}`, true)
         }
       }),
     ]
@@ -209,6 +215,7 @@ function RoyaleMatch({ room, snap, onExit }) {
   }, [inventory, weaponId, me?.pri])
   useEffect(() => { preloadSounds(inventory) }, [inventory])
   const weapon = useMemo(() => getWeapon(weaponId), [weaponId])
+  weaponRef.current = weapon
   const selectWeapon = useCallback((id) => {
     setWeaponId(id)
     playSfx('empty')
@@ -230,11 +237,24 @@ function RoyaleMatch({ room, snap, onExit }) {
 
   // ---- zone + callouts ----
   const zone = useMemo(() => (state?.z ? zoneAt(state.z, now) : null), [state?.z, now])
+  const finalClosed = zone?.stage === 'final'
   const outside = zone && validPos(myPos) ? outsideBy(myPos, zone.current) - gpsSlack(myPos.acc) : -1
-  const inGas = playing && alive && outside > 0
-  const gasText = inGas
-    ? `In the gas −${zone.dps}/s · safe zone ${formatDistance(Math.max(0, outside))} ${dirWord(bearingDeg(myPos, zone.current))}`
-    : null
+  // Once the final circle has closed the gas covers everything (engine.js sudden death).
+  const inGas = playing && alive && (outside > 0 || finalClosed)
+  const gasText = !inGas
+    ? null
+    : finalClosed
+      ? `Zone closed −${zone.dps}/s · last one standing wins`
+      : `−${zone.dps}/s · safe zone ${formatDistance(Math.max(0, outside))} ${dirWord(bearingDeg(myPos, zone.current))}`
+  // Where the next circle is, for the zone callout.
+  const nextDirNow = zone?.next && validPos(myPos) ? directionToCircle(myPos, zone.next) : null
+  const zoneHint = !zone?.next
+    ? null
+    : !validPos(myPos)
+      ? null
+      : nextDirNow
+        ? `Next zone ${formatDistance(nextDirNow.meters)} ${nextDirNow.dir}${zone.stage === 'shrink' ? ' · move now' : ''}`
+        : 'You’re inside the next zone'
 
   const callRef = useRef({ phase: null, stage: null, warned60: null, gasAt: 0 })
   useEffect(() => {
@@ -282,8 +302,7 @@ function RoyaleMatch({ room, snap, onExit }) {
   // Record the result once.
   useEffect(() => {
     if (state?.phase !== 'ended' || !me) return
-    const placement = me.pl || state.total || 0
-    const score = (me.k || 0) * 100 + Math.max(0, (state.total || 0) - placement) * 10
+    const score = royaleScore(me.k, me.pl, state.total)
     recordRoundResult(room, { result: state.winner === meId ? 'win' : 'loss', score })
     if (state.winner === meId) { playSfx('defused'); buzz('success') }
   }, [state?.phase]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -307,10 +326,18 @@ function RoyaleMatch({ room, snap, onExit }) {
   const aliveIds = useMemo(() => (state ? Object.keys(state.p).filter((id) => state.p[id]?.a && id !== meId) : []), [state?.p, meId]) // eslint-disable-line react-hooks/exhaustive-deps
   usePlayersRemainingCallout(aliveIds.length + (me?.a ? 1 : 0), announce, playing)
   const spectating = !!state && state.phase !== 'ended' && (!me || !me.a)
+  // Who eliminated me (the state stores the killer's name): spectate them first, like
+  // Warzone / PUBG's "spectate your killer".
+  const killerId = useMemo(() => {
+    const by = me?.by
+    if (!state || !by || by === 'gas' || by === 'left' || by === 'signal') return null
+    const ids = Object.keys(state.p).filter((id) => id !== meId && state.p[id]?.n === by)
+    return ids.find((id) => state.p[id]?.a) || ids[0] || null
+  }, [state?.p, me?.by, meId]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (!spectating) return
-    if (!followId || !aliveIds.includes(followId)) setFollowId(aliveIds[0] || null)
-  }, [spectating, aliveIds, followId])
+    if (!followId || !aliveIds.includes(followId)) setFollowId(killerId && aliveIds.includes(killerId) ? killerId : aliveIds[0] || null)
+  }, [spectating, aliveIds, followId, killerId])
 
   // ---- UAV: enemies stay off your map unless a UAV reveals them ----
   const [uavIds, setUavIds] = useState([])
@@ -361,14 +388,14 @@ function RoyaleMatch({ room, snap, onExit }) {
       const p = positions?.[id]
       if (!p || t - p.at > POS_FRESH_MS || !validPos(p)) continue
       const followed = spectating && id === followId
-      out.push({ id, lat: p.lat, lng: p.lng, color: followed ? ROYALE_COLORS.follow : pl.tr ? '#9aa3c0' : ROYALE_COLORS.enemy, ring: followed })
+      out.push({ id, lat: p.lat, lng: p.lng, color: followed ? ROYALE_COLORS.follow : pl.tr ? ROYALE_COLORS.transit : ROYALE_COLORS.enemy, ring: followed })
     }
     return out
   }, [state?.p, positions, meId, spectating, followId, uav.uavActive, uavIds]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const mapLoot = useMemo(() => (state?.loot || []).filter((l) => validPos(l)).map((l) => {
     const w = getWeapon(l.w)
-    return { id: l.id, lat: l.lat, lng: l.lng, label: `${w.icon} ${w.short}`, color: RARITY_COLORS[w.rarity] }
+    return { id: l.id, lat: l.lat, lng: l.lng, label: w.short.toUpperCase(), color: RARITY_COLORS[w.rarity] }
   }), [state?.loot])
 
   // Zone circles for the map: only change when the rounded radius moves (fewer native updates).
@@ -380,12 +407,14 @@ function RoyaleMatch({ room, snap, onExit }) {
 
   const nearLoot = useMemo(() => {
     if (!playing || !alive || inTransit || !validPos(myPos)) return null
+    // Nearest item in reach that isn't the weapon you already carry (a duplicate standing
+    // closer used to hide a different weapon right next to it).
     let best = null
     for (const l of state?.loot || []) {
+      if (l.w === me?.pri) continue
       const d = dist(myPos, l)
       if (d <= PICKUP_RANGE_M + gpsSlack(myPos.acc) && (!best || d < best.d)) best = { ...l, d }
     }
-    if (best && best.w === me?.pri) return null
     return best
   }, [state?.loot, myPos, playing, alive, inTransit, me?.pri]) // eslint-disable-line react-hooks/exhaustive-deps
   const pick = useCallback((item) => {
@@ -438,6 +467,12 @@ function RoyaleMatch({ room, snap, onExit }) {
         <KeepAwake />
         <SpectateView
           insets={insets}
+          me={me}
+          meName={me?.n}
+          killerId={killerId}
+          killerName={killerId ? state.p[killerId]?.n : null}
+          survivedMs={survived}
+          followId={f ? followId : null}
           followName={f?.n}
           followHp={f?.hp || 0}
           followKills={f?.k || 0}
@@ -489,10 +524,10 @@ function RoyaleMatch({ room, snap, onExit }) {
       {/* Top rows (laser/hudLayout.js): status | GamePlayScreen buttons, then zone, then feed. */}
       <View style={[styles.topCol, { top: hud.top, left: hud.side, right: hud.side }]} pointerEvents="none" onLayout={onTopLayout}>
         <View style={[styles.topRow, { marginRight: TOP_BUTTONS_W - 12, alignSelf: leftHanded ? 'flex-end' : 'flex-start' }]}>
-          <StatusCard hp={me?.hp ?? 0} alive={totalAlive} total={total} kills={me?.k || 0} />
+          <StatusCard hp={me?.hp ?? 0} alive={totalAlive} total={total} kills={me?.k || 0} zone={zone} />
         </View>
-        <ZonePill zone={zone} gasText={gasText} />
-        <Feed feed={state.feed} style={{ position: 'relative', alignSelf: leftHanded ? 'flex-end' : 'flex-start' }} />
+        <ZonePill zone={zone} gasText={gasText} hint={zoneHint} style={{ alignSelf: leftHanded ? 'flex-end' : 'flex-start' }} />
+        <Feed feed={state.feed} meName={me?.n} align={leftHanded ? 'flex-start' : 'flex-end'} style={{ alignSelf: leftHanded ? 'flex-start' : 'flex-end' }} />
       </View>
       <Banner banner={banner} top={bandTop} />
       <EnemyUavPill msLeft={uav.enemyMs} top={bandTop + (banner ? 64 : 0)} />
@@ -509,13 +544,13 @@ function RoyaleMatch({ room, snap, onExit }) {
           <UavButton count={uav.count} activeMsLeft={uav.myMs} disabled={!(playing && alive) && !uav.empty} onPress={uav.callUav} size={hud.compact ? 48 : 54} />
           <Pressable
             onPress={() => { buzz('select'); setMapOpen(true) }}
-            style={[styles.mini, { width: hud.mapSize, height: hud.mapSize, borderRadius: hud.mapSize / 2 }]}
+            style={[styles.mini, { width: hud.mapSize, height: hud.mapSize }]}
             accessibilityRole="button"
             accessibilityLabel="Open the map"
           >
             <RoyaleMap {...mapProps} rangeM={300} sizePx={hud.mapSize} style={StyleSheet.absoluteFill} legalLabelInsets={miniLegal} />
-            {uav.uavActive ? <RadarSweep size={hud.mapSize} /> : <View style={[styles.miniRim, { borderRadius: hud.mapSize / 2 }]} pointerEvents="none" />}
-            <View style={styles.miniTag} pointerEvents="none"><Ionicons name="expand" size={10} color="#fff" /></View>
+            {uav.uavActive ? <RadarSweep size={hud.mapSize} /> : <View style={styles.miniRim} pointerEvents="none" />}
+            <View style={styles.miniTag} pointerEvents="none"><Ionicons name="expand" size={11} color="#fff" /></View>
           </Pressable>
         </View>
         <View style={{ alignItems: leftHanded ? 'flex-start' : 'flex-end', maxWidth: hud.chipMaxW }} pointerEvents="box-none">
@@ -532,6 +567,8 @@ function RoyaleMatch({ room, snap, onExit }) {
           hp={me?.hp ?? 0}
           zone={zone}
           gasText={gasText}
+          hint={zoneHint}
+          meName={me?.n}
           feed={state.feed}
           alive={totalAlive}
           total={total}
@@ -544,8 +581,9 @@ function RoyaleMatch({ room, snap, onExit }) {
         onClose={() => setMapOpen(false)}
         insets={insets}
         zone={zone}
+        hint={zoneHint}
         mapProps={{ ...mapProps, rangeM: Math.max(300, Math.round(((zone?.current?.r || 800) * 1.15) / 100) * 100), sizePx: 360 }}
-        legend={uav.uavActive ? 'UAV online · red: nearest enemies in the zone · tags: weapons' : 'Solid ring: safe zone · dashed: next zone · enemies hidden (use a UAV) · tags: weapons'}
+        legend={uav.uavActive ? 'UAV online · red: nearest enemies in the zone · tags: weapons by rarity' : 'Amber ring: safe zone · dashed: next zone · enemies hidden (use a UAV) · tags: weapons by rarity'}
       />
       <UavSheet
         visible={uav.sheetOpen}
@@ -560,15 +598,16 @@ function RoyaleMatch({ room, snap, onExit }) {
 }
 
 const styles = StyleSheet.create({
-  fill: { flex: 1, backgroundColor: '#000', overflow: 'hidden' },
-  vignette: { ...StyleSheet.absoluteFill, borderWidth: 40, borderColor: 'rgba(224,79,79,0.7)', backgroundColor: 'rgba(224,79,79,0.18)' },
-  gasTint: { ...StyleSheet.absoluteFill, backgroundColor: 'rgba(140,60,255,0.18)', borderWidth: 6, borderColor: 'rgba(161,77,255,0.6)' },
+  fill: { flex: 1, backgroundColor: ST.ground, overflow: 'hidden' },
+  // Damage: enemy-red edge + dim (studio "Down" board). Gas: objective-amber edge.
+  vignette: { ...StyleSheet.absoluteFill, borderWidth: 10, borderColor: withAlpha(ST.enemy, 0.75), backgroundColor: 'rgba(60,6,14,0.45)' },
+  gasTint: { ...StyleSheet.absoluteFill, backgroundColor: withAlpha(ST.objective, 0.1), borderWidth: 6, borderColor: withAlpha(ST.objective, 0.6) },
   topCol: { position: 'absolute', gap: 6 },
-  topRow: { maxWidth: 220 },
+  topRow: { maxWidth: 240 },
   dock: { position: 'absolute', alignItems: 'flex-end', justifyContent: 'space-between' },
-  mini: { overflow: 'hidden', backgroundColor: '#141826' },
-  miniRim: { ...StyleSheet.absoluteFill, borderWidth: 2, borderColor: 'rgba(255,255,255,0.55)' },
-  miniTag: { position: 'absolute', top: 18, alignSelf: 'center', paddingHorizontal: 5, paddingVertical: 2, borderRadius: 6, backgroundColor: 'rgba(0,0,0,0.5)' },
+  mini: { overflow: 'hidden', backgroundColor: ST.ground2, borderRadius: ST.radius },
+  miniRim: { ...StyleSheet.absoluteFill, borderWidth: 1, borderColor: 'rgba(255,255,255,0.22)', borderRadius: ST.radius },
+  miniTag: { position: 'absolute', top: 4, right: 4, paddingHorizontal: 4, paddingVertical: 3, borderRadius: ST.radius, backgroundColor: ST.panel },
   pickDock: { position: 'absolute', alignItems: 'center' },
 })
 

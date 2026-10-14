@@ -12,6 +12,7 @@ import { Circle, Marker } from 'react-native-maps'
 import { Ionicons } from '@expo/vector-icons'
 import { MAP_MAX_CLUSTERS, MAP_MAX_DOTS, MAP_MAX_LOOT, ROYALE_COLORS } from './constants'
 import { dist, isValidCoord, validPos } from './geo'
+import { FONT, ST, withAlpha } from '../studio'
 
 const CAMERA_EVERY_MS = 1000
 
@@ -28,8 +29,13 @@ function cameraFor(center, rangeM, sizePx) {
   }
 }
 
+// Players are diamonds (studio enemy marker); the followed player gets a friendly frame.
 const Dot = memo(function Dot({ color, ring }) {
-  return <View style={[s.dot, { backgroundColor: color }, ring && s.dotRing]} />
+  return (
+    <View style={[s.dotWrap, ring && s.dotRing]}>
+      <View style={[s.dot, { backgroundColor: color }]} />
+    </View>
+  )
 })
 
 const Bubble = memo(function Bubble({ count }) {
@@ -184,8 +190,8 @@ export const RoyaleMap = memo(function RoyaleMap({ me, focus, zone, players, loo
           <Circle
             center={{ latitude: cur.lat, longitude: cur.lng }}
             radius={cur.r}
-            strokeColor="rgba(232,241,255,0.95)"
-            fillColor="rgba(120,180,255,0.07)"
+            strokeColor={ROYALE_COLORS.zone}
+            fillColor={withAlpha(ROYALE_COLORS.zone, 0.05)}
             strokeWidth={3}
           />
         )}
@@ -236,17 +242,18 @@ export const RoyaleMap = memo(function RoyaleMap({ me, focus, zone, players, loo
 })
 
 const s = StyleSheet.create({
-  noFix: { alignItems: 'center', justifyContent: 'center', backgroundColor: '#141826' },
-  noFixText: { fontSize: 11, color: 'rgba(255,255,255,0.7)' },
-  dot: { width: 11, height: 11, borderRadius: 6, borderWidth: 1.5, borderColor: '#fff' },
-  dotRing: { width: 15, height: 15, borderRadius: 8, borderWidth: 3, borderColor: ROYALE_COLORS.follow },
-  bubble: { minWidth: 24, height: 24, borderRadius: 12, paddingHorizontal: 5, backgroundColor: 'rgba(255,93,108,0.85)', borderWidth: 2, borderColor: '#fff', alignItems: 'center', justifyContent: 'center' },
-  bubbleText: { fontSize: 11, fontWeight: '800', color: '#fff' },
-  loot: { paddingHorizontal: 5, paddingVertical: 2, borderRadius: 7, backgroundColor: 'rgba(10,12,22,0.85)', borderWidth: 1.5, maxWidth: 80 },
-  lootText: { fontSize: 10, fontWeight: '800', color: '#fff' },
-  meWrap: { width: 24, height: 24, borderRadius: 12, backgroundColor: 'rgba(58,209,255,0.25)', alignItems: 'center', justifyContent: 'center' },
+  noFix: { alignItems: 'center', justifyContent: 'center', backgroundColor: ST.ground2 },
+  noFixText: { fontFamily: FONT.ui, fontSize: 10, letterSpacing: 1.6, color: ST.muted, textTransform: 'uppercase' },
+  dotWrap: { width: 18, height: 18, alignItems: 'center', justifyContent: 'center' },
+  dot: { width: 9, height: 9, transform: [{ rotate: '45deg' }], borderWidth: 1, borderColor: 'rgba(0,0,0,0.6)' },
+  dotRing: { borderWidth: 2, borderColor: ROYALE_COLORS.follow, backgroundColor: withAlpha(ROYALE_COLORS.follow, 0.18) },
+  bubble: { minWidth: 24, height: 22, paddingHorizontal: 5, backgroundColor: withAlpha(ST.enemy, 0.85), borderWidth: 1, borderColor: '#fff', alignItems: 'center', justifyContent: 'center' },
+  bubbleText: { fontFamily: FONT.display, fontSize: 11, color: '#fff', includeFontPadding: false },
+  loot: { paddingHorizontal: 5, paddingVertical: 2, backgroundColor: ST.panelStrong, borderWidth: 1, borderLeftWidth: 3, maxWidth: 80 },
+  lootText: { fontFamily: FONT.display, fontSize: 9, letterSpacing: 0.5, color: '#fff', includeFontPadding: false },
+  meWrap: { width: 24, height: 24, borderRadius: 12, backgroundColor: withAlpha(ROYALE_COLORS.me, 0.25), alignItems: 'center', justifyContent: 'center' },
   meDot: { width: 13, height: 13, borderRadius: 7, backgroundColor: ROYALE_COLORS.me, borderWidth: 2, borderColor: '#fff' },
-  recenter: { position: 'absolute', right: 10, bottom: 10, width: 38, height: 38, borderRadius: 19, backgroundColor: 'rgba(0,0,0,0.6)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.25)', alignItems: 'center', justifyContent: 'center' },
+  recenter: { position: 'absolute', right: 10, bottom: 10, width: 40, height: 40, borderRadius: ST.radius, backgroundColor: ST.panel, borderWidth: 1, borderColor: ST.lineStrong, alignItems: 'center', justifyContent: 'center' },
 })
 
 export default RoyaleMap

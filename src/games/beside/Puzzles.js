@@ -3,7 +3,8 @@ import React, { useEffect, useRef, useState } from 'react'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
 import { buzz } from '../../lib/gamePrefs'
 import { shuffled } from '../../lib/multiplayer'
-import { colors, radii, type } from '../../theme'
+import { Ionicons } from '@expo/vector-icons'
+import { ST, stType } from '../studio'
 
 export const PUZZLES = {
   wires: 'Connect the wires',
@@ -31,7 +32,7 @@ export function Puzzle({ kind, onDone }) {
   }
 }
 
-const WIRE_COLORS = [colors.danger, colors.gold, colors.success, colors.violet]
+const WIRE_COLORS = [ST.enemy, ST.objective, ST.health, ST.friendly]
 
 function Wires({ onDone }) {
   const [right] = useState(() => shuffled([0, 1, 2, 3]))
@@ -52,7 +53,7 @@ function Wires({ onDone }) {
   }
   return (
     <View>
-      <Text style={[type.caption, { marginBottom: 10 }]}>Tap a wire on the left, then the matching color on the right.</Text>
+      <Text style={[stType.small, { marginBottom: 10 }]}>Tap a wire on the left, then the matching color on the right.</Text>
       <View style={styles.wires}>
         <View style={styles.wireCol}>
           {[0, 1, 2, 3].map((c) => (
@@ -65,7 +66,7 @@ function Wires({ onDone }) {
           ))}
         </View>
       </View>
-      <Text style={[type.caption, { textAlign: 'center', marginTop: 8 }]}>{linked.length}/4 connected</Text>
+      <Text style={[stType.small, { textAlign: 'center', marginTop: 8 }]}>{linked.length}/4 connected</Text>
     </View>
   )
 }
@@ -104,10 +105,10 @@ function Memory({ onDone }) {
   }
   return (
     <View>
-      <Text style={[type.caption, { marginBottom: 10 }]}>{showing ? 'Watch the lights…' : `Repeat it: ${pos}/${seq.length}`}</Text>
+      <Text style={[stType.small, { marginBottom: 10 }]}>{showing ? 'Watch the lights…' : `Repeat it: ${pos}/${seq.length}`}</Text>
       <View style={styles.grid}>
         {Array.from({ length: 9 }, (_, i) => (
-          <Pressable key={i} onPress={() => tap(i)} style={[styles.cell, lit === i && { backgroundColor: colors.magenta }]} accessibilityRole="button" accessibilityLabel={`Light ${i + 1}`} />
+          <Pressable key={i} onPress={() => tap(i)} style={[styles.cell, lit === i && { backgroundColor: ST.friendly, borderColor: ST.friendly }]} accessibilityRole="button" accessibilityLabel={`Light ${i + 1}`} />
         ))}
       </View>
     </View>
@@ -125,13 +126,13 @@ function Lock({ onDone }) {
   }
   return (
     <View>
-      <Text style={[type.caption, { marginBottom: 10 }]}>The code on the sticky note is {code.join(' ')}. Turn the dials to match.</Text>
+      <Text style={[stType.small, { marginBottom: 10 }]}>The code on the sticky note is {code.join(' ')}. Turn the dials to match.</Text>
       <View style={styles.dials}>
         {dials.map((v, i) => (
           <View key={i} style={styles.dial}>
-            <Pressable onPress={() => turn(i, 1)} style={styles.dialBtn} accessibilityRole="button" accessibilityLabel={`Dial ${i + 1} up`}><Text style={type.title}>▲</Text></Pressable>
-            <Text style={[type.display, { color: v === code[i] ? colors.success : colors.text }]}>{v}</Text>
-            <Pressable onPress={() => turn(i, -1)} style={styles.dialBtn} accessibilityRole="button" accessibilityLabel={`Dial ${i + 1} down`}><Text style={type.title}>▼</Text></Pressable>
+            <Pressable onPress={() => turn(i, 1)} style={styles.dialBtn} accessibilityRole="button" accessibilityLabel={`Dial ${i + 1} up`}><Ionicons name="chevron-up" size={26} color={ST.text} /></Pressable>
+            <Text style={[stType.num, { fontSize: 44, color: v === code[i] ? ST.health : ST.text }]}>{v}</Text>
+            <Pressable onPress={() => turn(i, -1)} style={styles.dialBtn} accessibilityRole="button" accessibilityLabel={`Dial ${i + 1} down`}><Ionicons name="chevron-down" size={26} color={ST.text} /></Pressable>
           </View>
         ))}
       </View>
@@ -153,11 +154,11 @@ function Tiles({ onDone }) {
   }
   return (
     <View>
-      <Text style={[type.caption, { marginBottom: 10 }]}>Tap tiles to rotate them until every arrow points up.</Text>
+      <Text style={[stType.small, { marginBottom: 10 }]}>Tap tiles to rotate them until every arrow points up.</Text>
       <View style={styles.grid}>
         {rot.map((r, i) => (
-          <Pressable key={i} onPress={() => tap(i)} style={[styles.cell, r === 0 && { borderColor: colors.success }]} accessibilityRole="button" accessibilityLabel={`Tile ${i + 1}`}>
-            <Text style={[styles.arrow, { transform: [{ rotate: `${r * 90}deg` }], color: r === 0 ? colors.success : colors.text }]}>↑</Text>
+          <Pressable key={i} onPress={() => tap(i)} style={[styles.cell, r === 0 && { borderColor: ST.health }]} accessibilityRole="button" accessibilityLabel={`Tile ${i + 1}`}>
+            <Ionicons name="arrow-up" size={34} color={r === 0 ? ST.health : ST.text} style={{ transform: [{ rotate: `${r * 90}deg` }] }} />
           </Pressable>
         ))}
       </View>
@@ -181,15 +182,15 @@ function Pattern({ onDone }) {
   }
   return (
     <View>
-      <Text style={[type.caption, { marginBottom: 10 }]}>Trace the pattern: tap the dots in number order.</Text>
+      <Text style={[stType.small, { marginBottom: 10 }]}>Trace the pattern: tap the dots in number order.</Text>
       <View style={styles.grid}>
         {Array.from({ length: 9 }, (_, i) => {
           const order = pattern.indexOf(i)
           const doneDot = order >= 0 && order < pos
           return (
             <Pressable key={i} onPress={() => tap(i)} style={[styles.cell, styles.dotCell]} accessibilityRole="button" accessibilityLabel={`Dot ${i + 1}`}>
-              <View style={[styles.dot, doneDot && { backgroundColor: colors.success }, order === pos && { backgroundColor: colors.magenta }]}>
-                {order >= 0 && <Text style={[type.caption, { color: colors.onBrand }]}>{order + 1}</Text>}
+              <View style={[styles.dot, doneDot && { backgroundColor: ST.health, borderColor: ST.health }, order === pos && { backgroundColor: ST.friendly, borderColor: ST.friendly }]}>
+                {order >= 0 && <Text style={[stType.num, { fontSize: 14, color: doneDot || order === pos ? ST.ink : ST.text }]}>{order + 1}</Text>}
               </View>
             </Pressable>
           )
@@ -202,14 +203,13 @@ function Pattern({ onDone }) {
 const styles = StyleSheet.create({
   wires: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 10 },
   wireCol: { gap: 14 },
-  wire: { width: 90, height: 26, borderRadius: radii.sm },
-  wirePicked: { borderWidth: 3, borderColor: colors.text },
+  wire: { width: 90, height: 26, borderRadius: ST.radius },
+  wirePicked: { borderWidth: 3, borderColor: ST.text },
   grid: { flexDirection: 'row', flexWrap: 'wrap', width: 234, alignSelf: 'center', gap: 9 },
-  cell: { width: 72, height: 72, borderRadius: radii.sm, borderWidth: 1.5, borderColor: colors.hairline, backgroundColor: colors.glassFill, alignItems: 'center', justifyContent: 'center' },
-  arrow: { fontSize: 34, fontWeight: '800' },
+  cell: { width: 72, height: 72, borderRadius: ST.radius, borderWidth: 1.5, borderColor: ST.line, backgroundColor: ST.cell, alignItems: 'center', justifyContent: 'center' },
   dials: { flexDirection: 'row', justifyContent: 'center', gap: 20 },
   dial: { alignItems: 'center', gap: 4 },
   dialBtn: { padding: 8 },
   dotCell: { backgroundColor: 'transparent', borderWidth: 0 },
-  dot: { width: 34, height: 34, borderRadius: 17, backgroundColor: colors.violet, alignItems: 'center', justifyContent: 'center' },
+  dot: { width: 34, height: 34, borderRadius: 17, backgroundColor: '#2a3038', borderWidth: 1.5, borderColor: ST.lineStrong, alignItems: 'center', justifyContent: 'center' },
 })

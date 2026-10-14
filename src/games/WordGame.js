@@ -2,9 +2,10 @@
 // before the clock runs out. Six guesses per word; every guess must be a real word. Solving
 // adds time to the clock, fewer guesses and streaks score more.
 //
-// Presentation: always-dark arcade look (see arcadeUI), chunky 3D letter tiles that pop when
-// typed and flip to reveal, a draining timer bar, animated score count-ups, callouts, a
-// confetti burst on every solve, synthesized sounds (gunAudio `word*` effects) and haptics.
+// Presentation: the studio HUD look (see ./studio): dark ground, flat square letter tiles
+// (green right spot, amber wrong spot, slate not in word) that pop when typed and flip to
+// reveal, a draining timer bar, caps labels with Chakra Petch numbers, callouts, a confetti
+// burst on every solve, synthesized sounds (gunAudio `word*` effects) and haptics.
 // Everything animates with react-native Animated (native driver where possible), so it runs
 // the same on iOS, Android and web.
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -15,8 +16,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage'
 import { LinearGradient } from 'expo-linear-gradient'
 import { Ionicons } from '@expo/vector-icons'
 import { GameTutorial } from '../components/GameTutorial'
-import { AC, ArcadeBackground, GhostButton, PlayButton } from './arcadeUI'
-import { font } from '../theme'
+import { FONT, ST, StButton, StPanel, StStat, stType, useStudioFonts, withAlpha } from './studio'
 import { ANSWERS, isValidWord } from '../lib/wordRaceWords'
 import { loadArcadeStats, recordWordRace } from '../lib/arcadeStats'
 import { buzz } from '../lib/gamePrefs'
@@ -24,9 +24,9 @@ import { playSfx } from '../lib/gunAudio'
 
 const WORD_LEN = 5
 const MAX_GUESSES = 6
-const START_MS = 120 * 1000
-const SOLVE_BONUS_MS = 15 * 1000
-const SKIP_PENALTY_MS = 10 * 1000
+export const START_MS = 120 * 1000
+export const SOLVE_BONUS_MS = 15 * 1000
+export const SKIP_PENALTY_MS = 10 * 1000
 const TUTORIAL_KEY = 'word_race_tutorial_seen_v2'
 
 // Reveal timing: tiles flip one after another.
@@ -35,21 +35,22 @@ const FLIP_STAGGER = 80
 const REVEAL_MS = FLIP_STAGGER * (WORD_LEN - 1) + FLIP_MS
 
 const KEY_ROWS = ['QWERTYUIOP', 'ASDFGHJKL', 'ZXCVBNM']
-const GREEN = ['#3ee596', '#0fa36a']
 
-// Tile skins: a gradient face sitting on a darker "depth" slab.
+// Tile / key colours (approved Word mockup).
+export const WORD_COLORS = { correct: '#2fbf71', present: '#e0a422', absent: '#2a3038', key: '#3a414b' }
+const SUCCESS = '#2fbf71'
+
 const SKIN = {
-  correct: { face: ['#4be79c', '#14a862'], depth: '#0a6a3c', text: '#ffffff' },
-  present: { face: ['#ffd96b', '#f2a516'], depth: '#9c6304', text: '#ffffff' },
-  absent: { face: ['#4b5274', '#353b5a'], depth: '#1d2137', text: '#c4c9e3' },
-  filled: { face: ['#303a78', '#20275a'], depth: '#11153a', text: '#ffffff', border: 'rgba(150,165,255,0.85)' },
-  empty: { face: ['rgba(255,255,255,0.06)', 'rgba(255,255,255,0.02)'], depth: 'rgba(0,0,0,0.28)', text: '#ffffff', border: 'rgba(255,255,255,0.12)' },
-  key: { face: ['#3d4576', '#2b3260'], depth: '#151938', text: '#eef1ff' },
+  correct: { bg: WORD_COLORS.correct, text: '#ffffff' },
+  present: { bg: WORD_COLORS.present, text: '#ffffff' },
+  absent: { bg: WORD_COLORS.absent, text: 'rgba(242,244,247,0.75)' },
+  filled: { bg: ST.ground, text: ST.text, border: 'rgba(255,255,255,0.6)', borderWidth: 2 },
+  empty: { bg: 'rgba(255,255,255,0.03)', text: ST.text, border: 'rgba(255,255,255,0.14)', borderWidth: 1 },
 }
 
-const CONFETTI = ['#4be79c', '#ffd96b', '#7c8cff', '#ff5d8f', '#5ad7ff', '#ffffff']
+const CONFETTI = [SUCCESS, ST.objective, ST.friendly, '#ffffff', WORD_COLORS.present]
 
-const PRAISE = ['', 'GENIUS!', 'MAGNIFICENT!', 'IMPRESSIVE!', 'SPLENDID!', 'GREAT!', 'PHEW!']
+const PRAISE = ['', 'GENIUS', 'MAGNIFICENT', 'IMPRESSIVE', 'SPLENDID', 'GREAT', 'PHEW']
 
 const TUTORIAL_STEPS = [
   { icon: '⏱️', title: 'Race the clock', description: 'You start with 2 minutes. Solve as many hidden 5-letter words as you can before time runs out.' },
@@ -59,7 +60,8 @@ const TUTORIAL_STEPS = [
   { icon: '⚡', title: 'Bonuses', description: 'Each solve adds 15 seconds. Fewer guesses and solve streaks score more. Skipping costs 10 seconds.' },
 ]
 
-// Two-pass scoring so repeated letters are coloured correctly.
+// Two-pass scoring so repeated letters are coloured correctly (greens first, then
+// yellows only while unmatched copies of the letter remain in the answer).
 export function scoreGuess(guess, target) {
   const res = Array(WORD_LEN).fill('absent')
   const remaining = {}
@@ -87,6 +89,19 @@ export function solvePoints(tries, streak) {
 }
 
 const RANK = { absent: 1, present: 2, correct: 3 }
+
+/** Keyboard colours: each letter keeps the best colour it has earned (green > yellow > grey). */
+export function keyStatesFor(guesses) {
+  const m = {}
+  ;(guesses || []).forEach(({ word, score: sc }) => {
+    for (let i = 0; i < WORD_LEN; i++) {
+      const ch = word[i]
+      if (!m[ch] || RANK[sc[i]] > RANK[m[ch]]) m[ch] = sc[i]
+    }
+  })
+  return m
+}
+
 const ND = Platform.OS !== 'web' // native driver (web falls back to JS anyway)
 
 function shuffled(list) {
@@ -98,7 +113,7 @@ function shuffled(list) {
   return a
 }
 
-function formatClock(ms) {
+export function formatClock(ms) {
   const s = Math.max(0, Math.ceil(ms / 1000))
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
 }
@@ -144,30 +159,20 @@ function usePop(trigger, amount = 1.25) {
 // ---------------------------------------------------------------------------------------
 // Tiles
 
-function TileFace({ skin, size, letter, radius }) {
+function TileFace({ skin, size, letter }) {
   const c = SKIN[skin]
-  const depth = skin === 'empty' ? 0 : Math.max(3, Math.round(size * 0.075))
   return (
-    <View style={StyleSheet.absoluteFill} pointerEvents="none">
-      {depth ? <View style={[styles.tileDepth, { top: depth, borderRadius: radius, backgroundColor: c.depth }]} /> : null}
-      <LinearGradient
-        colors={c.face}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 0, y: 1 }}
-        style={[
-          styles.tileFace,
-          { bottom: depth, borderRadius: radius },
-          c.border ? { borderWidth: 2, borderColor: c.border } : null,
-        ]}
-      >
-        {skin !== 'empty' ? <View style={[styles.tileShine, { borderTopLeftRadius: radius, borderTopRightRadius: radius }]} /> : null}
-        <Text
-          allowFontScaling={false}
-          style={[styles.tileText, { fontSize: Math.round(size * 0.5), color: c.text }, skin === 'absent' && { textShadowColor: 'transparent' }]}
-        >
-          {letter}
-        </Text>
-      </LinearGradient>
+    <View
+      pointerEvents="none"
+      style={[
+        StyleSheet.absoluteFill, styles.tileFace,
+        { backgroundColor: c.bg },
+        c.border ? { borderWidth: c.borderWidth, borderColor: c.border } : null,
+      ]}
+    >
+      <Text allowFontScaling={false} style={[styles.tileText, { fontSize: Math.round(size * 0.46), color: c.text }]}>
+        {letter}
+      </Text>
     </View>
   )
 }
@@ -182,7 +187,7 @@ const Tile = memo(function Tile({ letter, state, size, index, win, sound }) {
   // Typed: quick squash-and-pop.
   useEffect(() => {
     if (letter && !prevLetter.current && !state) {
-      pop.setValue(1.18)
+      pop.setValue(1.14)
       Animated.spring(pop, { toValue: 1, friction: 4, tension: 260, useNativeDriver: ND }).start()
     }
     prevLetter.current = letter
@@ -214,11 +219,10 @@ const Tile = memo(function Tile({ letter, state, size, index, win, sound }) {
     ]).start()
   }, [win, index, jump])
 
-  const radius = Math.round(size * 0.2)
   const rotateX = flip.interpolate({ inputRange: [0, 0.5, 1], outputRange: ['0deg', '90deg', '0deg'] })
   const frontOpacity = flip.interpolate({ inputRange: [0, 0.5, 0.501, 1], outputRange: [1, 1, 0, 0] })
   const backOpacity = flip.interpolate({ inputRange: [0, 0.5, 0.501, 1], outputRange: [0, 0, 1, 1] })
-  const translateY = jump.interpolate({ inputRange: [0, 1], outputRange: [0, -size * 0.38] })
+  const translateY = jump.interpolate({ inputRange: [0, 1], outputRange: [0, -size * 0.3] })
 
   return (
     <Animated.View
@@ -227,11 +231,11 @@ const Tile = memo(function Tile({ letter, state, size, index, win, sound }) {
       accessibilityLabel={letter ? `${letter}${state ? `, ${state === 'correct' ? 'correct' : state === 'present' ? 'wrong spot' : 'not in word'}` : ''}` : 'empty'}
     >
       <Animated.View style={[StyleSheet.absoluteFill, { opacity: frontOpacity }]}>
-        <TileFace skin={letter ? 'filled' : 'empty'} size={size} letter={letter} radius={radius} />
+        <TileFace skin={letter ? 'filled' : 'empty'} size={size} letter={letter} />
       </Animated.View>
       {state ? (
         <Animated.View style={[StyleSheet.absoluteFill, { opacity: backOpacity }]}>
-          <TileFace skin={state} size={size} letter={letter} radius={radius} />
+          <TileFace skin={state} size={size} letter={letter} />
         </Animated.View>
       ) : null}
     </Animated.View>
@@ -264,9 +268,8 @@ const Burst = memo(function Burst({ count = 30, spread = 1 }) {
       fall: Math.sin(a) * v * 0.5 + 140 + Math.random() * 120,
       rot: (Math.random() > 0.5 ? 1 : -1) * (240 + Math.random() * 480),
       color: CONFETTI[i % CONFETTI.length],
-      w: 6 + Math.random() * 6,
-      h: Math.random() > 0.4 ? 10 + Math.random() * 6 : 8,
-      round: Math.random() > 0.65,
+      w: 5 + Math.random() * 5,
+      h: Math.random() > 0.4 ? 9 + Math.random() * 6 : 7,
     }
   }), [count, spread])
   useEffect(() => {
@@ -279,9 +282,8 @@ const Burst = memo(function Burst({ count = 30, spread = 1 }) {
           key={i}
           style={{
             position: 'absolute',
-            width: p.round ? p.w : p.w,
-            height: p.round ? p.w : p.h,
-            borderRadius: p.round ? p.w / 2 : 2,
+            width: p.w,
+            height: p.h,
             backgroundColor: p.color,
             opacity: progress.interpolate({ inputRange: [0, 0.75, 1], outputRange: [1, 1, 0] }),
             transform: [
@@ -296,7 +298,7 @@ const Burst = memo(function Burst({ count = 30, spread = 1 }) {
   )
 })
 
-// Big centered callout ("MAGNIFICENT!", "+175"...). Re-mounted (keyed) for each callout.
+// Big centered callout ("MAGNIFICENT", "+175"...). Re-mounted (keyed) for each callout.
 const Callout = memo(function Callout({ title, sub, tone = 'good', word }) {
   const inV = useRef(new Animated.Value(0)).current
   const outV = useRef(new Animated.Value(0)).current
@@ -307,24 +309,24 @@ const Callout = memo(function Callout({ title, sub, tone = 'good', word }) {
       Animated.timing(outV, { toValue: 1, duration: 260, easing: Easing.in(Easing.quad), useNativeDriver: ND }),
     ]).start()
   }, [inV, outV, word])
-  const color = tone === 'good' ? '#4be79c' : tone === 'bad' ? '#ff6b7a' : tone === 'gold' ? AC.gold : AC.text
+  const color = tone === 'good' ? SUCCESS : tone === 'bad' ? ST.enemy : tone === 'gold' ? ST.objective : ST.text
   return (
     <Animated.View
       pointerEvents="none"
-      style={[styles.callout, {
+      style={[styles.callout, { borderTopColor: color }, {
         opacity: Animated.multiply(inV.interpolate({ inputRange: [0, 1], outputRange: [0, 1], extrapolate: 'clamp' }), outV.interpolate({ inputRange: [0, 1], outputRange: [1, 0] })),
         transform: [
-          { scale: inV.interpolate({ inputRange: [0, 1], outputRange: [0.4, 1] }) },
+          { scale: inV.interpolate({ inputRange: [0, 1], outputRange: [0.5, 1] }) },
           { translateY: outV.interpolate({ inputRange: [0, 1], outputRange: [0, -30] }) },
         ],
       }]}
     >
-      <Text allowFontScaling={false} style={[styles.calloutTitle, { color, textShadowColor: color }]}>{title}</Text>
+      <Text allowFontScaling={false} style={[styles.calloutTitle, { color }]}>{title}</Text>
       {word ? (
         <View style={styles.calloutWord}>
           {word.split('').map((ch, i) => (
             <View key={i} style={{ width: 34, height: 34 }}>
-              <TileFace skin="correct" size={34} letter={ch} radius={7} />
+              <TileFace skin="correct" size={34} letter={ch} />
             </View>
           ))}
         </View>
@@ -347,7 +349,7 @@ const Floater = memo(function Floater({ text, color }) {
       style={[styles.floater, {
         color,
         opacity: v.interpolate({ inputRange: [0, 0.15, 0.7, 1], outputRange: [0, 1, 1, 0] }),
-        transform: [{ translateY: v.interpolate({ inputRange: [0, 1], outputRange: [6, -26] }) }, { scale: v.interpolate({ inputRange: [0, 0.15, 1], outputRange: [0.6, 1.15, 1] }) }],
+        transform: [{ translateY: v.interpolate({ inputRange: [0, 1], outputRange: [6, -22] }) }, { scale: v.interpolate({ inputRange: [0, 0.15, 1], outputRange: [0.6, 1.15, 1] }) }],
       }]}
     >
       {text}
@@ -359,8 +361,9 @@ const Floater = memo(function Floater({ text, color }) {
 // HUD
 
 // Draining timer bar. Reads the run's end time from a ref so the whole board doesn't
-// re-render 10x a second.
-function TimerBar({ endAtRef, running, paused, pausedMs, bump }) {
+// re-render 10x a second. Not running: shows `frozenMs` (time left when the run ended) or
+// the full start time before a run.
+function TimerBar({ endAtRef, running, paused, pausedMs, frozenMs, bump, onPause, canPause }) {
   const [left, setLeft] = useState(START_MS)
   const pulse = useRef(new Animated.Value(1)).current
   useEffect(() => {
@@ -371,7 +374,7 @@ function TimerBar({ endAtRef, running, paused, pausedMs, bump }) {
     const id = setInterval(tick, 100)
     return () => clearInterval(id)
   }, [running, paused, pausedMs, endAtRef])
-  useEffect(() => { if (!running) setLeft(START_MS) }, [running])
+  useEffect(() => { if (!running) setLeft(frozenMs ?? START_MS) }, [running, frozenMs])
 
   const low = running && left <= 15000
   useEffect(() => {
@@ -385,30 +388,44 @@ function TimerBar({ endAtRef, running, paused, pausedMs, bump }) {
   }, [low, paused, pulse])
 
   const pct = Math.max(0, Math.min(1, left / START_MS))
-  const barColors = left <= 15000 ? ['#ff8a5b', '#ff3b5c'] : left <= 45000 ? ['#ffe07a', '#f2a516'] : ['#5ad7ff', '#3ee596']
+  const color = left <= 15000 ? ST.enemy : left <= 45000 ? ST.objective : ST.friendly
   return (
-    <View style={styles.timerRow}>
-      <Animated.View style={[styles.timerClock, { transform: [{ scale: pulse }] }]}>
-        <Ionicons name="time" size={16} color={low ? '#ff6b7a' : AC.text} />
-        <Text allowFontScaling={false} style={[styles.timerText, low && { color: '#ff6b7a' }]}>{formatClock(left)}</Text>
-      </Animated.View>
+    <View style={styles.timerWrap}>
       <View style={styles.timerTrack}>
-        <LinearGradient colors={barColors} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={[styles.timerFill, { width: `${pct * 100}%` }]} />
-        <View style={styles.timerGloss} pointerEvents="none" />
+        <View style={{ width: `${pct * 100}%`, height: 8, backgroundColor: color }} />
       </View>
-      {bump ? <View style={styles.floaterAnchor} pointerEvents="none"><Floater key={bump.id} text={bump.text} color={bump.color} /></View> : null}
+      <View style={styles.timerRow}>
+        <Pressable
+          onPress={onPause}
+          disabled={!canPause}
+          accessibilityRole="button"
+          accessibilityLabel={paused ? 'Resume' : 'Pause'}
+          hitSlop={8}
+          style={({ pressed }) => [styles.pauseBtn, { opacity: canPause ? (pressed ? 0.7 : 1) : 0.35 }]}
+        >
+          <Ionicons name={paused ? 'play' : 'pause'} size={14} color={ST.text} />
+          <Text allowFontScaling={false} style={styles.pauseText}>{paused ? 'Resume' : 'Pause'}</Text>
+        </Pressable>
+        <View style={{ flex: 1 }} />
+        {bump ? <View style={styles.floaterAnchor} pointerEvents="none"><Floater key={bump.id} text={bump.text} color={bump.color} /></View> : null}
+        <Animated.Text
+          allowFontScaling={false}
+          accessibilityRole="timer"
+          accessibilityLabel={`${formatClock(left)} left`}
+          style={[styles.timerText, low && { color: ST.enemy }, { transform: [{ scale: pulse }] }]}
+        >
+          {formatClock(left)}
+        </Animated.Text>
+      </View>
     </View>
   )
 }
 
-function HudStat({ label, value, icon, iconColor, pop, accent }) {
+function HudStat({ label, value, pop, color, align = 'flex-start' }) {
   return (
-    <View style={styles.hudStat}>
-      <View style={styles.hudLabelRow}>
-        {icon ? <Ionicons name={icon} size={11} color={iconColor || AC.faint} /> : null}
-        <Text allowFontScaling={false} style={styles.hudLabel}>{label}</Text>
-      </View>
-      <Animated.Text allowFontScaling={false} style={[styles.hudValue, accent && { color: accent }, pop && { transform: [{ scale: pop }] }]} numberOfLines={1}>
+    <View style={[styles.hudStat, { alignItems: align }]}>
+      <Text allowFontScaling={false} style={[stType.label, color && { color }]}>{label}</Text>
+      <Animated.Text allowFontScaling={false} style={[styles.hudValue, color && { color }, pop && { transform: [{ scale: pop }] }]} numberOfLines={1}>
         {value}
       </Animated.Text>
     </View>
@@ -419,36 +436,22 @@ function HudStat({ label, value, icon, iconColor, pop, accent }) {
 // Keyboard
 
 const Key = memo(function Key({ k, label, icon, state, width, height, onKey, accent }) {
-  const skin = state ? SKIN[state] : SKIN.key
-  const face = accent ? GREEN : skin.face
-  const depthColor = accent ? '#07633f' : skin.depth
-  const depth = 4
+  const bg = accent ? ST.friendly : state ? WORD_COLORS[state] : WORD_COLORS.key
+  const fg = accent ? ST.ink : state === 'absent' ? 'rgba(242,244,247,0.55)' : ST.text
   return (
     <Pressable
       onPress={() => onKey(k)}
       accessibilityRole="button"
-      accessibilityLabel={label === '⌫' ? 'Delete' : label || k}
-      style={{ width, height }}
+      accessibilityLabel={k === 'DEL' ? 'Delete' : k === 'ENTER' ? 'Enter' : `${k}${state ? `, ${state === 'correct' ? 'correct' : state === 'present' ? 'in word' : 'not in word'}` : ''}`}
+      style={({ pressed }) => [styles.key, { width, height, backgroundColor: bg, opacity: pressed ? 0.7 : 1 }, pressed && { transform: [{ scale: 0.95 }] }]}
       hitSlop={{ top: 3, bottom: 3, left: 1, right: 1 }}
     >
-      {({ pressed }) => (
-        <View style={{ flex: 1 }}>
-          <View style={[styles.keyDepth, { top: depth, backgroundColor: depthColor }]} />
-          <LinearGradient
-            colors={face}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 0, y: 1 }}
-            style={[styles.keyFace, { bottom: pressed ? 0 : depth, top: pressed ? depth : 0 }]}
-          >
-            {icon ? (
-              <Ionicons name={icon} size={20} color="#fff" />
-            ) : (
-              <Text allowFontScaling={false} style={[styles.keyText, label && label.length > 1 && { fontSize: 12, letterSpacing: 0.6 }, { color: accent ? '#fff' : skin.text }]}>
-                {label || k}
-              </Text>
-            )}
-          </LinearGradient>
-        </View>
+      {icon ? (
+        <Ionicons name={icon} size={20} color={fg} />
+      ) : (
+        <Text allowFontScaling={false} style={[styles.keyText, label && label.length > 1 && { fontSize: 12, letterSpacing: 1.2 }, { color: fg }]}>
+          {label || k}
+        </Text>
       )}
     </Pressable>
   )
@@ -477,13 +480,12 @@ function TitleTile({ letter, skin, size, index }) {
         height: size,
         opacity: enter,
         transform: [
-          { translateY: bob.interpolate({ inputRange: [0, 1], outputRange: [0, -6] }) },
-          { rotate: `${(index % 2 ? 1 : -1) * 3}deg` },
+          { translateY: bob.interpolate({ inputRange: [0, 1], outputRange: [0, -5] }) },
           { scale: enter.interpolate({ inputRange: [0, 1], outputRange: [0.3, 1] }) },
         ],
       }}
     >
-      <TileFace skin={skin} size={size} letter={letter} radius={Math.round(size * 0.2)} />
+      <TileFace skin={skin} size={size} letter={letter} />
     </Animated.View>
   )
 }
@@ -491,7 +493,7 @@ function TitleTile({ letter, skin, size, index }) {
 function MiniTile({ letter, skin }) {
   return (
     <View style={{ width: 30, height: 30 }}>
-      <TileFace skin={skin} size={30} letter={letter} radius={7} />
+      <TileFace skin={skin} size={30} letter={letter} />
     </View>
   )
 }
@@ -500,17 +502,7 @@ function HowLine({ left, text }) {
   return (
     <View style={styles.howLine}>
       <View style={styles.howIcon}>{left}</View>
-      <Text style={styles.howText}>{text}</Text>
-    </View>
-  )
-}
-
-function BigStat({ label, value, icon, color }) {
-  return (
-    <View style={styles.bigStat}>
-      <Ionicons name={icon} size={16} color={color} />
-      <Text allowFontScaling={false} style={styles.bigStatValue} numberOfLines={1} adjustsFontSizeToFit>{value}</Text>
-      <Text allowFontScaling={false} style={styles.bigStatLabel} numberOfLines={1}>{label}</Text>
+      <Text style={[stType.body, { flex: 1 }]}>{text}</Text>
     </View>
   )
 }
@@ -518,13 +510,14 @@ function BigStat({ label, value, icon, color }) {
 // ---------------------------------------------------------------------------------------
 // Game
 
-export function WordGame({ onExit, onRecorded, bottomInset = 0, withBackground = true }) {
+export function WordGame({ onExit, onRecorded, bottomInset = 0 }) {
+  useStudioFonts()
   const { width: winW, height: winH } = useWindowDimensions()
   const compact = winH < 700
   const contentW = Math.min(winW, 520)
-  const keyGap = contentW < 360 ? 4 : 6
-  const keyW = Math.floor((contentW - 16 - 9 * keyGap) / 10)
-  const keyH = compact ? 44 : 54
+  const keyGap = contentW < 360 ? 4 : 5
+  const keyW = Math.floor((contentW - 12 - 9 * keyGap) / 10)
+  const keyH = compact ? 44 : 50
 
   const [phase, setPhase] = useState('ready') // ready | countdown | playing | over
   const [count, setCount] = useState(3)
@@ -550,6 +543,7 @@ export function WordGame({ onExit, onRecorded, bottomInset = 0, withBackground =
   const [stats, setStats] = useState(null)
   const [showTutorial, setShowTutorial] = useState(false)
   const [board, setBoard] = useState(null) // measured board area { w, h }
+  const [endInfo, setEndInfo] = useState(null) // { reason: 'time' | 'ended', leftMs }
 
   const deckRef = useRef([])
   const endAtRef = useRef(0)
@@ -618,13 +612,17 @@ export function WordGame({ onExit, onRecorded, bottomInset = 0, withBackground =
     Animated.spring(boardIn, { toValue: 1, friction: 6, tension: 90, useNativeDriver: ND }).start()
   }, [boardIn])
 
-  const finish = useCallback(() => {
+  const finish = useCallback((reason = 'time') => {
     if (finishedRef.current) return
     finishedRef.current = true
     clearLater()
     const { score: sc, solved: sv, bestStreak: bs } = stateRef.current
+    const leftMs = pausedRemainingRef.current ?? Math.max(0, endAtRef.current - Date.now())
+    pausedRemainingRef.current = null
+    setEndInfo({ reason: reason === 'ended' ? 'ended' : 'time', leftMs: reason === 'ended' ? leftMs : 0 })
     setPhase('over')
     setPaused(false)
+    setPausedMs(null)
     setShownScore(sc)
     setCallout(null)
     buzz('heavy')
@@ -644,6 +642,7 @@ export function WordGame({ onExit, onRecorded, bottomInset = 0, withBackground =
       })
       .catch(() => {})
   }, [refreshStats])
+  const endRun = useCallback(() => finish('ended'), [finish])
 
   const beginPlay = useCallback(() => {
     endAtRef.current = Date.now() + START_MS
@@ -667,6 +666,7 @@ export function WordGame({ onExit, onRecorded, bottomInset = 0, withBackground =
     setToast(null)
     setPaused(false)
     setPausedMs(null)
+    setEndInfo(null)
     pausedRemainingRef.current = null
     nextWord()
     // 3-2-1-GO
@@ -685,7 +685,7 @@ export function WordGame({ onExit, onRecorded, bottomInset = 0, withBackground =
     if (phase !== 'playing' || paused) return undefined
     const id = setInterval(() => {
       const left = endAtRef.current - Date.now()
-      if (left <= 0) { finish(); return }
+      if (left <= 0) { finish('time'); return }
       const sec = Math.ceil(left / 1000)
       if (sec <= 10 && lastTickRef.current !== sec) {
         lastTickRef.current = sec
@@ -698,6 +698,9 @@ export function WordGame({ onExit, onRecorded, bottomInset = 0, withBackground =
 
   const pause = useCallback(() => {
     if (stateRef.current.phase !== 'playing') return
+    // Already paused (e.g. the app went to the background while the pause card was up):
+    // keep the stored time. Recomputing from the stale end time would eat the paused time.
+    if (pausedRemainingRef.current != null) return
     const left = Math.max(0, endAtRef.current - Date.now())
     pausedRemainingRef.current = left
     setPausedMs(left)
@@ -722,7 +725,7 @@ export function WordGame({ onExit, onRecorded, bottomInset = 0, withBackground =
 
   const addTime = (ms) => {
     endAtRef.current += ms
-    setBump({ id: Date.now(), text: ms > 0 ? `+${Math.round(ms / 1000)}s` : `−${Math.round(-ms / 1000)}s`, color: ms > 0 ? '#4be79c' : '#ff6b7a' })
+    setBump({ id: Date.now(), text: ms > 0 ? `+${Math.round(ms / 1000)}s` : `−${Math.round(-ms / 1000)}s`, color: ms > 0 ? SUCCESS : ST.enemy })
   }
 
   const doShake = () => {
@@ -770,8 +773,8 @@ export function WordGame({ onExit, onRecorded, bottomInset = 0, withBackground =
         setBurst((b) => b + 1)
         setCallout({
           id: Date.now(),
-          title: PRAISE[tries] || 'NICE!',
-          sub: newStreak >= 2 ? `+${pts.total}   ·   🔥 ${newStreak} streak  +${pts.streakBonus}` : `+${pts.total}   ·   +15s`,
+          title: PRAISE[tries] || 'NICE',
+          sub: newStreak >= 2 ? `+${pts.total}  ·  STREAK ×${newStreak}  +${pts.streakBonus}` : `+${pts.total}  ·  +${SOLVE_BONUS_MS / 1000}S`,
           tone: tries <= 2 ? 'gold' : 'good',
         })
         buzz('success')
@@ -803,8 +806,8 @@ export function WordGame({ onExit, onRecorded, bottomInset = 0, withBackground =
     playSfx('wordWrong', { volume: 0.5 })
     setCallout({ id: Date.now(), title: 'SKIPPED', word: target, tone: 'neutral' })
     endAtRef.current -= SKIP_PENALTY_MS
-    setBump({ id: Date.now(), text: '−10s', color: '#ff6b7a' })
-    if (endAtRef.current - Date.now() <= 0) { finish(); return }
+    setBump({ id: Date.now(), text: `−${SKIP_PENALTY_MS / 1000}s`, color: ST.enemy })
+    if (endAtRef.current - Date.now() <= 0) { finish('time'); return }
     nextWord()
   }
 
@@ -842,16 +845,7 @@ export function WordGame({ onExit, onRecorded, bottomInset = 0, withBackground =
     return () => window.removeEventListener('keydown', onDown)
   }, [handleKey])
 
-  const keyStates = useMemo(() => {
-    const m = {}
-    guesses.slice(0, revealed).forEach(({ word, score: sc }) => {
-      for (let i = 0; i < WORD_LEN; i++) {
-        const ch = word[i]
-        if (!m[ch] || RANK[sc[i]] > RANK[m[ch]]) m[ch] = sc[i]
-      }
-    })
-    return m
-  }, [guesses, revealed])
+  const keyStates = useMemo(() => keyStatesFor(guesses.slice(0, revealed)), [guesses, revealed])
 
   const closeTutorial = () => {
     setShowTutorial(false)
@@ -859,11 +853,9 @@ export function WordGame({ onExit, onRecorded, bottomInset = 0, withBackground =
   }
 
   const scoreShown = useCountUp(shownScore)
-  const scorePop = usePop(shownScore, 1.3)
-  const streakPop = usePop(streak, 1.45)
-  const solvedPop = usePop(solved.length, 1.35)
-
-  const bg = withBackground ? <ArcadeBackground /> : null
+  const scorePop = usePop(shownScore, 1.2)
+  const streakPop = usePop(streak, 1.35)
+  const solvedPop = usePop(solved.length, 1.3)
 
   // ----- Start screen -----
   if (phase === 'ready') {
@@ -871,35 +863,35 @@ export function WordGame({ onExit, onRecorded, bottomInset = 0, withBackground =
     const wr = stats?.wordRace
     return (
       <View style={styles.container}>
-        {bg}
         <ScrollView contentContainerStyle={[styles.startScroll, { paddingBottom: bottomInset + 24 }]} showsVerticalScrollIndicator={false}>
           <View style={[styles.startInner, { maxWidth: 460 }]}>
-            <View style={styles.startGlow} pointerEvents="none" />
-            <Text allowFontScaling={false} style={styles.kicker}>WHAT'S THE</Text>
+            <Text allowFontScaling={false} style={[stType.kicker, { color: SUCCESS, marginBottom: 12 }]}>What's the</Text>
             <View style={styles.titleRow}>
               {['W', 'O', 'R', 'D'].map((ch, i) => (
                 <TitleTile key={ch} letter={ch} index={i} size={titleSize} skin={['correct', 'present', 'correct', 'filled'][i]} />
               ))}
             </View>
-            <Text style={styles.tagline}>Beat the clock. Crack the word.</Text>
+            <Text style={[stType.body, { marginBottom: 20, textAlign: 'center' }]}>Beat the clock. Crack the word.</Text>
 
-            <View style={styles.howCard}>
+            <StPanel style={styles.howCard}>
+              <Text style={stType.label}>How it works</Text>
               <HowLine left={<MiniTile letter="A" skin="correct" />} text="Green: right letter, right spot." />
-              <HowLine left={<MiniTile letter="B" skin="present" />} text="Yellow: in the word, wrong spot." />
+              <HowLine left={<MiniTile letter="B" skin="present" />} text="Amber: in the word, wrong spot." />
+              <HowLine left={<MiniTile letter="C" skin="absent" />} text="Slate: not in the word." />
               <HowLine
-                left={<View style={styles.howClock}><Ionicons name="timer" size={18} color={AC.gold} /></View>}
-                text="2:00 on the clock. Every solve adds +15s."
+                left={<View style={styles.howClock}><Ionicons name="timer-outline" size={18} color={ST.objective} /></View>}
+                text={`${formatClock(START_MS)} on the clock. Every solve adds +${SOLVE_BONUS_MS / 1000}s, skipping costs ${SKIP_PENALTY_MS / 1000}s.`}
               />
-            </View>
+            </StPanel>
 
             <View style={styles.bigStats}>
-              <BigStat label="Best score" value={best != null ? best.toLocaleString() : '—'} icon="trophy" color={AC.gold} />
-              <BigStat label="Best words" value={wr?.bestWords ? wr.bestWords : '—'} icon="checkmark-circle" color="#4be79c" />
-              <BigStat label="Best streak" value={wr?.bestStreak ? wr.bestStreak : '—'} icon="flame" color="#ff8a5b" />
+              <StStat label="Best score" value={best != null ? best.toLocaleString() : '—'} color={ST.objective} />
+              <StStat label="Best words" value={wr?.bestWords ? wr.bestWords : '—'} color={SUCCESS} />
+              <StStat label="Best streak" value={wr?.bestStreak ? `×${wr.bestStreak}` : '—'} />
             </View>
 
-            <PlayButton title="Play" icon="play" onPress={start} colors={GREEN} style={styles.playBtn} />
-            <GhostButton title="How to play" icon="help-circle-outline" small onPress={() => setShowTutorial(true)} style={{ marginTop: 12, alignSelf: 'center' }} />
+            <StButton title="Play" onPress={start} style={styles.playBtn} height={54} />
+            <StButton title="How to play" tone="ghost" height={44} onPress={() => setShowTutorial(true)} style={{ marginTop: 10, alignSelf: 'stretch' }} />
           </View>
         </ScrollView>
         {showTutorial && <GameTutorial steps={TUTORIAL_STEPS} onComplete={closeTutorial} gameTitle="What's The Word" />}
@@ -908,42 +900,34 @@ export function WordGame({ onExit, onRecorded, bottomInset = 0, withBackground =
   }
 
   // ----- Board -----
-  const gap = board && board.w > 380 ? 8 : 6
+  const gap = 6
   const tileSize = board
-    ? Math.max(28, Math.floor(Math.min((board.w - 4 * gap) / WORD_LEN, (board.h - 5 * gap - 8) / MAX_GUESSES, 66)))
+    ? Math.max(28, Math.floor(Math.min((board.w - 4 * gap) / WORD_LEN, (board.h - 5 * gap - 8) / MAX_GUESSES, 60)))
     : 0
   const playing = phase === 'playing'
-  const running = playing || phase === 'over'
+  const nextTries = Math.min(MAX_GUESSES, guesses.length + 1)
+  const hintPts = solvePoints(nextTries, streak + 1).total
+  const showHint = playing && !paused && !roundLocked
 
   return (
     <View style={styles.container}>
-      {bg}
-      <View style={[styles.playInner, { maxWidth: 520, paddingBottom: bottomInset + (compact ? 6 : 12) }]}>
+      <View style={[styles.playInner, { maxWidth: 520, paddingBottom: bottomInset + (compact ? 6 : 10) }]}>
         {/* HUD */}
         <View style={styles.hud}>
-          <HudStat label="Score" value={scoreShown.toLocaleString()} icon="star" iconColor={AC.gold} pop={scorePop} />
-          <HudStat label="Solved" value={solved.length} icon="checkmark-circle" iconColor="#4be79c" pop={solvedPop} />
-          <View style={styles.hudStat}>
-            <View style={styles.hudLabelRow}>
-              <Ionicons name="flame" size={11} color={streak ? '#ff8a5b' : AC.faint} />
-              <Text allowFontScaling={false} style={styles.hudLabel}>Streak</Text>
-            </View>
-            <Animated.View style={[styles.streakChip, streak >= 2 && styles.streakChipHot, { transform: [{ scale: streakPop }] }]}>
-              <Text allowFontScaling={false} style={[styles.hudValue, { fontSize: 18 }, streak >= 2 && { color: '#fff' }]}>×{streak}</Text>
-            </Animated.View>
-          </View>
-          <Pressable
-            onPress={paused ? resume : pause}
-            disabled={!playing}
-            accessibilityRole="button"
-            accessibilityLabel={paused ? 'Resume' : 'Pause'}
-            hitSlop={8}
-            style={({ pressed }) => [styles.roundBtn, { opacity: playing ? 1 : 0.4, transform: [{ scale: pressed ? 0.9 : 1 }] }]}
-          >
-            <Ionicons name={paused ? 'play' : 'pause'} size={18} color={AC.text} />
-          </Pressable>
+          <HudStat label="Score" value={scoreShown.toLocaleString()} pop={scorePop} />
+          <HudStat label="Streak" value={`×${streak}`} pop={streakPop} color={streak > 0 ? ST.objective : ST.muted} align="center" />
+          <HudStat label="Solved" value={solved.length} pop={solvedPop} align="flex-end" />
         </View>
-        <TimerBar endAtRef={endAtRef} running={running && phase !== 'over'} paused={paused} pausedMs={pausedMs} bump={bump} />
+        <TimerBar
+          endAtRef={endAtRef}
+          running={playing}
+          paused={paused}
+          pausedMs={pausedMs}
+          frozenMs={phase === 'over' ? endInfo?.leftMs ?? 0 : null}
+          bump={bump}
+          onPause={paused ? resume : pause}
+          canPause={playing}
+        />
 
         {/* Board */}
         <View style={styles.boardArea} onLayout={(e) => {
@@ -954,7 +938,7 @@ export function WordGame({ onExit, onRecorded, bottomInset = 0, withBackground =
           {board && !paused ? (
             <Animated.View
               key={wordId}
-              style={[styles.grid, { gap, opacity: boardIn, transform: [{ scale: boardIn.interpolate({ inputRange: [0, 1], outputRange: [0.9, 1] }) }] }]}
+              style={[styles.grid, { gap, opacity: boardIn, transform: [{ scale: boardIn.interpolate({ inputRange: [0, 1], outputRange: [0.94, 1] }) }] }]}
             >
               {Array.from({ length: MAX_GUESSES }).map((_, r) => {
                 const g = guesses[r]
@@ -975,18 +959,18 @@ export function WordGame({ onExit, onRecorded, bottomInset = 0, withBackground =
           ) : null}
 
           {paused ? (
-            <View style={styles.pauseCard}>
-              <Ionicons name="pause-circle" size={54} color={AC.accent} />
-              <Text style={styles.pauseTitle}>Paused</Text>
-              <Text style={styles.pauseBody}>The clock is stopped. The board is hidden until you resume.</Text>
-              <PlayButton title="Resume" icon="play" onPress={resume} colors={GREEN} style={{ alignSelf: 'stretch', marginTop: 18 }} />
-              <GhostButton title="End run" icon="flag" small onPress={finish} style={{ alignSelf: 'stretch', marginTop: 10 }} />
-            </View>
+            <StPanel strong accent={ST.friendly} style={styles.pauseCard}>
+              <Text style={stType.kicker}>Clock stopped</Text>
+              <Text style={[stType.display, { fontSize: 40, lineHeight: 46 }]}>Paused</Text>
+              <Text style={[stType.small, { textAlign: 'center', marginTop: 4 }]}>The board is hidden until you resume.</Text>
+              <StButton title="Resume" onPress={resume} style={{ alignSelf: 'stretch', marginTop: 18 }} />
+              <StButton title="End run" tone="ghost" height={44} onPress={endRun} style={{ alignSelf: 'stretch', marginTop: 8 }} />
+            </StPanel>
           ) : null}
 
           {toast ? (
-            <View key={toast.id} style={styles.toast} pointerEvents="none">
-              <Ionicons name="alert-circle" size={15} color="#ff6b7a" />
+            <View key={toast.id} style={styles.toast} pointerEvents="none" accessibilityLiveRegion="polite">
+              <Ionicons name="alert-circle" size={15} color={ST.enemy} />
               <Text style={styles.toastText}>{toast.text}</Text>
             </View>
           ) : null}
@@ -994,38 +978,46 @@ export function WordGame({ onExit, onRecorded, bottomInset = 0, withBackground =
           {burst > 0 && phase !== 'over' ? <Burst key={burst} /> : null}
         </View>
 
-        {/* Actions */}
+        {/* Next-solve value + actions */}
+        <View style={styles.hintRow}>
+          {showHint ? (
+            <View style={styles.hint}>
+              <Text allowFontScaling={false} style={styles.hintText}>+{SOLVE_BONUS_MS / 1000} S · SOLVE IN {nextTries} FOR +{hintPts}</Text>
+            </View>
+          ) : <View style={[styles.hint, { opacity: 0 }]}><Text style={styles.hintText}> </Text></View>}
+        </View>
         <View style={styles.actions}>
           <Pressable
             onPress={skip}
             disabled={!playing || paused || roundLocked}
             accessibilityRole="button"
-            style={({ pressed }) => [styles.pill, { opacity: !playing || paused || roundLocked ? 0.4 : 1, transform: [{ scale: pressed ? 0.95 : 1 }] }]}
+            accessibilityLabel={`Skip word, minus ${SKIP_PENALTY_MS / 1000} seconds`}
+            style={({ pressed }) => [styles.actionBtn, { opacity: !playing || paused || roundLocked ? 0.38 : pressed ? 0.7 : 1 }]}
           >
-            <Ionicons name="play-skip-forward" size={14} color={AC.text} />
-            <Text style={styles.pillText}>Skip</Text>
-            <Text style={styles.pillPenalty}>−10s</Text>
+            <Ionicons name="play-skip-forward" size={13} color={ST.text} />
+            <Text style={styles.actionText}>Skip</Text>
+            <Text style={[styles.actionText, { color: ST.enemy }]}>−{SKIP_PENALTY_MS / 1000}s</Text>
           </Pressable>
           <Pressable
-            onPress={finish}
+            onPress={endRun}
             disabled={!playing}
             accessibilityRole="button"
-            style={({ pressed }) => [styles.pill, { opacity: playing ? 1 : 0.4, transform: [{ scale: pressed ? 0.95 : 1 }] }]}
+            style={({ pressed }) => [styles.actionBtn, { opacity: playing ? (pressed ? 0.7 : 1) : 0.38 }]}
           >
-            <Ionicons name="flag" size={14} color={AC.text} />
-            <Text style={styles.pillText}>End run</Text>
+            <Ionicons name="flag" size={13} color={ST.text} />
+            <Text style={styles.actionText}>End run</Text>
           </Pressable>
         </View>
 
         {/* Keyboard */}
-        <View style={[styles.keyboard, { gap: compact ? 6 : 8 }]}>
+        <View style={[styles.keyboard, { gap: compact ? 6 : 7 }]}>
           {KEY_ROWS.map((r, ri) => (
             <View key={r} style={[styles.keyRow, { gap: keyGap }]}>
               {ri === 2 && <Key k="ENTER" label="ENTER" accent onKey={handleKey} width={Math.floor(keyW * 1.5 + keyGap / 2)} height={keyH} />}
               {r.split('').map((k) => (
                 <Key key={k} k={k} state={keyStates[k]} onKey={handleKey} width={keyW} height={keyH} />
               ))}
-              {ri === 2 && <Key k="DEL" label="⌫" icon="backspace-outline" onKey={handleKey} width={Math.floor(keyW * 1.5 + keyGap / 2)} height={keyH} />}
+              {ri === 2 && <Key k="DEL" icon="backspace-outline" onKey={handleKey} width={Math.floor(keyW * 1.5 + keyGap / 2)} height={keyH} />}
             </View>
           ))}
         </View>
@@ -1041,6 +1033,7 @@ export function WordGame({ onExit, onRecorded, bottomInset = 0, withBackground =
           bestStreak={bestStreak}
           summary={summary}
           burst={burst}
+          endReason={endInfo?.reason}
           bottomInset={bottomInset}
           onPlayAgain={start}
           onExit={onExit}
@@ -1064,17 +1057,17 @@ function Countdown({ count }) {
   return (
     <View style={styles.countdown} pointerEvents="auto">
       <Animated.View style={{ alignItems: 'center', opacity: v, transform: [{ scale: v.interpolate({ inputRange: [0, 1], outputRange: [2.2, 1] }) }] }}>
-        <Text allowFontScaling={false} style={[styles.countText, go && { color: '#4be79c', textShadowColor: 'rgba(75,231,156,0.8)' }]}>
-          {go ? 'GO!' : count}
+        <Text allowFontScaling={false} style={[styles.countText, go && { color: SUCCESS }]}>
+          {go ? 'GO' : count}
         </Text>
-        {!go ? <Text style={styles.countSub}>Get ready…</Text> : null}
+        {!go ? <Text style={[stType.kicker, { color: ST.muted }]}>Get ready</Text> : null}
       </Animated.View>
     </View>
   )
 }
 
-// Run summary.
-function Results({ score, solved, missed, bestStreak, summary, burst, bottomInset, onPlayAgain, onExit, onMenu }) {
+// Run summary (studio Summary style).
+function Results({ score, solved, missed, bestStreak, summary, burst, endReason, bottomInset, onPlayAgain, onExit, onMenu }) {
   const enter = useRef(new Animated.Value(0)).current
   const badge = useRef(new Animated.Value(0)).current
   const shown = useCountUp(score, 1200, 0)
@@ -1085,52 +1078,59 @@ function Results({ score, solved, missed, bestStreak, summary, burst, bottomInse
   useEffect(() => {
     if (!isNewBest) return undefined
     badge.setValue(0)
-    Animated.spring(badge, { toValue: 1, delay: 500, friction: 4, tension: 120, useNativeDriver: ND }).start()
+    Animated.spring(badge, { toValue: 1, delay: 500, friction: 5, tension: 120, useNativeDriver: ND }).start()
     return undefined
   }, [isNewBest, badge])
   const attempted = solved.length + missed.length
   const accuracy = attempted ? `${Math.round((solved.length / attempted) * 100)}%` : '—'
   const avg = solved.length ? (solved.reduce((a, s) => a + s.tries, 0) / solved.length).toFixed(1) : '—'
   const words = [...solved.map((s) => ({ w: s.word, ok: true, tries: s.tries })), ...missed.map((w) => ({ w, ok: false }))]
+  const wash = isNewBest ? ST.objective : ST.friendly
 
   return (
     <View style={styles.resultsOverlay}>
       <Animated.View style={[StyleSheet.absoluteFill, styles.resultsDim, { opacity: enter }]} />
+      <Animated.View pointerEvents="none" style={[styles.resultsWash, { opacity: enter }]}>
+        <LinearGradient colors={[withAlpha(wash, 0.22), withAlpha(wash, 0)]} style={StyleSheet.absoluteFill} />
+      </Animated.View>
       {isNewBest ? <View style={styles.resultsBurst} pointerEvents="none"><Burst key={burst} count={44} spread={1.5} /></View> : null}
       <ScrollView contentContainerStyle={[styles.resultsScroll, { paddingBottom: bottomInset + 24 }]} showsVerticalScrollIndicator={false}>
-        <Animated.View style={[styles.resultsCardOuter, { opacity: enter, transform: [{ translateY: enter.interpolate({ inputRange: [0, 1], outputRange: [60, 0] }) }] }]}>
-          <LinearGradient colors={['rgba(36,44,92,0.97)', 'rgba(14,16,36,0.98)']} start={{ x: 0, y: 0 }} end={{ x: 0.5, y: 1 }} style={styles.resultsCard}>
-            <Text style={styles.resultsKicker}>TIME'S UP</Text>
-            <Text allowFontScaling={false} style={styles.resultsScore}>{shown.toLocaleString()}</Text>
-            <Text style={styles.resultsScoreLabel}>points</Text>
+        <Animated.View style={[styles.resultsInner, { opacity: enter, transform: [{ translateY: enter.interpolate({ inputRange: [0, 1], outputRange: [40, 0] }) }] }]}>
+          <View style={{ alignItems: 'center', gap: 4 }}>
+            <Text style={[stType.label, { color: wash }]}>{endReason === 'ended' ? 'Run ended' : 'Time’s up'} · Word race</Text>
+            <Text allowFontScaling={false} style={[stType.display, { fontSize: 64, lineHeight: 70 }]} numberOfLines={1} adjustsFontSizeToFit>{shown.toLocaleString()}</Text>
+            <Text style={[stType.body, { fontSize: 13 }]}>
+              {solved.length} {solved.length === 1 ? 'word' : 'words'} cracked{summary?.previousBest != null && !isNewBest ? ` · best ${summary.previousBest.toLocaleString()}` : ''}
+            </Text>
+          </View>
 
-            {isNewBest ? (
-              <Animated.View style={[styles.newBest, { opacity: badge, transform: [{ scale: badge.interpolate({ inputRange: [0, 1], outputRange: [0.3, 1] }) }, { rotate: '-3deg' }] }]}>
-                <LinearGradient colors={['#ffe08a', '#f2a516']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.newBestInner}>
-                  <Ionicons name="trophy" size={15} color="#3a2600" />
-                  <Text style={styles.newBestText}>NEW PERSONAL BEST</Text>
-                </LinearGradient>
-              </Animated.View>
-            ) : summary?.previousBest != null ? (
-              <Text style={styles.prevBest}>Personal best {summary.previousBest.toLocaleString()}</Text>
-            ) : null}
+          <View style={styles.resultStats}>
+            <ResultStat label="Words" value={String(solved.length)} color={SUCCESS} />
+            <ResultStat label="Accuracy" value={accuracy} />
+            <ResultStat label="Streak" value={`×${bestStreak}`} color={bestStreak > 0 ? ST.objective : undefined} />
+            <ResultStat label="Avg tries" value={avg} />
+          </View>
 
-            <View style={styles.resultStats}>
-              <BigStat label="Words" value={solved.length} icon="checkmark-circle" color="#4be79c" />
-              <BigStat label="Accuracy" value={accuracy} icon="locate" color="#5ad7ff" />
-              <BigStat label="Best streak" value={bestStreak} icon="flame" color="#ff8a5b" />
+          {isNewBest ? (
+            <Animated.View style={[styles.newBest, { opacity: badge, transform: [{ scale: badge.interpolate({ inputRange: [0, 1], outputRange: [0.85, 1] }) }] }]}>
+              <Ionicons name="star-outline" size={30} color={ST.objective} />
+              <View style={{ flex: 1 }}>
+                <Text style={[stType.label, { color: ST.objective }]}>New personal best</Text>
+                <Text style={styles.newBestText}>{score.toLocaleString()} points{summary ? ` · +${summary.pointsEarned} arcade` : ''}</Text>
+              </View>
+            </Animated.View>
+          ) : summary ? (
+            <View style={[styles.newBest, { borderColor: ST.line, backgroundColor: ST.panel }]}>
+              <View style={{ flex: 1 }}>
+                <Text style={stType.label}>Arcade points</Text>
+                <Text style={[styles.newBestText, { color: ST.objective }]}>+{summary.pointsEarned}</Text>
+              </View>
             </View>
-            <View style={styles.resultMeta}>
-              <Text style={styles.resultMetaText}>Avg guesses <Text style={styles.resultMetaStrong}>{avg}</Text></Text>
-              {summary ? (
-                <View style={styles.pointsPill}>
-                  <Text style={styles.pointsGlyph}>◆</Text>
-                  <Text style={styles.pointsText}>+{summary.pointsEarned} arcade points</Text>
-                </View>
-              ) : null}
-            </View>
+          ) : null}
 
-            {words.length ? (
+          {words.length ? (
+            <View style={{ marginTop: 16 }}>
+              <Text style={[stType.label, { marginBottom: 6 }]}>This run</Text>
               <View style={styles.wordChips}>
                 {words.slice(0, 24).map((x, i) => (
                   <View key={`${x.w}-${i}`} style={[styles.wordChip, x.ok ? styles.wordChipOk : styles.wordChipMiss]}>
@@ -1139,161 +1139,129 @@ function Results({ score, solved, missed, bestStreak, summary, burst, bottomInse
                   </View>
                 ))}
               </View>
-            ) : (
-              <Text style={styles.noWords}>No words this time. Try a starter like CRANE or SLATE.</Text>
-            )}
+            </View>
+          ) : (
+            <Text style={[stType.small, { textAlign: 'center', marginTop: 16 }]}>No words this time. Try a starter like CRANE or SLATE.</Text>
+          )}
 
-            <PlayButton title="Play again" icon="refresh" onPress={onPlayAgain} colors={GREEN} style={{ alignSelf: 'stretch', marginTop: 20 }} />
+          <View style={{ flexDirection: 'row', gap: 8, marginTop: 22 }}>
+            <StButton title="Play again" onPress={onPlayAgain} style={{ flex: 1 }} />
             {onExit ? (
-              <GhostButton title="Back to arcade" icon="grid-outline" onPress={onExit} style={{ alignSelf: 'stretch', marginTop: 10 }} />
+              <StButton title="Arcade" tone="ghost" onPress={onExit} style={{ width: 130 }} />
             ) : (
-              <GhostButton title="Main menu" icon="home-outline" onPress={onMenu} style={{ alignSelf: 'stretch', marginTop: 10 }} />
+              <StButton title="Menu" tone="ghost" onPress={onMenu} style={{ width: 130 }} />
             )}
-          </LinearGradient>
+          </View>
         </Animated.View>
       </ScrollView>
     </View>
   )
 }
 
+function ResultStat({ label, value, color }) {
+  return (
+    <View style={styles.resultStat}>
+      <Text style={stType.label} numberOfLines={1}>{label}</Text>
+      <Text style={[stType.num, { fontSize: 22, color: color || ST.text }]} numberOfLines={1} adjustsFontSizeToFit>{value}</Text>
+    </View>
+  )
+}
+
 export default WordGame
 
-const textGlow = Platform.select({
-  web: { textShadowColor: 'rgba(0,0,0,0.25)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 2 },
-  default: { textShadowColor: 'rgba(0,0,0,0.25)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 2 },
-})
-
 const styles = StyleSheet.create({
-  container: { flex: 1 },
+  container: { flex: 1, backgroundColor: ST.ground },
 
   // Start
-  startScroll: { flexGrow: 1, justifyContent: 'center', paddingHorizontal: 20, paddingTop: 8 },
+  startScroll: { flexGrow: 1, justifyContent: 'center', paddingHorizontal: 16, paddingTop: 8 },
   startInner: { width: '100%', alignSelf: 'center', alignItems: 'center' },
-  startGlow: { position: 'absolute', top: -40, width: 300, height: 300, borderRadius: 150, backgroundColor: 'rgba(62,229,150,0.12)' },
-  kicker: { fontSize: 15, ...font.heavy, color: AC.muted, letterSpacing: 6, marginBottom: 10 },
-  titleRow: { flexDirection: 'row', gap: 10, marginBottom: 14 },
-  tagline: { fontSize: 16, ...font.semibold, color: AC.text, opacity: 0.85, marginBottom: 22 },
-  howCard: {
-    alignSelf: 'stretch', borderRadius: 22, padding: 16, gap: 12,
-    backgroundColor: 'rgba(255,255,255,0.05)', borderWidth: 1, borderColor: AC.border,
-  },
+  titleRow: { flexDirection: 'row', gap: 8, marginBottom: 14 },
+  howCard: { alignSelf: 'stretch', gap: 12, padding: 14 },
   howLine: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   howIcon: { width: 30, alignItems: 'center' },
-  howClock: { width: 30, height: 30, borderRadius: 8, backgroundColor: 'rgba(255,201,77,0.14)', alignItems: 'center', justifyContent: 'center' },
-  howText: { flex: 1, fontSize: 14.5, ...font.medium, color: AC.text, lineHeight: 19 },
-  bigStats: { flexDirection: 'row', gap: 10, alignSelf: 'stretch', marginTop: 14 },
-  bigStat: {
-    flex: 1, alignItems: 'center', paddingVertical: 12, paddingHorizontal: 6, borderRadius: 18,
-    backgroundColor: 'rgba(255,255,255,0.05)', borderWidth: 1, borderColor: AC.border, gap: 2,
-  },
-  bigStatValue: { fontSize: 20, ...font.heavy, color: AC.text, fontVariant: ['tabular-nums'], marginTop: 2 },
-  bigStatLabel: { fontSize: 10, ...font.bold, color: AC.faint, letterSpacing: 1, textTransform: 'uppercase' },
-  playBtn: { alignSelf: 'stretch', marginTop: 22 },
+  howClock: { width: 30, height: 30, borderRadius: ST.radius, backgroundColor: withAlpha(ST.objective, 0.14), alignItems: 'center', justifyContent: 'center' },
+  bigStats: { flexDirection: 'row', gap: 6, alignSelf: 'stretch', marginTop: 10 },
+  playBtn: { alignSelf: 'stretch', marginTop: 20 },
 
   // Play
-  playInner: { flex: 1, width: '100%', alignSelf: 'center', paddingHorizontal: 8, paddingTop: 6 },
-  hud: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8, gap: 6 },
-  hudStat: { flex: 1, alignItems: 'flex-start' },
-  hudLabelRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  hudLabel: { fontSize: 10, ...font.heavy, color: AC.faint, letterSpacing: 1.2, textTransform: 'uppercase' },
-  hudValue: { fontSize: 24, ...font.heavy, color: AC.text, fontVariant: ['tabular-nums'], letterSpacing: -0.5 },
-  streakChip: { marginTop: 2, paddingHorizontal: 10, paddingVertical: 1, borderRadius: 999, backgroundColor: 'rgba(255,255,255,0.06)', borderWidth: 1, borderColor: AC.border },
-  streakChipHot: { backgroundColor: '#ff6a3d', borderColor: '#ffb08a' },
-  roundBtn: {
-    width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.08)', borderWidth: 1, borderColor: AC.border,
-  },
+  playInner: { flex: 1, width: '100%', alignSelf: 'center', paddingHorizontal: 6, paddingTop: 6 },
+  hud: { flexDirection: 'row', alignItems: 'flex-end', paddingHorizontal: 6 },
+  hudStat: { flex: 1 },
+  hudValue: { fontFamily: FONT.display, fontSize: 30, color: ST.text, fontVariant: ['tabular-nums'], includeFontPadding: false },
 
-  timerRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 8, marginTop: 10 },
-  timerClock: { flexDirection: 'row', alignItems: 'center', gap: 4, minWidth: 62 },
-  timerText: { fontSize: 17, ...font.heavy, color: AC.text, fontVariant: ['tabular-nums'] },
-  timerTrack: { flex: 1, height: 12, borderRadius: 6, backgroundColor: 'rgba(255,255,255,0.08)', overflow: 'hidden', borderWidth: 1, borderColor: 'rgba(255,255,255,0.06)' },
-  timerFill: { height: '100%', borderRadius: 6 },
-  timerGloss: { position: 'absolute', top: 1, left: 4, right: 4, height: 3, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.25)' },
-  floaterAnchor: { position: 'absolute', left: 8, top: -18 },
-  floater: { fontSize: 18, ...font.heavy, textShadowColor: 'rgba(0,0,0,0.5)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 4 },
+  timerWrap: { paddingHorizontal: 6, marginTop: 8 },
+  timerTrack: { height: 8, backgroundColor: 'rgba(255,255,255,0.12)', overflow: 'hidden' },
+  timerRow: { flexDirection: 'row', alignItems: 'center', marginTop: 6 },
+  timerText: { fontFamily: FONT.display, fontSize: 16, color: ST.text, fontVariant: ['tabular-nums'], includeFontPadding: false },
+  pauseBtn: { flexDirection: 'row', alignItems: 'center', gap: 5, height: 26, paddingHorizontal: 8, borderWidth: 1, borderColor: ST.lineStrong, borderRadius: ST.radius },
+  pauseText: { fontFamily: FONT.ui, fontSize: 10, letterSpacing: 1.4, color: ST.text, textTransform: 'uppercase' },
+  floaterAnchor: { marginRight: 10 },
+  floater: { fontFamily: FONT.display, fontSize: 16, ...{ textShadowColor: 'rgba(0,0,0,0.6)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 4 } },
 
-  boardArea: { flex: 1, alignItems: 'center', justifyContent: 'center', marginTop: 10, marginBottom: 4, minHeight: 160 },
+  boardArea: { flex: 1, alignItems: 'center', justifyContent: 'center', marginTop: 8, marginBottom: 2, minHeight: 160 },
   grid: { alignItems: 'center' },
   row: { flexDirection: 'row' },
-  tileDepth: { position: 'absolute', left: 0, right: 0, bottom: 0 },
-  tileFace: { position: 'absolute', left: 0, right: 0, top: 0, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
-  tileShine: { position: 'absolute', top: 0, left: 0, right: 0, height: '42%', backgroundColor: 'rgba(255,255,255,0.12)' },
-  tileText: { ...font.heavy, letterSpacing: 0.5, ...textGlow },
+  tileFace: { alignItems: 'center', justifyContent: 'center', borderRadius: 2 },
+  tileText: { fontFamily: FONT.display, includeFontPadding: false, textTransform: 'uppercase' },
 
-  pauseCard: {
-    width: '88%', maxWidth: 340, alignItems: 'center', padding: 22, borderRadius: 24,
-    backgroundColor: 'rgba(20,24,52,0.92)', borderWidth: 1, borderColor: AC.border,
-  },
-  pauseTitle: { fontSize: 26, ...font.heavy, color: AC.text, marginTop: 6 },
-  pauseBody: { fontSize: 14, ...font.regular, color: AC.muted, textAlign: 'center', marginTop: 6, lineHeight: 20 },
+  pauseCard: { width: '88%', maxWidth: 340, alignItems: 'center', padding: 20 },
 
   toast: {
     position: 'absolute', top: 0, flexDirection: 'row', alignItems: 'center', gap: 6,
-    backgroundColor: 'rgba(30,14,26,0.95)', borderRadius: 999, paddingHorizontal: 14, paddingVertical: 8,
-    borderWidth: 1, borderColor: 'rgba(255,107,122,0.5)',
+    backgroundColor: ST.panelStrong, borderRadius: ST.radius, paddingHorizontal: 14, paddingVertical: 8,
+    borderWidth: 1, borderColor: withAlpha(ST.enemy, 0.6),
   },
-  toastText: { fontSize: 14, ...font.bold, color: AC.text },
+  toastText: { fontFamily: FONT.ui, fontSize: 13, letterSpacing: 1, color: ST.text, textTransform: 'uppercase' },
 
   callout: {
     position: 'absolute', alignSelf: 'center', alignItems: 'center',
-    paddingHorizontal: 22, paddingVertical: 14, borderRadius: 22,
-    backgroundColor: 'rgba(8,10,24,0.82)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)',
+    paddingHorizontal: 22, paddingVertical: 14, borderRadius: ST.radius,
+    backgroundColor: ST.panelStrong, borderTopWidth: 2,
   },
-  calloutTitle: { fontSize: 30, ...font.heavy, letterSpacing: 1, textShadowOffset: { width: 0, height: 0 }, textShadowRadius: 14 },
-  calloutSub: { fontSize: 15, ...font.bold, color: AC.text, marginTop: 4 },
+  calloutTitle: { fontFamily: FONT.display, fontSize: 30, letterSpacing: 3, includeFontPadding: false },
+  calloutSub: { fontFamily: FONT.display, fontSize: 14, letterSpacing: 1.4, color: ST.text, marginTop: 4 },
   calloutWord: { flexDirection: 'row', gap: 5, marginTop: 10 },
 
   burst: { position: 'absolute', top: '45%', left: '50%', width: 0, height: 0 },
 
-  actions: { flexDirection: 'row', justifyContent: 'center', gap: 10, marginVertical: 8 },
-  pill: {
-    flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 999,
-    backgroundColor: 'rgba(255,255,255,0.07)', borderWidth: 1, borderColor: AC.border,
+  hintRow: { alignItems: 'center', marginTop: 4 },
+  hint: { paddingHorizontal: 12, paddingVertical: 4, backgroundColor: 'rgba(92,242,160,0.14)' },
+  hintText: { fontFamily: FONT.display, fontSize: 13, letterSpacing: 1.4, color: ST.health, includeFontPadding: false },
+
+  actions: { flexDirection: 'row', justifyContent: 'center', gap: 8, marginVertical: 8 },
+  actionBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 6, height: 32, paddingHorizontal: 12, borderRadius: ST.radius,
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.18)',
   },
-  pillText: { fontSize: 13, ...font.bold, color: AC.text },
-  pillPenalty: { fontSize: 12, ...font.heavy, color: '#ff6b7a' },
+  actionText: { fontFamily: FONT.ui, fontSize: 11, letterSpacing: 1.2, color: ST.text, textTransform: 'uppercase' },
 
   keyboard: { alignItems: 'center' },
   keyRow: { flexDirection: 'row' },
-  keyDepth: { position: 'absolute', left: 0, right: 0, bottom: 0, borderRadius: 9 },
-  keyFace: { position: 'absolute', left: 0, right: 0, borderRadius: 9, alignItems: 'center', justifyContent: 'center' },
-  keyText: { fontSize: 18, ...font.heavy, ...textGlow },
+  key: { alignItems: 'center', justifyContent: 'center', borderRadius: ST.radius },
+  keyText: { fontFamily: FONT.ui, fontSize: 16 },
 
-  countdown: { ...StyleSheet.absoluteFill, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(4,5,13,0.55)' },
-  countText: { fontSize: 120, ...font.heavy, color: AC.text, textShadowColor: 'rgba(124,140,255,0.9)', textShadowOffset: { width: 0, height: 0 }, textShadowRadius: 30 },
-  countSub: { fontSize: 16, ...font.bold, color: AC.muted, letterSpacing: 2, marginTop: -6 },
+  countdown: { ...StyleSheet.absoluteFill, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(11,13,17,0.7)' },
+  countText: { fontFamily: FONT.display, fontSize: 120, color: ST.text, includeFontPadding: false },
 
   // Results
   resultsOverlay: { ...StyleSheet.absoluteFill },
-  resultsDim: { backgroundColor: 'rgba(4,5,13,0.78)' },
+  resultsDim: { backgroundColor: 'rgba(11,13,17,0.96)' },
+  resultsWash: { position: 'absolute', left: 0, right: 0, top: 0, height: 300 },
   resultsBurst: { position: 'absolute', top: '22%', left: 0, right: 0, height: 0 },
   resultsScroll: { flexGrow: 1, justifyContent: 'center', padding: 16 },
-  resultsCardOuter: {
-    width: '100%', maxWidth: 420, alignSelf: 'center', borderRadius: 28,
-    shadowColor: 'rgba(62,229,150,0.5)', shadowOpacity: 0.6, shadowRadius: 24, shadowOffset: { width: 0, height: 10 },
+  resultsInner: { width: '100%', maxWidth: 420, alignSelf: 'center' },
+  resultStats: { flexDirection: 'row', gap: 6, marginTop: 24 },
+  resultStat: { flex: 1, paddingVertical: 10, paddingHorizontal: 8, backgroundColor: ST.panel, borderRadius: ST.radius, gap: 2 },
+  newBest: {
+    flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 10, paddingVertical: 12, paddingHorizontal: 14,
+    borderWidth: 1, borderColor: ST.objective, backgroundColor: withAlpha(ST.objective, 0.08), borderRadius: ST.radius,
   },
-  resultsCard: { borderRadius: 28, padding: 22, alignItems: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)', overflow: 'hidden' },
-  resultsKicker: { fontSize: 13, ...font.heavy, color: AC.accent, letterSpacing: 4 },
-  resultsScore: { fontSize: 64, ...font.heavy, color: AC.text, fontVariant: ['tabular-nums'], letterSpacing: -2, marginTop: 4 },
-  resultsScoreLabel: { fontSize: 12, ...font.bold, color: AC.faint, letterSpacing: 2, textTransform: 'uppercase', marginTop: -6 },
-  newBest: { marginTop: 12 },
-  newBestInner: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 14, paddingVertical: 7, borderRadius: 999 },
-  newBestText: { fontSize: 13, ...font.heavy, color: '#3a2600', letterSpacing: 1 },
-  prevBest: { fontSize: 13, ...font.semibold, color: AC.muted, marginTop: 10 },
-  resultStats: { flexDirection: 'row', gap: 8, alignSelf: 'stretch', marginTop: 18 },
-  resultMeta: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', alignSelf: 'stretch', marginTop: 12, flexWrap: 'wrap', gap: 8 },
-  resultMetaText: { fontSize: 13, ...font.medium, color: AC.muted },
-  resultMetaStrong: { ...font.heavy, color: AC.text },
-  pointsPill: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 999, backgroundColor: 'rgba(255,201,77,0.14)' },
-  pointsGlyph: { fontSize: 11, color: AC.gold, ...font.heavy },
-  pointsText: { fontSize: 13, ...font.bold, color: AC.gold },
-  wordChips: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 6, marginTop: 16 },
-  wordChip: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 10 },
-  wordChipOk: { backgroundColor: 'rgba(62,229,150,0.16)', borderWidth: 1, borderColor: 'rgba(62,229,150,0.4)' },
-  wordChipMiss: { backgroundColor: 'rgba(255,255,255,0.05)', borderWidth: 1, borderColor: AC.border },
-  wordChipText: { fontSize: 13, ...font.heavy, color: AC.text, letterSpacing: 1 },
-  wordChipTextMiss: { color: AC.faint, textDecorationLine: 'line-through' },
-  wordChipTries: { fontSize: 11, ...font.bold, color: '#4be79c' },
-  noWords: { fontSize: 14, ...font.medium, color: AC.muted, textAlign: 'center', marginTop: 16 },
+  newBestText: { fontFamily: FONT.display, fontSize: 18, color: ST.text, includeFontPadding: false },
+  wordChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  wordChip: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 5, borderRadius: ST.radius },
+  wordChipOk: { backgroundColor: withAlpha(SUCCESS, 0.16), borderWidth: 1, borderColor: withAlpha(SUCCESS, 0.45) },
+  wordChipMiss: { backgroundColor: 'rgba(255,255,255,0.04)', borderWidth: 1, borderColor: ST.line },
+  wordChipText: { fontFamily: FONT.display, fontSize: 13, color: ST.text, letterSpacing: 1.5 },
+  wordChipTextMiss: { color: ST.faint, textDecorationLine: 'line-through' },
+  wordChipTries: { fontFamily: FONT.ui, fontSize: 11, color: SUCCESS },
 })

@@ -85,15 +85,15 @@ function shortName(w) {
   return n.split(' ').pop() || 'Weapon'
 }
 
-export const RARITY_COLORS = (() => {
-  const r = Guns.RARITIES || {}
-  return {
-    common: r.common?.color || '#9aa3c0',
-    rare: r.rare?.color || '#4fa3ff',
-    epic: r.epic?.color || '#b46cff',
-    legendary: r.legendary?.color || '#ffb547',
-  }
-})()
+// Studio HUD rarity colours (epic matches the studio epic token). Kept as plain hex here so
+// this module stays free of UI imports.
+export const RARITY_COLORS = {
+  common: '#c9ced6',
+  rare: '#4f8dff',
+  epic: '#b06cff',
+  legendary: '#ffb21e',
+}
+export const RARITY_LABEL = { common: 'COMMON', rare: 'RARE', epic: 'EPIC', legendary: 'LEGENDARY' }
 
 /** Beams per trigger pull (1 for automatic weapons). */
 export const shotsPerPull = (w) => (w?.automatic ? 1 : Math.max(1, Math.min(5, w?.shotsPerClick || 1)))

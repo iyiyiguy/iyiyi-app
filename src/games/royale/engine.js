@@ -9,7 +9,8 @@
 //   p: { [id]: { n: name, hp, a: 1|0 alive, k: kills, tr: 1|0 in transit, pri: weaponId|null,
 //                pl: placement (0 while alive), el: eliminatedAt, by: 'name' | 'gas' | 'left' | null } },
 //   loot: [{ id, w, lat, lng }], ls: loot id counter,
-//   feed: [{ id, t }], alive, total, winner
+//   feed: [{ id, t, v?: victim, k?: killer name, c?: 'kill'|'gas'|'left'|'signal', pl?: placement }],
+//   alive, total, winner
 // }
 // Host-only bookkeeping that doesn't need to be broadcast (tick timing, last GPS fix per
 // player, transit trackers, shot spam guards) lives in a `mem` object the caller keeps.
@@ -24,7 +25,7 @@ import { TransitTracker } from './useTransit'
 export const gpsSlack = (acc) => Math.min(12, Math.max(3, (Number.isFinite(acc) ? acc : 10) / 2))
 
 export function newHostMem() {
-  return { lastTickAt: null, lastPosAt: {}, lastFixAt: {}, clientTransit: {}, trackers: {}, lastShot: {}, startedFor: null }
+  return { lastTickAt: null, lastPosAt: {}, lastFixAt: {}, lastGood: {}, clientTransit: {}, trackers: {}, lastShot: {}, startedFor: null }
 }
 
 const r6 = (v) => Math.round(v * 1e6) / 1e6
@@ -76,8 +77,10 @@ export function initialState({ roster, info, now, center, rand = Math.random }) 
   }
 }
 
-function pushFeed(feed, text, now) {
-  return [{ id: `${now}-${Math.floor(Math.random() * 1e6)}`, t: String(text).slice(0, 80) }, ...(feed || [])].slice(0, 6)
+// Feed entries keep the plain sentence (t) for older clients plus structured parts the HUD
+// colours: victim (v), killer name (k), cause (c) and placement (pl).
+function pushFeed(feed, text, now, extra) {
+  return [{ id: `${now}-${Math.floor(Math.random() * 1e6)}`, t: String(text).slice(0, 80), ...(extra || {}) }, ...(feed || [])].slice(0, 6)
 }
 
 // Eliminate several players at once (sorted so the one with the least health goes first).
@@ -97,7 +100,8 @@ function eliminate(next, deaths, now, posOf) {
       next.loot = [...next.loot, { id: `L${next.ls}`, w: pl.pri, lat: r6(pos.lat), lng: r6(pos.lng) }]
     }
     const why = d.by === 'gas' ? 'was taken by the gas' : d.by === 'left' ? 'left the match' : d.by === 'signal' ? 'lost GPS signal' : `was eliminated by ${d.by}`
-    next.feed = pushFeed(next.feed, `${pl.n} ${why} · #${placement}`, now)
+    const cause = d.by === 'gas' || d.by === 'left' || d.by === 'signal' ? d.by : 'kill'
+    next.feed = pushFeed(next.feed, `${pl.n} ${why} · #${placement}`, now, { v: pl.n, c: cause, pl: placement, ...(cause === 'kill' ? { k: String(d.by).slice(0, 24) } : null) })
   }
   if (next.alive <= 1 && next.phase === 'playing') {
     const last = Object.keys(next.p).find((id) => next.p[id].a)
@@ -109,7 +113,7 @@ function eliminate(next, deaths, now, posOf) {
     }
     next.phase = 'ended'
     next.endedAt = now
-    if (next.winner) next.feed = pushFeed(next.feed, `${next.p[next.winner].n} is the last one standing!`, now)
+    if (next.winner) next.feed = pushFeed(next.feed, `${next.p[next.winner].n} is the last one standing!`, now, { v: next.p[next.winner].n, c: 'win', pl: 1 })
   }
 }
 
@@ -143,7 +147,9 @@ export function tick(state, { now, presentIds, posOf, mem }) {
       continue
     }
     const pos = posOf(id)
+    const good = mem.lastGood || (mem.lastGood = {})
     if (validPos(pos)) {
+      good[id] = pos
       if (mem.lastFixAt[id] !== pos.at) {
         mem.lastFixAt[id] = pos.at
         const tr = mem.trackers[id] || (mem.trackers[id] = new TransitTracker())
@@ -160,8 +166,14 @@ export function tick(state, { now, presentIds, posOf, mem }) {
     mem.trackers[id]?.evaluate(now)
     const tr = mem.clientTransit[id] || mem.trackers[id]?.inTransit ? 1 : 0
     let hp = pl.hp
-    if (zone && validPos(pos) && dt > 0) {
-      const out = outsideBy(pos, zone.current) - gpsSlack(pos.acc)
+    if (zone && dt > 0) {
+      // Once the final circle has fully closed the gas covers everything (sudden death), so
+      // two players standing inside the GPS slack of the last point can't stall the match
+      // forever: the healthiest player wins. Otherwise the gas hurts anyone outside the
+      // circle; a phone that stops sharing its position keeps being judged on its last fix
+      // (so going dark in the gas is no escape).
+      const gpos = validPos(pos) ? pos : good[id]
+      const out = zone.stage === 'final' ? 1 : validPos(gpos) ? outsideBy(gpos, zone.current) - gpsSlack(gpos.acc) : -1
       if (out > 0) hp = round1(Math.max(0, hp - zone.dps * dt))
     }
     if (hp !== pl.hp || tr !== pl.tr) {

@@ -15,8 +15,8 @@ export const RoyaleMap = memo(function RoyaleMap({ style, zone }) {
 })
 
 const s = StyleSheet.create({
-  box: { alignItems: 'center', justifyContent: 'center', backgroundColor: '#141826' },
-  text: { fontSize: 11, color: 'rgba(255,255,255,0.7)', textAlign: 'center', padding: 8 },
+  box: { alignItems: 'center', justifyContent: 'center', backgroundColor: '#101318' },
+  text: { fontSize: 11, letterSpacing: 1.2, color: 'rgba(242,244,247,0.62)', textAlign: 'center', padding: 8, textTransform: 'uppercase' },
 })
 
 export default RoyaleMap

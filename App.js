@@ -16,6 +16,7 @@ import { installWebPhoneFrame } from './src/lib/webPhoneFrame'
 import { loadThemePref } from './src/lib/themePref'
 import { loadLanguage, useLanguage } from './src/i18n'
 import LanguageScreen from './src/screens/LanguageScreen'
+import { useStudioFonts } from './src/games/studio'
 import { ensureProfile, linkProviderToProfile } from './src/lib/oauth'
 import { initCrashLogger, setupGlobalErrorHandler } from './src/lib/crashLogger'
 import TabBar from './src/components/TabBar'
@@ -220,6 +221,7 @@ function GuestTabs({ navigation }) {
 }
 
 export default function App() {
+  useStudioFonts() // game HUD fonts; loads in the background, games fall back to system text until ready
   const [session, setSession] = useState(undefined)
   const [locationConsent, setLocationConsent] = useState(undefined)
   const [themeReady, setThemeReady] = useState(false)

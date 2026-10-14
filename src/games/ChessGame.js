@@ -1,8 +1,12 @@
 // Full chess game: rules from chess.js (legal moves, check, mate, stalemate, draws,
 // castling, en passant, promotion), vs the built-in AI or local pass & play.
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+//
+// Studio look (see ./studio): dark ground, black glass seat panels, caps labels, Chakra Petch
+// names and numbers, square corners. The board, seat panel, clock, action tiles, promotion
+// picker and result sheet are exported and shared with OnlineChessGame.
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
-  View, Text, Pressable, StyleSheet, Modal, ScrollView, Alert, ActivityIndicator,
+  View, Text, Pressable, StyleSheet, Modal, ScrollView, Alert, ActivityIndicator, Image,
   useWindowDimensions,
 } from 'react-native'
 import AsyncStorage from '@react-native-async-storage/async-storage'
@@ -10,8 +14,7 @@ import { Chess } from 'chess.js'
 import { Ionicons } from '@expo/vector-icons'
 import { LinearGradient } from 'expo-linear-gradient'
 import { GameTutorial } from '../components/GameTutorial'
-import { AC } from './arcadeUI'
-import { font } from '../theme'
+import { FONT, ST, StButton, stType, useStudioFonts, withAlpha } from './studio'
 import { findBestMove, DIFFICULTY_LABELS } from '../lib/chessAI'
 import { recordChessGame } from '../lib/arcadeStats'
 
@@ -22,17 +25,21 @@ export const GLYPHS = { k: '♚', q: '♛', r: '♜', b: '♝', n: '♞', p: '�
 const PIECE_VALUE = { p: 1, n: 3, b: 3, r: 5, q: 9, k: 0 }
 const START_COUNT = { p: 8, n: 2, b: 2, r: 2, q: 1 }
 export const PROMOTION_CHOICES = ['q', 'r', 'b', 'n']
+const PIECE_NAME = { q: 'queen', r: 'rook', b: 'bishop', n: 'knight', k: 'king', p: 'pawn' }
 const TUTORIAL_KEY = 'chess_tutorial_seen_v2'
 
-export const BOARD_LIGHT = '#ecd9b9'
-export const BOARD_DARK = '#b58863'
+// Studio board: cool slate squares so the role colours (friendly last move, enemy check)
+// read clearly on top.
+export const BOARD_LIGHT = '#9aa6b4'
+export const BOARD_DARK = '#4a5563'
+const MARK = 'rgba(7,9,12,0.42)' // legal-move dots and capture rings
 
 const TUTORIAL_STEPS = [
-  { icon: '♟️', title: 'Tap to move', description: 'Tap one of your pieces to see its legal moves (dots), then tap a highlighted square to move there.' },
-  { icon: '👑', title: 'Checkmate wins', description: "Put the enemy king in check with no way out. The king's square glows red when it is in check." },
-  { icon: '🏰', title: 'Special moves', description: 'Castling, en passant and pawn promotion all work. When a pawn reaches the last rank you choose its new piece.' },
-  { icon: '🤖', title: 'Play the computer', description: 'Pick Easy, Medium or Hard. Wins against the computer raise your chess rating and earn arcade points.' },
-  { icon: '🤝', title: 'Pass & play', description: 'Play a friend on this device. White moves first, then hand over the phone.' },
+  { icon: '♟︎', title: 'Tap to move', description: 'Tap one of your pieces to see its legal moves (dots), then tap a highlighted square to move there.' },
+  { icon: '♚', title: 'Checkmate wins', description: "Put the enemy king in check with no way out. The king's square turns red when it is in check." },
+  { icon: '♜', title: 'Special moves', description: 'Castling, en passant and pawn promotion all work. When a pawn reaches the last rank you choose its new piece.' },
+  { icon: '♞', title: 'Play the computer', description: 'Pick Easy, Medium or Hard. Wins against the computer raise your chess rating and earn arcade points.' },
+  { icon: '♝', title: 'Pass & play', description: 'Play a friend on this device. White moves first, then hand over the phone.' },
 ]
 
 export function describeResult(game, resignedColor) {
@@ -62,6 +69,244 @@ export function capturedBy(board) {
   return { w: lost('b'), b: lost('w'), diff: material('w') - material('b') }
 }
 
+/** "♛♜♟  +3" for the pieces colour `c` has taken. */
+export function capturedText(captured, c) {
+  const list = captured?.[c] || []
+  const adv = c === 'w' ? captured?.diff || 0 : -(captured?.diff || 0)
+  return `${list.map((t) => GLYPHS[t]).join('')}${adv > 0 ? `  +${adv}` : ''}`
+}
+
+/** Human label for a result reason ("checkmate" -> "Checkmate"). */
+export function reasonLabel(reason) {
+  const map = {
+    checkmate: 'Checkmate', resignation: 'Resignation', stalemate: 'Stalemate', 'insufficient material': 'Insufficient material',
+    'threefold repetition': 'Threefold repetition', '50-move rule': '50-move rule', agreement: 'Agreement', abandonment: 'Abandonment',
+    timeout: 'Time out', 'timeout vs insufficient material': 'Time out vs insufficient material', aborted: 'Game aborted', draw: 'Draw',
+  }
+  return map[reason] || String(reason || '')
+}
+
+/** m:ss, and 0:09.4 style tenths under 10 seconds (like Lichess). */
+export function formatClock(ms) {
+  const v = Math.max(0, ms || 0)
+  if (v < 10000) {
+    const tenths = Math.floor(v / 100)
+    return `0:0${Math.floor(tenths / 10)}.${tenths % 10}`
+  }
+  const s = Math.ceil(v / 1000)
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
+}
+
+// ---------------------------------------------------------------------------------------
+// Shared studio pieces (used by OnlineChessGame too)
+
+/** The 8x8 board. targets: Map<square, verbose move>. Memoized: pass a stable onSquare. */
+export const ChessBoard = memo(function ChessBoard({ board, size, flipped, selected, targets, lastMove, checkedKing, onSquare }) {
+  const sq = size / 8
+  const rows = flipped ? [7, 6, 5, 4, 3, 2, 1, 0] : [0, 1, 2, 3, 4, 5, 6, 7]
+  const cols = flipped ? [7, 6, 5, 4, 3, 2, 1, 0] : [0, 1, 2, 3, 4, 5, 6, 7]
+  return (
+    <View style={[styles.boardFrame, { width: size + 2, height: size + 2 }]}>
+      <View style={{ width: size, height: size }}>
+        {rows.map((r) => (
+          <View key={r} style={styles.boardRow}>
+            {cols.map((c) => {
+              const square = FILES[c] + (8 - r)
+              const piece = board[r]?.[c]
+              const light = (r + c) % 2 === 0
+              const target = targets?.get(square)
+              const isFrom = lastMove?.from === square
+              const isTo = lastMove?.to === square
+              const coordColor = light ? BOARD_DARK : BOARD_LIGHT
+              return (
+                <Pressable
+                  key={square}
+                  onPress={() => onSquare?.(square)}
+                  style={[styles.square, { width: sq, height: sq, backgroundColor: light ? BOARD_LIGHT : BOARD_DARK }]}
+                  accessibilityLabel={`${square}${piece ? ` ${piece.color === 'w' ? 'white' : 'black'} ${PIECE_NAME[piece.type]}` : ''}${target ? ', legal move' : ''}`}
+                >
+                  {isFrom || isTo ? <View style={[StyleSheet.absoluteFill, { backgroundColor: withAlpha(ST.friendly, isTo ? 0.45 : 0.28) }]} /> : null}
+                  {selected === square ? <View style={[StyleSheet.absoluteFill, styles.selectedSq]} /> : null}
+                  {checkedKing === square ? <View style={[StyleSheet.absoluteFill, styles.checkSq]} /> : null}
+                  {cols[0] === c ? <Text allowFontScaling={false} style={[styles.coord, styles.rankCoord, { color: coordColor }]}>{8 - r}</Text> : null}
+                  {rows[7] === r ? <Text allowFontScaling={false} style={[styles.coord, styles.fileCoord, { color: coordColor }]}>{FILES[c]}</Text> : null}
+                  {piece ? (
+                    <Text allowFontScaling={false} style={[styles.piece, { fontSize: sq * 0.78, lineHeight: sq * 0.95 }, piece.color === 'w' ? styles.whitePiece : styles.blackPiece]}>
+                      {GLYPHS[piece.type]}
+                    </Text>
+                  ) : null}
+                  {target ? (piece || String(target.flags || '').includes('e')
+                    ? <View pointerEvents="none" style={[styles.captureRing, { width: sq - 4, height: sq - 4, borderRadius: sq }]} />
+                    : <View pointerEvents="none" style={[styles.moveDot, { width: sq * 0.28, height: sq * 0.28, borderRadius: sq }]} />) : null}
+                </Pressable>
+              )
+            })}
+          </View>
+        ))}
+      </View>
+    </View>
+  )
+})
+
+/** Square avatar with a role-colour bottom edge. */
+export function SeatAvatar({ uri, name, accent = ST.friendly, size = 40 }) {
+  return (
+    <View style={[styles.avatar, { width: size, height: size, borderBottomColor: accent }]}>
+      {uri
+        ? <Image source={{ uri }} style={{ width: size, height: size - 3 }} />
+        : <Text allowFontScaling={false} style={[styles.avatarText, { fontSize: Math.round(size * 0.42) }]}>{String(name || '?').slice(0, 1).toUpperCase()}</Text>}
+    </View>
+  )
+}
+
+/** Seat panel: avatar, caps name, a status line, and something on the right (captured pieces). */
+export function ChessSeat({ name, sub, subColor, avatar, accent = ST.friendly, right, style }) {
+  return (
+    <View style={[styles.seat, style]}>
+      <SeatAvatar uri={avatar} name={name} accent={accent} />
+      <View style={{ flex: 1, minWidth: 0 }}>
+        <Text style={styles.seatName} numberOfLines={1}>{name}</Text>
+        {sub ? <Text style={[styles.seatSub, subColor && { color: subColor }]} numberOfLines={1}>{sub}</Text> : null}
+      </View>
+      {right}
+    </View>
+  )
+}
+
+/** Chess clock. mine + active fills friendly; low time while running turns enemy. */
+export function ChessClock({ ms, active, mine, style }) {
+  const low = ms != null && ms < 20000
+  let bg = 'rgba(255,255,255,0.06)'
+  let fg = 'rgba(242,244,247,0.7)'
+  if (active && low) { bg = ST.enemy; fg = '#ffffff' } else if (active && mine) { bg = ST.friendly; fg = ST.ink } else if (active) { bg = 'rgba(255,255,255,0.14)'; fg = ST.text }
+  return (
+    <View
+      style={[styles.clock, { backgroundColor: bg }, active && !mine && !low && { borderBottomWidth: 2, borderBottomColor: ST.enemy }, style]}
+      accessibilityRole="timer"
+      accessibilityLabel={`${mine ? 'Your' : 'Opponent'} clock ${formatClock(ms)}`}
+    >
+      <Text allowFontScaling={false} style={[stType.clock, { fontSize: 22, color: fg }]}>{formatClock(ms)}</Text>
+    </View>
+  )
+}
+
+/** Bordered action tile (DRAW / RESIGN / CHAT / CALL). */
+export function ActionTile({ label, icon, onPress, disabled, tone, badge, accessibilityLabel }) {
+  const color = tone === 'danger' ? ST.enemy : tone === 'friendly' ? ST.friendly : tone === 'objective' ? ST.objective : ST.text
+  return (
+    <Pressable
+      onPress={onPress}
+      disabled={disabled}
+      accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel || label}
+      accessibilityState={{ disabled: !!disabled }}
+      style={({ pressed }) => [
+        styles.action,
+        tone && tone !== 'friendly' ? { borderColor: withAlpha(color, 0.55) } : null,
+        tone === 'friendly' ? { borderColor: ST.friendly, backgroundColor: withAlpha(ST.friendly, 0.12) } : null,
+        { opacity: disabled ? 0.38 : pressed ? 0.75 : 1 },
+      ]}
+    >
+      {icon ? <Ionicons name={icon} size={15} color={color} /> : null}
+      <Text allowFontScaling={false} style={[styles.actionText, { color }]} numberOfLines={1}>{label}</Text>
+      {badge ? <View style={styles.badge}><Text allowFontScaling={false} style={styles.badgeText}>{badge}</Text></View> : null}
+    </Pressable>
+  )
+}
+
+/** Compact move list: "14. Nxe5 dxe5  15. Qh5+". Scrolls to the latest move. */
+export function MoveList({ moves, emptyText = 'White moves first', style }) {
+  const ref = useRef(null)
+  useEffect(() => {
+    const t = setTimeout(() => ref.current?.scrollToEnd?.({ animated: true }), 50)
+    return () => clearTimeout(t)
+  }, [moves?.length])
+  const pairs = []
+  ;(moves || []).forEach((san, i) => { if (i % 2 === 0) pairs.push([san]); else pairs[pairs.length - 1].push(san) })
+  return (
+    <ScrollView ref={ref} horizontal style={[styles.moveList, style]} contentContainerStyle={styles.moveListContent} showsHorizontalScrollIndicator={false}>
+      {pairs.length === 0 ? (
+        <Text style={styles.moveMuted}>{emptyText}</Text>
+      ) : pairs.map((pair, i) => {
+        const latest = i === pairs.length - 1
+        return (
+          <Text key={i} style={[styles.moveText, latest && { color: ST.text }]} allowFontScaling={false}>
+            <Text style={styles.moveMuted}>{i + 1}. </Text>{pair.join('  ')}
+          </Text>
+        )
+      })}
+    </ScrollView>
+  )
+}
+
+/** Promotion picker: four board-coloured squares. */
+export function PromotionPicker({ visible, color, onPick, onCancel }) {
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onCancel}>
+      <View style={styles.overlay}>
+        <View style={styles.sheet}>
+          <Text style={[stType.kicker, { textAlign: 'center' }]}>Promote pawn</Text>
+          <Text style={[stType.title, { textAlign: 'center', marginTop: 4, marginBottom: 16 }]}>Choose a piece</Text>
+          <View style={styles.promoRow}>
+            {PROMOTION_CHOICES.map((p, i) => (
+              <Pressable
+                key={p}
+                onPress={() => onPick(p)}
+                style={({ pressed }) => [styles.promoBtn, { backgroundColor: i % 2 ? BOARD_DARK : BOARD_LIGHT }, pressed && { borderColor: ST.friendly }]}
+                accessibilityRole="button"
+                accessibilityLabel={`Promote to ${PIECE_NAME[p]}`}
+              >
+                <Text allowFontScaling={false} style={[styles.promoPiece, color === 'b' ? styles.blackPiece : styles.whitePiece]}>{GLYPHS[p]}</Text>
+                <Text allowFontScaling={false} style={styles.promoLabel}>{PIECE_NAME[p]}</Text>
+              </Pressable>
+            ))}
+          </View>
+          <StButton title="Cancel" tone="ghost" height={44} onPress={onCancel} style={{ marginTop: 16 }} />
+        </View>
+      </View>
+    </Modal>
+  )
+}
+
+/**
+ * Full-screen result in the studio Summary style.
+ * tone: 'win' | 'loss' | 'draw'. stats: [{ label, value, color }].
+ */
+export function ChessResultSheet({ visible, tone, kicker, title, sub, stats, children, actions, onRequestClose }) {
+  const color = tone === 'win' ? ST.friendly : tone === 'loss' ? ST.enemy : ST.objective
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onRequestClose}>
+      <View style={styles.resultRoot}>
+        <LinearGradient colors={[withAlpha(color, 0.22), withAlpha(color, 0)]} style={styles.resultWash} pointerEvents="none" />
+        <ScrollView contentContainerStyle={styles.resultScroll} showsVerticalScrollIndicator={false}>
+          <View style={styles.resultInner}>
+            <View style={{ alignItems: 'center', gap: 4 }}>
+              <Text style={[stType.kicker, { color, fontSize: 10, letterSpacing: 1.8 }]} numberOfLines={1}>{kicker}</Text>
+              <Text style={[stType.display, { textAlign: 'center' }]} numberOfLines={1} adjustsFontSizeToFit>{title}</Text>
+              {sub ? <Text style={[stType.body, { textAlign: 'center', fontSize: 13 }]} numberOfLines={2}>{sub}</Text> : null}
+            </View>
+            {stats?.length ? (
+              <View style={styles.resultStats}>
+                {stats.map((s) => (
+                  <View key={s.label} style={styles.resultStat}>
+                    <Text style={stType.label} numberOfLines={1}>{s.label}</Text>
+                    <Text style={[stType.num, { fontSize: 20, color: s.color || ST.text }]} numberOfLines={1} adjustsFontSizeToFit>{s.value}</Text>
+                  </View>
+                ))}
+              </View>
+            ) : null}
+            {children}
+            <View style={{ gap: 8, marginTop: 18 }}>{actions}</View>
+          </View>
+        </ScrollView>
+      </View>
+    </Modal>
+  )
+}
+
+// ---------------------------------------------------------------------------------------
+// Local game (vs AI / pass & play)
+
 /**
  * Props:
  *  mode: 'ai' | 'local'          (defaults from legacy `aiDifficulty` prop)
@@ -71,11 +316,11 @@ export function capturedBy(board) {
  *  onChangeSetup?: () => void
  */
 export function ChessGame({ mode: modeProp, difficulty: difficultyProp, playerColor = 'w', onExit, onChangeSetup, aiDifficulty }) {
-  const mode = modeProp || (aiDifficulty ? 'ai' : 'local')
+  useStudioFonts()
+  const mode = modeProp === 'ai' || modeProp === 'local' ? modeProp : (aiDifficulty ? 'ai' : 'local')
   const difficulty = difficultyProp || aiDifficulty || 'medium'
   const { width } = useWindowDimensions()
-  const boardSize = Math.min(width - 24, 520)
-  const sq = boardSize / 8
+  const boardSize = Math.floor(Math.min(width - 24, 520) / 8) * 8
 
   const gameRef = useRef(new Chess())
   const [fen, setFen] = useState(gameRef.current.fen())
@@ -92,7 +337,6 @@ export function ChessGame({ mode: modeProp, difficulty: difficultyProp, playerCo
   const mountedRef = useRef(true)
   const searchTokenRef = useRef(0)
   const recordedRef = useRef(false)
-  const moveScrollRef = useRef(null)
 
   const game = gameRef.current
   const turn = game.turn()
@@ -179,11 +423,6 @@ export function ChessGame({ mode: modeProp, difficulty: difficultyProp, playerCo
     }
   }, [fen, mode, result, turn, playerColor, difficulty, commitMove])
 
-  useEffect(() => {
-    const t = setTimeout(() => moveScrollRef.current?.scrollToEnd({ animated: true }), 50)
-    return () => clearTimeout(t)
-  }, [fen])
-
   const onSquarePress = (square) => {
     if (result || thinking || !isPlayersTurn) return
     const piece = game.get(square)
@@ -235,6 +474,7 @@ export function ChessGame({ mode: modeProp, difficulty: difficultyProp, playerCo
       { text: 'Cancel', style: 'cancel' },
       { text: 'New game', style: 'destructive', onPress: resetGame },
     ])
+    return undefined
   }
 
   const undo = () => {
@@ -245,7 +485,6 @@ export function ChessGame({ mode: modeProp, difficulty: difficultyProp, playerCo
       // Take back the AI's reply and your move so it's your turn again.
       if (g.turn() !== playerColor) g.undo()
       else { g.undo(); g.undo() }
-      // If you're Black and only the AI's opening move is left, keep it.
     } else {
       g.undo()
     }
@@ -279,288 +518,200 @@ export function ChessGame({ mode: modeProp, difficulty: difficultyProp, playerCo
   const captured = useMemo(() => capturedBy(board), [board])
   const inCheck = game.inCheck()
   const checkedKing = inCheck ? game.findPiece({ type: 'k', color: turn })[0] : null
-  const targetSet = new Map(targets.map((m) => [m.to, m]))
+  const targetSet = useMemo(() => new Map(targets.map((m) => [m.to, m])), [targets])
 
   const canUndo = !result && history.length > 0 && (mode === 'local' || history.length > (playerColor === 'b' ? 1 : 0))
-
-  let status
-  if (result) {
-    status = result.winner ? `${result.winner === 'w' ? 'White' : 'Black'} wins by ${result.reason}` : `Draw — ${result.reason}`
-  } else if (mode === 'ai') {
-    status = thinking || turn !== playerColor ? `${DIFFICULTY_LABELS[difficulty]} AI is thinking…` : inCheck ? 'Check! Your move' : 'Your move'
-  } else {
-    status = `${turn === 'w' ? 'White' : 'Black'} to move${inCheck ? ' — check!' : ''}`
-  }
 
   const resultTitle = (() => {
     if (!result) return ''
     if (!result.winner) return 'Draw'
-    if (mode === 'ai') return result.winner === playerColor ? 'You win!' : 'You lost'
-    return `${result.winner === 'w' ? 'White' : 'Black'} wins!`
+    if (mode === 'ai') return result.winner === playerColor ? 'Victory' : 'Defeat'
+    return `${result.winner === 'w' ? 'White' : 'Black'} wins`
   })()
+  const resultTone = !result?.winner ? 'draw' : mode === 'ai' && result.winner !== playerColor ? 'loss' : 'win'
 
   const topColor = flipped ? 'w' : 'b'
   const bottomColor = flipped ? 'b' : 'w'
-  const sideLabel = (c) => {
-    if (mode === 'ai') return c === playerColor ? 'You' : `Computer (${DIFFICULTY_LABELS[difficulty]})`
-    return c === 'w' ? 'White' : 'Black'
+  const colorName = (c) => (c === 'w' ? 'White' : 'Black')
+  const seatName = (c) => {
+    if (mode === 'ai') return c === playerColor ? `You · ${colorName(c)}` : `Computer · ${DIFFICULTY_LABELS[difficulty] || difficulty}`
+    return colorName(c)
   }
-
-  const renderCaptured = (c) => {
-    const list = captured[c]
-    const adv = c === 'w' ? captured.diff : -captured.diff
+  const seatAccent = (c) => (mode === 'ai' ? (c === playerColor ? ST.friendly : ST.enemy) : c === 'w' ? '#ffffff' : ST.faint)
+  const seatSub = (c) => {
+    if (result) {
+      if (!result.winner) return { text: `Draw · ${reasonLabel(result.reason)}`, color: ST.objective }
+      return result.winner === c ? { text: `Wins · ${reasonLabel(result.reason)}`, color: ST.objective } : { text: reasonLabel(result.reason), color: ST.muted }
+    }
+    if (turn !== c) return { text: 'Waiting', color: ST.muted }
+    if (mode === 'ai' && c !== playerColor) return { text: 'Thinking…', color: ST.enemy }
+    const you = mode === 'ai' ? 'Your move' : `${colorName(c)} to move`
+    return { text: inCheck ? `Check · ${you}` : you, color: inCheck ? ST.enemy : ST.friendly }
+  }
+  const seat = (c) => {
+    const sub = seatSub(c)
+    const cap = capturedText(captured, c)
     return (
-      <View style={styles.playerRow}>
-        <View style={[styles.turnDot, turn === c && !result && styles.turnDotActive]} />
-        <Text style={styles.playerName} numberOfLines={1}>{sideLabel(c)}</Text>
-        <Text style={styles.capturedText} numberOfLines={1}>
-          {list.map((t) => GLYPHS[t]).join('')}
-          {adv > 0 ? `  +${adv}` : ''}
-        </Text>
-      </View>
+      <ChessSeat
+        name={seatName(c)}
+        sub={sub.text}
+        subColor={sub.color}
+        accent={seatAccent(c)}
+        style={turn === c && !result ? { borderLeftWidth: 3, borderLeftColor: mode === 'ai' && c !== playerColor ? ST.enemy : ST.friendly } : null}
+        right={
+          <View style={{ alignItems: 'flex-end', maxWidth: '45%' }}>
+            {mode === 'ai' && c !== playerColor && thinking && !result ? <ActivityIndicator size="small" color={ST.enemy} /> : null}
+            {cap ? <Text style={styles.captured} numberOfLines={1}>{cap}</Text> : null}
+          </View>
+        }
+      />
     )
   }
 
-  const rows = flipped ? [7, 6, 5, 4, 3, 2, 1, 0] : [0, 1, 2, 3, 4, 5, 6, 7]
-  const cols = flipped ? [7, 6, 5, 4, 3, 2, 1, 0] : [0, 1, 2, 3, 4, 5, 6, 7]
+  const kicker = mode === 'ai' ? `Vs computer · ${DIFFICULTY_LABELS[difficulty] || difficulty}` : 'Pass & play'
 
   return (
     <View style={styles.container}>
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
-        <View style={styles.statusRow}>
-          <View style={[styles.statusDot, { backgroundColor: result ? AC.gold : isPlayersTurn && !thinking ? AC.live : AC.muted }]} />
-          <Text style={[styles.status, result && { color: AC.gold }]} numberOfLines={1}>{status}</Text>
-          {thinking && <ActivityIndicator size="small" color={AC.accent} />}
-          <Pressable onPress={() => setShowTutorial(true)} hitSlop={10} style={styles.helpBtn} accessibilityLabel="How to play">
+        <View style={styles.topRow}>
+          <Text style={[stType.kicker, { flex: 1 }]} numberOfLines={1}>{kicker}{history.length ? ` · Move ${Math.ceil(history.length / 2)}` : ''}</Text>
+          <Pressable onPress={() => setShowTutorial(true)} hitSlop={10} style={styles.helpBtn} accessibilityRole="button" accessibilityLabel="How to play">
             <Text style={styles.helpText}>?</Text>
           </Pressable>
         </View>
 
-        {renderCaptured(topColor)}
+        {seat(topColor)}
 
-        <View style={[styles.boardFrame, { width: boardSize + 8, height: boardSize + 8 }]}>
-        <View style={[styles.board, { width: boardSize, height: boardSize }]}>
-          {rows.map((r) => (
-            <View key={r} style={styles.boardRow}>
-              {cols.map((c) => {
-                const square = FILES[c] + (8 - r)
-                const piece = board[r][c]
-                const light = (r + c) % 2 === 0
-                const isSel = selected === square
-                const isLast = lastMove && (lastMove.from === square || lastMove.to === square)
-                const target = targetSet.get(square)
-                const isCheck = checkedKing === square
-                const showFile = rows[7] === r
-                const showRank = cols[0] === c
-                return (
-                  <Pressable
-                    key={square}
-                    onPress={() => onSquarePress(square)}
-                    style={[styles.square, { width: sq, height: sq, backgroundColor: light ? BOARD_LIGHT : BOARD_DARK }]}
-                    accessibilityLabel={`${square}${piece ? ` ${piece.color === 'w' ? 'white' : 'black'} ${piece.type}` : ''}`}
-                  >
-                    {isLast && <View style={[StyleSheet.absoluteFill, styles.lastMove]} />}
-                    {isSel && <View style={[StyleSheet.absoluteFill, styles.selectedSq]} />}
-                    {isCheck && <View style={[StyleSheet.absoluteFill, styles.checkSq]} />}
-                    {showRank && <Text style={[styles.coord, styles.rankCoord, { color: light ? BOARD_DARK : BOARD_LIGHT }]}>{8 - r}</Text>}
-                    {showFile && <Text style={[styles.coord, styles.fileCoord, { color: light ? BOARD_DARK : BOARD_LIGHT }]}>{FILES[c]}</Text>}
-                    {piece && (
-                      <Text
-                        allowFontScaling={false}
-                        style={[
-                          styles.piece,
-                          { fontSize: sq * 0.78, lineHeight: sq * 0.95 },
-                          piece.color === 'w' ? styles.whitePiece : styles.blackPiece,
-                        ]}
-                      >
-                        {GLYPHS[piece.type]}
-                      </Text>
-                    )}
-                    {target && (piece || target.flags.includes('e')
-                      ? <View style={[styles.captureRing, { width: sq - 4, height: sq - 4, borderRadius: sq }]} />
-                      : <View style={[styles.moveDot, { width: sq * 0.3, height: sq * 0.3, borderRadius: sq }]} />)}
-                  </Pressable>
-                )
-              })}
-            </View>
-          ))}
-        </View>
+        <View style={{ marginVertical: 10 }}>
+          <ChessBoard
+            board={board}
+            size={boardSize}
+            flipped={flipped}
+            selected={selected}
+            targets={targetSet}
+            lastMove={lastMove}
+            checkedKing={checkedKing}
+            onSquare={onSquarePress}
+          />
         </View>
 
-        {renderCaptured(bottomColor)}
+        <MoveList moves={history} emptyText="Moves will appear here" />
 
-        <ScrollView horizontal ref={moveScrollRef} style={styles.moveList} contentContainerStyle={styles.moveListContent} showsHorizontalScrollIndicator={false}>
-          {history.length === 0 ? (
-            <Text style={styles.moveTextMuted}>Moves will appear here</Text>
-          ) : (
-            history.reduce((acc, san, i) => {
-              if (i % 2 === 0) acc.push([san])
-              else acc[acc.length - 1].push(san)
-              return acc
-            }, []).map((pair, i) => (
-              <Text key={i} style={styles.moveText}>
-                <Text style={styles.moveTextMuted}>{i + 1}. </Text>
-                {pair.join(' ')}
-              </Text>
-            ))
-          )}
-        </ScrollView>
+        {seat(bottomColor)}
 
-        <View style={styles.controls}>
-          <ControlButton label="Undo" icon="arrow-undo" onPress={undo} disabled={!canUndo} />
-          <ControlButton label={result ? 'New game' : 'Restart'} icon="refresh" onPress={confirmNewGame} />
-          <ControlButton label="Resign" icon="flag" onPress={resign} disabled={!!result || history.length === 0} danger />
+        <View style={styles.actions}>
+          <ActionTile label="Undo" icon="arrow-undo" onPress={undo} disabled={!canUndo} />
+          <ActionTile label={result ? 'New game' : 'Restart'} icon="refresh" onPress={confirmNewGame} tone={result ? 'friendly' : undefined} />
+          <ActionTile label="Resign" icon="flag" onPress={resign} disabled={!!result || history.length === 0} tone="danger" />
         </View>
-        {(onChangeSetup || onExit) && (
-          <View style={styles.controls}>
-            {onChangeSetup && <ControlButton label="Change mode" icon="options" onPress={onChangeSetup} subtle />}
-            {result && !showResult && <ControlButton label="Show result" icon="trophy" onPress={() => setShowResult(true)} subtle />}
+        {(onChangeSetup || (result && !showResult)) && (
+          <View style={[styles.actions, { marginTop: 6 }]}>
+            {onChangeSetup ? <ActionTile label="Change mode" icon="options" onPress={onChangeSetup} /> : null}
+            {result && !showResult ? <ActionTile label="Result" icon="podium" onPress={() => setShowResult(true)} tone="objective" /> : null}
           </View>
         )}
         {mode === 'ai' && undoCount > 0 && !result && (
-          <Text style={styles.footnote}>Takebacks used: {undoCount}</Text>
+          <Text style={[stType.label, { marginTop: 10, color: ST.faint }]}>Takebacks used · {undoCount}</Text>
         )}
       </ScrollView>
 
-      {/* Promotion picker */}
-      <Modal visible={!!pendingPromotion} transparent animationType="fade" onRequestClose={() => setPendingPromotion(null)}>
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>Promote pawn to</Text>
-            <View style={styles.promoRow}>
-              {PROMOTION_CHOICES.map((p) => (
-                <Pressable key={p} onPress={() => choosePromotion(p)} style={({ pressed }) => [styles.promoBtn, pressed && { opacity: 0.7 }]} accessibilityLabel={`Promote to ${p}`}>
-                  <Text allowFontScaling={false} style={[styles.promoPiece, turn === 'w' ? styles.whitePiece : styles.blackPiece]}>{GLYPHS[p]}</Text>
-                </Pressable>
-              ))}
-            </View>
-            <Pressable onPress={() => setPendingPromotion(null)} style={styles.modalLink}>
-              <Text style={styles.modalLinkText}>Cancel</Text>
-            </Pressable>
-          </View>
-        </View>
-      </Modal>
+      <PromotionPicker
+        visible={!!pendingPromotion}
+        color={turn}
+        onPick={choosePromotion}
+        onCancel={() => setPendingPromotion(null)}
+      />
 
-      {/* Game over */}
-      <Modal visible={showResult && !!result} transparent animationType="fade" onRequestClose={() => setShowResult(false)}>
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalCard}>
-            <Text style={styles.resultGlyph} allowFontScaling={false}>{!result?.winner ? '🤝' : mode === 'ai' && result.winner !== playerColor ? '♚' : '🏆'}</Text>
-            <Text style={styles.resultTitle}>{resultTitle}</Text>
-            <Text style={styles.resultReason}>
-              {result?.winner ? `by ${result.reason}` : result?.reason ? `by ${result.reason}` : ''}
-            </Text>
-            {award && (
-              <View style={styles.awardBox}>
-                {typeof award.ratingAfter === 'number' && (
-                  <Text style={styles.awardLine}>
-                    Rating {award.ratingBefore} → {award.ratingAfter}{' '}
-                    <Text style={{ color: award.ratingDelta >= 0 ? AC.live : AC.danger }}>
-                      ({award.ratingDelta >= 0 ? '+' : ''}{award.ratingDelta})
-                    </Text>
-                  </Text>
-                )}
-                <Text style={styles.awardLine}>+{award.pointsEarned} arcade points</Text>
-              </View>
-            )}
-            <Pressable onPress={resetGame} style={({ pressed }) => [pressed && { transform: [{ scale: 0.97 }] }]} accessibilityRole="button">
-              <LinearGradient colors={AC.play} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.primaryBtn}>
-                <Ionicons name="refresh" size={18} color="#fff" style={{ marginRight: 8 }} />
-                <Text style={styles.primaryBtnText}>Play again</Text>
-              </LinearGradient>
-            </Pressable>
-            <Pressable onPress={() => setShowResult(false)} style={styles.modalLink}>
-              <Text style={styles.modalLinkText}>View board</Text>
-            </Pressable>
-            {onExit && (
-              <Pressable onPress={onExit} style={styles.modalLink}>
-                <Text style={styles.modalLinkText}>Exit</Text>
-              </Pressable>
-            )}
-          </View>
-        </View>
-      </Modal>
+      <ChessResultSheet
+        visible={showResult && !!result}
+        tone={resultTone}
+        kicker={`${mode === 'ai' ? 'Vs computer' : 'Pass & play'} · ${reasonLabel(result?.reason)}`}
+        title={resultTitle}
+        sub={`${result?.winner ? `${colorName(result.winner)} wins by ${reasonLabel(result.reason).toLowerCase()}` : `Draw by ${reasonLabel(result?.reason).toLowerCase()}`} · ${Math.ceil(history.length / 2)} moves`}
+        stats={[
+          { label: 'Moves', value: String(Math.ceil(history.length / 2)) },
+          ...(award && typeof award.ratingAfter === 'number'
+            ? [{ label: 'Rating', value: String(award.ratingAfter) }, { label: 'Change', value: `${award.ratingDelta >= 0 ? '+' : ''}${award.ratingDelta}`, color: award.ratingDelta >= 0 ? ST.health : ST.enemy }]
+            : []),
+          ...(award ? [{ label: 'Points', value: `+${award.pointsEarned}`, color: ST.objective }] : []),
+        ]}
+        onRequestClose={() => setShowResult(false)}
+        actions={(
+          <>
+            <StButton title="Play again" onPress={resetGame} />
+            <View style={{ flexDirection: 'row', gap: 8 }}>
+              <StButton title="View board" tone="ghost" height={44} onPress={() => setShowResult(false)} style={{ flex: 1 }} />
+              {onExit ? <StButton title="Exit" tone="ghost" height={44} onPress={onExit} style={{ flex: 1 }} /> : null}
+            </View>
+          </>
+        )}
+      />
 
       {showTutorial && <GameTutorial steps={TUTORIAL_STEPS} onComplete={closeTutorial} gameTitle="Chess" />}
     </View>
   )
 }
 
-function ControlButton({ label, icon, onPress, disabled, danger, subtle }) {
-  return (
-    <Pressable
-      onPress={onPress}
-      disabled={disabled}
-      style={({ pressed }) => [
-        styles.ctrlBtn,
-        danger && styles.ctrlBtnDanger,
-        subtle && styles.ctrlBtnSubtle,
-        { opacity: disabled ? 0.4 : pressed ? 0.75 : 1 },
-      ]}
-      accessibilityRole="button"
-    >
-      {icon ? <Ionicons name={icon} size={15} color={danger ? AC.danger : AC.text} style={{ marginRight: 6 }} /> : null}
-      <Text style={[styles.ctrlText, danger && { color: AC.danger }]} numberOfLines={1}>{label}</Text>
-    </Pressable>
-  )
-}
-
 export default ChessGame
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
-  scroll: { alignItems: 'center', paddingHorizontal: 12, paddingTop: 12, paddingBottom: 48 },
-  statusRow: { flexDirection: 'row', alignItems: 'center', alignSelf: 'stretch', gap: 8, marginBottom: 8, paddingHorizontal: 4 },
-  statusDot: { width: 8, height: 8, borderRadius: 4 },
-  status: { flex: 1, fontSize: 17, ...font.bold, letterSpacing: -0.2, color: AC.text },
-  helpBtn: { width: 30, height: 30, borderRadius: 15, borderWidth: 1, borderColor: AC.border, alignItems: 'center', justifyContent: 'center', backgroundColor: AC.cardStrong },
-  helpText: { fontSize: 15, ...font.bold, color: AC.text },
-  playerRow: { flexDirection: 'row', alignItems: 'center', alignSelf: 'stretch', paddingHorizontal: 6, paddingVertical: 8, gap: 8 },
-  turnDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: AC.border },
-  turnDotActive: { backgroundColor: AC.live },
-  playerName: { fontSize: 15, ...font.bold, color: AC.text, maxWidth: '55%' },
-  capturedText: { fontSize: 15, color: AC.muted, flex: 1, textAlign: 'right' },
-  boardFrame: { padding: 4, borderRadius: 12, backgroundColor: 'rgba(255,255,255,0.06)', borderWidth: 1, borderColor: AC.border, shadowColor: '#7c8cff', shadowOpacity: 0.25, shadowRadius: 18, shadowOffset: { width: 0, height: 6 } },
-  board: { borderRadius: 8, overflow: 'hidden' },
+  container: { flex: 1, backgroundColor: ST.ground },
+  scroll: { alignItems: 'center', paddingHorizontal: 12, paddingTop: 10, paddingBottom: 48 },
+  topRow: { flexDirection: 'row', alignItems: 'center', alignSelf: 'stretch', gap: 8, marginBottom: 8 },
+  helpBtn: { width: 30, height: 30, borderRadius: ST.radius, borderWidth: 1, borderColor: ST.lineStrong, alignItems: 'center', justifyContent: 'center' },
+  helpText: { fontSize: 15, fontFamily: FONT.display, color: ST.text },
+
+  boardFrame: { borderWidth: 1, borderColor: ST.line, backgroundColor: ST.ground2 },
   boardRow: { flexDirection: 'row', flex: 1 },
   square: { alignItems: 'center', justifyContent: 'center' },
-  lastMove: { backgroundColor: 'rgba(240, 220, 60, 0.38)' },
-  selectedSq: { backgroundColor: 'rgba(80, 160, 255, 0.45)' },
-  checkSq: { backgroundColor: 'rgba(224, 40, 40, 0.65)' },
-  coord: { position: 'absolute', fontSize: 9, ...font.bold },
-  rankCoord: { top: 2, left: 3 },
-  fileCoord: { bottom: 1, right: 3 },
+  selectedSq: { backgroundColor: withAlpha(ST.friendly, 0.3), borderWidth: 3, borderColor: ST.friendly },
+  checkSq: { backgroundColor: withAlpha(ST.enemy, 0.6) },
+  coord: { position: 'absolute', fontSize: 9, fontFamily: FONT.ui },
+  rankCoord: { top: 1, left: 3 },
+  fileCoord: { bottom: 0, right: 3 },
   piece: { textAlign: 'center', includeFontPadding: false },
-  whitePiece: { color: '#fbfaf7', textShadowColor: 'rgba(0,0,0,0.85)', textShadowRadius: 2, textShadowOffset: { width: 0, height: 0 } },
-  blackPiece: { color: '#1d1a22', textShadowColor: 'rgba(255,255,255,0.35)', textShadowRadius: 1, textShadowOffset: { width: 0, height: 0 } },
-  moveDot: { position: 'absolute', backgroundColor: 'rgba(20, 20, 30, 0.32)' },
-  captureRing: { position: 'absolute', borderWidth: 4, borderColor: 'rgba(20, 20, 30, 0.35)' },
-  moveList: { alignSelf: 'stretch', marginTop: 4, maxHeight: 36 },
-  moveListContent: { alignItems: 'center', gap: 12, paddingHorizontal: 6 },
-  moveText: { fontSize: 14, ...font.semibold, color: AC.text },
-  moveTextMuted: { fontSize: 13, ...font.regular, color: AC.muted },
-  controls: { flexDirection: 'row', gap: 8, alignSelf: 'stretch', marginTop: 12 },
-  ctrlBtn: {
-    flex: 1, flexDirection: 'row', paddingVertical: 12, paddingHorizontal: 8, borderRadius: 16, alignItems: 'center', justifyContent: 'center',
-    backgroundColor: AC.cardStrong, borderWidth: 1, borderColor: AC.border,
+  whitePiece: { color: '#ffffff', textShadowColor: 'rgba(0,0,0,0.9)', textShadowRadius: 2, textShadowOffset: { width: 0, height: 0 } },
+  blackPiece: { color: '#111418', textShadowColor: 'rgba(255,255,255,0.35)', textShadowRadius: 1, textShadowOffset: { width: 0, height: 0 } },
+  moveDot: { position: 'absolute', backgroundColor: MARK },
+  captureRing: { position: 'absolute', borderWidth: 4, borderColor: MARK },
+
+  avatar: { backgroundColor: '#2a3038', borderBottomWidth: 3, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+  avatarText: { fontFamily: FONT.display, color: ST.text, includeFontPadding: false },
+  seat: {
+    alignSelf: 'stretch', flexDirection: 'row', alignItems: 'center', gap: 10,
+    paddingVertical: 10, paddingHorizontal: 12, backgroundColor: ST.panel, borderRadius: ST.radius,
   },
-  ctrlBtnDanger: { borderColor: 'rgba(255,93,108,0.45)', backgroundColor: 'rgba(255,93,108,0.10)' },
-  ctrlBtnSubtle: { backgroundColor: 'transparent' },
-  ctrlText: { fontSize: 14, ...font.bold, color: AC.text },
-  footnote: { fontSize: 13, ...font.regular, color: AC.faint, marginTop: 10 },
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(2,3,10,0.66)', justifyContent: 'center', alignItems: 'center', padding: 24 },
-  modalCard: { width: '100%', maxWidth: 340, padding: 22, alignItems: 'stretch', borderRadius: 28, backgroundColor: '#0d1126', borderWidth: 1, borderColor: AC.border },
-  modalTitle: { fontSize: 20, ...font.bold, color: AC.text, textAlign: 'center', marginBottom: 16 },
-  promoRow: { flexDirection: 'row', justifyContent: 'space-between', gap: 8 },
-  promoBtn: { flex: 1, aspectRatio: 1, borderRadius: 12, backgroundColor: BOARD_LIGHT, alignItems: 'center', justifyContent: 'center' },
+  seatName: { fontFamily: FONT.display, fontSize: 16, color: ST.text, textTransform: 'uppercase', includeFontPadding: false },
+  seatSub: { fontFamily: FONT.uiSemi, fontSize: 11, color: ST.muted, marginTop: 1 },
+  captured: { fontSize: 15, color: ST.muted },
+
+  clock: { paddingHorizontal: 12, paddingVertical: 4, minWidth: 84, alignItems: 'center', borderRadius: ST.radius },
+
+  actions: { flexDirection: 'row', gap: 6, alignSelf: 'stretch', marginTop: 10 },
+  action: {
+    flex: 1, height: 48, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.18)', borderRadius: ST.radius, paddingHorizontal: 4,
+  },
+  actionText: { fontFamily: FONT.ui, fontSize: 12, letterSpacing: 1.2, textTransform: 'uppercase' },
+  badge: { position: 'absolute', top: -6, right: -4, minWidth: 18, height: 18, paddingHorizontal: 4, borderRadius: ST.radius, backgroundColor: ST.enemy, alignItems: 'center', justifyContent: 'center' },
+  badgeText: { fontFamily: FONT.display, fontSize: 10, color: '#ffffff', includeFontPadding: false },
+
+  moveList: { alignSelf: 'stretch', maxHeight: 30, marginBottom: 8 },
+  moveListContent: { alignItems: 'center', gap: 12, paddingHorizontal: 2 },
+  moveText: { fontFamily: FONT.ui, fontSize: 12, letterSpacing: 1, color: 'rgba(242,244,247,0.7)' },
+  moveMuted: { fontFamily: FONT.uiSemi, fontSize: 12, color: ST.faint },
+
+  overlay: { flex: 1, backgroundColor: 'rgba(4,5,8,0.72)', justifyContent: 'center', alignItems: 'center', padding: 20 },
+  sheet: { width: '100%', maxWidth: 360, padding: 18, borderRadius: ST.radius, backgroundColor: ST.panelStrong, borderTopWidth: 2, borderTopColor: ST.friendly },
+  promoRow: { flexDirection: 'row', gap: 6 },
+  promoBtn: { flex: 1, aspectRatio: 0.85, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: 'transparent', borderRadius: ST.radius },
   promoPiece: { fontSize: 44, lineHeight: 52, textAlign: 'center' },
-  modalLink: { paddingVertical: 12, alignItems: 'center' },
-  modalLinkText: { fontSize: 15, ...font.semibold, color: AC.muted },
-  resultGlyph: { fontSize: 46, textAlign: 'center', color: AC.gold },
-  resultTitle: { fontSize: 32, ...font.heavy, letterSpacing: -0.8, color: AC.text, textAlign: 'center', marginTop: 4 },
-  resultReason: { fontSize: 15, ...font.regular, color: AC.muted, textAlign: 'center', marginTop: 4, marginBottom: 16 },
-  awardBox: { borderRadius: 16, borderWidth: 1, borderColor: AC.border, backgroundColor: AC.card, padding: 12, marginBottom: 16, gap: 4 },
-  awardLine: { fontSize: 15, ...font.semibold, color: AC.text, textAlign: 'center' },
-  primaryBtn: { flexDirection: 'row', borderRadius: 20, paddingVertical: 15, alignItems: 'center', justifyContent: 'center' },
-  primaryBtnText: { fontSize: 16, ...font.heavy, color: '#fff' },
+  promoLabel: { fontFamily: FONT.ui, fontSize: 9, letterSpacing: 1.2, color: ST.ink, textTransform: 'uppercase', marginTop: -2 },
+
+  resultRoot: { flex: 1, backgroundColor: 'rgba(11,13,17,0.97)' },
+  resultWash: { position: 'absolute', left: 0, right: 0, top: 0, height: 300 },
+  resultScroll: { flexGrow: 1, justifyContent: 'center', padding: 16, paddingTop: 60, paddingBottom: 32 },
+  resultInner: { width: '100%', maxWidth: 420, alignSelf: 'center' },
+  resultStats: { flexDirection: 'row', gap: 6, marginTop: 26 },
+  resultStat: { flex: 1, paddingVertical: 10, paddingHorizontal: 8, backgroundColor: ST.panel, borderRadius: ST.radius, gap: 2 },
 })

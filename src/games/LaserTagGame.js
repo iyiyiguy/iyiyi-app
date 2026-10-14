@@ -13,26 +13,28 @@
 // automatic fires continuously while held (useTrigger). Your phone decides who is in
 // your sights; the host validates hits and runs the rules (laser/engine.js).
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Animated, BackHandler, Platform, Pressable, StyleSheet, Text, View } from 'react-native'
+import { Animated, BackHandler, Easing, Platform, Pressable, StyleSheet, Text, View } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { Camera, CameraView } from 'expo-camera'
 import { useKeepAwake } from 'expo-keep-awake'
 import { CameraOff, useCameraGate } from '../components/CameraGate'
 import { setAudioModeAsync } from 'expo-audio'
-import { Btn, LocationGate, PlayerTap, Spectating, formatClock } from './MultiplayerUI'
+import { LocationGate, PlayerTap, Spectating, formatClock } from './MultiplayerUI'
 import GameFollowButton from '../components/GameFollowButton'
-import { CountdownOverlay, MatchSummary, RoundBreak, hudShadow } from './laser/Hud'
+import { CountdownOverlay, MatchSummary, RoundBreak } from './laser/Hud'
 import {
-  AlertBanner, BombCountdown, EnemyMarkers, HoldActionButton, ScoreboardOverlay, WeaponWheel,
+  AlertBanner, BombCountdown, EnemyMarkers, HoldActionButton, ScoreboardOverlay, TargetBrackets, WeaponWheel,
 } from './laser/HudExtras'
-import { CompassTape, FireButton, HUD, HudButton, KillFeed, MatchBar, Nameplates, ScorePops, StatusPanel, WeaponCard } from './laser/HudPro'
+import { CompassTape, FireButton, HUD, HudButton, HudCta, KillFeed, MatchClock, Nameplates, ScorePanel, ScorePops, StatusPanel, WeaponCard, stripSymbols } from './laser/HudPro'
+import { HipFireRadar, HipFireStatus, HipFireZone } from './laser/HipFire'
+import { FONT, ST, stShadow, stType, useStudioFonts } from './studio'
 import { mapsAvailable } from '../components/SafeMapView'
 import { DEFAULT_MAP_RANGE, MapMinimap, MapOverlay, allowedRanges, rangeById } from './laser/MapMinimap'
-import { AIM_MODE_LABELS, AIM_MODE_TIPS, useAim } from './laser/useAim'
+import { AIM_MODE_TIPS, useAim } from './laser/useAim'
 import * as engine from './laser/engine'
 import { classifyHit, photoRectToScreen, pickVisionTarget, useVisionCapture, visionAvailable, VISION_RANGE_M } from './laser/vision'
 import {
-  TEAMS, angleDiff, bearingDeg, compassLabel, distanceMeters, formatDistance, recordRoundResult,
+  angleDiff, bearingDeg, compassLabel, distanceMeters, formatDistance, recordRoundResult,
   useHostLoop, useRoomClock, useRoomPositions, useRoomSnapshot, useSharedLocation,
 } from '../lib/multiplayer'
 import { buzz, useGamePrefs } from '../lib/gamePrefs'
@@ -41,14 +43,13 @@ import {
 } from '../lib/guns'
 import { recordGameResult } from '../lib/arcadeStats'
 import { useUavControl } from './laser/useUavControl'
-import { EnemyUavPill, UavButton, UavSheet } from './laser/Uav'
+import { UavButton, UavSheet } from './laser/Uav'
 import { SHOT_BROADCAST_MIN_MS, isEnemy, useEnemyIntel } from './laser/intel'
 import { BYSTANDER_COOLDOWN_MS, pickBystander, recordBystanderTag, useNearbyTaggable } from '../lib/bystanderTags'
 import { sendBystanderTag } from '../lib/invites'
 import { BystanderMarkers, useTaggablePrompt } from './laser/Bystander'
-import { colors, radii, type } from '../theme'
 import { useArcadeInsets } from './arcadeUI'
-import { DOCK_GAP, TOP_BUTTONS_W, useHudMetrics, useMeasuredHeight } from './laser/hudLayout'
+import { DOCK_GAP, useHudMetrics, useMeasuredHeight } from './laser/hudLayout'
 import { BINOCULAR_MAX_ZOOM, formatZoom, maxZoomFor, useScopeZoom } from './laser/useScopeZoom'
 import { BinocularFrame, BinocularMarkers, binocularMarkers } from './laser/Binoculars'
 import { GroundExplosives, groundMarkers } from './laser/GroundExplosives'
@@ -57,58 +58,93 @@ import * as MediaLibrary from 'expo-media-library/legacy'
 import { GRENADE_FUSE_MS, GrenadeBlast, GrenadeButton, destinationPoint } from './laser/Grenade'
 import { StickyBombButton, LandMineButton } from './laser/Consumables'
 import { useBattleEffects, directionToAngle } from './laser/BattleEffects'
+import Svg, { Path, Rect } from 'react-native-svg'
 import GunViewModel, { muzzlePoint } from './laser/GunViewModel'
 import FpsCrosshair from './laser/FpsCrosshair'
 import { spendGrenade, useGrenadeInventory } from '../lib/grenades'
 import { spendStickyBomb, useStickyBombInventory } from '../lib/stickyBombs'
 import { spendLandMine, useLandMineInventory } from '../lib/landMines'
 
-// Animated death screen: red flash, skull, respawn countdown.
-function DeathOverlay({ respawnSecs, snd, killer }) {
-  const flash = useRef(new Animated.Value(0)).current
-  const skull = useRef(new Animated.Value(0)).current
-  const pulse = useRef(new Animated.Value(1)).current
+// Tagged-out screen (studio "Down" board): red dim, who got you (with Follow), the respawn
+// countdown, and a shortcut to the weapon wheel while you wait.
+function DeathOverlay({ respawnSecs, snd, killer, onChangeWeapon }) {
+  const fade = useRef(new Animated.Value(0)).current
   useEffect(() => {
-    flash.setValue(1)
-    skull.setValue(0)
-    Animated.sequence([
-      Animated.timing(flash, { toValue: 0.55, duration: 400, useNativeDriver: true }),
-      Animated.timing(skull, { toValue: 1, duration: 300, useNativeDriver: true }),
-    ]).start()
-    const p = Animated.loop(Animated.sequence([
-      Animated.timing(pulse, { toValue: 1.15, duration: 800, useNativeDriver: true }),
-      Animated.timing(pulse, { toValue: 1, duration: 800, useNativeDriver: true }),
-    ]))
-    p.start()
-    return () => p.stop()
-  }, [flash, skull, pulse])
-
+    Animated.timing(fade, { toValue: 1, duration: 260, easing: Easing.out(Easing.quad), useNativeDriver: true }).start()
+  }, [fade])
+  const total = engine.RESPAWN_MS / 1000
+  const pct = respawnSecs != null ? Math.max(0, Math.min(1, 1 - respawnSecs / total)) : 0
+  const sub = killer ? [killer.weapon, killer.where, Number.isFinite(killer.hpLeft) ? `${killer.hpLeft} HP left` : null].filter(Boolean).join(' · ') : ''
   return (
-    <Animated.View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(120,0,20,0.65)', opacity: flash.interpolate({ inputRange: [0.55, 1], outputRange: [1, 1] }) }]} pointerEvents="box-none">
-      <Animated.View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', opacity: skull }} pointerEvents="box-none">
-        <Animated.View style={{ transform: [{ scale: pulse }] }}>
-          <Ionicons name="skull" size={72} color="#fff" style={{ textShadowColor: HUD.red, textShadowRadius: 24, textShadowOffset: { width: 0, height: 0 } }} />
-        </Animated.View>
-        <Text style={{ color: '#fff', fontSize: 30, fontWeight: '900', letterSpacing: 5, marginTop: 14, textShadowColor: '#000', textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 8 }}>TAGGED OUT</Text>
-        <Text style={{ color: 'rgba(255,255,255,0.85)', fontSize: 11, fontWeight: '900', letterSpacing: 1.6, marginTop: 10 }}>
-          {snd ? "BACK NEXT ROUND" : respawnSecs != null ? `RESPAWNING IN ${respawnSecs}S` : ''}
-        </Text>
-        {respawnSecs != null && !snd && (
-          <View style={{ marginTop: 16, width: 140, height: 5, borderRadius: 3, backgroundColor: 'rgba(255,255,255,0.2)', overflow: 'hidden' }}>
-            <View style={{ width: `${Math.max(0, Math.min(100, 100 - (respawnSecs / 8) * 100))}%`, height: '100%', backgroundColor: HUD.red, borderRadius: 3 }} />
-          </View>
-        )}
+    <Animated.View style={[StyleSheet.absoluteFill, { opacity: fade }]} pointerEvents="box-none">
+      <View style={[StyleSheet.absoluteFill, styles.deadDim]} pointerEvents="none" />
+      <View style={[StyleSheet.absoluteFill, styles.deadEdge]} pointerEvents="none" />
+      <View style={styles.deadBody} pointerEvents="box-none">
         {killer?.name ? (
-          <View style={styles.killerCard}>
-            <Text style={styles.killerKicker}>TAGGED OUT BY</Text>
-            <PlayerTap player={killer.id ? { id: killer.id, username: killer.name } : null} style={styles.killerRow}>
-              <Text style={styles.killerName} numberOfLines={1}>{killer.name}</Text>
-              {killer.how ? <Text style={styles.killerHow} numberOfLines={1}>{killer.how}</Text> : null}
+          <View style={{ alignItems: 'center', gap: 10 }} pointerEvents="box-none">
+            <Text style={styles.deadLabel}>TAGGED OUT BY</Text>
+            <PlayerTap player={killer.id ? { id: killer.id, username: killer.name } : null} style={styles.killerCard}>
+              <View style={styles.killerAvatar}><Text style={styles.killerInitial}>{String(killer.name).slice(0, 1).toUpperCase()}</Text></View>
+              <View style={{ flexShrink: 1 }}>
+                <Text style={styles.killerName} numberOfLines={1}>{String(killer.name).toUpperCase()}</Text>
+                {sub ? <Text style={styles.killerHow} numberOfLines={2}>{sub}</Text> : null}
+              </View>
             </PlayerTap>
-            {killer.id ? <GameFollowButton userId={killer.id} name={killer.name} style={{ marginTop: 10 }} /> : null}
           </View>
-        ) : null}
-      </Animated.View>
+        ) : (
+          <Text style={[stType.display, stShadow, { fontSize: 40, lineHeight: 44, color: '#fff' }]}>TAGGED OUT</Text>
+        )}
+        <View style={{ alignItems: 'center', gap: 8 }} pointerEvents="none">
+          <Text style={styles.deadLabel}>{snd ? 'BACK NEXT ROUND' : 'BACK IN'}</Text>
+          {snd ? (
+            <Text style={[stType.body, stShadow, { textAlign: 'center' }]}>No respawns in Search & Destroy. Watch your team.</Text>
+          ) : (
+            <>
+              <Text style={styles.deadCount}>{respawnSecs ?? ''}</Text>
+              <View style={styles.deadTrack}><View style={[styles.deadFill, { width: `${pct * 100}%` }]} /></View>
+              <Text style={[stType.small, { color: 'rgba(242,244,247,0.8)' }]}>{Math.round(engine.SPAWN_PROTECT_MS / 1000)} s of spawn shield when you’re back</Text>
+            </>
+          )}
+        </View>
+        <View style={styles.deadButtons} pointerEvents="box-none">
+          {onChangeWeapon ? (
+            <Pressable onPress={onChangeWeapon} style={({ pressed }) => [styles.deadBtn, pressed && { opacity: 0.8 }]} accessibilityRole="button" accessibilityLabel="Change weapon">
+              <Svg width={16} height={16} viewBox="0 0 24 24" fill="none"><Path d="M12 3v18M3 12h18" stroke="#fff" strokeWidth={2} /><Rect x={3} y={3} width={18} height={18} rx={9} stroke="#fff" strokeWidth={2} /></Svg>
+              <Text style={styles.deadBtnText}>CHANGE WEAPON</Text>
+            </Pressable>
+          ) : null}
+          {killer?.id ? <GameFollowButton userId={killer.id} name={killer.name} style={styles.deadFollow} /> : null}
+        </View>
+      </View>
+    </Animated.View>
+  )
+}
+
+// Where the person who tagged me was, in words: "24 m behind you".
+function relativeWhere(myPos, headingDeg, pos) {
+  try {
+    if (!myPos || !pos || !Number.isFinite(pos.lat)) return null
+    const d = distanceMeters(myPos, pos)
+    if (!Number.isFinite(d)) return null
+    const a = directionToAngle(myPos, headingDeg, pos)
+    const dir = a < 45 || a >= 315 ? 'in front of you' : a < 135 ? 'to your right' : a < 225 ? 'behind you' : 'to your left'
+    return `${formatDistance(d)} ${dir}`
+  } catch { return null }
+}
+
+// "Tagged out" marker left where the enemy stood (studio "Kill" board), fades out.
+function TagOutMark({ x, y }) {
+  const a = useRef(new Animated.Value(1)).current
+  useEffect(() => {
+    Animated.sequence([Animated.delay(700), Animated.timing(a, { toValue: 0, duration: 500, useNativeDriver: true })]).start()
+  }, [a])
+  return (
+    <Animated.View pointerEvents="none" style={[styles.tagOut, { left: x - 50, top: y - 10, opacity: a }]}>
+      <Svg width={26} height={26} viewBox="0 0 24 24" fill="none">
+        <Path d="M5 5l14 14M19 5L5 19" stroke={ST.enemy} strokeWidth={2} />
+        <Rect x={2} y={2} width={20} height={20} transform="rotate(45 12 12)" stroke={ST.enemy} strokeWidth={1.4} />
+      </Svg>
+      <Text style={styles.tagOutText}>TAGGED OUT</Text>
     </Animated.View>
   )
 }
@@ -206,6 +242,7 @@ export function LaserTagGame({ room, onExit }) {
   // The screen stays on for the whole match: a phone that dims mid-game backgrounds the app
   // (Android then drops the connection).
   useKeepAwake(undefined, { suppressDeactivateWarnings: true })
+  useStudioFonts()
   const insets = useArcadeInsets()
   const snap = useRoomSnapshot(room)
   const positions = useRoomPositions(room)
@@ -215,6 +252,8 @@ export function LaserTagGame({ room, onExit }) {
   const hud = useHudMetrics(insets, { minimap: prefs.minimap !== false })
   const [topH, onTopLayout] = useMeasuredHeight()
   const [dockH, onDockLayout] = useMeasuredHeight()
+  const [row1H, onRow1Layout] = useMeasuredHeight()
+  const [aboveH, onAboveLayout] = useMeasuredHeight()
   const aim = useAim({ enabled: loc.status === 'granted', override: prefs.aimMode })
   const { loadout, weaponId, select: selectWeapon } = useLoadout()
   const gun = useMemo(() => normalizeGun(getWeapon(weaponId)), [weaponId])
@@ -271,7 +310,7 @@ export function LaserTagGame({ room, onExit }) {
           const perm = await MediaLibrary.requestPermissionsAsync(true)
           if (perm?.granted) {
             await MediaLibrary.saveToLibraryAsync(uri)
-            flash('🎬 Gameplay saved to Photos', true)
+            flash('Gameplay saved to Photos', true)
           } else {
             flash('Allow Photos access to save recordings', false)
           }
@@ -335,6 +374,14 @@ export function LaserTagGame({ room, onExit }) {
   const removePop = useCallback((id) => setPops((a) => a.filter((p) => p.id !== id)), [])
   const [blastKey, setBlastKey] = useState(0)
   const [killer, setKiller] = useState(null) // who tagged me out last (shown on the death screen with Follow)
+  const killerRef = useRef(null)
+  killerRef.current = killer
+  // Tag-out streak (since my last death) + recent tag-out times for multi-tag medals.
+  const [streak, setStreak] = useState(0)
+  const streakRef = useRef(0)
+  const recentKills = useRef([])
+  const [tagOuts, setTagOuts] = useState([]) // "TAGGED OUT" marks where enemies stood
+  const plateMarkersRef = useRef([])
   const grenadeTimers = useRef([])
   useEffect(() => () => grenadeTimers.current.forEach(clearTimeout), [])
 
@@ -380,10 +427,42 @@ export function LaserTagGame({ room, onExit }) {
   useEffect(() => { setTipUntil((t) => Math.max(t, Date.now() + 4500)) }, [aim.mode])
   const showTip = playing && !dead && now < tipUntil + (room?.clockOffset || 0)
 
+  // My tag-outs: streak, multi-tag / payback medals, and a "TAGGED OUT" mark where they stood.
+  const stateRef = useRef(null)
+  stateRef.current = state
+  const onTagOuts = (names) => {
+    try {
+      const t0 = Date.now()
+      recentKills.current = [...recentKills.current.filter((x) => t0 - x < 4000), ...names.map(() => t0)]
+      const n = recentKills.current.length
+      streakRef.current += names.length
+      setStreak(streakRef.current)
+      const s = streakRef.current
+      const payback = killerRef.current?.name && names.includes(killerRef.current.name)
+      if (n >= 2) battle.addMedal({ title: n === 2 ? 'Double tag' : n === 3 ? 'Triple tag' : 'Multi tag', sub: `${n} tag-outs in 4 seconds` })
+      else if (payback) battle.addMedal({ title: 'Payback', sub: `You got ${killerRef.current.name} back` })
+      else if (s === 3 || s === 5 || s === 10) battle.addMedal({ title: s === 3 ? 'On a roll' : s === 5 ? 'Unstoppable' : 'Untouchable', sub: `${s} tag-outs without being tagged` })
+      const marks = []
+      for (const nm of names) {
+        const m = enemyMarkersRef.current.find((e) => e.label === nm) || plateMarkersRef.current.find((e) => e.name === nm && e.inView)
+        if (m && Number.isFinite(m.x) && Number.isFinite(m.y)) marks.push({ id: `${t0}-${nm}`, x: m.x, y: m.y })
+      }
+      if (marks.length) {
+        setTagOuts((a) => [...a, ...marks].slice(-4))
+        const t = setTimeout(() => setTagOuts((a) => a.filter((x) => !marks.includes(x))), 1300)
+        grenadeTimers.current.push(t)
+      }
+    } catch {}
+  }
+
   // New round/match: fresh shot counter, close round-specific overlays.
   const roundKey = `${state?.round}:${state?.snd?.roundNo ?? 0}`
   useEffect(() => {
-    if (state?.snd?.roundNo == null || state.snd.roundNo === 1) shotsRef.current = 0
+    if (state?.snd?.roundNo == null || state.snd.roundNo === 1) {
+      shotsRef.current = 0
+      streakRef.current = 0
+      setStreak(0)
+    }
     setHolding(null)
   }, [roundKey]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -395,44 +474,46 @@ export function LaserTagGame({ room, onExit }) {
         if (d?.killed) setKillTick(Date.now())
         playSfx('hit')
         buzz(d?.killed ? 'success' : 'medium')
-        const dmg = d?.damage ? ` −${d.damage}` : ''
+        const head = d?.zone === 'head'
+        const gunLine = head ? `${gunNameRef.current} · Headshot` : gunNameRef.current
         if (d?.killed) addPop(100, 'TAGGED OUT', HUD.red)
-        else addPop((d?.hits || 1) * 10 + (d?.zone === 'head' ? 10 : 0), d?.zone === 'head' ? 'HEADSHOT' : 'HIT', d?.zone === 'head' ? HUD.gold : '#fff')
-        if (d?.killed) battle.addKill({ victim: d.name, weapon: d.zone === 'head' ? `${gunNameRef.current} · Headshot` : gunNameRef.current, points: 100 })
-        for (const sh of Array.isArray(d?.splash) ? d.splash : []) {
-          if (sh?.killed) battle.addKill({ victim: sh.name, weapon: `${gunNameRef.current} · Splash`, points: 100 })
-        }
-        if (d?.killed) flash(`${d.zone === 'head' ? '🎯 ' : ''}Tagged out ${d.name}!`, true)
-        else if (d?.zone === 'head') flash(`🎯 HEADSHOT${dmg}`, true)
-        else flash(`✕ ${d?.zone === 'limb' ? 'Limb' : 'Hit'}${dmg}`, true)
+        else addPop((d?.hits || 1) * 10 + (head ? 10 : 0), head ? 'HEADSHOT' : d?.zone === 'limb' ? 'LIMB HIT' : 'BODY HIT', head ? HUD.gold : '#fff')
+        const victims = []
+        if (d?.killed) victims.push({ name: d.name, weapon: gunLine })
+        for (const sh of Array.isArray(d?.splash) ? d.splash : []) if (sh?.killed) victims.push({ name: sh.name, weapon: `${gunNameRef.current} · Splash` })
+        victims.forEach((v) => battle.addKill({ victim: v.name, weapon: v.weapon, points: 100 }))
+        // Hit marker + pop + banner say it all; no extra text mid-fight.
+        if (victims.length) onTagOuts(victims.map((v) => v.name))
       }),
       room.onMessage('notice', (d) => flash(String(d?.text || ''), false)),
       room.onMessage('grenade_ok', (d) => {
         const hits = Array.isArray(d?.hits) ? d.hits : []
         const kills = hits.filter((h) => h.killed)
         battle.addExplosion('Grenade')
-        if (!hits.length) { flash('💥 Grenade missed', false); return }
+        if (!hits.length) { flash('Grenade missed', false); return }
         playSfx('hit')
         buzz('success')
         kills.forEach((k) => battle.addKill({ victim: k.name, weapon: 'Grenade', points: 100 }))
-        if (kills.length) flash(`💥 Grenade tagged out ${kills.map((k) => k.name).join(', ')}!`, true)
-        else flash(`💥 Grenade hit ${hits.map((h) => `${h.name} −${h.damage}`).join(', ')}`, true)
+        if (kills.length) onTagOuts(kills.map((k) => k.name))
+        if (kills.length) flash(`Grenade tagged out ${kills.map((k) => k.name).join(', ')}!`, true)
+        else flash(`Grenade hit ${hits.map((h) => `${h.name} −${h.damage}`).join(', ')}`, true)
       }),
       room.onMessage('sticky_bomb_ok', (d) => {
         const hits = Array.isArray(d?.hits) ? d.hits : []
         const kills = hits.filter((h) => h.killed)
         battle.addExplosion('Sticky bomb')
-        if (!hits.length) { flash('💥 Sticky bomb missed', false); return }
+        if (!hits.length) { flash('Sticky bomb missed', false); return }
         playSfx('explosion')
         buzz('success')
         setBlastKey(Date.now())
         kills.forEach((k) => battle.addKill({ victim: k.name, weapon: 'Sticky bomb', points: 100 }))
-        if (kills.length) flash(`💥 Sticky bomb tagged out ${kills.map((k) => k.name).join(', ')}!`, true)
-        else flash(`💥 Sticky bomb hit ${hits.map((h) => `${h.name} −${h.damage}`).join(', ')}`, true)
+        if (kills.length) onTagOuts(kills.map((k) => k.name))
+        if (kills.length) flash(`Sticky bomb tagged out ${kills.map((k) => k.name).join(', ')}!`, true)
+        else flash(`Sticky bomb hit ${hits.map((h) => `${h.name} −${h.damage}`).join(', ')}`, true)
       }),
       room.onMessage('land_mine_ok', () => {
         buzz('medium')
-        flash('⚠️ Land mine placed! It\'s on your map', true)
+        flash('Land mine placed. It\'s on your map', true)
       }),
       room.onMessage('got_hit', (d, from) => {
         const by = String(d?.by || 'Someone').slice(0, 24)
@@ -455,11 +536,20 @@ export function LaserTagGame({ room, onExit }) {
         const zoneLabel = d?.zone === 'grenade' ? 'Grenade' : d?.zone === 'sticky_bomb' ? 'Sticky bomb' : d?.zone === 'land_mine' ? 'Land mine' : d?.zone === 'head' ? 'Headshot' : d?.zone === 'rocket' ? 'Rocket' : 'Hit'
         const suffix = d?.zone === 'grenade' ? "'s grenade" : d?.zone === 'sticky_bomb' ? "'s sticky bomb" : d?.zone === 'land_mine' ? "'s land mine" : ''
         if (d?.killed) {
-          flash(`💀 Tagged out by ${by}${suffix}`, false)
+          flash(`Tagged out by ${by}${suffix}`, false)
           const kid = typeof d?.byId === 'string' ? d.byId : null
-          setKiller({ id: kid, name: by, how: zoneLabel === 'Hit' ? null : zoneLabel })
+          // Killer card: weapon, where they were, how much HP they had left.
+          let weapon = null
+          try { weapon = typeof d?.weapon === 'string' ? getWeapon(d.weapon)?.name || null : null } catch { weapon = null }
+          if (zoneLabel !== 'Hit') weapon = weapon && zoneLabel === 'Headshot' ? `${weapon} · Headshot` : zoneLabel === 'Headshot' ? 'Headshot' : zoneLabel
+          const kpos = kid ? positionsRef.current?.[kid] : null
+          const kst = kid ? stateRef.current?.players?.[kid] : null
+          setKiller({ id: kid, name: by, weapon, where: relativeWhere(myPosRef.current, headingRef.current, kpos), hpLeft: Number.isFinite(kst?.hp) ? kst.hp : null })
+          streakRef.current = 0
+          setStreak(0)
+          recentKills.current = []
         }
-        else flash(`${isExplosive ? '💥' : d?.zone === 'head' ? '🎯' : ''} ${zoneLabel} by ${by}${dmg}`, false)
+        else flash(`${zoneLabel} by ${by}${dmg}`, false)
       }),
       room.onMessage('bystander_ok', (d) => {
         try {
@@ -467,7 +557,7 @@ export function LaserTagGame({ room, onExit }) {
           if (!userId) return
           playSfx('hit')
           buzz('success')
-          flash(`🎯 Tagged iYiYi user @${String(d.username || 'iyiyi').slice(0, 24)} +${d.points || engine.BYSTANDER_POINTS}`, true)
+          flash(`Tagged iYiYi user @${String(d.username || 'iyiyi').slice(0, 24)} +${d.points || engine.BYSTANDER_POINTS}`, true)
           const { fromName, code } = btCtx.current
           // Stored row first (missed-alert inbox), then the live alert carrying its id.
           recordBystanderTag({ targetId: userId, fromName, code })
@@ -508,8 +598,8 @@ export function LaserTagGame({ room, onExit }) {
           const killed = hits.filter((h) => h.killed)
           killed.forEach((h) => battle.addKill({ victim: h.name, weapon: 'Land mine', points: 100 }))
           const wounded = hits.filter((h) => !h.killed)
-          if (wounded.length) flash(`💥 Your mine hit ${wounded.map((h) => `${h.name} −${h.damage}`).join(', ')}`, true)
-          else if (!killed.length) flash('💥 Your land mine went off', true)
+          if (wounded.length) flash(`Your mine hit ${wounded.map((h) => `${h.name} −${h.damage}`).join(', ')}`, true)
+          else if (!killed.length) flash('Your land mine went off', true)
         }
       } catch {}
     }
@@ -548,6 +638,14 @@ export function LaserTagGame({ room, onExit }) {
     prevHp.current = myHp
   }, [myHp, vignette])
 
+  // Tagged out (however it happened): the streak ends.
+  useEffect(() => {
+    if (!dead) return
+    streakRef.current = 0
+    recentKills.current = []
+    setStreak(0)
+  }, [dead])
+
   // Match over: share my shot count (for accuracy) and record the result.
   useEffect(() => {
     if (state?.phase !== 'ended' || !myState) return
@@ -582,17 +680,17 @@ export function LaserTagGame({ room, onExit }) {
     if (bombState === 'planted') {
       playSfx('planted')
       buzz('warning')
-      showAlert({ title: `💣 Bomb planted at site ${snd.bomb.site}`, sub: attacker ? `Defend the bomb for ${Math.round(engine.BOMB_MS / 1000)} s` : `Get to site ${snd.bomb.site} and hold DEFUSE!`, color: '#d4202f' }, 4500)
+      showAlert({ title: `Bomb planted at site ${snd.bomb.site}`, sub: attacker ? `Defend the bomb for ${Math.round(engine.BOMB_MS / 1000)} s` : `Get to site ${snd.bomb.site} and hold DEFUSE!`, color: attacker ? ST.objective : ST.enemy, icon: 'flag' }, 4500)
     } else if (bombState === 'defused') {
       playSfx('defused')
       buzz('success')
-      showAlert({ title: 'Bomb defused', sub: attacker ? 'They stopped the bomb' : 'Nice work!', color: '#1f9d6b' })
+      showAlert({ title: 'Bomb defused', sub: attacker ? 'They stopped the bomb' : 'Nice work!', color: attacker ? ST.enemy : ST.friendly, icon: 'shield-checkmark' })
     } else if (bombState === 'exploded') {
       playSfx('explosion')
       buzz('heavy')
-      showAlert({ title: '💥 The bomb exploded', color: '#d4202f' })
+      showAlert({ title: 'The bomb exploded', color: attacker ? ST.friendly : ST.enemy, icon: 'flame' })
     } else if (bombState === 'dropped' && attacker) {
-      showAlert({ title: 'Bomb dropped', sub: 'Walk over to it and pick it up', color: '#b8860b' })
+      showAlert({ title: 'Bomb dropped', sub: 'Walk over to it and pick it up', color: ST.objective, icon: 'flag-outline' })
     }
   }, [bombEventKey]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -601,14 +699,14 @@ export function LaserTagGame({ room, onExit }) {
   useEffect(() => {
     if (!carrierIsMe) return
     buzz('warning')
-    showAlert({ title: '💣 You have the bomb', sub: `Get to ${snd.sites.map((x) => `site ${x.id}`).join(' or ')} and hold PLANT`, color: '#b8860b' }, 4500)
+    showAlert({ title: 'You have the bomb', sub: `Get to ${snd.sites.map((x) => `site ${x.id}`).join(' or ')} and hold PLANT`, color: ST.objective, icon: 'flag' }, 4500)
   }, [carrierIsMe, state?.round, snd?.roundNo]) // eslint-disable-line react-hooks/exhaustive-deps
   const actAlertKey = snd?.act && snd.act.by !== meId ? `${snd.act.kind}:${snd.act.startedAt}` : null
   useEffect(() => {
     if (!actAlertKey || !snd?.act) return
     const mine = myTeam && state.players[snd.act.by]?.team === myTeam
-    if (snd.act.kind === 'plant' && !mine) { buzz('warning'); showAlert({ title: `⚠️ They’re planting at ${snd.act.site}!`, sub: 'Stop them', color: '#d4202f' }, 2500) }
-    else if (snd.act.kind === 'defuse' && !mine) { buzz('warning'); showAlert({ title: '⚠️ They’re defusing!', sub: `Get back to site ${snd.bomb?.site || ''}`, color: '#d4202f' }, 2500) }
+    if (snd.act.kind === 'plant' && !mine) { buzz('warning'); showAlert({ title: `They’re planting at ${snd.act.site}`, sub: 'Stop them', color: ST.enemy, icon: 'warning' }, 2500) }
+    else if (snd.act.kind === 'defuse' && !mine) { buzz('warning'); showAlert({ title: 'They’re defusing', sub: `Get back to site ${snd.bomb?.site || ''}`, color: ST.enemy, icon: 'warning' }, 2500) }
   }, [actAlertKey]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const bombSecs = bombState === 'planted' ? Math.max(0, Math.ceil(((snd?.bomb?.explodesAt || now) - now) / 1000)) : null
@@ -686,12 +784,12 @@ export function LaserTagGame({ room, onExit }) {
         }
       }
       if (action?.type === 'hit' && reply?.type === 'hit_ok' && action.target) {
-        const victimMsg = { by: s.players?.[from]?.name || 'Someone', byId: from, zone: reply.data.zone, damage: reply.data.damage, killed: reply.data.killed }
+        const victimMsg = { by: s.players?.[from]?.name || 'Someone', byId: from, zone: reply.data.zone, damage: reply.data.damage, killed: reply.data.killed, weapon: typeof action.weapon === 'string' ? action.weapon.slice(0, 24) : undefined }
         if (action.target === meId) room.emitter.emit('msg:got_hit', victimMsg, from)
         else room.queue('got_hit', victimMsg, { to: action.target })
         // Rocket splash: notify everyone caught in the blast
         for (const sh of reply.data?.splash || []) {
-          const splashMsg = { by: s.players?.[from]?.name || 'Someone', byId: from, zone: 'rocket', damage: sh.damage, killed: sh.killed }
+          const splashMsg = { by: s.players?.[from]?.name || 'Someone', byId: from, zone: 'rocket', damage: sh.damage, killed: sh.killed, weapon: typeof action.weapon === 'string' ? action.weapon.slice(0, 24) : undefined }
           if (sh.id === meId) room.emitter.emit('msg:got_hit', splashMsg, from)
           else room.queue('got_hit', splashMsg, { to: sh.id })
         }
@@ -812,8 +910,8 @@ export function LaserTagGame({ room, onExit }) {
       seen.add(t.id)
       const r = scope.zoomRect(photoRectToScreen(b.head || b.box, b, view), view)
       if (!Number.isFinite(r.left + r.width / 2) || !Number.isFinite(r.top)) continue // NaN in a native-driven spring
-      const color = state?.mode === 'ffa' ? colors.danger : TEAMS[t.team]?.color || colors.danger
-      out.push({ id: t.id, x: r.left + r.width / 2, y: r.top, color, label: t.name })
+      // Role colour (kit): every enemy is red, whatever their team is called.
+      out.push({ id: t.id, x: r.left + r.width / 2, y: r.top, color: ST.enemy, label: t.name, d: t.d, hp: t.hp })
     }
     return { enemyMarkers: out, bystanderMarkers: bys }
   }, [bodies, view, visionAim, bystanders, scope.zoom]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -943,7 +1041,7 @@ export function LaserTagGame({ room, onExit }) {
     if (!ok) { flash('No grenades left — get more in the Arcade Shop', false); return }
     const land = destinationPoint(h.pos, h.heading.deg, distance)
     buzz('medium')
-    flash(`💣 Grenade ${how === 'swing' ? 'thrown' : 'out'} — ${distance} m`, true)
+    flash(`Grenade ${how === 'swing' ? 'thrown' : 'out'} — ${distance} m`, true)
     const t = setTimeout(() => {
       try {
         playSfx('explosion')
@@ -959,7 +1057,10 @@ export function LaserTagGame({ room, onExit }) {
   }
 
   // Place a sticky bomb at the player's current location.
+  const stickyBusy = useRef(false) // one placement at a time (spending is async)
   const placeStickyBomb = async () => {
+    if (stickyBusy.current || stickyBombPos.current) return
+    stickyBusy.current = true
     try {
     if (dead || !playing) return
     const h = aimRef.current
@@ -970,8 +1071,8 @@ export function LaserTagGame({ room, onExit }) {
     stickyBombPos.current = { lat: h.pos.lat, lng: h.pos.lng }
     setStickyMarker(stickyBombPos.current)
     buzz('medium')
-    flash('🧨 Sticky bomb placed! Tap again to detonate', true)
-    } catch { /* IAP error */ }
+    flash('Sticky bomb placed. Tap again to detonate', true)
+    } catch { /* IAP error */ } finally { stickyBusy.current = false }
   }
 
   // Detonate the placed sticky bomb.
@@ -998,7 +1099,7 @@ export function LaserTagGame({ room, onExit }) {
     const ok = await spendLandMine()
     if (!ok) { flash('No land mines left', false); return }
     buzz('medium')
-    flash('⚠️ Land mine dropped! It triggers when an enemy walks near', true)
+    flash('Land mine down. It goes off when an enemy walks near', true)
     room.sendAction({ type: 'land_mine' })
     } catch { /* IAP error */ }
   }
@@ -1068,7 +1169,7 @@ export function LaserTagGame({ room, onExit }) {
       pts.push({
         id,
         pos: p,
-        color: !pl.alive ? '#7a8099' : mate ? TEAMS[pl.team]?.color || colors.success : colors.danger,
+        color: !pl.alive ? '#7a8099' : ST.friendly,
         ring: !!sndS && sndS.bomb?.carrier === id,
       })
     }
@@ -1079,11 +1180,11 @@ export function LaserTagGame({ room, onExit }) {
     }
     // Your sticky bomb, waiting to be detonated.
     if (stickyMarker?.lat != null) pts.push({ id: 'my-sticky', pos: stickyMarker, kind: 'c4' })
-    const areas = sndS ? sndS.sites.map((x) => ({ id: x.id, pos: x, r: x.r, color: colors.gold, label: x.id })) : []
+    const areas = sndS ? sndS.sites.map((x) => ({ id: x.id, pos: x, r: x.r, color: ST.objective, label: x.id })) : []
     const b = sndS?.bomb
     // A planted bomb is shown to everyone; a dropped one to attackers.
     if (b && (b.state === 'planted' || (b.state === 'dropped' && myTeam === engine.attackingTeam(state))) && b.lat != null) {
-      pts.push({ id: 'bomb', pos: b, color: b.state === 'planted' ? colors.danger : colors.gold, label: '💣' })
+      pts.push({ id: 'bomb', pos: b, color: b.state === 'planted' ? ST.enemy : ST.objective, label: '!' })
     }
     return { mapPoints: pts, mapAreas: areas }
   }, [state, positions, meId, myTeam, stickyMarker])
@@ -1096,7 +1197,7 @@ export function LaserTagGame({ room, onExit }) {
 
   const topMode = aim.mode === 'top'
   const triggerMode = aim.mode === 'trigger'
-  const intelPoints = useEnemyIntel({ room, state, positions, meId, myTeam, uavActive, color: colors.danger })
+  const intelPoints = useEnemyIntel({ room, state, positions, meId, myTeam, uavActive, color: ST.enemy })
   // Enemies the map is currently revealing (UAV sweep or a recent shot ping) also get a
   // target tag over their head in the camera view, placed from GPS + compass.
   const revealedMarkers = useMemo(() => {
@@ -1118,7 +1219,7 @@ export function LaserTagGame({ room, onExit }) {
           name: pl?.name || 'Enemy',
           d: distanceMeters(myPos, pos),
           bearing: bearingDeg(myPos, pos),
-          color: state?.mode === 'ffa' ? colors.danger : TEAMS[pl?.team]?.color || colors.danger,
+          color: ST.enemy,
         })
       }
       return binocularMarkers({ players: out, headingDeg: heading.deg, zoom: scope.zoom, view })
@@ -1139,12 +1240,13 @@ export function LaserTagGame({ room, onExit }) {
         const err = gpsErr(myPos.acc, e.pos?.acc)
         const close = e.d <= err
         if (!close && e.d > PLATE_RANGE_M && !revealed.has(e.id)) continue
-        list.push({ id: `plate-${e.id}`, name: e.name, d: e.d, bearing: e.bearing, hp: e.hp, close, color: state?.mode === 'ffa' ? HUD.red : TEAMS[e.team]?.color || HUD.red })
+        list.push({ id: `plate-${e.id}`, name: e.name, d: e.d, bearing: e.bearing, hp: e.hp, close, color: ST.enemy })
       }
       const placed = binocularMarkers({ players: list, headingDeg: heading.deg, zoom: scope.zoom, view })
       return placed.map((m) => (m.close ? { ...m, x: view.width / 2, y: view.height * 0.42, inView: true, side: null } : m))
     } catch { return [] }
-  }, [enemies, enemyMarkers, revealedMarkers, myPos, heading?.deg, scope.zoom, view, state?.mode, topMode])
+  }, [enemies, enemyMarkers, revealedMarkers, myPos, heading?.deg, scope.zoom, view, topMode])
+  plateMarkersRef.current = plateMarkers
   // Compass tape pips: the same enemies, by bearing.
   const enemyPips = useMemo(() => plateMarkers.filter((m) => !m.close).map((m) => ({ id: m.id, bearing: m.bearing, color: m.color })), [plateMarkers])
   // S&D objectives on the compass: both bomb sites, and the bomb once it's planted (or
@@ -1154,11 +1256,11 @@ export function LaserTagGame({ room, onExit }) {
     if (!sndForPips || !myPos) return enemyPips
     const out = []
     for (const x of sndForPips.sites || []) {
-      if (distanceMeters(myPos, x) > (x.r || engine.SITE_RADIUS_M)) out.push({ id: `site-${x.id}`, bearing: bearingDeg(myPos, x), color: colors.gold, label: x.id })
+      if (distanceMeters(myPos, x) > (x.r || engine.SITE_RADIUS_M)) out.push({ id: `site-${x.id}`, bearing: bearingDeg(myPos, x), color: ST.objective, label: x.id })
     }
     const b = sndForPips.bomb
     if (b?.lat != null && (b.state === 'planted' || (b.state === 'dropped' && myTeam === engine.attackingTeam(state))) && distanceMeters(myPos, b) > 6) {
-      out.push({ id: 'bomb', bearing: bearingDeg(myPos, b), color: colors.danger, label: '!' })
+      out.push({ id: 'bomb', bearing: bearingDeg(myPos, b), color: b.state === 'planted' ? ST.enemy : ST.objective, label: '!' })
     }
     return [...out, ...enemyPips]
   }, [sndForPips, myPos, myTeam, enemyPips]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -1192,7 +1294,7 @@ export function LaserTagGame({ room, onExit }) {
 
   if (state.phase === 'ended') {
     return (
-      <View style={{ flex: 1, paddingTop: insets.top + 44, backgroundColor: HUD.bg }}>
+      <View style={{ flex: 1, paddingTop: insets.top + 44, backgroundColor: ST.ground }}>
         <MatchSummary
           state={state}
           meId={meId}
@@ -1223,6 +1325,60 @@ export function LaserTagGame({ room, onExit }) {
   const compassLow = !!heading && heading.accuracy < (Platform.OS === 'android' ? 1 : 2)
 
 
+  // ---- layout (studio "Main" board; see laser/hudLayout.js for the edges) ----
+  const tight = hud.compact
+  const rootW = view.width || hud.width
+  const rootH = view.height || hud.height
+  const mapSize = Math.round(Math.max(88, Math.min(116, hud.width * 0.27)))
+  const leftColW = tight ? 160 : 172
+  const rightColW = tight ? 156 : 170
+  const tileSize = tight ? 36 : 38
+  const topEdge = hud.top + (topH || 150)
+  const dockTop = rootH - hud.bottom - (dockH || 150)
+  // Landscape: the dock's two columns sit in the bottom corners, so the middle column
+  // (between them) holds the objective / warnings and the hip-fire radar.
+  const land = hud.landscape
+  const midLeft = land ? hud.side + leftColW + 16 : hud.side
+  const midRight = land ? hud.side + rightColW + 16 : hud.side
+  const aboveBottom = land ? hud.bottom : hud.bottom + (dockH || 150) + 8
+  const aboveTop = rootH - aboveBottom - (aboveH ? aboveH + 4 : 0)
+  // The crosshair sits on the true screen centre: camera hits are judged at the frame centre.
+  const cx = rootW / 2
+  const cy = rootH / 2
+  const infoTop = cy + 38
+  const infoRoom = aboveTop - infoTop
+  const bannerUp = Date.now() - killTick < 2500
+  const bombPlanted = bombState === 'planted' && !!snd?.bomb
+  const scorePanelW = tight ? 128 : 138
+  const targetLocked = !!bodies?.some((b) => classifyHit([b]))
+  const hint = !playing || dead
+    ? null
+    : topMode
+      ? null
+      : triggerMode
+        ? (gun.automatic ? 'AIM · TAP TO FIRE · HOLD FOR AUTO' : 'AIM · TAP ANYWHERE TO FIRE')
+        : 'AIM · CROSSHAIR ON A PLAYER · PRESS FIRE'
+  // Hip fire: what the radar shows (the same enemies the camera view would tag).
+  const hipRange = Math.min(gun.range, COMPASS_MAX_RANGE_M)
+  const hip = topMode ? (() => {
+    try {
+      const revealed = new Set(revealedMarkers.map((m) => m.id.replace(/^rev-/, '')))
+      const shown = enemies.filter((e) => e.alive && (e.d <= PLATE_RANGE_M || revealed.has(e.id) || e.d <= gpsErr(myPos?.acc, e.pos?.acc)))
+      const mates = state.mode === 'ffa' ? [] : Object.keys(state.players)
+        .filter((id) => id !== meId && state.players[id].team === myTeam && state.players[id].alive)
+        .map((id) => ({ id, p: positions?.[id] }))
+        .filter((m) => m.p && Date.now() - m.p.at <= 15000 && myPos)
+        .map((m) => ({ id: m.id, d: distanceMeters(myPos, m.p), bearing: bearingDeg(myPos, m.p) }))
+      const objectives = snd && myPos ? (snd.sites || []).map((x) => ({ id: `s-${x.id}`, label: x.id, d: distanceMeters(myPos, x), bearing: bearingDeg(myPos, x) })) : []
+      const cone = Math.max(6, Math.min(40, aimTolerance(20, myPos?.acc, 10, heading?.accuracy)))
+      const top = land ? hud.top + 46 : topEdge + 4
+      const avail = aboveTop - top - 8
+      const zone = !land && avail - 44 - 60 - 30 - 92 >= 180
+      const size = Math.round(Math.max(110, Math.min(rootW - midLeft - midRight - 8, 320, avail - 44 - 60 - 30 - (zone ? 92 : 0))))
+      return { shown, mates, objectives, cone, size, zone, top, height: Math.max(0, avail) }
+    } catch { return null }
+  })() : null
+
   return (
     <View style={styles.fill} {...scope.panHandlers}>
       {camPerm?.granted ? (
@@ -1235,11 +1391,12 @@ export function LaserTagGame({ room, onExit }) {
                 selfieEnabled
                 selfieFrame={(() => {
                   // The preview is scaled by the zoom around its centre; place the bubble so it
-                  // lands on the same spot (and size) on screen at any zoom.
+                  // lands on the same spot (and size) on screen at any zoom. It sits on the
+                  // left, under the minimap.
                   const z = Math.max(1, scope.zoom || 1)
                   const W = view.width || 390
                   const H = view.height || 844
-                  const r = { x: 12, y: H * 0.3, w: 104, h: 140 }
+                  const r = { x: 12, y: Math.max(H * 0.3, Math.min(H * 0.5, topEdge + 8)), w: 104, h: 140 }
                   return [W / 2 + (r.x - W / 2) / z, H / 2 + (r.y - H / 2) / z, r.w / z, r.h / z]
                 })()}
                 onCameraError={() => { setSelfieOn(false); flash('Selfie camera unavailable', false) }}
@@ -1250,10 +1407,13 @@ export function LaserTagGame({ room, onExit }) {
           </Animated.View>
         </View>
       ) : (
-        <View style={[StyleSheet.absoluteFill, styles.noCam]}>
+        <View style={[StyleSheet.absoluteFill, styles.noCam]} onLayout={(e) => setView(e.nativeEvent.layout)}>
           {camPerm && !camPerm.granted && camPerm.status === 'denied' ? <CameraOff what="aiming in Laser Tag" compact /> : null}
         </View>
       )}
+
+      {/* Hip fire: the camera sees the ground, so the screen becomes a dark radar. */}
+      {topMode ? <View style={[StyleSheet.absoluteFill, styles.hipScrim]} pointerEvents="none" /> : null}
 
       {/* Top-edge and trigger modes: the whole screen is the trigger. */}
       {fullScreenTrigger && !bino && (
@@ -1267,34 +1427,41 @@ export function LaserTagGame({ room, onExit }) {
         />
       )}
 
-      {/* Target-lock brackets around people the camera sees */}
-      {visionAim && bodies && view.width > 0 && bodies.map((b, i) => {
-        try {
-          if (!b?.box) return null
-          const r = scope.zoomRect(photoRectToScreen(b.box, b, view), view)
-          if (!Number.isFinite(r?.left) || !Number.isFinite(r?.top)) return null
-          const locked = !!classifyHit([b])
-          return (
-            <View key={i} pointerEvents="none" style={[styles.bracket, { left: r.left, top: r.top, width: Math.max(0, r.width), height: Math.max(0, r.height), borderColor: locked ? colors.danger : 'rgba(255,255,255,0.4)' }]} />
-          )
-        } catch { return null }
-      })}
+      {/* Target-lock corner brackets around people the camera sees */}
+      {visionAim && bodies && view.width > 0 && !topMode ? (
+        <TargetBrackets
+          rects={bodies.map((b, i) => {
+            try {
+              if (!b?.box) return null
+              const r = scope.zoomRect(photoRectToScreen(b.box, b, view), view)
+              if (!Number.isFinite(r?.left) || !Number.isFinite(r?.top)) return null
+              const locked = !!classifyHit([b])
+              let head = null
+              if (locked && b.head) {
+                const h = scope.zoomRect(photoRectToScreen(b.head, b, view), view)
+                if (Number.isFinite(h?.left) && Number.isFinite(h?.top)) head = h
+              }
+              return { key: String(i), left: r.left, top: r.top, width: Math.max(0, r.width), height: Math.max(0, r.height), locked, head }
+            } catch { return null }
+          }).filter(Boolean)}
+        />
+      ) : null}
       {bino ? <BinocularFrame zoom={scope.zoom} view={view} /> : null}
       {bino ? (
         <BinocularMarkers
           markers={(() => { try { return binocularMarkers({
-            players: enemies.filter((e) => e.alive).map((e) => ({ id: e.id, name: e.name, d: e.d, bearing: e.bearing, color: state?.mode === 'ffa' ? colors.danger : TEAMS[e.team]?.color || colors.danger })),
+            players: enemies.filter((e) => e.alive).map((e) => ({ id: e.id, name: e.name, d: e.d, bearing: e.bearing, color: ST.enemy })),
             headingDeg: heading?.deg,
             zoom: scope.zoom,
             view,
           }) } catch { return [] } })()}
         />
-      ) : (
+      ) : !topMode ? (
         <>
           <EnemyMarkers markers={enemyMarkers} />
-          {camPerm?.granted && !topMode ? <Nameplates markers={plateMarkers} /> : null}
+          {camPerm?.granted ? <Nameplates markers={plateMarkers} /> : null}
         </>
-      )}
+      ) : null}
       <BystanderMarkers markers={bystanderMarkers} />
       {camPerm?.granted && !topMode ? (
         <GroundExplosives
@@ -1310,111 +1477,122 @@ export function LaserTagGame({ room, onExit }) {
           }) } catch { return [] } })()}
         />
       ) : null}
+      {tagOuts.map((m) => <TagOutMark key={m.id} x={m.x} y={m.y} />)}
 
       {camPerm?.granted && !topMode && !bino && aim.mode === 'camera' ? (
         <GunViewModel gun={gun} shotTick={shotTick} bottom={dockH || 0} hidden={dead} leftHanded={leftHanded} aim={aimPoint} />
       ) : null}
       <GrenadeBlast key={blastKey} visible={!!blastKey} />
       {battle.overlay}
-      <ScorePops pops={pops} onDone={removePop} />
+      <ScorePops pops={pops} onDone={removePop} top={cy - 14} />
       <Animated.View pointerEvents="none" style={[styles.vignette, { opacity: vignette }]} />
 
-      {/* HUD — top: explicit rows in normal flow (see laser/hudLayout.js). The right edge
-          leaves room for GamePlayScreen's floating 👥 💬 ☰ buttons. */}
+      {/* Crosshair, on the screen centre (AIM). */}
+      {!topMode && !bino ? (
+        <View style={[styles.crosshair, { left: cx - 32, top: cy - 32 }]} pointerEvents="none">
+          <FpsCrosshair onTarget={!!inSights || enemyMarkers.length > 0 || targetLocked} shotTick={shotTick} hitTick={hitTick} killTick={killTick} size={64} />
+        </View>
+      ) : null}
+
+      {/* HUD top: score panel + clock, compass tape, minimap + kill feed (see laser/hudLayout.js).
+          The top-right corner stays clear for GamePlayScreen's floating buttons. */}
       <View style={[styles.topCol, { top: hud.top, left: hud.side, right: hud.side }]} pointerEvents="box-none" onLayout={onTopLayout}>
-        {/* Row 1: status panel · clock (the right edge leaves room for the floating buttons) */}
-        <View style={[styles.row1, { marginRight: TOP_BUTTONS_W - 12 }]} pointerEvents="none">
-          <StatusPanel
-            hp={myState.hp}
-            score={myState.score}
-            kills={myState.kills || 0}
-            deaths={myState.deaths || 0}
-            team={myTeam}
-            side={snd && myTeam ? snd.sides[myTeam] : null}
-            protectedNow={isProtected}
-            compact={hud.compact}
-            width={hud.compact ? 104 : 120}
+        <View style={styles.row1} pointerEvents="box-none" onLayout={onRow1Layout}>
+          <ScorePanel
+            mode={state.mode}
+            teamScore={state.teamScore}
+            snd={snd}
+            myTeam={myTeam}
+            meId={meId}
+            players={state.players}
+            live={!!state.endless}
+            rank={arenaRank?.rank}
+            of={arenaRank?.of}
+            width={scorePanelW}
+            onPress={() => { trigger.stop(); buzz('select'); setScoresOpen(true) }}
           />
-          <View style={styles.centerBlock}>
-            {bombState === 'planted' ? (
+          <View style={styles.clockAbs} pointerEvents="none">
+            {bombPlanted ? (
               <BombCountdown msLeft={(snd.bomb.explodesAt || now) - now} inline />
             ) : (
-              <MatchBar
-                clock={formatClock(timerMs)}
-                live={!!state.endless}
-                rank={arenaRank?.rank}
-                of={arenaRank?.of}
-                mode={state.mode}
-                teamScore={state.teamScore}
-                snd={snd}
-                compact={hud.compact || hud.width < 400}
-              />
+              <MatchClock clock={formatClock(timerMs)} live={!!state.endless} kicker={topMode ? 'HIP FIRE' : null} compact={tight} />
             )}
           </View>
         </View>
 
-        {/* Row 2: compass tape, full width (below the floating buttons) */}
         {!topMode ? (
           <View style={styles.rowCenter} pointerEvents="none">
-            <CompassTape heading={heading?.deg} pips={compassPips} width={Math.min(300, hud.width - hud.side * 2 - 8)} compact={hud.compact} />
+            <CompassTape heading={heading?.deg} pips={compassPips} width={Math.min(240, hud.width - hud.side * 2 - 40)} compact={tight} />
           </View>
         ) : null}
 
-        {/* Row 3: scores + fire-mode pill on the left, kill feed on the right */}
         <View style={styles.row3} pointerEvents="box-none">
-          <View style={styles.row3Left} pointerEvents="box-none">
-            <Pressable onPress={() => { trigger.stop(); buzz('select'); setScoresOpen(true) }} hitSlop={8} style={styles.scoreBtn} accessibilityRole="button" accessibilityLabel="Open scoreboard">
-              <Ionicons name="podium" size={12} color="#fff" />
-              <Text style={styles.scoreBtnText}>SCORES</Text>
-            </Pressable>
-            <View style={styles.modePill} pointerEvents="none">
-              <Text style={styles.modePillText} numberOfLines={1}>
-                {aim.mode === 'trigger' ? '☝︎' : aim.mode === 'top' ? '▲' : '⌖'} {AIM_MODE_LABELS[aim.mode] || ''}{aim.autoDetected ? ' · AUTO' : ''}
-              </Text>
-            </View>
-          </View>
-          {!triggerMode && state.feed.length > 0 ? <KillFeed feed={state.feed} max={hud.compact ? 2 : 3} /> : null}
+          {prefs.minimap && !topMode ? (
+            <MapMinimap
+              available={mapsAvailable}
+              size={mapSize}
+              me={myPos}
+              headingDeg={mapHeading}
+              rangeM={rangeById(effectiveRangeId).r}
+              rangeLabel={rangeById(effectiveRangeId).label}
+              points={allMapPoints}
+              areas={mapAreas}
+              boundary={mapBoundary}
+              rangeRingM={gun.range}
+              onOpen={openMap}
+              uavActive={uavActive}
+            />
+          ) : <View />}
+          {state.feed.length > 0 ? <KillFeed feed={state.feed} max={tight ? 2 : 3} state={state} meId={meId} /> : null}
         </View>
-
-        {/* Row 3: top-edge AIM marker */}
-        {topMode && <Text style={styles.topEdge} pointerEvents="none">▲ AIM ▲</Text>}
       </View>
 
-      {/* Aim indicator: the space between the top rows and the bottom dock. */}
-      <View style={[styles.center, { top: (topH ? hud.top + topH : hud.top + 120) + 8, bottom: hud.bottom + (dockH || 160) + 8 }]} pointerEvents="none">
-        {topMode ? (
-          <View style={{ alignItems: 'center' }}>
-            <Text style={[styles.arrow, hud.compact && { fontSize: 46 }, inSights && { color: colors.danger }]}>▲</Text>
-            <Text style={styles.sightText}>Point the top edge at a player · tap anywhere to fire</Text>
-          </View>
-        ) : (
-          <FpsCrosshair onTarget={!!inSights || enemyMarkers.length > 0} shotTick={shotTick} hitTick={hitTick} killTick={killTick} />
-        )}
-        {!triggerMode && <Text style={[styles.sightText, (bodies?.some((b) => classifyHit([b])) || inSights) && { color: HUD.red }]} numberOfLines={2}>
-          {visionAim
-            ? (bodies?.some((b) => classifyHit([b])) ? 'TARGET LOCKED' : inSights ? `${inSights.name.toUpperCase()} · ${formatDistance(inSights.d)}` : enemies.some((e) => e.alive) ? `CAMERA AIM · ${formatDistance(VISION_RANGE_M)}` : 'WAITING FOR PLAYERS’ GPS…')
-            : inSights
-              ? `${inSights.name.toUpperCase()} · ${formatDistance(inSights.d)} · ${Math.round(inSights.chance * 100)}%`
-              : enemies.some((e) => e.alive) ? 'NO TARGET' : 'WAITING FOR PLAYERS’ GPS…'}
-        </Text>}
-        {!visionAim && !triggerMode && <Text style={styles.aimMode}>COMPASS AIM · {formatDistance(Math.min(gun.range, COMPASS_MAX_RANGE_M))}</Text>}
-        {!!marker && <Text style={[styles.marker, { color: marker.good ? HUD.green : '#fff' }]} numberOfLines={2}>{marker.text}</Text>}
-        {showTip && !marker ? (
-          <View style={styles.tip} pointerEvents="none">
-            <Ionicons name="information-circle" size={13} color={HUD.accent} />
-            <Text style={styles.tipText} numberOfLines={3}>{AIM_MODE_TIPS[aim.mode] || AIM_MODE_TIPS.trigger}</Text>
-          </View>
-        ) : null}
-      </View>
+      {/* AIM: what's under the crosshair, coaching, notices — just below the crosshair. */}
+      {!topMode && infoRoom > 24 ? (
+        <View style={[styles.info, { top: infoTop, height: infoRoom }]} pointerEvents="none">
+          {!bannerUp && !triggerMode ? (
+            <Text style={[styles.sightText, (targetLocked || inSights) && { color: ST.enemy }]} numberOfLines={2}>
+              {visionAim
+                ? (targetLocked ? 'TARGET LOCKED' : inSights ? `${inSights.name.toUpperCase()} · ${formatDistance(inSights.d).toUpperCase()}` : enemies.some((e) => e.alive) ? `CAMERA AIM · ${formatDistance(VISION_RANGE_M).toUpperCase()}` : 'WAITING FOR PLAYERS’ GPS…')
+                : inSights
+                  ? `${inSights.name.toUpperCase()} · ${formatDistance(inSights.d).toUpperCase()} · ${Math.round(inSights.chance * 100)}%`
+                  : enemies.some((e) => e.alive) ? 'NO TARGET' : 'WAITING FOR PLAYERS’ GPS…'}
+            </Text>
+          ) : null}
+          {!bannerUp && triggerMode && targetLocked ? <Text style={[styles.sightText, { color: ST.enemy }]}>TARGET LOCKED</Text> : null}
+          {!visionAim && !triggerMode && !bannerUp ? <Text style={styles.aimMode}>COMPASS AIM · {formatDistance(Math.min(gun.range, COMPASS_MAX_RANGE_M)).toUpperCase()}</Text> : null}
+          {!!marker && !bannerUp ? <Text style={[styles.marker, { color: marker.good ? ST.health : '#fff' }]} numberOfLines={2}>{stripSymbols(marker.text)}</Text> : null}
+          {showTip && !marker && !bannerUp ? (
+            <View style={styles.tip}>
+              <Ionicons name="information-circle-outline" size={14} color={ST.friendly} />
+              <Text style={styles.tipText} numberOfLines={3}>{AIM_MODE_TIPS[aim.mode] || AIM_MODE_TIPS.trigger}</Text>
+            </View>
+          ) : null}
+        </View>
+      ) : null}
 
-      {/* Above the dock: S&D objective + GPS/compass warnings. */}
-      <View style={[styles.aboveDock, { bottom: hud.bottom + (dockH || 160) + 8, left: hud.side, right: hud.side }]} pointerEvents="box-none">
+      {/* HIP FIRE (studio board): top-edge cue, radar with the firing cone, lock + hit chance, fire zone. */}
+      {topMode && hip ? (
+        <View style={[styles.hip, { top: hip.top, height: hip.height, left: land ? midLeft : 12, right: land ? midRight : 12 }]} pointerEvents="none">
+          <View style={{ alignItems: 'center', gap: 4 }}>
+            <Svg width={36} height={20} viewBox="0 0 40 22" fill="none"><Path d="M2 20L20 3l18 17" stroke={inSights ? ST.enemy : '#fff'} strokeWidth={2.6} strokeLinejoin="round" /></Svg>
+            <Text style={styles.hipCue}>POINT THE TOP EDGE AT A PLAYER</Text>
+          </View>
+          <HipFireRadar size={hip.size} heading={heading?.deg} rangeM={hipRange} coneDeg={hip.cone} enemies={hip.shown} mates={hip.mates} objectives={hip.objectives} lockedId={inSights?.id} />
+          <HipFireStatus target={inSights} waiting={!enemies.some((e) => e.alive)} />
+          {!!marker ? <Text style={[styles.marker, { marginTop: 0, color: marker.good ? ST.health : '#fff' }]} numberOfLines={1}>{stripSymbols(marker.text)}</Text> : null}
+          {hip.zone && playing && !dead ? <HipFireZone auto={gun.automatic} height={84} /> : null}
+        </View>
+      ) : null}
+
+      {/* Above the dock: S&D objective, warnings, enemy UAV, the fire hint. */}
+      <View style={[styles.aboveDock, { bottom: aboveBottom, left: midLeft, right: midRight }]} pointerEvents="box-none" onLayout={onAboveLayout}>
         {objective && (
           <View style={styles.objective} pointerEvents="box-none">
-            <Text style={styles.objectiveText} pointerEvents="none" numberOfLines={2}>{objective.text}</Text>
+            <Text style={styles.objectiveText} pointerEvents="none" numberOfLines={2}>{stripSymbols(objective.text)}</Text>
             {objective.action && !dead && playing && (
               objective.action.kind === 'pickup' ? (
-                <Btn title="Pick up bomb" variant="primary" onPress={() => { buzz('medium'); room.sendAction({ type: 'pickup' }) }} />
+                <HudCta title="Pick up bomb" tone="gold" icon="flag" onPress={() => { buzz('medium'); room.sendAction({ type: 'pickup' }) }} style={{ minWidth: 220 }} />
               ) : (
                 <HoldActionButton
                   key={`${state.round}:${snd.roundNo}:${objective.action.kind}-${objective.action.site || ''}`}
@@ -1422,7 +1600,7 @@ export function LaserTagGame({ room, onExit }) {
                   site={objective.action.site}
                   holdMs={objective.action.kind === 'plant' ? engine.PLANT_MS : engine.DEFUSE_MS}
                   activeKey={myActKey}
-                  color={objective.action.kind === 'plant' ? colors.gold : '#3ad1ff'}
+                  color={objective.action.kind === 'plant' ? ST.objective : ST.friendly}
                   onStart={() => {
                     trigger.stop()
                     setHolding(objective.action.kind)
@@ -1435,51 +1613,57 @@ export function LaserTagGame({ room, onExit }) {
             )}
           </View>
         )}
+        {uav.enemyMs > 0 ? (
+          <View style={styles.pillWarn} pointerEvents="none">
+            <Ionicons name="radio-outline" size={14} color={ST.enemy} />
+            <Text style={styles.pillWarnText} numberOfLines={1}>ENEMY UAV OVERHEAD · {Math.ceil(uav.enemyMs / 1000)}S</Text>
+          </View>
+        ) : null}
+        {outsideArea ? (
+          <View style={[styles.pillWarn, { backgroundColor: 'rgba(255,61,82,0.85)' }]} pointerEvents="none">
+            <Ionicons name="warning" size={14} color="#fff" />
+            <Text style={styles.pillWarnText} numberOfLines={2}>OUTSIDE THE PLAY AREA · HEAD BACK</Text>
+          </View>
+        ) : null}
         {(myPos?.acc > 20 || compassLow) && (
           <Text style={[styles.warn, { alignSelf: leftHanded ? 'flex-end' : 'flex-start' }]} pointerEvents="none" numberOfLines={2}>
-            {myPos?.acc > 20 ? `Weak GPS (±${Math.round(myPos.acc)} m)` : 'Compass needs calibrating — move your phone in a figure 8'}
+            {myPos?.acc > 20 ? `WEAK GPS (±${Math.round(myPos.acc)} M)` : 'COMPASS NEEDS CALIBRATING · MOVE YOUR PHONE IN A FIGURE 8'}
           </Text>
         )}
+        {hint && !objective?.action ? <Text style={styles.hint} pointerEvents="none" numberOfLines={1}>{hint}</Text> : null}
       </View>
 
-      {/* Bottom dock: minimap on one side; UAV, weapon and FIRE stacked on the other. */}
+      {/* Bottom dock: health + equipment on one side, optics / FIRE / weapon on the other. */}
       <View
         style={[styles.dock, { bottom: hud.bottom, left: hud.side, right: hud.side, flexDirection: leftHanded ? 'row-reverse' : 'row' }]}
         pointerEvents="box-none"
         onLayout={onDockLayout}
       >
-        {/* Minimap (double-tap opens the large map; swallows taps so it never fires) */}
-        {prefs.minimap ? (
-          <MapMinimap
-            available={mapsAvailable}
-            size={hud.mapSize}
-            me={myPos}
-            headingDeg={mapHeading}
-            rangeM={rangeById(effectiveRangeId).r}
-            rangeLabel={rangeById(effectiveRangeId).label}
-            points={allMapPoints}
-            areas={mapAreas}
-            boundary={mapBoundary}
-            rangeRingM={gun.range}
-            onOpen={openMap}
-            uavActive={uavActive}
-          />
-        ) : <View />}
-        <View style={[styles.fireCol, hud.landscape && { flexDirection: leftHanded ? 'row-reverse' : 'row', alignItems: 'flex-end' }, !hud.landscape && { alignItems: leftHanded ? 'flex-start' : 'flex-end' }, { maxWidth: hud.landscape ? hud.width - hud.side * 2 - hud.mapSize - DOCK_GAP : hud.chipMaxW }]} pointerEvents="box-none">
-          {/* Consumables row: UAV + grenade + sticky bomb + land mine side by side */}
-          <View style={styles.consumablesRow} pointerEvents="box-none">
-            <UavButton count={uav.count} activeMsLeft={uav.myMs} disabled={!playing && !uav.empty} onPress={uav.callUav} size={hud.compact ? 40 : 46} />
+        <View style={[styles.leftCol, { width: leftColW }]} pointerEvents="box-none">
+          {streak > 0 && !dead ? (
+            <View style={styles.streak} pointerEvents="none">
+              <Text style={stType.label}>STREAK</Text>
+              <View style={styles.streakRow}>
+                {Array.from({ length: Math.max(3, Math.min(5, streak)) }, (_, i) => (
+                  <View key={i} style={[styles.streakPip, { backgroundColor: i < streak ? ST.objective : 'rgba(255,255,255,0.18)' }]} />
+                ))}
+                {streak > 5 ? <Text style={styles.streakMore}>{streak}</Text> : null}
+              </View>
+            </View>
+          ) : null}
+          <View style={[styles.equipRow, { gap: tight ? 5 : 6 }]} pointerEvents="box-none">
             <GrenadeButton
               count={grenadeInv.owner ? Infinity : grenadeInv.balance}
               disabled={!playing || dead || bino}
-              size={hud.compact ? 40 : 46}
+              size={tileSize}
               onThrow={throwGrenade}
               onEmpty={() => flash('No grenades — get 10 in the Arcade Shop', false)}
             />
             <StickyBombButton
               count={stickyBombInv.owner ? Infinity : stickyBombInv.balance}
               disabled={!playing || dead || bino}
-              size={hud.compact ? 38 : 44}
+              size={tileSize}
+              placed={stickyMarker?.lat != null}
               onPlace={placeStickyBomb}
               onDetonate={detonateStickyBomb}
               onEmpty={() => flash('No sticky bombs — get more in the Arcade Shop', false)}
@@ -1487,62 +1671,66 @@ export function LaserTagGame({ room, onExit }) {
             <LandMineButton
               count={landMineInv.owner ? Infinity : landMineInv.balance}
               disabled={!playing || dead || bino}
-              size={hud.compact ? 38 : 44}
+              size={tileSize}
               onDrop={dropLandMine}
               onEmpty={() => flash('No land mines — get more in the Arcade Shop', false)}
             />
+            <UavButton tile count={uav.count} activeMsLeft={uav.myMs} disabled={!playing && !uav.empty} onPress={uav.callUav} size={tileSize} />
           </View>
-          {/* Optics row: binoculars, REC, selfie, scope zoom */}
+          <StatusPanel
+            hp={myState.hp}
+            score={myState.score}
+            kills={myState.kills || 0}
+            deaths={myState.deaths || 0}
+            protectedNow={isProtected}
+            compact={tight}
+            width={leftColW}
+          />
+        </View>
+        <View style={[styles.rightCol, { alignItems: leftHanded ? 'flex-start' : 'flex-end', maxWidth: Math.max(rightColW, hud.width - hud.side * 2 - leftColW - 8) }]} pointerEvents="box-none">
           {camPerm?.granted && !topMode ? (
-            <View style={styles.opticsRow} pointerEvents="box-none">
-              <HudButton onPress={toggleBino} on={bino} icon="telescope" text={bino ? 'LOWER' : 'SCOUT'} accessibilityLabel={bino ? 'Lower binoculars' : 'Binoculars: scout enemies. Cannot shoot.'} />
+            <View style={[styles.opticsRow, { justifyContent: leftHanded ? 'flex-start' : 'flex-end' }]} pointerEvents="box-none">
+              <HudButton onPress={toggleBino} on={bino} icon="telescope-outline" accessibilityLabel={bino ? 'Lower binoculars' : 'Binoculars: scout enemies. Cannot shoot.'} />
               {recOk ? (
-                <HudButton onPress={toggleRecording} on={!!recAt} onColor="#d4202f" accessibilityLabel={recAt ? 'Stop recording and save to Photos' : 'Record gameplay with your voice'}
-                  text={recAt ? (() => { const sec = Math.max(0, Math.floor((recNow - recAt) / 1000)); return `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}` })() : 'REC'}>
-                  <View style={[styles.recDot, recAt && { borderRadius: 2, backgroundColor: '#fff' }]} />
+                <HudButton onPress={toggleRecording} on={!!recAt} onColor={ST.enemy} accessibilityLabel={recAt ? 'Stop recording and save to Photos' : 'Record gameplay with your voice'}
+                  text={recAt ? (() => { const sec = Math.max(0, Math.floor((recNow - recAt) / 1000)); return `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}` })() : null}>
+                  <View style={[styles.recDot, recAt && { borderRadius: 1 }]} />
                 </HudButton>
               ) : null}
               {dualOk ? (
-                <HudButton onPress={() => { buzz('select'); setSelfieOn((v) => !v) }} on={selfieOn} icon="camera-reverse" accessibilityLabel={selfieOn ? 'Hide selfie camera' : 'Show selfie camera'} />
+                <HudButton onPress={() => { buzz('select'); setSelfieOn((v) => !v) }} on={selfieOn} onColor={ST.friendly} icon="camera-reverse-outline" accessibilityLabel={selfieOn ? 'Hide selfie camera' : 'Show selfie camera'} />
               ) : null}
-              <HudButton onPress={scope.cycle} on={scope.zoom > 1} icon="scan" text={formatZoom(scope.zoom)} accessibilityLabel={`Scope zoom ${formatZoom(scope.zoom)}. Tap to change, or pinch the screen.`} />
+              <HudButton onPress={scope.cycle} on={scope.zoom > 1} onColor={ST.friendly} text={formatZoom(scope.zoom)} accessibilityLabel={`Scope zoom ${formatZoom(scope.zoom)}. Tap to change, or pinch the screen.`} />
             </View>
           ) : null}
-          <WeaponCard weapon={gun} count={loadout.length} onWheel={openWheel} maxWidth={hud.landscape ? 240 : hud.chipMaxW} compact={hud.compact} />
           {aim.mode === 'camera' && (
             <FireButton
               onPressIn={trigger.onPressIn}
               onPressOut={trigger.onPressOut}
               disabled={dead || !playing}
-              compact={hud.compact}
-              locked={!!inSights || enemyMarkers.length > 0}
+              compact={tight}
+              locked={!!inSights || enemyMarkers.length > 0 || targetLocked}
               auto={gun.automatic}
             />
           )}
+          <WeaponCard weapon={gun} count={loadout.length} onWheel={openWheel} width={rightColW} compact={tight} />
         </View>
       </View>
-
-      <EnemyUavPill msLeft={uav.enemyMs} top={(topH ? hud.top + topH : hud.top + 120) + 6} />
-      {outsideArea && (
-        <View style={[styles.areaWarn, { top: (topH ? hud.top + topH : hud.top + 120) + (uav.enemyMs > 0 ? 40 : 6) }]} pointerEvents="none">
-          <Ionicons name="warning" size={14} color="#fff" />
-          <Text style={styles.areaWarnText} numberOfLines={2}>OUTSIDE THE PLAY AREA — HEAD BACK</Text>
-        </View>
-      )}
 
       {dead && state.phase === 'playing' && (
         <DeathOverlay
           respawnSecs={snd ? null : Math.max(0, Math.ceil(((myState.respawnAt || now) - now) / 1000))}
           snd={snd}
           killer={killer}
+          onChangeWeapon={loadout.length > 1 ? openWheel : null}
         />
       )}
-      <AlertBanner alert={alert} top={(topH ? hud.top + topH : hud.top + 120) + 6} />
+      <AlertBanner alert={alert} top={hud.top + (row1H || 90) + 6} />
       {state.phase === 'countdown' && <CountdownOverlay state={state} now={now} meTeam={myTeam} />}
-      {state.phase === 'roundEnd' && snd && <RoundBreak state={state} now={now} />}
+      {state.phase === 'roundEnd' && snd && <RoundBreak state={state} now={now} meTeam={myTeam} />}
 
       <WeaponWheel visible={wheelOpen} loadout={loadout} currentId={weaponId} onPick={pickWeapon} onClose={() => setWheelOpen(false)} insets={insets} />
-      <ScoreboardOverlay visible={scoresOpen} state={state} meId={meId} insets={insets} onClose={() => setScoresOpen(false)} />
+      <ScoreboardOverlay visible={scoresOpen} state={state} meId={meId} insets={insets} clock={state.endless ? 'LIVE' : formatClock(timerMs)} onClose={() => setScoresOpen(false)} />
       <MapOverlay
         visible={mapOpen}
         onClose={() => setMapOpen(false)}
@@ -1595,7 +1783,7 @@ function sndObjective(state, meId, myPos, now) {
     if (bomb.state === 'carried' && bomb.carrier === meId) {
       const site = myPos ? snd.sites.find((x) => engine.insideRadius(myPos, x, x.r || engine.SITE_RADIUS_M)) : null
       if (site) return { text: `Inside site ${site.id} — hold PLANT`, action: !act || myAct ? { kind: 'plant', site: site.id } : null }
-      return { text: myPos ? `You have the bomb 💣 — site ${nearest?.id}: ${where(nearest)}` : 'You have the bomb 💣 — waiting for GPS…' }
+      return { text: myPos ? `You have the bomb · site ${nearest?.id}: ${where(nearest)}` : 'You have the bomb · waiting for GPS…' }
     }
     if (act?.kind === 'plant') return { text: `${state.players[act.by]?.name || 'A teammate'} is planting at ${act.site} — cover them` }
     if (bomb.state === 'dropped') {
@@ -1610,43 +1798,63 @@ function sndObjective(state, meId, myPos, now) {
 }
 
 const styles = StyleSheet.create({
-  killerCard: { marginTop: 22, alignItems: 'center', paddingHorizontal: 18, paddingVertical: 12, backgroundColor: 'rgba(8,10,14,0.8)', borderRadius: 4, minWidth: 220 },
-  killerKicker: { color: 'rgba(255,255,255,0.75)', fontSize: 10, fontWeight: '900', letterSpacing: 2.4 },
-  killerRow: { alignItems: 'center', marginTop: 4 },
-  killerName: { color: HUD.red, fontSize: 22, fontWeight: '900', letterSpacing: 0.8 },
-  killerHow: { color: 'rgba(255,255,255,0.8)', fontSize: 12, fontWeight: '700', marginTop: 2 },
+  // tagged out
+  deadDim: { backgroundColor: 'rgba(60,6,14,0.62)' },
+  deadEdge: { borderWidth: 10, borderColor: 'rgba(255,61,82,0.45)' },
+  deadBody: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 16, gap: 30 },
+  deadLabel: { fontFamily: FONT.ui, fontSize: 11, letterSpacing: 2.6, color: 'rgba(242,244,247,0.8)', ...stShadow },
+  killerCard: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingVertical: 10, backgroundColor: 'rgba(8,10,14,0.8)', borderRadius: ST.radius, borderLeftWidth: 3, borderLeftColor: ST.enemy, maxWidth: 340 },
+  killerAvatar: { width: 44, height: 44, backgroundColor: '#3c434c', alignItems: 'center', justifyContent: 'center', borderRadius: 2 },
+  killerInitial: { fontFamily: FONT.display, fontSize: 18, color: '#fff' },
+  killerName: { fontFamily: FONT.display, fontSize: 22, color: ST.enemy },
+  killerHow: { fontFamily: FONT.uiSemi, fontSize: 12, color: 'rgba(242,244,247,0.8)' },
+  deadCount: { fontFamily: FONT.display, fontSize: 72, lineHeight: 76, color: '#fff', fontVariant: ['tabular-nums'], includeFontPadding: false, ...stShadow },
+  deadTrack: { width: 160, height: 4, backgroundColor: 'rgba(255,255,255,0.2)' },
+  deadFill: { height: 4, backgroundColor: '#ffffff' },
+  deadButtons: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 10 },
+  deadBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, height: 44, paddingHorizontal: 16, borderRadius: ST.radius, backgroundColor: 'rgba(8,10,14,0.8)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.22)' },
+  deadBtnText: { fontFamily: FONT.ui, fontSize: 13, letterSpacing: 1.2, color: '#fff' },
+  deadFollow: { height: 44, paddingHorizontal: 16, minWidth: 120 },
+  tagOut: { position: 'absolute', width: 100, alignItems: 'center', gap: 4 },
+  tagOutText: { fontFamily: FONT.display, fontSize: 11, letterSpacing: 1, color: ST.enemy, ...stShadow },
+  // frame
   fill: { flex: 1, backgroundColor: '#000', overflow: 'hidden' },
-  noCam: { alignItems: 'center', justifyContent: 'center', padding: 24, backgroundColor: '#111' },
-  topCol: { position: 'absolute', gap: 6 },
-  row1: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, minHeight: 48 },
-  centerBlock: { flex: 1, minWidth: 0, alignItems: 'center' },
+  noCam: { alignItems: 'center', justifyContent: 'center', padding: 24, backgroundColor: ST.ground2 },
+  hipScrim: { backgroundColor: 'rgba(11,13,17,0.86)' },
+  crosshair: { position: 'absolute', width: 64, height: 64 },
+  // top
+  topCol: { position: 'absolute', gap: 8 },
+  row1: { flexDirection: 'row', alignItems: 'flex-start' },
+  clockAbs: { position: 'absolute', left: 0, right: 0, top: 2, alignItems: 'center' },
   rowCenter: { alignItems: 'center' },
   row3: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 },
-  row3Left: { flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 1 },
-  aboveDock: { position: 'absolute', gap: 8 },
+  // centre
+  info: { position: 'absolute', left: 24, right: 24, alignItems: 'center', overflow: 'hidden' },
+  sightText: { fontFamily: FONT.ui, fontSize: 11, letterSpacing: 1.4, color: '#fff', textAlign: 'center', ...stShadow },
+  aimMode: { fontFamily: FONT.ui, fontSize: 10, letterSpacing: 1.4, color: ST.objective, marginTop: 4, textAlign: 'center', ...stShadow },
+  marker: { fontFamily: FONT.display, fontSize: 15, letterSpacing: 0.6, marginTop: 8, textAlign: 'center', ...stShadow },
+  tip: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 10, maxWidth: 330, paddingHorizontal: 10, paddingVertical: 6, borderRadius: ST.radius, backgroundColor: HUD.panel, borderLeftWidth: 2, borderLeftColor: ST.friendly },
+  tipText: { flexShrink: 1, fontFamily: FONT.uiSemi, fontSize: 12, color: '#fff', lineHeight: 16 },
+  hip: { position: 'absolute', left: 12, right: 12, alignItems: 'center', justifyContent: 'center', gap: 10, overflow: 'hidden' },
+  hipCue: { fontFamily: FONT.ui, fontSize: 11, letterSpacing: 1.8, color: 'rgba(242,244,247,0.75)' },
+  // above the dock
+  aboveDock: { position: 'absolute', gap: 8, alignItems: 'center' },
+  objective: { alignItems: 'center', gap: 10, alignSelf: 'stretch' },
+  objectiveText: { ...stType.body, fontFamily: FONT.ui, color: '#fff', textAlign: 'center', ...stShadow },
+  warn: { fontFamily: FONT.ui, fontSize: 10.5, letterSpacing: 1, color: ST.objective, ...stShadow, maxWidth: 240 },
+  hint: { fontFamily: FONT.uiSemi, fontSize: 11, letterSpacing: 1.4, color: 'rgba(242,244,247,0.75)', ...stShadow },
+  pillWarn: { flexDirection: 'row', alignItems: 'center', gap: 7, paddingHorizontal: 12, paddingVertical: 6, borderRadius: ST.radius, backgroundColor: 'rgba(8,10,14,0.8)', borderLeftWidth: 3, borderLeftColor: ST.enemy, maxWidth: '100%' },
+  pillWarnText: { flexShrink: 1, fontFamily: FONT.ui, fontSize: 11, letterSpacing: 1.3, color: '#fff' },
+  // dock
   dock: { position: 'absolute', alignItems: 'flex-end', justifyContent: 'space-between' },
-  fireCol: { gap: DOCK_GAP },
-  consumablesRow: { flexDirection: 'row', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' },
-  opticsRow: { flexDirection: 'row', gap: 6 },
-  recDot: { width: 11, height: 11, borderRadius: 6, backgroundColor: '#ff2d3d', borderWidth: 1.5, borderColor: '#fff' },
-  scoreBtn: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 5, borderRadius: radii.pill, backgroundColor: HUD.panel, borderWidth: 1, borderColor: HUD.border },
-  scoreBtnText: { fontSize: 10, fontWeight: '900', color: '#fff', letterSpacing: 1 },
-  center: { position: 'absolute', left: 0, right: 0, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 30, overflow: 'hidden' },
-  arrow: { fontSize: 64, color: colors.onBrand, ...hudShadow },
-  topEdge: { alignSelf: 'center', marginTop: 4, fontSize: 12, fontWeight: '800', letterSpacing: 3, color: colors.gold, ...hudShadow },
-  sightText: { fontSize: 11, fontWeight: '900', letterSpacing: 1.2, color: '#fff', marginTop: 12, textAlign: 'center', ...hudShadow },
-  marker: { fontSize: 17, fontWeight: '900', marginTop: 6, textAlign: 'center', ...hudShadow },
-  tip: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 10, maxWidth: 320, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 10, backgroundColor: HUD.panel, borderWidth: 1, borderColor: HUD.border },
-  tipText: { flexShrink: 1, fontSize: 11, fontWeight: '700', color: '#fff', lineHeight: 15 },
-  objective: { alignItems: 'center', gap: 10 },
-  objectiveText: { ...type.body, fontWeight: '700', color: colors.onBrand, textAlign: 'center', ...hudShadow },
-  warn: { fontSize: 11, fontWeight: '800', color: colors.gold, ...hudShadow, maxWidth: 220 },
-  bracket: { position: 'absolute', borderWidth: 1.5, borderRadius: 6 },
-  areaWarn: { position: 'absolute', alignSelf: 'center', flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: 'rgba(255,51,70,0.88)', paddingHorizontal: 14, paddingVertical: 8, borderRadius: radii.pill },
-  areaWarnText: { fontSize: 10.5, fontWeight: '900', letterSpacing: 1.2, color: '#fff' },
-  vignette: { ...StyleSheet.absoluteFill, borderWidth: 40, borderColor: 'rgba(224,79,79,0.7)', backgroundColor: 'rgba(224,79,79,0.18)' },
-  modePill: { flexShrink: 1, maxWidth: 190, backgroundColor: HUD.panel, paddingHorizontal: 10, paddingVertical: 5, borderRadius: radii.pill, borderWidth: 1, borderColor: HUD.border },
-  modePillText: { fontSize: 10, fontWeight: '800', color: '#fff', letterSpacing: 0.4 },
-  aimMode: { fontSize: 10, fontWeight: '900', letterSpacing: 1.2, color: colors.gold, marginTop: 4, textAlign: 'center', ...hudShadow },
-  deadOverlay: { ...StyleSheet.absoluteFill, backgroundColor: 'rgba(120,0,20,0.5)', alignItems: 'center', justifyContent: 'center' },
+  leftCol: { gap: 8 },
+  rightCol: { gap: DOCK_GAP, flexShrink: 1 },
+  equipRow: { flexDirection: 'row' },
+  opticsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  recDot: { width: 11, height: 11, borderRadius: 6, backgroundColor: ST.enemy, borderWidth: 1.5, borderColor: '#fff' },
+  streak: { gap: 4 },
+  streakRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  streakPip: { width: 13, height: 13, transform: [{ rotate: '45deg' }], margin: 2 },
+  streakMore: { fontFamily: FONT.display, fontSize: 13, color: ST.objective, marginLeft: 2, ...stShadow },
+  vignette: { ...StyleSheet.absoluteFill, borderWidth: 40, borderColor: 'rgba(255,61,82,0.6)', backgroundColor: 'rgba(255,61,82,0.16)' },
 })

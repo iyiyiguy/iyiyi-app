@@ -66,11 +66,15 @@ export function newSecret(state) {
 
 const feed = (state, text, now) => [{ id: `${now}-${Math.random().toString(36).slice(2, 6)}`, text }, ...state.feed].slice(0, 6)
 
-export function crewProgress(state, imposterId) {
+// Crew task progress 0..1. Players who left the game (not in presentIds, when given) drop
+// out of the count entirely, as in Among Us: otherwise one disconnect would make the task
+// win impossible.
+export function crewProgress(state, imposterId, presentIds) {
   let done = 0
   let total = 0
   for (const id of Object.keys(state.tasks)) {
     if (id === imposterId) continue
+    if (presentIds && !presentIds.has(id)) continue
     for (const t of state.tasks[id]) { total += 1; if (t.done) done += 1 }
   }
   return total ? done / total : 0
@@ -115,21 +119,29 @@ function startMeeting(state, kind, calledBy, body, now) {
   }
 }
 
-function resolveMeeting(state, secret, now) {
-  const m = state.meeting
-  const aliveIds = Object.keys(state.players).filter((id) => state.players[id].alive)
+// Among Us rules: the most-voted player is ejected unless that's a tie or Skip has at
+// least as many votes. Not voting counts as nothing.
+export function voteOutcome(state, votes) {
   const tally = {}
   let skip = 0
-  for (const voter of Object.keys(m.votes)) {
+  for (const voter of Object.keys(votes)) {
     if (!state.players[voter]?.alive) continue
-    const v = m.votes[voter]
+    const v = votes[voter]
     if (v === 'skip') skip += 1
-    else tally[v] = (tally[v] || 0) + 1
+    else if (state.players[v]?.alive) tally[v] = (tally[v] || 0) + 1
   }
+  const ranked = Object.entries(tally).sort((a, b) => b[1] - a[1])
+  const top = ranked[0]
+  const tie = !!top && ranked.length > 1 && ranked[1][1] === top[1]
+  const ejected = top && !tie && top[1] > skip ? top[0] : null
+  return { ejected, tally, skip, tie }
+}
+
+function resolveMeeting(state, secret, now) {
+  const m = state.meeting
   secret.voteLog.push({ meetingNo: state.meetingNo, votes: { ...m.votes } })
   secret.lastKillAt = now // kill cooldown restarts after every meeting
-  let ejected = null
-  for (const id of Object.keys(tally)) if (tally[id] > aliveIds.length / 2) ejected = id
+  const { ejected, tally, skip, tie } = voteOutcome(state, m.votes)
   const players = { ...state.players }
   if (ejected) players[ejected] = { ...players[ejected], alive: false, ejected: true }
   return {
@@ -139,7 +151,7 @@ function resolveMeeting(state, secret, now) {
     meeting: null,
     meetingReadyAt: now + MEETING_COOLDOWN_MS,
     lastMeeting: { at: now, ejected, wasImposter: ejected ? ejected === secret.imposterId : null, tally, skip, voters: Object.keys(m.votes).length },
-    feed: feed(state, ejected ? `${players[ejected].name} was voted out` : 'No one was voted out', now),
+    feed: feed(state, ejected ? `${players[ejected].name} was voted out` : `No one was voted out${tie ? ' (tie)' : ''}`, now),
   }
 }
 
@@ -148,6 +160,10 @@ export function tick(state, secret, { now, presentIds }) {
   if (state.phase === 'countdown') return now >= state.startsAt ? { ...state, phase: 'playing' } : state
   let next = state
   if (next.sabotage && now >= next.sabotage.until) next = { ...next, sabotage: null, feed: feed(next, 'Comms came back online', now) }
+  if (next.phase === 'playing') {
+    const progress = crewProgress(next, secret?.imposterId, presentIds)
+    if (progress !== next.progress) next = { ...next, progress }
+  }
   if (next.phase === 'meeting' && next.meeting) {
     const aliveIds = Object.keys(next.players).filter((id) => next.players[id].alive && presentIds.has(id))
     const allVoted = now >= next.meeting.discussUntil && aliveIds.every((id) => next.meeting.votes[id] !== undefined)
@@ -174,7 +190,7 @@ export function applyAction(state, secret, action, from, { now, posOf, stations,
         tasks: { ...state.tasks, [from]: list.map((t, j) => (j === i ? { ...t, done: true } : t)) },
         players: { ...state.players, [from]: { ...me, tasksDone: me.tasksDone + 1 } },
       }
-      next.progress = crewProgress(next, secret.imposterId)
+      next.progress = crewProgress(next, secret.imposterId, presentIds)
       break
     }
     case 'kill': {
@@ -221,7 +237,7 @@ export function applyAction(state, secret, action, from, { now, posOf, stations,
       if (state.phase !== 'playing' || from !== secret.imposterId || !me.alive || state.sabotage) return { state }
       if (now < secret.sabotageReadyAt) return notice(`Sabotage ready in ${Math.ceil((secret.sabotageReadyAt - now) / 1000)}s.`)
       secret.sabotageReadyAt = now + SABOTAGE_COOLDOWN_MS
-      next = { ...state, sabotage: { until: now + SABOTAGE_MS }, feed: feed(state, '📡 Comms sabotaged!', now) }
+      next = { ...state, sabotage: { until: now + SABOTAGE_MS }, feed: feed(state, 'Comms sabotaged!', now) }
       break
     }
     case 'fix': {

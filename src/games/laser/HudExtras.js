@@ -1,52 +1,50 @@
 // Laser Tag HUD extras: weapon switcher (+ wheel), scoreboard, the S&D hold-to-plant button,
-// bomb alerts / countdown, and floating enemy markers. All overlays here are in-tree
-// Views (never native Modals) so they can't get stuck, and every one of them swallows
+// bomb alerts / countdown, camera target brackets and enemy markers. All overlays here are
+// in-tree Views (never native Modals) so they can't get stuck, and every one of them swallows
 // touches so a tap on the HUD never fires the gun.
 import React, { memo, useEffect, useRef, useState } from 'react'
-import { Animated, Easing, Pressable, ScrollView, StyleSheet, Text, View, Image, useWindowDimensions } from 'react-native'
+import { Animated, Easing, Image, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import Svg, { Circle } from 'react-native-svg'
-import { TEAMS } from '../../lib/multiplayer'
 import { buzz } from '../../lib/gamePrefs'
 import { playSfx } from '../../lib/gunAudio'
 import { WeaponSpinWheel } from './WeaponSpinWheel'
 import { gunArt } from '../../lib/gunArt'
-import { HUD, hudSheet, hudType } from './HudPro'
+import { HUD, NameTag, relColor } from './HudPro'
 import { PlayerTap } from '../MultiplayerUI'
 import GameFollowButton from '../../components/GameFollowButton'
+import { FONT, ST, stShadow, stType, withAlpha } from '../studio'
+import { LASER_MODES, TEAMS } from '../../lib/multiplayer'
 
-const hudShadow = { textShadowColor: 'rgba(0,0,0,0.85)', textShadowRadius: 4, textShadowOffset: { width: 0, height: 1 } }
 const W = '#fff'
-const PANEL = HUD.sheet
-const BORDER = HUD.border
-const MUTED = HUD.muted
-const GOLD = HUD.gold
-const RED = HUD.red
+const MUTED = ST.muted
+const GOLD = ST.objective
+const RED = ST.enemy
 
 // ---------------------------------------------------------------------------
 // Weapon switcher
 // ---------------------------------------------------------------------------
 
-/** Chip showing the current weapon. Tap = spin-wheel weapon picker. */
+/** Chip showing the current weapon. Tap = weapon wheel. */
 export const WeaponChip = memo(function WeaponChip({ weapon, count, onWheel, maxWidth }) {
   return (
     <Pressable
       onPress={onWheel}
       hitSlop={6}
-      style={({ pressed }) => [s.chip, Number.isFinite(maxWidth) && { maxWidth }, pressed && { transform: [{ scale: 0.95 }] }]}
+      style={({ pressed }) => [s.chip, Number.isFinite(maxWidth) && { maxWidth }, pressed && { opacity: 0.85 }]}
       accessibilityRole="button"
       accessibilityLabel={`Weapon: ${weapon?.name}. Tap to choose a weapon`}
     >
       <Image source={gunArt(weapon?.id)} style={s.chipImg} resizeMode="contain" />
       <View style={{ flexShrink: 1 }}>
-        <Text style={s.chipName} numberOfLines={1}>{weapon?.name}</Text>
-        <Text style={s.chipSub} numberOfLines={1}>{weapon?.automatic ? 'AUTO' : weapon?.shotsPerClick > 1 ? 'BURST' : 'SEMI'} · ∞{count > 1 ? `  ·  ${count} guns ◎` : ''}</Text>
+        <Text style={s.chipName} numberOfLines={1}>{String(weapon?.name || '').toUpperCase()}</Text>
+        <Text style={s.chipSub} numberOfLines={1}>{weapon?.automatic ? 'AUTO' : weapon?.shotsPerClick > 1 ? 'BURST' : 'SEMI'} · ∞{count > 1 ? `  ·  ${count} GUNS` : ''}</Text>
       </View>
     </Pressable>
   )
 })
 
-/** Weapon picker: the spin wheel (kept under this name for existing importers). */
+/** Weapon picker: the radial wheel (kept under this name for existing importers). */
 export const WeaponWheel = WeaponSpinWheel
 
 // ---------------------------------------------------------------------------
@@ -56,91 +54,103 @@ export const WeaponWheel = WeaponSpinWheel
 function rankedPlayers(state) {
   return Object.entries(state?.players || {})
     .map(([id, p]) => ({ id, ...p }))
-    .sort((a, b) => (b.score - a.score) || (b.kills - a.kills) || (a.deaths - b.deaths))
+    .sort((a, b) => ((b.score || 0) - (a.score || 0)) || ((b.kills || 0) - (a.kills || 0)) || ((a.deaths || 0) - (b.deaths || 0)))
 }
 
-/** Sorted K/D/score table; grouped by team in team modes. */
-export function ScoreTable({ state, meId, shotsBy }) {
-  const rows = rankedPlayers(state)
-  const teamMode = state?.mode && state.mode !== 'ffa'
-  const groups = teamMode
-    ? ['A', 'B'].map((t) => ({ team: t, rows: rows.filter((r) => r.team === t) })).filter((g) => g.rows.length)
-    : [{ team: null, rows }]
-  const showBt = rows.some((r) => (r.bystanderTags || 0) > 0)
-  const acc = (r) => {
-    const shots = shotsBy?.[r.id]
-    return shots ? `${Math.round((Math.min(r.hits, shots) / shots) * 100)}%` : '—'
-  }
+/** Team totals: my team first (friendly), then the other (enemy). */
+export function TeamTotals({ state, meId, style }) {
+  if (!state || state.mode === 'ffa') return null
+  const mine = state.players?.[meId]?.team || 'A'
+  const other = mine === 'A' ? 'B' : 'A'
+  const val = (t) => (state.mode === 'snd' ? state.snd?.wins?.[t] : state.teamScore?.[t]) ?? 0
+  const unit = state.mode === 'snd' ? 'ROUNDS' : 'TAG-OUTS'
   return (
-    <View>
-      {groups.map((g) => {
-        const color = g.team ? TEAMS[g.team]?.color : null
-        const total = g.rows.reduce((n, r) => n + (r.kills || 0), 0)
-        const teamScore = g.team && state.mode === 'tdm' ? state.teamScore?.[g.team] : g.team && state.mode === 'snd' ? state.snd?.wins?.[g.team] : null
-        return (
-          <View key={g.team || 'all'} style={{ marginBottom: 10 }}>
-            {g.team && (
-              <View style={[s.teamHead, { borderLeftColor: color }]}>
-                <Text style={[s.teamName, { color }]}>{TEAMS[g.team]?.name}</Text>
-                <Text style={s.teamTotal}>{teamScore != null ? `${teamScore} ${state.mode === 'snd' ? 'rounds' : 'tag-outs'}` : `${total} tag-outs`}</Text>
-              </View>
-            )}
-            <View style={s.tHead}>
-              <Text style={[s.th, { width: 22 }]}>#</Text>
-              <Text style={[s.th, { flex: 1 }]}>PLAYER</Text>
-              <Text style={[s.th, s.c]}>K</Text>
-              <Text style={[s.th, s.c]}>D</Text>
-              {showBt && <Text style={[s.th, s.c]}>BT</Text>}
-              {shotsBy && <Text style={[s.th, s.cw]}>ACC</Text>}
-              <Text style={[s.th, s.cw]}>SCORE</Text>
-              <View style={s.fcol} />
-            </View>
-            {g.rows.map((r, i) => (
-              <View key={r.id} style={[s.tRow, r.id === meId && s.tRowMe]}>
-                <Text style={[s.td, { width: 22, color: MUTED }]}>{i + 1}</Text>
-                <PlayerTap player={{ id: r.id, username: r.name }} style={{ flex: 1, flexDirection: 'row', alignItems: 'center' }}>
-                  {!r.alive && state.phase === 'playing' && <Text style={s.deadTag}>✕ </Text>}
-                  <Text style={[s.td, { flexShrink: 1 }, r.id === meId && { fontWeight: '800' }]} numberOfLines={1}>{r.name}{r.id === meId ? ' (you)' : ''}</Text>
-                </PlayerTap>
-                <Text style={[s.td, s.c]}>{r.kills || 0}</Text>
-                <Text style={[s.td, s.c]}>{r.deaths || 0}</Text>
-                {showBt && <Text style={[s.td, s.c]}>{r.bystanderTags || 0}</Text>}
-                {shotsBy && <Text style={[s.td, s.cw]}>{acc(r)}</Text>}
-                <Text style={[s.td, s.cw, { fontWeight: '800' }]}>{r.score || 0}</Text>
-                <View style={s.fcol}>{r.id !== meId ? <GameFollowButton userId={r.id} name={r.name} size="sm" /> : null}</View>
-              </View>
-            ))}
-          </View>
-        )
-      })}
-      {showBt && <Text style={[s.th, { marginTop: 2 }]}>BT = Bystander tags (iYiYi users outside the match, +25 each)</Text>}
+    <View style={[s.totals, style]}>
+      {[[mine, ST.friendly, `${TEAMS[mine]?.name || ''} · YOUR TEAM`], [other, ST.enemy, TEAMS[other]?.name || '']].map(([t, c, label]) => (
+        <View key={t} style={[s.totalTile, { backgroundColor: withAlpha(c, 0.12), borderTopColor: c }]}>
+          <Text style={[stType.label, { color: c }]} numberOfLines={1}>{String(label).toUpperCase()}</Text>
+          <Text style={s.totalNum}>{val(t)}</Text>
+          <Text style={[stType.label, { fontSize: 9 }]}>{unit}</Text>
+        </View>
+      ))}
     </View>
   )
 }
 
-/** In-match scoreboard overlay (X or tap outside to close). */
-export function ScoreboardOverlay({ visible, state, meId, onClose, insets }) {
+/**
+ * Sorted K / D / score table (studio scoreboard). Team modes show a role-coloured square
+ * next to each name. shotsBy (match summary) adds ACC; bystander tags add BT.
+ */
+export function ScoreTable({ state, meId, shotsBy }) {
+  const rows = rankedPlayers(state)
+  const teamMode = state?.mode && state.mode !== 'ffa'
+  const showBt = rows.some((r) => (r.bystanderTags || 0) > 0)
+  const acc = (r) => {
+    const shots = shotsBy?.[r.id]
+    return shots ? `${Math.round((Math.min(r.hits || 0, shots) / shots) * 100)}%` : '—'
+  }
+  return (
+    <View>
+      <View style={s.tHead}>
+        <Text style={[s.th, { width: 22 }]}>#</Text>
+        <Text style={[s.th, { flex: 1 }]}>PLAYER</Text>
+        <Text style={[s.th, s.c]}>K</Text>
+        <Text style={[s.th, s.c]}>D</Text>
+        {showBt && <Text style={[s.th, s.c]}>BT</Text>}
+        {shotsBy && <Text style={[s.th, s.cw]}>ACC</Text>}
+        <Text style={[s.th, s.cw]}>SCORE</Text>
+        <View style={s.fcol} />
+      </View>
+      {rows.map((r, i) => {
+        const me = r.id === meId
+        const color = relColor(state, meId, r.id)
+        return (
+          <View key={r.id} style={[s.tRow, me && s.tRowMe]}>
+            <Text style={[s.tdRank, { width: 22 }]}>{i + 1}</Text>
+            <PlayerTap player={me ? null : { id: r.id, username: r.name }} style={s.nameCell}>
+              {teamMode || me ? <View style={[s.teamSq, { backgroundColor: color }]} /> : null}
+              {!r.alive && state.phase === 'playing' ? <Ionicons name="close" size={12} color={RED} /> : null}
+              <Text style={[s.tdName, !r.alive && state.phase === 'playing' && { color: MUTED }]} numberOfLines={1}>{me ? 'YOU' : r.name}</Text>
+            </PlayerTap>
+            <Text style={[s.td, s.c]}>{r.kills || 0}</Text>
+            <Text style={[s.td, s.c]}>{r.deaths || 0}</Text>
+            {showBt && <Text style={[s.td, s.c]}>{r.bystanderTags || 0}</Text>}
+            {shotsBy && <Text style={[s.td, s.cw]}>{acc(r)}</Text>}
+            <Text style={[s.tdScore, s.cw]}>{r.score || 0}</Text>
+            <View style={s.fcol}>{!me ? <GameFollowButton userId={r.id} name={r.name} size="sm" /> : null}</View>
+          </View>
+        )
+      })}
+      {showBt && <Text style={[s.th, { marginTop: 6 }]}>BT = BYSTANDER TAGS (IYIYI USERS OUTSIDE THE MATCH, +25 EACH)</Text>}
+    </View>
+  )
+}
+
+/** In-match scoreboard (full-screen black glass; X or the Android back button closes it). */
+export function ScoreboardOverlay({ visible, state, meId, onClose, insets, clock }) {
   const { height: winH } = useWindowDimensions()
   if (!visible || !state) return null
-  const maxH = Math.max(160, Math.min(460, winH - (insets?.top || 0) - (insets?.bottom || 0) - 140))
+  const teamMode = state.mode !== 'ffa'
+  const maxH = Math.max(160, winH - (insets?.top || 0) - (insets?.bottom || 0) - (teamMode ? 250 : 160))
+  const kicker = `${String(LASER_MODES[state.mode]?.name || 'Laser Tag').toUpperCase()}${clock ? ` · ${clock}` : ''}`
   return (
     <View style={[StyleSheet.absoluteFill, s.overlayRoot]}>
       <Pressable style={s.backdrop} onPress={onClose} accessibilityRole="button" accessibilityLabel="Close scoreboard" />
-      <View style={[s.centerWrap, { paddingTop: (insets?.top || 0) + 16, paddingBottom: (insets?.bottom || 0) + 16 }]} pointerEvents="box-none">
-        <View style={s.panel}>
-          <View style={s.panelHead}>
-            <View>
-              <Text style={hudType.kicker}>LIVE STANDINGS</Text>
-              <Text style={s.panelTitle}>SCOREBOARD</Text>
-            </View>
-            <Pressable onPress={onClose} hitSlop={12} style={s.close} accessibilityRole="button" accessibilityLabel="Close scoreboard">
-              <Ionicons name="close" size={20} color={W} />
-            </Pressable>
+      <View style={[s.boardWrap, { paddingTop: (insets?.top || 0) + 12, paddingBottom: (insets?.bottom || 0) + 12, paddingLeft: 16 + (insets?.left || 0), paddingRight: 16 + (insets?.right || 0) }]} pointerEvents="box-none">
+        <View style={s.panelHead}>
+          <View style={{ flex: 1 }}>
+            <Text style={stType.kicker} numberOfLines={1}>{kicker}</Text>
+            <Text style={stType.title}>SCOREBOARD</Text>
           </View>
-          <ScrollView style={{ maxHeight: maxH }}>
-            <ScoreTable state={state} meId={meId} />
-          </ScrollView>
+          <Pressable onPress={onClose} hitSlop={12} style={s.close} accessibilityRole="button" accessibilityLabel="Close scoreboard">
+            <Ionicons name="close" size={20} color={W} />
+          </Pressable>
         </View>
+        <TeamTotals state={state} meId={meId} style={{ marginBottom: 14 }} />
+        <ScrollView style={{ maxHeight: maxH, flexGrow: 0 }}>
+          <ScoreTable state={state} meId={meId} />
+        </ScrollView>
+        <Text style={[stType.small, { marginTop: 12 }]}>Tap a name for their iYiYi profile. Follow works on teammates and enemies.</Text>
       </View>
     </View>
   )
@@ -312,7 +322,7 @@ export function BigActionButton({ title, onPress, color = GOLD }) {
   return (
     <Animated.View style={{ transform: [{ scale }] }}>
       <Pressable onPress={onPress} style={({ pressed }) => [s.bigBtn, { backgroundColor: color, opacity: pressed ? 0.85 : 1 }]} accessibilityRole="button" accessibilityLabel={title}>
-        <Text style={s.bigBtnText}>{title}</Text>
+        <Text style={s.bigBtnText}>{String(title).toUpperCase()}</Text>
       </Pressable>
     </Animated.View>
   )
@@ -322,18 +332,28 @@ export function BigActionButton({ title, onPress, color = GOLD }) {
 // Bomb alerts
 // ---------------------------------------------------------------------------
 
+/** alert: { title, sub?, color?, icon? (Ionicons name), key }. Slides in (kit: 180 ms). */
 export function AlertBanner({ alert, top }) {
-  const y = useRef(new Animated.Value(-120)).current
+  const y = useRef(new Animated.Value(-40)).current
+  const o = useRef(new Animated.Value(0)).current
   useEffect(() => {
     if (!alert) return
-    y.setValue(-120)
-    Animated.spring(y, { toValue: 0, useNativeDriver: true, damping: 14 }).start()
+    y.setValue(-40)
+    o.setValue(0)
+    Animated.parallel([
+      Animated.timing(y, { toValue: 0, duration: 180, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
+      Animated.timing(o, { toValue: 1, duration: 180, useNativeDriver: true }),
+    ]).start()
   }, [alert?.key]) // eslint-disable-line react-hooks/exhaustive-deps
   if (!alert) return null
+  const c = alert.color || RED
   return (
-    <Animated.View pointerEvents="none" style={[s.alert, { top, backgroundColor: alert.color || RED, transform: [{ translateY: y }] }]}>
-      <Text style={s.alertTitle}>{alert.title}</Text>
-      {!!alert.sub && <Text style={s.alertSub}>{alert.sub}</Text>}
+    <Animated.View pointerEvents="none" style={[s.alert, { top, borderLeftColor: c, opacity: o, transform: [{ translateY: y }] }]}>
+      {alert.icon ? <View style={[s.alertIcon, { borderColor: c }]}><Ionicons name={alert.icon} size={18} color={c} /></View> : null}
+      <View style={{ flexShrink: 1 }}>
+        <Text style={s.alertTitle} numberOfLines={2}>{String(alert.title || '').toUpperCase()}</Text>
+        {!!alert.sub && <Text style={s.alertSub} numberOfLines={2}>{alert.sub}</Text>}
+      </View>
     </Animated.View>
   )
 }
@@ -343,106 +363,125 @@ export function BombCountdown({ msLeft, top, inline }) {
   const secs = Math.max(0, Math.ceil(msLeft / 1000))
   const pulse = useRef(new Animated.Value(1)).current
   useEffect(() => {
-    pulse.setValue(1.15)
+    pulse.setValue(1.12)
     Animated.timing(pulse, { toValue: 1, duration: 400, easing: Easing.out(Easing.quad), useNativeDriver: true }).start()
   }, [secs, pulse])
   return (
     <Animated.View pointerEvents="none" style={[s.bomb, inline ? s.bombInline : { top }, { transform: [{ scale: pulse }] }]}>
-      <Text style={s.bombLabel}>BOMB</Text>
+      <View style={s.bombHead}>
+        <View style={s.bombDiamond} />
+        <Text style={s.bombLabel}>BOMB</Text>
+      </View>
       <Text style={[s.bombTime, secs <= 10 && { color: RED }]}>{secs}</Text>
     </Animated.View>
   )
 }
 
 // ---------------------------------------------------------------------------
-// Enemy markers over heads (from the camera's body detection)
+// Camera target brackets (kit: corner brackets that stick to the person)
 // ---------------------------------------------------------------------------
 
-const EnemyMarker = memo(function EnemyMarker({ x, y, color, label }) {
+/** rects: [{ key, left, top, width, height, locked, head?: { left, top, width, height } }] */
+export const TargetBrackets = memo(function TargetBrackets({ rects }) {
+  if (!rects?.length) return null
+  return (
+    <View style={StyleSheet.absoluteFill} pointerEvents="none">
+      {rects.map((r) => {
+        const c = r.locked ? RED : 'rgba(255,255,255,0.6)'
+        const k = Math.max(8, Math.min(22, Math.min(r.width, r.height) * 0.18))
+        const t = r.locked ? 2.5 : 2
+        return (
+          <View key={r.key} style={{ position: 'absolute', left: r.left, top: r.top, width: r.width, height: r.height }}>
+            <View style={[s.corner, { left: 0, top: 0, width: k, height: k, borderLeftWidth: t, borderTopWidth: t, borderColor: c }]} />
+            <View style={[s.corner, { right: 0, top: 0, width: k, height: k, borderRightWidth: t, borderTopWidth: t, borderColor: c }]} />
+            <View style={[s.corner, { left: 0, bottom: 0, width: k, height: k, borderLeftWidth: t, borderBottomWidth: t, borderColor: c }]} />
+            <View style={[s.corner, { right: 0, bottom: 0, width: k, height: k, borderRightWidth: t, borderBottomWidth: t, borderColor: c }]} />
+            {r.locked && r.head && r.head.width > 6 ? (
+              <View style={[s.headZone, { left: r.head.left - r.left, top: r.head.top - r.top, width: r.head.width, height: r.head.height, borderRadius: Math.max(r.head.width, r.head.height) / 2 }]} />
+            ) : null}
+          </View>
+        )
+      })}
+    </View>
+  )
+})
+
+// ---------------------------------------------------------------------------
+// Enemy markers over heads (from the camera's body detection): the studio nameplate.
+// ---------------------------------------------------------------------------
+
+const MARKER_W = 132
+
+const EnemyMarker = memo(function EnemyMarker({ x, y, color, label, d, hp }) {
   const pos = useRef(new Animated.ValueXY({ x, y })).current
   const fade = useRef(new Animated.Value(0)).current
-  const bob = useRef(new Animated.Value(0)).current
   useEffect(() => {
-    Animated.timing(fade, { toValue: 1, duration: 180, useNativeDriver: true }).start()
-    const loop = Animated.loop(Animated.sequence([
-      Animated.timing(bob, { toValue: -5, duration: 450, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-      Animated.timing(bob, { toValue: 0, duration: 450, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-    ]))
-    loop.start()
-    return () => loop.stop()
-  }, [fade, bob])
+    Animated.timing(fade, { toValue: 1, duration: 160, useNativeDriver: true }).start()
+  }, [fade])
   useEffect(() => {
     Animated.spring(pos, { toValue: { x, y }, useNativeDriver: true, damping: 18, stiffness: 140 }).start()
   }, [x, y, pos])
   return (
-    <Animated.View pointerEvents="none" style={[s.enemy, { opacity: fade, transform: [{ translateX: pos.x }, { translateY: Animated.add(pos.y, bob) }] }]}>
-      {!!label && <Text style={[s.enemyLabel, { color }]} numberOfLines={1}>{label}</Text>}
-      <View style={[s.enemyCross, { borderColor: color }]}>
-        <View style={[s.enemyCrossH, { backgroundColor: color }]} />
-        <View style={[s.enemyCrossV, { backgroundColor: color }]} />
-      </View>
-      <Ionicons name="chevron-down" size={30} color={color} style={s.enemyChevron} />
+    <Animated.View pointerEvents="none" style={[s.enemy, { opacity: fade, transform: [{ translateX: pos.x }, { translateY: pos.y }] }]}>
+      <NameTag name={label} d={d} hp={hp} color={color} />
+      <View style={[s.enemyMark, { borderTopColor: color }]} />
     </Animated.View>
   )
 })
 
-/** markers: [{ id, x, y, color, label }] — x/y = screen point just above the head. */
+/** markers: [{ id, x, y, color, label, d?, hp? }] — x/y = screen point just above the head. */
 export const EnemyMarkers = memo(function EnemyMarkers({ markers }) {
   if (!markers?.length) return null
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="none">
-      {markers.map((m) => <EnemyMarker key={m.id} x={m.x - 30} y={m.y - 64} color={m.color} label={m.label} />)}
+      {markers.map((m) => <EnemyMarker key={m.id} x={m.x - MARKER_W / 2} y={m.y - 58} color={m.color || RED} label={m.label} d={m.d} hp={m.hp} />)}
     </View>
   )
 })
 
 const s = StyleSheet.create({
-  fcol: { width: 36, alignItems: 'flex-end' },
+  fcol: { width: 34, alignItems: 'flex-end' },
   overlayRoot: { zIndex: 60, elevation: 60 },
-  backdrop: { ...StyleSheet.absoluteFill, backgroundColor: 'rgba(0,0,0,0.55)' },
-  centerWrap: { flex: 1, justifyContent: 'center', paddingHorizontal: 12 },
-  panel: { ...hudSheet, padding: 16 },
-  panelHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 },
-  panelTitle: { ...hudType.title },
-  close: { width: 34, height: 34, borderRadius: 17, backgroundColor: 'rgba(255,255,255,0.14)', alignItems: 'center', justifyContent: 'center' },
-  chip: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 18, backgroundColor: 'rgba(0,0,0,0.55)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.25)', maxWidth: 210 },
-  chipIcon: { fontSize: 24 },
-  chipImg: { width: 44, height: 24 },
-  chipName: { fontSize: 13, fontWeight: '800', color: W, maxWidth: 140 },
-  chipSub: { fontSize: 10, fontWeight: '700', color: GOLD, letterSpacing: 0.5 },
-  wheelCenter: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  wheelHub: { position: 'absolute', width: 76, height: 76, borderRadius: 38, backgroundColor: 'rgba(255,255,255,0.08)', borderWidth: 1, borderColor: BORDER, alignItems: 'center', justifyContent: 'center' },
-  wheelHubText: { fontSize: 11, fontWeight: '800', color: MUTED },
-  wheelItem: { position: 'absolute', width: 76, height: 76, borderRadius: 38, backgroundColor: PANEL, borderWidth: 1.5, borderColor: BORDER, alignItems: 'center', justifyContent: 'center', padding: 4 },
-  wheelItemOn: { borderColor: GOLD, backgroundColor: 'rgba(255,201,77,0.18)' },
-  wheelName: { fontSize: 9, fontWeight: '700', color: W, textAlign: 'center' },
-  teamHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderLeftWidth: 4, paddingLeft: 8, marginBottom: 4 },
-  teamName: { fontSize: 13, fontWeight: '900', letterSpacing: 1.6, textTransform: 'uppercase' },
-  teamTotal: { fontSize: 12, fontWeight: '700', color: MUTED },
-  tHead: { flexDirection: 'row', alignItems: 'center', paddingVertical: 6, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: BORDER },
-  th: { ...hudType.label, fontSize: 9.5 },
-  tRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 8, paddingHorizontal: 4, borderRadius: 6, borderLeftWidth: 2, borderLeftColor: 'transparent' },
-  tRowMe: { backgroundColor: 'rgba(58,209,255,0.10)', borderLeftColor: HUD.accent },
-  td: { fontSize: 14, fontWeight: '700', color: W, fontVariant: ['tabular-nums'] },
-  c: { width: 30, textAlign: 'center' },
-  cw: { width: 52, textAlign: 'right' },
-  deadTag: { fontSize: 12, color: RED, fontWeight: '900' },
-  holdBtn: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingLeft: 10, paddingRight: 20, paddingVertical: 10, borderRadius: 30, borderWidth: 3, minWidth: 260, maxWidth: 360 },
-  holdTitle: { fontSize: 19, fontWeight: '900', color: W, letterSpacing: 0.8, ...hudShadow },
-  holdSub: { fontSize: 11, fontWeight: '700', color: 'rgba(255,255,255,0.8)', marginTop: 1 },
-  bigBtn: { paddingHorizontal: 34, paddingVertical: 18, borderRadius: 24, borderWidth: 3, borderColor: W, minWidth: 240, alignItems: 'center' },
-  bigBtnText: { fontSize: 22, fontWeight: '900', color: '#1a1000', letterSpacing: 1 },
-  alert: { position: 'absolute', left: 16, right: 16, borderRadius: 18, paddingVertical: 12, paddingHorizontal: 16, alignItems: 'center' },
-  alertTitle: { fontSize: 18, fontWeight: '900', color: W, textAlign: 'center' },
-  alertSub: { fontSize: 13, fontWeight: '700', color: 'rgba(255,255,255,0.9)', marginTop: 2, textAlign: 'center' },
-  bomb: { position: 'absolute', alignSelf: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.6)', borderRadius: 18, paddingHorizontal: 18, paddingVertical: 6, borderWidth: 2, borderColor: RED },
+  backdrop: { ...StyleSheet.absoluteFill, backgroundColor: 'rgba(11,13,17,0.94)' },
+  boardWrap: { flex: 1 },
+  panelHead: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, marginBottom: 14 },
+  close: { width: 40, height: 40, borderRadius: ST.radius, borderWidth: 1, borderColor: 'rgba(255,255,255,0.18)', alignItems: 'center', justifyContent: 'center' },
+  totals: { flexDirection: 'row', gap: 8 },
+  totalTile: { flex: 1, paddingHorizontal: 12, paddingVertical: 10, borderTopWidth: 3, borderRadius: ST.radius },
+  totalNum: { fontFamily: FONT.display, fontSize: 34, lineHeight: 38, color: ST.text, fontVariant: ['tabular-nums'], includeFontPadding: false },
+  chip: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 12, paddingVertical: 8, borderRadius: ST.radius, backgroundColor: HUD.panel, borderWidth: 1, borderColor: HUD.border, maxWidth: 210 },
+  chipImg: { width: 44, height: 24, tintColor: ST.text },
+  chipName: { fontFamily: FONT.display, fontSize: 13, color: W, maxWidth: 140 },
+  chipSub: { fontFamily: FONT.ui, fontSize: 10, color: ST.friendly, letterSpacing: 1 },
+  tHead: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 8, paddingBottom: 6, borderBottomWidth: 1, borderBottomColor: ST.line },
+  th: { ...stType.label, letterSpacing: 1.4 },
+  tRow: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 10, paddingHorizontal: 8, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.07)', borderLeftWidth: 3, borderLeftColor: 'transparent' },
+  tRowMe: { backgroundColor: 'rgba(57,213,255,0.12)', borderLeftColor: ST.friendly },
+  nameCell: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 8 },
+  teamSq: { width: 8, height: 8 },
+  tdRank: { fontFamily: FONT.displaySemi, fontSize: 13, color: MUTED, fontVariant: ['tabular-nums'] },
+  tdName: { flexShrink: 1, fontFamily: FONT.ui, fontSize: 15, color: ST.text },
+  td: { fontFamily: FONT.displaySemi, fontSize: 14, color: W, fontVariant: ['tabular-nums'] },
+  tdScore: { fontFamily: FONT.display, fontSize: 14, color: W, fontVariant: ['tabular-nums'] },
+  c: { width: 26, textAlign: 'center' },
+  cw: { width: 46, textAlign: 'right' },
+  holdBtn: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingLeft: 10, paddingRight: 18, paddingVertical: 10, borderRadius: ST.radius, borderWidth: 2, minWidth: 260, maxWidth: 360 },
+  holdTitle: { fontFamily: FONT.display, fontSize: 17, color: W, letterSpacing: 1, ...stShadow },
+  holdSub: { fontFamily: FONT.uiSemi, fontSize: 11, color: 'rgba(242,244,247,0.8)', marginTop: 1 },
+  bigBtn: { paddingHorizontal: 30, paddingVertical: 16, borderRadius: ST.radius, minWidth: 240, alignItems: 'center' },
+  bigBtnText: { fontFamily: FONT.display, fontSize: 18, color: ST.ink, letterSpacing: 2 },
+  alert: { position: 'absolute', left: 16, right: 16, flexDirection: 'row', alignItems: 'center', gap: 12, borderRadius: ST.radius, paddingVertical: 10, paddingHorizontal: 12, backgroundColor: 'rgba(8,10,14,0.86)', borderLeftWidth: 3 },
+  alertIcon: { width: 34, height: 34, borderWidth: 1, borderRadius: ST.radius, alignItems: 'center', justifyContent: 'center' },
+  alertTitle: { fontFamily: FONT.display, fontSize: 16, letterSpacing: 1, color: W },
+  alertSub: { fontFamily: FONT.uiSemi, fontSize: 12.5, color: 'rgba(242,244,247,0.85)', marginTop: 1 },
+  bomb: { position: 'absolute', alignSelf: 'center', alignItems: 'center', backgroundColor: 'rgba(8,10,14,0.72)', borderRadius: ST.radius, paddingHorizontal: 16, paddingVertical: 4, borderTopWidth: 2, borderTopColor: RED },
   bombInline: { position: 'relative', paddingVertical: 2, paddingHorizontal: 14 },
-  bombLabel: { fontSize: 11, fontWeight: '900', color: RED, letterSpacing: 2 },
-  bombTime: { fontSize: 40, fontWeight: '900', color: W, fontVariant: ['tabular-nums'], ...hudShadow },
-  enemy: { position: 'absolute', left: 0, top: 0, width: 60, alignItems: 'center' },
-  enemyLabel: { fontSize: 11, fontWeight: '900', maxWidth: 110, ...hudShadow },
-  enemyCross: { width: 22, height: 22, borderRadius: 11, borderWidth: 2, alignItems: 'center', justifyContent: 'center', marginTop: 2 },
-  enemyCrossH: { position: 'absolute', width: 12, height: 2 },
-  enemyCrossV: { position: 'absolute', width: 2, height: 12 },
-  enemyChevron: { marginTop: -6, ...hudShadow },
+  bombHead: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  bombDiamond: { width: 6, height: 6, backgroundColor: RED, transform: [{ rotate: '45deg' }] },
+  bombLabel: { fontFamily: FONT.ui, fontSize: 10, color: RED, letterSpacing: 2 },
+  bombTime: { fontFamily: FONT.display, fontSize: 30, lineHeight: 32, color: W, fontVariant: ['tabular-nums'], includeFontPadding: false, ...stShadow },
+  corner: { position: 'absolute' },
+  headZone: { position: 'absolute', borderWidth: 1, borderStyle: 'dashed', borderColor: 'rgba(255,61,82,0.75)' },
+  enemy: { position: 'absolute', left: 0, top: 0, width: MARKER_W, alignItems: 'center' },
+  enemyMark: { marginTop: 5, width: 0, height: 0, borderLeftWidth: 6, borderRightWidth: 6, borderTopWidth: 8, borderLeftColor: 'transparent', borderRightColor: 'transparent' },
 })

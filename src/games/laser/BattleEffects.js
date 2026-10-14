@@ -6,8 +6,10 @@
 // Animated for GPU-driven opacity/scale so the camera stays smooth.
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { Animated, Easing, StyleSheet, Text, View, useWindowDimensions } from 'react-native'
+import { Ionicons } from '@expo/vector-icons'
 import { bearingDeg } from '../../lib/multiplayer'
 import { ENEMY_BOLT, glowFor } from './gunGlow'
+import { FONT, ST, stShadow } from '../studio'
 
 // ─── Perspective helpers for the laser bolts ───
 // A bolt moving at constant speed away from the camera covers less and less of the screen
@@ -52,7 +54,8 @@ function MuzzleFlash({ id, angle, onDone }) {
       ]}
       pointerEvents="none"
     >
-      <Text style={st.flashEmoji}>{'💥'}</Text>
+      <View style={st.flashCore} />
+      {[0, 45, 90, 135].map((r) => <View key={r} style={[st.flashRay, { transform: [{ rotate: `${r}deg` }] }]} />)}
     </Animated.View>
   )
 }
@@ -112,7 +115,6 @@ function Fireball({ palette, size, duration, children }) {
       {ring(0, palette[1], 0.3, 1.8, 10)}
       {ring(1, palette[2], 0.3, 2.6, 8)}
       {ring(2, palette[3], 0.3, 3.4, 6)}
-      <Animated.Text style={{ fontSize: size * 0.45, opacity: fade, transform: [{ scale: t.interpolate({ inputRange: [0, 0.3, 1], outputRange: [0.3, 1.3, 1.5] }) }] }}>{'💥'}</Animated.Text>
       {children}
     </View>
   )
@@ -169,8 +171,6 @@ function MegaExplosion({ id, label, angle, dist, by, onDone }) {
   const far = Number.isFinite(dist) ? Math.min(1, Math.max(0, dist / 500)) : 0.3
   const size = Math.max(width, height * 0.6) * (1.25 - far * 0.45)
   const distText = Number.isFinite(dist) ? (dist < 1000 ? `${Math.round(dist)} m` : `${(dist / 1000).toFixed(1)} km`) : ''
-  const arrow = inView ? '' : rel < 0 ? '◀ ' : ''
-  const arrowR = inView ? '' : rel > 0 ? ' ▶' : ''
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="none">
       <ScreenFlash color={palette[4]} peak={inView ? 0.4 : 0.22} duration={MEGA_DURATION * 0.6} />
@@ -178,8 +178,12 @@ function MegaExplosion({ id, label, angle, dist, by, onDone }) {
         <Fireball palette={palette} size={size} duration={MEGA_DURATION} />
       </View>
       <View style={st.megaLabelWrap}>
-        <Text style={[st.megaLabel, { color: palette[1] }]}>{`${arrow}💥 ${String(label || 'Explosion').toUpperCase()}${distText ? ` · ${distText}` : ''}${arrowR}`}</Text>
-        {by ? <Text style={st.megaBy}>{by}</Text> : null}
+        <View style={st.megaRow}>
+          {!inView && rel < 0 ? <Ionicons name="caret-back" size={20} color={palette[1]} /> : null}
+          <Text style={[st.megaLabel, { color: palette[1] }]}>{`${String(label || 'Explosion').toUpperCase()}${distText ? ` · ${distText.toUpperCase()}` : ''}`}</Text>
+          {!inView && rel > 0 ? <Ionicons name="caret-forward" size={20} color={palette[1]} /> : null}
+        </View>
+        {by ? <Text style={st.megaBy}>{String(by).toUpperCase()}</Text> : null}
       </View>
     </View>
   )
@@ -244,33 +248,59 @@ function LaserBolt({ id, fromX, fromY, toX, toY, color, onDone }) {
   )
 }
 
-// ─── Kill notification, Call of Duty style: who you killed and with what ───
+// ─── Elimination banner (studio "Kill" board): ELIMINATED / NAME / weapon · how · points ───
 const KILL_MS = 2600
 const KILL_MAX = 3
 
-function KillBanner({ id, victim, weapon, points, index, onDone }) {
+function KillBanner({ id, victim, weapon, points, onDone }) {
   const a = useRef(new Animated.Value(0)).current
   useEffect(() => {
     Animated.sequence([
-      Animated.spring(a, { toValue: 1, friction: 6, tension: 120, useNativeDriver: true }),
-      Animated.delay(KILL_MS - 600),
+      Animated.timing(a, { toValue: 1, duration: 180, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
+      Animated.delay(KILL_MS - 480),
       Animated.timing(a, { toValue: 0, duration: 300, useNativeDriver: true }),
     ]).start(() => onDone(id))
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
   return (
     <Animated.View
       pointerEvents="none"
-      style={[st.kill, {
-        marginTop: index * 64,
-        opacity: a,
-        transform: [{ scale: a.interpolate({ inputRange: [0, 1], outputRange: [1.6, 1] }) }],
-      }]}
+      style={[st.kill, { opacity: a, transform: [{ translateY: a.interpolate({ inputRange: [0, 1], outputRange: [14, 0] }) }] }]}
+      accessibilityLiveRegion="polite"
     >
-      <Text style={st.killTop}>
-        <Text style={st.killWord}>{'KILLED  '}</Text>
-        <Text style={st.killName}>{String(victim || 'Enemy').toUpperCase()}</Text>
-      </Text>
-      <Text style={st.killWeapon}>{`${String(weapon || '').toUpperCase()}${points ? `   +${points}` : ''}`}</Text>
+      <View style={st.killHead}>
+        <View style={st.killRule} />
+        <Text style={st.killWord}>ELIMINATED</Text>
+        <View style={st.killRule} />
+      </View>
+      <Text style={st.killName} numberOfLines={1}>{String(victim || 'Enemy').toUpperCase()}</Text>
+      <View style={st.killPill}>
+        {weapon ? <Text style={st.killWeapon} numberOfLines={1}>{String(weapon).toUpperCase()}</Text> : null}
+        {points ? <Text style={st.killPts}>+{points}</Text> : null}
+      </View>
+    </Animated.View>
+  )
+}
+
+// ─── Medal (multi-tags, streaks): objective-coloured card under the banner ───
+const MEDAL_MS = 2400
+
+function MedalCard({ id, title, sub, onDone }) {
+  const a = useRef(new Animated.Value(0)).current
+  useEffect(() => {
+    Animated.sequence([
+      Animated.delay(120),
+      Animated.spring(a, { toValue: 1, friction: 7, tension: 140, useNativeDriver: true }),
+      Animated.delay(MEDAL_MS - 600),
+      Animated.timing(a, { toValue: 0, duration: 260, useNativeDriver: true }),
+    ]).start(() => onDone(id))
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  return (
+    <Animated.View pointerEvents="none" style={[st.medal, { opacity: a, transform: [{ scale: a.interpolate({ inputRange: [0, 1], outputRange: [0.85, 1] }) }] }]}>
+      <Ionicons name="star-outline" size={26} color={ST.objective} />
+      <View style={{ flexShrink: 1 }}>
+        <Text style={st.medalTitle} numberOfLines={1}>{String(title || '').toUpperCase()}</Text>
+        {sub ? <Text style={st.medalSub} numberOfLines={1}>{sub}</Text> : null}
+      </View>
     </Animated.View>
   )
 }
@@ -415,6 +445,7 @@ export function useBattleEffects() {
   const [explosions, setExplosions] = useState([])
   const [megas, setMegas] = useState([])
   const [kills, setKills] = useState([])
+  const [medals, setMedals] = useState([])
   const [outs, setOuts] = useState([])
   const [hits, setHits] = useState([])
   const [tracers, setTracers] = useState([])
@@ -425,6 +456,7 @@ export function useBattleEffects() {
   const removeExplosion = useCallback((id) => setExplosions((a) => a.filter((f) => f.id !== id)), [])
   const removeMega = useCallback((id) => setMegas((a) => a.filter((f) => f.id !== id)), [])
   const removeKill = useCallback((id) => setKills((a) => a.filter((f) => f.id !== id)), [])
+  const removeMedal = useCallback((id) => setMedals((a) => a.filter((f) => f.id !== id)), [])
   const removeOut = useCallback((id) => setOuts((a) => a.filter((f) => f.id !== id)), [])
   const removeHit = useCallback((id) => setHits((a) => a.filter((f) => f.id !== id)), [])
   const removeTracer = useCallback((id) => setTracers((a) => a.filter((f) => f.id !== id)), [])
@@ -476,6 +508,11 @@ export function useBattleEffects() {
     })
   }, [])
 
+  // Medal: { title, sub } (only the newest shows).
+  const addMedal = useCallback((m) => {
+    setMedals((a) => [...a, { id: nextId++, ...m }].slice(-2))
+  }, [])
+
   const addHit = useCallback((angle) => {
     setHits((a) => [...a, { id: nextId++, angle }])
   }, [])
@@ -500,13 +537,15 @@ export function useBattleEffects() {
       {tracers.map((t) => <Tracer key={t.id} id={t.id} angle={t.angle} onDone={removeTracer} />)}
       {outs.map((o) => <LaserBolt key={o.id} id={o.id} fromX={o.fromX} fromY={o.fromY} toX={o.toX} toY={o.toY} color={o.color} onDone={removeOut} />)}
       {bullets.map((b) => <IncomingBolt key={b.id} id={b.id} angle={b.angle} screenW={screenW} screenH={screenH} onDone={removeBullet} />)}
+      {/* Newest elimination only (a quick double tag replaces the banner, CoD style). */}
       <View style={st.killWrap} pointerEvents="none">
-        {kills.map((k, i) => <KillBanner key={k.id} id={k.id} index={i} victim={k.victim} weapon={k.weapon} points={k.points} onDone={removeKill} />)}
+        {kills.slice(-1).map((k) => <KillBanner key={k.id} id={k.id} victim={k.victim} weapon={k.weapon} points={k.points} onDone={removeKill} />)}
+        {medals.slice(-1).map((m) => <MedalCard key={m.id} id={m.id} title={m.title} sub={m.sub} onDone={removeMedal} />)}
       </View>
     </View>
   )
 
-  return { addFlash, addExplosion, addMegaExplosion, addKill, addOutgoing, addHit, addTracer, addBullet, overlay }
+  return { addFlash, addExplosion, addMegaExplosion, addKill, addMedal, addOutgoing, addHit, addTracer, addBullet, overlay }
 }
 
 /**
@@ -527,7 +566,8 @@ const st = StyleSheet.create({
     marginLeft: -24, marginTop: -24,
     alignItems: 'center', justifyContent: 'center',
   },
-  flashEmoji: { fontSize: 36 },
+  flashCore: { position: 'absolute', width: 18, height: 18, borderRadius: 9, backgroundColor: '#fff4e0', boxShadow: `0 0 16px 6px ${ST.enemy}` },
+  flashRay: { position: 'absolute', width: 44, height: 3, borderRadius: 2, backgroundColor: 'rgba(255,200,160,0.9)' },
   explosion: {
     ...StyleSheet.absoluteFill,
     alignItems: 'center', justifyContent: 'center',
@@ -547,19 +587,26 @@ const st = StyleSheet.create({
   boltFlare: { position: 'absolute', width: 48, height: 48, borderRadius: 24, borderWidth: 2, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.12)' },
   boltFlareCore: { width: 16, height: 16, borderRadius: 8, opacity: 0.9 },
   megaLabelWrap: { position: 'absolute', top: '18%', left: 0, right: 0, alignItems: 'center' },
-  megaLabel: { fontSize: 22, fontWeight: '900', letterSpacing: 1.5, textShadowColor: '#000', textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 8 },
-  megaBy: { marginTop: 2, fontSize: 13, fontWeight: '800', color: '#fff', textShadowColor: '#000', textShadowRadius: 6 },
-  killWrap: { position: 'absolute', top: '58%', left: 0, right: 0, alignItems: 'center' },
-  kill: { position: 'absolute', alignItems: 'center', paddingHorizontal: 18, paddingVertical: 6, borderRadius: 6, backgroundColor: 'rgba(0,0,0,0.55)', borderLeftWidth: 4, borderLeftColor: '#ff2d2d' },
-  killTop: { fontSize: 20, fontWeight: '900', letterSpacing: 1 },
-  killWord: { color: '#ff3b3b' },
-  killName: { color: '#fff' },
-  killWeapon: { marginTop: 1, fontSize: 12, fontWeight: '800', letterSpacing: 2, color: '#ffd23f' },
+  megaRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  megaLabel: { fontFamily: FONT.display, fontSize: 22, letterSpacing: 1.5, textShadowColor: '#000', textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 8 },
+  megaBy: { marginTop: 2, fontFamily: FONT.ui, fontSize: 12, letterSpacing: 1.6, color: '#fff', ...stShadow },
+  killWrap: { position: 'absolute', top: '53%', left: 16, right: 16, alignItems: 'center', gap: 12 },
+  kill: { alignItems: 'center', gap: 6, maxWidth: '100%' },
+  killHead: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  killRule: { width: 40, height: 2, backgroundColor: ST.enemy },
+  killWord: { fontFamily: FONT.ui, fontSize: 11, letterSpacing: 2.6, color: ST.enemy, ...stShadow },
+  killName: { fontFamily: FONT.display, fontSize: 34, lineHeight: 38, letterSpacing: 1.5, color: '#ffffff', includeFontPadding: false, textShadowColor: 'rgba(0,0,0,0.8)', textShadowRadius: 12, textShadowOffset: { width: 0, height: 2 } },
+  killPill: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 12, paddingVertical: 4, borderRadius: ST.radius, backgroundColor: ST.panel, maxWidth: '100%' },
+  killWeapon: { flexShrink: 1, fontFamily: FONT.ui, fontSize: 12, letterSpacing: 1.2, color: 'rgba(242,244,247,0.8)' },
+  killPts: { fontFamily: FONT.display, fontSize: 16, color: ST.objective },
+  medal: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 14, paddingVertical: 8, borderRadius: ST.radius, borderWidth: 1, borderColor: ST.objective, backgroundColor: ST.panel, maxWidth: '100%' },
+  medalTitle: { fontFamily: FONT.display, fontSize: 15, letterSpacing: 1, color: ST.objective },
+  medalSub: { fontFamily: FONT.uiSemi, fontSize: 11, color: 'rgba(242,244,247,0.75)' },
   explosionLabel: {
     position: 'absolute',
     bottom: '30%',
+    fontFamily: FONT.display,
     fontSize: 22,
-    fontWeight: '800',
     color: '#ff9944',
     textShadowColor: '#000',
     textShadowOffset: { width: 0, height: 1 },
@@ -576,7 +623,7 @@ const st = StyleSheet.create({
     borderLeftWidth: 20, borderRightWidth: 20,
     borderBottomWidth: 40,
     borderLeftColor: 'transparent', borderRightColor: 'transparent',
-    borderBottomColor: 'rgba(255,30,30,0.55)',
+    borderBottomColor: 'rgba(255,61,82,0.8)',
     marginTop: -4,
   },
   tracer: {

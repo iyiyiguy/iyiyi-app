@@ -4,8 +4,9 @@ import { memo } from 'react'
 import { Pressable, Text, StyleSheet } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { useFollow } from '../lib/followCache'
+import { ST, FONT } from '../games/studio'
 
-const ACCENT = '#3ad1ff'
+const ACCENT = ST.friendly
 
 function GameFollowButton({ userId, name, size = 'md', style }) {
   const { status, toggle } = useFollow(userId)
@@ -46,5 +47,5 @@ const s = StyleSheet.create({
   sm: { minWidth: 30, width: 30, height: 26, paddingHorizontal: 0 },
   off: { backgroundColor: '#ffffff', borderColor: '#ffffff' },
   on: { backgroundColor: 'transparent', borderColor: ACCENT },
-  txt: { color: '#07090c', fontSize: 12, fontWeight: '900', letterSpacing: 1 },
+  txt: { color: '#07090c', fontSize: 12, fontFamily: FONT.ui, letterSpacing: 1 },
 })

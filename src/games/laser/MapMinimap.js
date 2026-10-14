@@ -10,9 +10,9 @@ import MapView, { mapsAvailable } from '../../components/SafeMapView'
 import { Circle, Marker } from 'react-native-maps'
 import { Ionicons } from '@expo/vector-icons'
 import { isValidCoord, withAlpha } from '../GameMap'
-import { colors, radii } from '../../theme'
 import { PulseDot, RadarSweep, ShotPing } from './Uav'
 import { angleDiff, bearingDeg, distanceMeters } from '../../lib/multiplayer'
+import { FONT, ST, stShadow, stType } from '../studio'
 
 // Google Maps (Android) in the game's dark palette: no POI clutter, muted roads, dark water.
 const DARK_MAP = [
@@ -91,7 +91,7 @@ function Dot({ color, label, ring, me, kind }) {
     )
   }
   return (
-    <View style={[s.dot, { backgroundColor: color || colors.danger }, ring && s.dotRing]}>
+    <View style={[s.dot, { backgroundColor: color || ST.enemy }, ring && s.dotRing]}>
       {!!label && <Text style={s.dotLabel}>{label}</Text>}
     </View>
   )
@@ -179,7 +179,7 @@ function LaserMap({ me, headingDeg, rangeM, points, areas, boundary, rangeRingM,
           <Circle center={{ latitude: me.lat, longitude: me.lng }} radius={rangeRingM} strokeColor="rgba(255,255,255,0.55)" fillColor="rgba(255,255,255,0.04)" strokeWidth={1} lineDashPattern={[4, 4]} />
         )}
         {validAreas.map((a) => (
-          <Circle key={`a-${a.id}`} center={{ latitude: a.pos.lat, longitude: a.pos.lng }} radius={a.r} strokeColor={withAlpha(a.color || colors.gold, 0.95)} fillColor={withAlpha(a.color || colors.gold, 0.22)} strokeWidth={2} />
+          <Circle key={`a-${a.id}`} center={{ latitude: a.pos.lat, longitude: a.pos.lng }} radius={a.r} strokeColor={withAlpha(a.color || ST.objective, 0.95)} fillColor={withAlpha(a.color || ST.objective, 0.22)} strokeWidth={2} />
         ))}
         {validAreas.map((a) => (
           <Marker key={`al-${a.id}`} coordinate={{ latitude: a.pos.lat, longitude: a.pos.lng }} tracksViewChanges={false} anchor={{ x: 0.5, y: 0.5 }}>
@@ -247,7 +247,7 @@ function RadarMap({ me, headingDeg, rangeM, points, areas, boundary, rangeRingM,
         if (!c) return null
         const r = Math.max(6, (a.r || 12) * pxPerM)
         return (
-          <View key={`a-${a.id}`} style={[s.radarArea, { width: r * 2, height: r * 2, borderRadius: r, left: c.x - r, top: c.y - r, borderColor: a.color || colors.gold, backgroundColor: withAlpha(a.color || colors.gold, 0.2) }]}>
+          <View key={`a-${a.id}`} style={[s.radarArea, { width: r * 2, height: r * 2, borderRadius: r, left: c.x - r, top: c.y - r, borderColor: a.color || ST.objective, backgroundColor: withAlpha(a.color || ST.objective, 0.2) }]}>
             <Text style={s.siteText}>{a.label}</Text>
           </View>
         )
@@ -264,7 +264,7 @@ function RadarMap({ me, headingDeg, rangeM, points, areas, boundary, rangeRingM,
         if (out) { x = half + (dx / dist) * (half - 8); y = half + (dy / dist) * (half - 8) }
         const size = large ? 14 : 10
         const kind = p.kind
-        const color = kind === 'uav' || kind === 'ping' ? colors.danger : kind === 'c4' || kind === 'mine' ? colors.gold : p.color || colors.danger
+        const color = kind === 'uav' || kind === 'ping' ? ST.enemy : kind === 'c4' || kind === 'mine' ? ST.objective : p.color || ST.enemy
         return (
           <View key={`p-${p.id}`} style={[s.radarDot, { width: size, height: size, borderRadius: kind === 'c4' || kind === 'mine' ? 2 : size / 2, left: x - size / 2, top: y - size / 2, backgroundColor: color, opacity: out ? 0.6 : Number.isFinite(p.opacity) ? p.opacity : 1, boxShadow: `0 0 6px ${color}` }, p.ring && s.dotRing]}>
             {!!p.label && large ? <Text style={s.dotLabel}>{p.label}</Text> : null}
@@ -293,13 +293,13 @@ export const MapMinimap = React.memo(function MapMinimap({ size = 140, me, headi
     }
   }
   const half = size / 2
-  // Apple's "Maps · Legal" label must stay visible: centre it near the bottom of the circle
-  // (the square's corners are clipped). The range label sits at the top instead.
-  const legalInsets = useMemo(() => ({ top: 0, left: Math.max(0, Math.round(half - 34)), right: 0, bottom: Math.round(size * 0.07) }), [half, size])
+  // Apple's "Maps · Legal" label must stay visible: bottom-left of the (square) map. The
+  // range label sits at the top-left instead.
+  const legalInsets = useMemo(() => ({ top: 0, left: 2, right: 0, bottom: 2 }), [])
   const nRad = (-(headingDeg || 0) * Math.PI) / 180
   return (
     <Pressable onPress={onPress} style={{ width: size, height: size }} accessibilityRole="button" accessibilityLabel="Minimap. Double-tap to open the large map" accessibilityHint="Double-tap to open the map">
-      <View style={[s.mini, { width: size, height: size, borderRadius: half }]}>
+      <View style={[s.mini, { width: size, height: size }]}>
         <Body
           me={me}
           headingDeg={headingDeg}
@@ -313,14 +313,11 @@ export const MapMinimap = React.memo(function MapMinimap({ size = 140, me, headi
           legalLabelInsets={legalInsets}
           style={StyleSheet.absoluteFill}
         />
-        {/* You (centre, facing up) */}
-        <View style={[s.meArrowWrap, { left: half - 8, top: half - 9 }]} pointerEvents="none">
-          <Ionicons name="navigate" size={16} color="#3ad1ff" style={{ transform: [{ rotate: '-45deg' }] }} />
-        </View>
-        {uavActive ? <RadarSweep size={size} /> : <View style={[s.rim, { borderColor: 'rgba(58,209,255,0.7)' }]} pointerEvents="none" />}
-        <View style={s.rimOuter} pointerEvents="none" />
-        <Text style={[s.north, { left: half + Math.sin(nRad) * (half - 11) - 6, top: half - Math.cos(nRad) * (half - 11) - 8 }]} pointerEvents="none">N</Text>
-        {!!rangeLabel && <Text style={s.scale} pointerEvents="none">{rangeLabel}</Text>}
+        {/* You (centre, facing up): the friendly arrow from the kit */}
+        <View style={[s.meArrow, { left: half - 6, top: half - 8 }]} pointerEvents="none" />
+        {uavActive ? <RadarSweep size={size} square /> : <View style={s.rim} pointerEvents="none" />}
+        <Text style={[s.north, { left: half + Math.sin(nRad) * (half - 10) - 6, top: half - Math.cos(nRad) * (half - 10) - 7 }]} pointerEvents="none">N</Text>
+        {!!rangeLabel && <Text style={s.scale} pointerEvents="none">{String(rangeLabel).toUpperCase()}</Text>}
       </View>
     </Pressable>
   )
@@ -338,7 +335,10 @@ export function MapOverlay({ visible, onClose, insets, me, rangeId, allowed, onR
         <View style={s.panel}>
           <View style={s.panelHead}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-              <Text style={s.panelTitle}>Map</Text>
+              <View>
+                <Text style={stType.kicker}>TACTICAL</Text>
+                <Text style={s.panelTitle}>MAP</Text>
+              </View>
               {!!uavActive && <Text style={s.uavTag}>UAV ONLINE</Text>}
             </View>
             <Pressable onPress={onClose} hitSlop={12} style={s.close} accessibilityRole="button" accessibilityLabel="Close map">
@@ -358,7 +358,7 @@ export function MapOverlay({ visible, onClose, insets, me, rangeId, allowed, onR
                   accessibilityRole="button"
                   accessibilityState={{ selected: on, disabled: !ok }}
                 >
-                  <Text style={[s.rangeText, on && { color: '#10121f' }]}>{r.label}</Text>
+                  <Text style={[s.rangeText, on && { color: ST.ink }]}>{String(r.label).toUpperCase()}</Text>
                 </Pressable>
               )
             })}
@@ -379,7 +379,7 @@ export function MapOverlay({ visible, onClose, insets, me, rangeId, allowed, onR
           <Text style={s.panelNote}>
             {allowed.length < MAP_RANGES.length ? 'Larger ranges are limited by this lobby’s play area.' : 'Pinch and drag to look around.'}
           </Text>
-          <Text style={s.panelNote}>Enemies stay hidden — they flash red when they fire, or all show while a UAV is up.</Text>
+          <Text style={s.panelNote}>Enemies stay hidden: they flash red when they fire, or all show while a UAV is up.</Text>
         </View>
       </View>
     </View>
@@ -387,43 +387,42 @@ export function MapOverlay({ visible, onClose, insets, me, rangeId, allowed, onR
 }
 
 const s = StyleSheet.create({
-  mini: { overflow: 'hidden', backgroundColor: '#10141f' },
-  rim: { ...StyleSheet.absoluteFill, borderRadius: 999, borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.55)' },
-  rimOuter: { ...StyleSheet.absoluteFill, borderRadius: 999, borderWidth: 4, borderColor: 'rgba(8,10,18,0.6)' },
-  radar: { backgroundColor: '#0f1420', overflow: 'hidden' },
-  radarLine: { position: 'absolute', backgroundColor: 'rgba(58,209,255,0.12)' },
-  radarRing: { position: 'absolute', borderWidth: 1, borderColor: 'rgba(58,209,255,0.22)' },
+  mini: { overflow: 'hidden', backgroundColor: 'rgba(8,10,14,0.72)', borderRadius: ST.radius },
+  rim: { ...StyleSheet.absoluteFill, borderRadius: ST.radius, borderWidth: 1, borderColor: 'rgba(255,255,255,0.16)' },
+  meArrow: { position: 'absolute', width: 0, height: 0, borderLeftWidth: 6, borderRightWidth: 6, borderBottomWidth: 14, borderLeftColor: 'transparent', borderRightColor: 'transparent', borderBottomColor: ST.friendly },
+  radar: { backgroundColor: 'rgba(8,10,14,0.72)', overflow: 'hidden' },
+  radarLine: { position: 'absolute', backgroundColor: 'rgba(255,255,255,0.1)' },
+  radarRing: { position: 'absolute', borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)' },
   radarRange: { position: 'absolute', borderWidth: 1, borderColor: 'rgba(255,255,255,0.4)', borderStyle: 'dashed' },
   radarBoundary: { position: 'absolute', borderWidth: 2, borderColor: 'rgba(124,140,255,0.9)', backgroundColor: 'rgba(124,140,255,0.06)' },
   radarArea: { position: 'absolute', borderWidth: 1.5, alignItems: 'center', justifyContent: 'center' },
   radarDot: { position: 'absolute', borderWidth: 1.5, borderColor: '#fff', alignItems: 'center', justifyContent: 'center' },
   c4: { width: 54, height: 54 },
   mine: { width: 56, height: 32 },
-  north: { position: 'absolute', width: 12, textAlign: 'center', fontSize: 11, fontWeight: '900', color: '#ff5d6c', textShadowColor: 'rgba(0,0,0,0.9)', textShadowRadius: 3 },
-  scale: { position: 'absolute', top: 20, alignSelf: 'center', fontSize: 9, fontWeight: '800', color: '#fff', backgroundColor: 'rgba(0,0,0,0.45)', paddingHorizontal: 5, borderRadius: 4, overflow: 'hidden' },
-  meArrowWrap: { position: 'absolute', width: 16, height: 18, alignItems: 'center', justifyContent: 'center' },
+  north: { position: 'absolute', width: 12, textAlign: 'center', fontFamily: FONT.display, fontSize: 10, color: ST.enemy, ...stShadow },
+  scale: { position: 'absolute', top: 4, left: 5, fontFamily: FONT.ui, fontSize: 9, letterSpacing: 1, color: 'rgba(242,244,247,0.7)', ...stShadow },
   noFix: { alignItems: 'center', justifyContent: 'center', backgroundColor: '#1a1f2e' },
-  noFixText: { fontSize: 10, color: 'rgba(255,255,255,0.7)' },
+  noFixText: { fontFamily: FONT.uiSemi, fontSize: 10, color: 'rgba(255,255,255,0.7)', textAlign: 'center' },
   dot: { minWidth: 12, height: 12, borderRadius: 6, borderWidth: 2, borderColor: '#fff', alignItems: 'center', justifyContent: 'center' },
   dotRing: { borderColor: '#ffc94d', borderWidth: 3 },
   dotLabel: { fontSize: 9, paddingHorizontal: 2 },
   meWrap: { width: 22, height: 22, borderRadius: 11, backgroundColor: 'rgba(58,209,255,0.25)', alignItems: 'center', justifyContent: 'center' },
-  meDot: { width: 12, height: 12, borderRadius: 6, backgroundColor: '#3ad1ff', borderWidth: 2, borderColor: '#fff' },
-  siteTag: { paddingHorizontal: 5, paddingVertical: 1, borderRadius: 6, backgroundColor: 'rgba(0,0,0,0.6)' },
-  siteText: { fontSize: 10, fontWeight: '900', color: '#ffc94d' },
+  meDot: { width: 12, height: 12, borderRadius: 6, backgroundColor: ST.friendly, borderWidth: 2, borderColor: '#fff' },
+  siteTag: { paddingHorizontal: 5, paddingVertical: 1, borderRadius: 2, backgroundColor: 'rgba(8,10,14,0.72)' },
+  siteText: { fontFamily: FONT.display, fontSize: 10, color: ST.objective },
   overlayRoot: { zIndex: 50, elevation: 50 },
   backdrop: { ...StyleSheet.absoluteFill, backgroundColor: 'rgba(0,0,0,0.55)' },
   overlayWrap: { flex: 1, justifyContent: 'center', paddingHorizontal: 12 },
-  panel: { backgroundColor: 'rgba(14,17,30,0.96)', borderRadius: radii.lg, padding: 14, borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)' },
-  panelHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 },
-  panelTitle: { fontSize: 20, fontWeight: '800', color: '#fff' },
-  close: { width: 34, height: 34, borderRadius: 17, backgroundColor: 'rgba(255,255,255,0.14)', alignItems: 'center', justifyContent: 'center' },
+  panel: { backgroundColor: 'rgba(11,13,17,0.96)', borderRadius: ST.radius, padding: 14, borderWidth: 1, borderColor: ST.line, borderTopWidth: 2, borderTopColor: ST.friendly },
+  panelHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
+  panelTitle: { ...stType.title },
+  close: { width: 40, height: 40, borderRadius: ST.radius, borderWidth: 1, borderColor: 'rgba(255,255,255,0.18)', alignItems: 'center', justifyContent: 'center' },
   ranges: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 10 },
-  rangeChip: { paddingHorizontal: 11, paddingVertical: 6, borderRadius: 999, borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)' },
-  rangeOn: { backgroundColor: '#fff', borderColor: '#fff' },
-  rangeText: { fontSize: 12, fontWeight: '700', color: '#fff' },
-  bigMap: { height: 360, borderRadius: radii.md, overflow: 'hidden' },
-  bigRadar: { width: 340, height: 340, alignSelf: 'center', borderRadius: radii.md, overflow: 'hidden' },
-  uavTag: { fontSize: 10, fontWeight: '900', letterSpacing: 1, color: '#fff', backgroundColor: '#d4202f', paddingHorizontal: 7, paddingVertical: 2, borderRadius: 6, overflow: 'hidden' },
-  panelNote: { fontSize: 11, color: 'rgba(255,255,255,0.6)', marginTop: 8, textAlign: 'center' },
+  rangeChip: { paddingHorizontal: 11, height: 32, justifyContent: 'center', borderRadius: ST.radius, borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)' },
+  rangeOn: { backgroundColor: ST.friendly, borderColor: ST.friendly },
+  rangeText: { fontFamily: FONT.ui, fontSize: 12, letterSpacing: 1, color: '#fff' },
+  bigMap: { height: 360, borderRadius: ST.radius, overflow: 'hidden' },
+  bigRadar: { width: 340, height: 340, maxWidth: '100%', alignSelf: 'center', borderRadius: ST.radius, overflow: 'hidden' },
+  uavTag: { fontFamily: FONT.ui, fontSize: 10, letterSpacing: 1.4, color: ST.enemy, borderWidth: 1, borderColor: ST.enemy, paddingHorizontal: 7, paddingVertical: 2, borderRadius: 2, overflow: 'hidden' },
+  panelNote: { fontFamily: FONT.uiSemi, fontSize: 11.5, color: ST.muted, marginTop: 8, textAlign: 'center' },
 })

@@ -3,6 +3,7 @@
 import React, { memo, useEffect, useState } from 'react'
 import { Alert, StyleSheet, Text, View } from 'react-native'
 import { getTaggable, markTaggablePrompted, setTaggable, shouldPromptTaggable } from '../../lib/bystanderTags'
+import { FONT, ST } from '../studio'
 
 const TEAL = '#1fc8c8'
 const W = 240 // max marker width (centred on x)
@@ -86,10 +87,10 @@ export function LaserTaggableSetting({ SwitchRow }) {
 
 const s = StyleSheet.create({
   wrap: { position: 'absolute', width: W, alignItems: 'center' },
-  pill: { flexDirection: 'row', alignItems: 'center', gap: 6, maxWidth: W, paddingLeft: 4, paddingRight: 10, paddingVertical: 4, borderRadius: 999, backgroundColor: 'rgba(8,40,52,0.82)', borderWidth: 1.5, borderColor: TEAL },
-  badge: { width: 24, height: 24, borderRadius: 12, backgroundColor: TEAL, alignItems: 'center', justifyContent: 'center' },
-  badgeText: { fontSize: 11, fontWeight: '900', color: '#062a33', letterSpacing: -0.3 },
-  kicker: { fontSize: 9, fontWeight: '800', color: TEAL, letterSpacing: 0.6, textTransform: 'uppercase' },
-  name: { fontSize: 12, fontWeight: '800', color: '#fff' },
+  pill: { flexDirection: 'row', alignItems: 'center', gap: 6, maxWidth: W, paddingLeft: 4, paddingRight: 10, paddingVertical: 4, borderRadius: ST.radius, backgroundColor: ST.panel, borderLeftWidth: 2, borderLeftColor: TEAL },
+  badge: { width: 24, height: 24, borderRadius: 2, backgroundColor: TEAL, alignItems: 'center', justifyContent: 'center' },
+  badgeText: { fontFamily: FONT.display, fontSize: 11, color: '#062a33' },
+  kicker: { fontFamily: FONT.ui, fontSize: 9, color: TEAL, letterSpacing: 1.4, textTransform: 'uppercase' },
+  name: { fontFamily: FONT.display, fontSize: 12, color: '#fff' },
   stem: { width: 2, height: 8, backgroundColor: TEAL },
 })

@@ -5,9 +5,11 @@
 // the button (keep hold of the phone!): the swing is measured with the accelerometer and a
 // harder swing throws further. The grenade flies along the compass heading you're facing.
 import React, { useCallback, useEffect, useRef, useState } from 'react'
-import { Animated, Easing, Pressable, StyleSheet, Text, View } from 'react-native'
+import { Animated, Easing, Pressable, StyleSheet, View } from 'react-native'
 import { Accelerometer } from 'expo-sensors'
 import { GRENADE_MAX_THROW_M, GRENADE_MIN_THROW_M } from './engine'
+import { EquipTileFace, TileHint } from './Consumables'
+import { ST } from '../studio'
 
 export const GRENADE_FUSE_MS = 2500
 const FULL_POWER_MS = 1400
@@ -36,7 +38,7 @@ const distanceFor = (power) => Math.round(GRENADE_MIN_THROW_M + (GRENADE_MAX_THR
  *   count: grenades left (owner: Infinity), disabled, size,
  *   onThrow(distanceMeters, how: 'swing' | 'hold'), onEmpty() when tapped with none left.
  */
-export function GrenadeButton({ count, disabled, size = 54, onThrow, onEmpty }) {
+export function GrenadeButton({ count, disabled, size = 38, onThrow, onEmpty }) {
   const [holding, setHolding] = useState(false)
   const [preview, setPreview] = useState(null) // metres while holding
   const power = useRef(new Animated.Value(0)).current
@@ -105,22 +107,18 @@ export function GrenadeButton({ count, disabled, size = 54, onThrow, onEmpty }) 
   const label = count === Infinity ? '∞' : String(Math.max(0, count | 0))
   return (
     <View style={{ alignItems: 'center' }} pointerEvents="box-none">
-      {holding && preview != null ? (
-        <View style={styles.preview} pointerEvents="none">
-          <Text style={styles.previewText}>{preview} m · swing or let go</Text>
-        </View>
-      ) : null}
+      {holding && preview != null ? <TileHint text={`${preview} M · SWING OR LET GO`} /> : null}
       <Pressable
         onPressIn={begin}
         onPressOut={end}
         delayLongPress={100000}
-        style={[styles.btn, { width: size, height: size, borderRadius: size / 2 }, (disabled || empty) && { opacity: 0.45 }, holding && styles.btnOn]}
+        hitSlop={4}
         accessibilityRole="button"
         accessibilityLabel={`Grenade, ${label} left. Hold to aim, then let go or make a throwing motion to throw.`}
       >
-        <Animated.View style={[styles.fill, { height: ring }]} pointerEvents="none" />
-        <Text style={{ fontSize: size * 0.42 }}>💣</Text>
-        <View style={styles.badge} pointerEvents="none"><Text style={styles.badgeText}>{label}</Text></View>
+        <EquipTileFace kind="grenade" label={label} size={size} accent={holding ? ST.objective : null} dim={disabled || empty}>
+          <Animated.View style={[styles.fill, { height: ring }]} pointerEvents="none" />
+        </EquipTileFace>
       </Pressable>
     </View>
   )
@@ -144,20 +142,5 @@ export function GrenadeBlast({ visible }) {
 }
 
 const styles = StyleSheet.create({
-  btn: {
-    alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
-    backgroundColor: 'rgba(10,12,22,0.72)', borderWidth: 1.5, borderColor: 'rgba(255,190,90,0.7)',
-  },
-  btnOn: { borderColor: '#ffb347', borderWidth: 2.5 },
-  fill: { position: 'absolute', left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(255,150,40,0.45)' },
-  badge: {
-    position: 'absolute', top: 2, right: 2, minWidth: 18, height: 18, borderRadius: 9, paddingHorizontal: 4,
-    backgroundColor: '#ff9a3c', alignItems: 'center', justifyContent: 'center',
-  },
-  badgeText: { color: '#1b0f00', fontSize: 11, fontWeight: '800' },
-  preview: {
-    position: 'absolute', bottom: '100%', marginBottom: 8, paddingHorizontal: 10, paddingVertical: 5,
-    borderRadius: 10, backgroundColor: 'rgba(0,0,0,0.75)', minWidth: 150, alignItems: 'center',
-  },
-  previewText: { color: '#ffd29a', fontSize: 12, fontWeight: '800' },
+  fill: { position: 'absolute', left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(255,178,30,0.32)' },
 })

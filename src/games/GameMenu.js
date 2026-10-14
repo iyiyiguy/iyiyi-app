@@ -20,6 +20,7 @@ import { setPref, useGamePrefs } from '../lib/gamePrefs'
 import { attackingTeam } from './laser/engine'
 import { HUD, HudCta, hudSheet, hudType } from './laser/HudPro'
 import { colors, radii, type } from '../theme'
+import { FONT, ST } from './studio'
 
 // What each game shows on the full map. Mirrors the in-game visibility rules
 // (e.g. Search & Destroy hides enemies, Beside Them hides everyone).
@@ -132,7 +133,7 @@ export function GameMenu({ visible, onClose, gameId, snap, positions, onLeave })
   const inner = (
     <>
       <Pressable onPress={close} hitSlop={12} style={[styles.closeBtn, shooter && styles.closeBtnHud]} accessibilityRole="button" accessibilityLabel="Close menu">
-        <Ionicons name="close" size={20} color={shooter ? '#fff' : colors.text} />
+        <Ionicons name="close" size={shooter ? 18 : 20} color={shooter ? '#fff' : colors.text} />
       </Pressable>
       {view === 'main' && (
         <View style={styles.pad}>
@@ -149,7 +150,7 @@ export function GameMenu({ visible, onClose, gameId, snap, positions, onLeave })
           {showMap && <S.Row icon="map" title="View map" onPress={() => setView('map')} />}
           <S.Row icon="book" title="How to play" onPress={() => setView('rules')} />
           {shooter
-            ? <HudCta tone="danger" icon="exit" title="Leave match" onPress={confirmLeave} style={{ marginTop: 18 }} />
+            ? <HudCta tone="ghost" icon="exit-outline" title="Leave match" onPress={confirmLeave} style={{ marginTop: 18, borderColor: ST.enemy }} />
             : <Btn title="Leave game" variant="danger" onPress={confirmLeave} style={{ marginTop: 16 }} />}
         </View>
       )}
@@ -262,12 +263,13 @@ function Segmented({ label, value, options, onChange }) {
 const light = { Row, Header, Toggle, Segmented, caption: type.caption }
 
 // ---- HUD variants (shooters) ----
+const HUD_ICONS = { 'settings-sharp': 'options-outline', map: 'map-outline', book: 'book-outline' }
 function HudRow({ title, icon, onPress }) {
   return (
-    <Pressable onPress={onPress} accessibilityRole="button" style={({ pressed }) => [styles.rowHud, pressed && styles.rowHudOn]}>
-      <Ionicons name={icon} size={16} color={HUD.accent} />
+    <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={title} style={({ pressed }) => [styles.rowHud, pressed && styles.rowHudOn]}>
+      <View style={styles.rowHudIcon}><Ionicons name={HUD_ICONS[icon] || icon} size={16} color={ST.friendly} /></View>
       <Text style={styles.rowHudText}>{title}</Text>
-      <Ionicons name="chevron-forward" size={16} color={HUD.muted} />
+      <Ionicons name="chevron-forward" size={16} color={ST.faint} />
     </Pressable>
   )
 }
@@ -276,8 +278,8 @@ function HudHeader({ title, onBack }) {
   return (
     <View style={styles.header}>
       <Pressable onPress={onBack} hitSlop={10} accessibilityRole="button" accessibilityLabel="Back" style={styles.backHud}>
-        <Ionicons name="chevron-back" size={18} color={HUD.accent} />
-        <Text style={[hudType.label, { color: HUD.accent }]}>BACK</Text>
+        <Ionicons name="chevron-back" size={18} color={ST.friendly} />
+        <Text style={[hudType.label, { color: ST.friendly, fontSize: 11 }]}>BACK</Text>
       </Pressable>
       <Text style={[hudType.title, { flex: 1, textAlign: 'center', marginRight: 72 }]} numberOfLines={1}>{title}</Text>
     </View>
@@ -288,7 +290,7 @@ function HudToggle({ label, value, onChange }) {
   return (
     <View style={styles.rowHudPlain}>
       <Text style={styles.toggleHudText}>{label}</Text>
-      <Switch value={value} onValueChange={onChange} trackColor={{ false: 'rgba(255,255,255,0.14)', true: HUD.accent }} thumbColor="#fff" ios_backgroundColor="rgba(255,255,255,0.14)" />
+      <Switch value={value} onValueChange={onChange} trackColor={{ false: 'rgba(255,255,255,0.14)', true: ST.friendly }} thumbColor="#fff" ios_backgroundColor="rgba(255,255,255,0.14)" accessibilityLabel={label} />
     </View>
   )
 }
@@ -301,8 +303,8 @@ function HudSegmented({ label, value, options, onChange }) {
         {options.map(([v, l]) => {
           const on = value === v
           return (
-            <Pressable key={v} onPress={() => onChange(v)} style={[styles.segItem, on && { backgroundColor: HUD.accent }]} accessibilityRole="button" accessibilityState={{ selected: on }}>
-              <Text style={[styles.segHudText, on && { color: HUD.bg }]} numberOfLines={1}>{l}</Text>
+            <Pressable key={v} onPress={() => onChange(v)} style={[styles.segItem, styles.segItemHud, on && { backgroundColor: ST.friendly }]} accessibilityRole="button" accessibilityState={{ selected: on }}>
+              <Text style={[styles.segHudText, on && { color: ST.ink }]} numberOfLines={1}>{l}</Text>
             </Pressable>
           )
         })}
@@ -310,7 +312,7 @@ function HudSegmented({ label, value, options, onChange }) {
     </View>
   )
 }
-const dark = { Row: HudRow, Header: HudHeader, Toggle: HudToggle, Segmented: HudSegmented, caption: { fontSize: 12, lineHeight: 17, color: HUD.muted, marginTop: 6 } }
+const dark = { Row: HudRow, Header: HudHeader, Toggle: HudToggle, Segmented: HudSegmented, caption: { fontFamily: FONT.uiSemi, fontSize: 12.5, lineHeight: 17, color: ST.muted, marginTop: 6 } }
 
 const styles = StyleSheet.create({
   root: { zIndex: 100, elevation: 100 },
@@ -318,21 +320,23 @@ const styles = StyleSheet.create({
   closeBtn: { position: 'absolute', top: 12, right: 12, zIndex: 2, width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.glassFillStrong, borderWidth: 1, borderColor: colors.hairline },
   sheetWrap: { flex: 1, justifyContent: 'flex-end', paddingHorizontal: 10 },
   sheet: { maxHeight: '88%' },
-  sheetHud: { ...hudSheet, borderTopWidth: 2, borderTopColor: HUD.accent },
-  closeBtnHud: { backgroundColor: 'rgba(255,255,255,0.08)', borderColor: HUD.border },
+  sheetHud: { ...hudSheet, backgroundColor: 'rgba(11,13,17,0.97)', borderTopWidth: 2, borderTopColor: ST.friendly },
+  closeBtnHud: { width: 40, height: 40, borderRadius: ST.radius, backgroundColor: 'transparent', borderColor: 'rgba(255,255,255,0.18)' },
   pad: { padding: 18 },
   row: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 14, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.hairline },
-  rowHud: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 15, paddingHorizontal: 10, borderLeftWidth: 2, borderLeftColor: 'transparent', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: HUD.border },
-  rowHudOn: { backgroundColor: 'rgba(58,209,255,0.08)', borderLeftColor: HUD.accent },
-  rowHudText: { flex: 1, fontSize: 13, fontWeight: '900', letterSpacing: 1.4, color: '#fff', textTransform: 'uppercase' },
-  rowHudPlain: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 12, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: HUD.border },
-  toggleHudText: { fontSize: 14, fontWeight: '800', color: '#fff' },
+  rowHud: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 52, paddingHorizontal: 10, borderLeftWidth: 3, borderLeftColor: 'transparent', borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.07)' },
+  rowHudOn: { backgroundColor: 'rgba(57,213,255,0.10)', borderLeftColor: ST.friendly },
+  rowHudIcon: { width: 32, height: 32, borderRadius: ST.radius, borderWidth: 1, borderColor: 'rgba(255,255,255,0.16)', alignItems: 'center', justifyContent: 'center' },
+  rowHudText: { flex: 1, fontFamily: FONT.display, fontSize: 14, letterSpacing: 1.6, color: '#fff', textTransform: 'uppercase' },
+  rowHudPlain: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', minHeight: 50, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.07)' },
+  toggleHudText: { fontFamily: FONT.ui, fontSize: 15, color: '#fff' },
   backHud: { flexDirection: 'row', alignItems: 'center', gap: 2, width: 72 },
   header: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
   seg: { flexDirection: 'row', borderRadius: radii.sm, borderWidth: 1, borderColor: colors.hairline, overflow: 'hidden' },
-  segHud: { flexDirection: 'row', borderRadius: 10, borderWidth: 1, borderColor: HUD.border, overflow: 'hidden', backgroundColor: 'rgba(255,255,255,0.04)' },
-  segHudText: { fontSize: 10.5, fontWeight: '900', letterSpacing: 0.8, textTransform: 'uppercase', color: '#fff' },
+  segHud: { flexDirection: 'row', borderRadius: ST.radius, borderWidth: 1, borderColor: 'rgba(255,255,255,0.16)', overflow: 'hidden', backgroundColor: 'rgba(255,255,255,0.04)' },
+  segHudText: { fontFamily: FONT.ui, fontSize: 11, letterSpacing: 1, textTransform: 'uppercase', color: '#fff' },
+  segItemHud: { minHeight: 40, justifyContent: 'center', paddingHorizontal: 4 },
   segItem: { flex: 1, paddingVertical: 10, alignItems: 'center' },
   ruleRow: { flexDirection: 'row', gap: 12, marginBottom: 12 },
-  ruleNum: { ...hudType.kicker, width: 26, paddingTop: 2 },
+  ruleNum: { fontFamily: FONT.display, fontSize: 13, color: ST.friendly, width: 26, paddingTop: 1 },
 })

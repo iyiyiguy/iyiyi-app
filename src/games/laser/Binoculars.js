@@ -1,7 +1,9 @@
 import { memo } from 'react'
 import { StyleSheet, Text, View } from 'react-native'
+import { Ionicons } from '@expo/vector-icons'
 import { angleDiff, formatDistance } from '../../lib/multiplayer'
 import { CAMERA_HFOV_DEG } from './vision'
+import { FONT, ST, stShadow } from '../studio'
 
 // Binocular mode for Laser Tag: look far without shooting. The camera preview is magnified
 // (useScopeZoom) and every enemy with a recent GPS fix gets a name + distance marker placed
@@ -43,18 +45,20 @@ export const BinocularMarkers = memo(function BinocularMarkers({ markers }) {
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="none">
       {markers.map((m) => (m.inView ? (
-        <View key={m.id} style={[s.tag, { left: m.x - 60, top: m.y - 52 }]}>
-          <View style={[s.pill, { borderColor: m.color }]}>
-            <Text style={s.name} numberOfLines={1}>{m.name}</Text>
-            <Text style={s.dist}>{formatDistance(m.d)}</Text>
+        <View key={m.id} style={[s.tag, { left: m.x - 70, top: m.y - 48 }]}>
+          <View style={s.pill}>
+            <View style={[s.diamond, { backgroundColor: m.color }]} />
+            <Text style={s.name} numberOfLines={1}>{String(m.name || '').toUpperCase()}</Text>
+            <Text style={s.dist}>{formatDistance(m.d).toUpperCase()}</Text>
           </View>
           <View style={[s.stem, { backgroundColor: m.color }]} />
           <View style={[s.dot, { backgroundColor: m.color }]} />
         </View>
       ) : (
         <View key={m.id} style={[s.edge, { top: m.y - 18 }, m.side === 'right' ? { right: 8 } : { left: 8 }]}>
-          <Text style={[s.arrow, { color: m.color }]}>{m.side === 'right' ? '▶' : '◀'}</Text>
-          <Text style={s.edgeText} numberOfLines={1}>{m.name} · {formatDistance(m.d)}</Text>
+          {m.side !== 'right' ? <Ionicons name="caret-back" size={13} color={m.color} /> : null}
+          <Text style={s.edgeText} numberOfLines={1}>{String(m.name || '').toUpperCase()} · {formatDistance(m.d).toUpperCase()}</Text>
+          {m.side === 'right' ? <Ionicons name="caret-forward" size={13} color={m.color} /> : null}
         </View>
       )))}
     </View>
@@ -70,23 +74,24 @@ export function BinocularFrame({ zoom, view }) {
     <View style={StyleSheet.absoluteFill} pointerEvents="none">
       <View style={[s.mask, { width: d + ring * 2, height: d + ring * 2, borderRadius: (d + ring * 2) / 2, borderWidth: ring, left: (view.width - d) / 2 - ring, top: (view.height - d) / 2 - ring }]} />
       <View style={[s.badge, { top: (view.height - d) / 2 + 14 }]}>
-        <Text style={s.badgeText}>🔭 BINOCULARS · {Number.isInteger(zoom) ? zoom : zoom.toFixed(1)}× · lower to shoot</Text>
+        <Ionicons name="telescope-outline" size={14} color={ST.objective} />
+        <Text style={s.badgeText}>BINOCULARS · {Number.isInteger(zoom) ? zoom : zoom.toFixed(1)}× · LOWER TO SHOOT</Text>
       </View>
     </View>
   )
 }
 
 const s = StyleSheet.create({
-  tag: { position: 'absolute', width: 120, alignItems: 'center' },
-  pill: { backgroundColor: 'rgba(0,0,0,0.7)', borderWidth: 1.5, borderRadius: 12, paddingHorizontal: 9, paddingVertical: 4, alignItems: 'center', maxWidth: 120 },
-  name: { color: '#fff', fontWeight: '800', fontSize: 13 },
-  dist: { color: 'rgba(255,255,255,0.8)', fontWeight: '700', fontSize: 11 },
-  stem: { width: 2, height: 14 },
-  dot: { width: 10, height: 10, borderRadius: 5 },
-  edge: { position: 'absolute', flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: 'rgba(0,0,0,0.6)', borderRadius: 14, paddingHorizontal: 8, paddingVertical: 5, maxWidth: 170 },
-  arrow: { fontSize: 14, fontWeight: '900' },
-  edgeText: { color: '#fff', fontSize: 11, fontWeight: '700', flexShrink: 1 },
+  tag: { position: 'absolute', width: 140, alignItems: 'center' },
+  pill: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: ST.panel, borderRadius: ST.radius, paddingHorizontal: 8, paddingVertical: 3, maxWidth: 140 },
+  diamond: { width: 7, height: 7, transform: [{ rotate: '45deg' }] },
+  name: { flexShrink: 1, fontFamily: FONT.display, fontSize: 13, color: '#fff' },
+  dist: { fontFamily: FONT.displaySemi, fontSize: 11, color: 'rgba(242,244,247,0.75)' },
+  stem: { width: 2, height: 12 },
+  dot: { width: 9, height: 9, transform: [{ rotate: '45deg' }] },
+  edge: { position: 'absolute', flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: ST.panel, borderRadius: ST.radius, paddingHorizontal: 8, paddingVertical: 5, maxWidth: 180 },
+  edgeText: { color: '#fff', fontFamily: FONT.ui, fontSize: 11, letterSpacing: 0.4, flexShrink: 1 },
   mask: { position: 'absolute', borderColor: 'rgba(0,0,0,0.82)' },
-  badge: { position: 'absolute', alignSelf: 'center', backgroundColor: 'rgba(0,0,0,0.6)', borderRadius: 14, paddingHorizontal: 12, paddingVertical: 6 },
-  badgeText: { color: '#fff', fontWeight: '800', fontSize: 12, letterSpacing: 0.3 },
+  badge: { position: 'absolute', alignSelf: 'center', flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: ST.panel, borderRadius: ST.radius, borderLeftWidth: 2, borderLeftColor: ST.objective, paddingHorizontal: 12, paddingVertical: 6 },
+  badgeText: { color: '#fff', fontFamily: FONT.ui, fontSize: 11, letterSpacing: 1.4, ...stShadow },
 })

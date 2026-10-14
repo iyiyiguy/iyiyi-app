@@ -2,12 +2,12 @@
 // task stations scanned from real objects inside it.
 import React, { useEffect, useState } from 'react'
 import { Alert, Pressable, StyleSheet, Text, View } from 'react-native'
-import { Btn, Card } from '../MultiplayerUI'
+import { Ionicons } from '@expo/vector-icons'
 import { GameMap } from '../GameMap'
 import { StationImage } from './StationImage'
 import { StationScanner } from './StationScanner'
 import { distanceMeters, formatDistance } from '../../lib/multiplayer'
-import { colors, radii, type } from '../../theme'
+import { ST, StButton, StPanel, stType, withAlpha } from '../studio'
 
 export const MIN_STATIONS = 3
 export const MAX_STATIONS = 10
@@ -81,35 +81,36 @@ export function BesideSetup({ room, snap }) {
 
   return (
     <>
-      <Card>
-        <Text style={[type.label, { marginBottom: 6 }]}>Play area</Text>
+      <StPanel accent={ST.friendly} style={styles.panel}>
+        <Text style={[stType.label, { marginBottom: 6 }]}>Play area</Text>
         <GameMap
           center={area}
           onPick={isHost ? setArea : undefined}
           hint={isHost ? (area ? 'Tap to move the center' : 'Tap the map to set the center') : null}
-          circles={area ? [{ id: 'area', lat: area.lat, lng: area.lng, radius: area.r, color: colors.violet }] : []}
-          markers={stations.map((st, i) => ({ id: st.id, lat: st.lat, lng: st.lng, label: `${i + 1}. ${st.name}`, color: colors.magenta }))}
+          circles={area ? [{ id: 'area', lat: area.lat, lng: area.lng, radius: area.r, color: ST.friendly }] : []}
+          markers={stations.map((st, i) => ({ id: st.id, lat: st.lat, lng: st.lng, label: `${i + 1}. ${st.name}`, color: ST.objective }))}
         />
         {isHost && area && (
           <View style={styles.chips}>
             {AREA_SIZES.map((r) => (
               <Pressable key={r} onPress={() => setRadius(r)} style={[styles.chip, area.r === r && styles.chipOn]} accessibilityRole="button" accessibilityState={{ selected: area.r === r }}>
-                <Text style={[type.caption, { color: area.r === r ? colors.onBrand : colors.text }]}>{formatDistance(r)}</Text>
+                <Text style={[styles.chipText, { color: area.r === r ? ST.ink : ST.text }]}>{formatDistance(r)}</Text>
               </Pressable>
             ))}
           </View>
         )}
-        <Text style={[type.caption, { marginTop: 8 }]}>
+        <Text style={[stType.small, { marginTop: 8 }]}>
           {area ? 'Everyone plays inside this circle. Keep it somewhere safe and walkable.' : isHost ? 'Choose where the game is played.' : 'The host is choosing the play area.'}
         </Text>
-      </Card>
+      </StPanel>
 
-      <Card>
+      <StPanel accent={ST.objective} style={styles.panel}>
         <View style={styles.headRow}>
-          <Text style={type.label}>Task stations ({stations.length}/{MAX_STATIONS})</Text>
+          <Text style={stType.label}>Task stations · {stations.length}/{MAX_STATIONS}</Text>
+          <Text style={[stType.label, { color: stations.length >= MIN_STATIONS ? ST.health : ST.objective }]}>{stations.length >= MIN_STATIONS ? 'Ready' : `Need ${MIN_STATIONS - stations.length} more`}</Text>
         </View>
         {stations.length === 0 && (
-          <Text style={type.caption}>
+          <Text style={stType.small}>
             {canScan ? 'Walk to real objects inside the play area and scan them. 5–10 stations spread around works best.' : 'The host is scanning task stations.'}
           </Text>
         )}
@@ -117,22 +118,29 @@ export function BesideSetup({ room, snap }) {
           <View key={st.id} style={styles.station}>
             <StationImage room={room} station={st} assets={snap.assets} style={styles.thumb} />
             <View style={{ flex: 1, marginLeft: 10 }}>
-              <Text style={type.body} numberOfLines={1}>{i + 1}. {st.name}</Text>
-              <Text style={type.caption}>
+              <Text style={[stType.name, { fontSize: 15 }]} numberOfLines={1}>{i + 1}. {st.name}</Text>
+              <Text style={[stType.small, { fontSize: 11 }]}>
                 {area ? `${formatDistance(distanceMeters(area, st))} from center` : ''}{st.url ? '' : ' · shared from phone'}
               </Text>
             </View>
             {(isHost || st.by === snap.me.id) && (
               <Pressable onPress={() => remove(st)} hitSlop={8} accessibilityRole="button" accessibilityLabel={`Remove ${st.name}`}>
-                <Text style={[type.caption, { color: colors.danger }]}>Remove</Text>
+                <Ionicons name="trash-outline" size={18} color={ST.enemy} />
               </Pressable>
             )}
           </View>
         ))}
         {canScan && stations.length < MAX_STATIONS && (
-          <Btn title="📷  Scan a station" onPress={() => (area ? setScanning(true) : Alert.alert('Set the play area first', 'Stations need to be inside the play area.'))} style={{ marginTop: 10 }} />
+          <StButton
+            title="Scan a station"
+            tone="objective"
+            height={46}
+            left={<Ionicons name="camera-outline" size={18} color={ST.ink} />}
+            onPress={() => (area ? setScanning(true) : Alert.alert('Set the play area first', 'Stations need to be inside the play area.'))}
+            style={{ marginTop: 10 }}
+          />
         )}
-      </Card>
+      </StPanel>
 
       <StationScanner visible={scanning} onClose={() => setScanning(false)} onSave={save} area={area} meId={snap.me.id} />
     </>
@@ -140,10 +148,12 @@ export function BesideSetup({ room, snap }) {
 }
 
 const styles = StyleSheet.create({
+  panel: { marginBottom: 12, backgroundColor: ST.panelStrong },
   headRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
   chips: { flexDirection: 'row', gap: 8, marginTop: 10, flexWrap: 'wrap' },
-  chip: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: radii.pill, borderWidth: 1, borderColor: colors.hairline },
-  chipOn: { backgroundColor: colors.magenta, borderColor: colors.magenta },
-  station: { flexDirection: 'row', alignItems: 'center', paddingVertical: 6 },
+  chip: { paddingHorizontal: 12, height: 32, justifyContent: 'center', borderRadius: ST.radius, borderWidth: 1, borderColor: ST.lineStrong, backgroundColor: withAlpha('#ffffff', 0.04) },
+  chipOn: { backgroundColor: ST.friendly, borderColor: ST.friendly },
+  chipText: { ...stType.label, fontSize: 12, letterSpacing: 1.2 },
+  station: { flexDirection: 'row', alignItems: 'center', paddingVertical: 6, paddingHorizontal: 6, marginVertical: 2, backgroundColor: ST.cell, borderRadius: ST.radius },
   thumb: { width: 48, height: 48 },
 })

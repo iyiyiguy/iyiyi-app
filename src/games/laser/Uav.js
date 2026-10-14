@@ -11,6 +11,8 @@ import { UavPackCard, UavStorePanel, useUavBuyFlow } from '../UavStore'
 import { buzz } from '../../lib/gamePrefs'
 import { UAV_DURATION_MS } from '../../lib/uav'
 import { font } from '../../theme'
+import { EquipTileFace } from './Consumables'
+import { FONT, ST } from '../studio'
 
 const UAV_RED = '#ff3b4f'
 
@@ -19,10 +21,31 @@ const UAV_RED = '#ff3b4f'
  * the seconds left and is disabled (UAVs don't stack).
  * count: number | '∞'. activeMsLeft: ms left on my UAV (0 when idle).
  */
-export const UavButton = React.memo(function UavButton({ count, activeMsLeft = 0, disabled, onPress, size = 54 }) {
+export const UavButton = React.memo(function UavButton({ count, activeMsLeft = 0, disabled, onPress, size = 54, tile = false }) {
   const active = activeMsLeft > 0
   const empty = count === 0
   const secs = Math.max(0, Math.ceil(activeMsLeft / 1000))
+  if (tile) {
+    // Studio kit square (Laser Tag HUD): objective-coloured, count in the corner.
+    return (
+      <Pressable
+        onPress={onPress}
+        disabled={disabled || active}
+        hitSlop={4}
+        style={({ pressed }) => pressed && { transform: [{ scale: 0.94 }] }}
+        accessibilityRole="button"
+        accessibilityLabel={active ? `UAV online, ${secs} seconds left` : empty ? 'UAV. None left — get more' : `Call in UAV. ${count === '∞' ? 'Unlimited' : count} available`}
+        accessibilityState={{ disabled: !!disabled || active }}
+      >
+        <EquipTileFace kind="uav" label={active ? `${secs}S` : 'UAV'} size={size} accent={empty ? null : active ? ST.enemy : ST.objective} dim={!!disabled || empty} />
+        {!active ? (
+          <View style={[st.tileBadge, empty && { backgroundColor: 'rgba(255,255,255,0.3)' }]} pointerEvents="none">
+            <Text style={st.tileBadgeText}>{empty ? '+' : count}</Text>
+          </View>
+        ) : null}
+      </Pressable>
+    )
+  }
   return (
     <Pressable
       onPress={onPress}
@@ -56,14 +79,14 @@ export function EnemyUavPill({ msLeft, top }) {
   if (!(msLeft > 0)) return null
   return (
     <View style={[st.enemyPill, { top }]} pointerEvents="none">
-      <MaterialCommunityIcons name="satellite-variant" size={13} color="#fff" />
-      <Text style={st.enemyPillText}>Enemy UAV overhead · {Math.ceil(msLeft / 1000)}s</Text>
+      <MaterialCommunityIcons name="satellite-variant" size={14} color={ST.enemy} />
+      <Text style={st.enemyPillText}>ENEMY UAV OVERHEAD · {Math.ceil(msLeft / 1000)}S</Text>
     </View>
   )
 }
 
 /** Rotating radar sweep drawn over the (circular) minimap while a UAV is active. */
-export function RadarSweep({ size }) {
+export function RadarSweep({ size, square = false }) {
   const spin = useRef(new Animated.Value(0)).current
   useEffect(() => {
     const loop = Animated.loop(Animated.timing(spin, { toValue: 1, duration: 2200, easing: Easing.linear, useNativeDriver: true }))
@@ -73,9 +96,9 @@ export function RadarSweep({ size }) {
   const half = size / 2
   const rotate = spin.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] })
   return (
-    <View style={[StyleSheet.absoluteFill, { borderRadius: half, overflow: 'hidden' }]} pointerEvents="none">
+    <View style={[StyleSheet.absoluteFill, { borderRadius: square ? ST.radius : half, overflow: 'hidden' }]} pointerEvents="none">
       <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(255,40,60,0.08)' }]} />
-      <Animated.View style={{ position: 'absolute', width: size, height: size, transform: [{ rotate }] }}>
+      <Animated.View style={{ position: 'absolute', width: size, height: size, transform: [{ rotate }, ...(square ? [{ scale: 1.42 }] : [])] }}>
         {/* Trailing glow: the quadrant behind the leading edge (centre → 12 o'clock). */}
         <LinearGradient
           colors={['rgba(255,59,79,0)', 'rgba(255,59,79,0.38)']}
@@ -85,7 +108,7 @@ export function RadarSweep({ size }) {
         />
         <View style={{ position: 'absolute', left: half - 1, top: 0, width: 2, height: half, backgroundColor: 'rgba(255,90,100,0.9)' }} />
       </Animated.View>
-      <View style={[StyleSheet.absoluteFill, { borderRadius: half, borderWidth: 2, borderColor: 'rgba(255,59,79,0.8)' }]} />
+      <View style={[StyleSheet.absoluteFill, { borderRadius: square ? ST.radius : half, borderWidth: square ? 1 : 2, borderColor: 'rgba(255,59,79,0.8)' }]} />
     </View>
   )
 }
@@ -131,7 +154,7 @@ function UavSheetBody({ onClose, balance, owner, freeLeft, insets }) {
     <View style={[StyleSheet.absoluteFill, st.sheetRoot]}>
       <Pressable style={st.backdrop} onPress={onClose} accessibilityRole="button" accessibilityLabel="Close" />
       <View style={[st.sheetWrap, { paddingBottom: (insets?.bottom || 0) + 10 }]} pointerEvents="box-none">
-        <View style={[st.sheet, hudSheet, { borderRadius: 20, borderTopWidth: 2, borderTopColor: HUD.accent }]}>
+        <View style={[st.sheet, hudSheet, { borderTopWidth: 2, borderTopColor: HUD.accent }]}>
           <View style={st.sheetHead}>
             <View style={{ flex: 1 }}>
               <Text style={hudType.kicker}>KILLSTREAK</Text>
@@ -184,8 +207,10 @@ const st = StyleSheet.create({
   badge: { position: 'absolute', top: -3, right: -3, minWidth: 20, height: 20, borderRadius: 10, paddingHorizontal: 5, backgroundColor: UAV_RED, borderWidth: 1.5, borderColor: '#fff', alignItems: 'center', justifyContent: 'center' },
   badgeEmpty: { backgroundColor: '#4a4f6a' },
   badgeText: { fontSize: 11, ...font.heavy, color: '#fff' },
-  enemyPill: { position: 'absolute', alignSelf: 'center', flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingVertical: 5, borderRadius: 999, backgroundColor: 'rgba(212,32,47,0.85)' },
-  enemyPillText: { fontSize: 12, ...font.heavy, color: '#fff' },
+  enemyPill: { position: 'absolute', alignSelf: 'center', flexDirection: 'row', alignItems: 'center', gap: 7, paddingHorizontal: 12, paddingVertical: 6, borderRadius: ST.radius, backgroundColor: 'rgba(8,10,14,0.8)', borderLeftWidth: 3, borderLeftColor: ST.enemy },
+  enemyPillText: { fontFamily: FONT.ui, fontSize: 11.5, letterSpacing: 1.4, color: '#fff' },
+  tileBadge: { position: 'absolute', top: -4, right: -4, minWidth: 15, height: 15, paddingHorizontal: 3, borderRadius: 2, backgroundColor: ST.objective, alignItems: 'center', justifyContent: 'center' },
+  tileBadgeText: { fontFamily: FONT.display, fontSize: 9.5, lineHeight: 12, color: ST.ink, includeFontPadding: false },
   pulseWrap: { width: 26, height: 26, alignItems: 'center', justifyContent: 'center' },
   pulseHalo: { position: 'absolute', width: 18, height: 18, borderRadius: 9, backgroundColor: UAV_RED },
   pulseCore: { width: 12, height: 12, borderRadius: 6, backgroundColor: UAV_RED, borderWidth: 2, borderColor: '#fff' },
@@ -195,13 +220,13 @@ const st = StyleSheet.create({
   sheetRoot: { zIndex: 60, elevation: 60 },
   backdrop: { ...StyleSheet.absoluteFill, backgroundColor: 'rgba(0,0,0,0.45)' },
   sheetWrap: { flex: 1, justifyContent: 'flex-end', paddingHorizontal: 10 },
-  sheet: { padding: 16, gap: 12, borderRadius: 28, borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)' },
+  sheet: { padding: 16, gap: 12, borderRadius: ST.radius, borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)' },
   sheetHead: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   sheetIcon: { width: 48, height: 48, borderRadius: 24, backgroundColor: 'rgba(255,59,79,0.35)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.3)', alignItems: 'center', justifyContent: 'center' },
   sheetTitle: { ...hudType.title },
   sheetSub: { fontSize: 13, color: AC.muted, marginTop: 2 },
   sheetBal: { fontSize: 14, ...font.bold, color: AC.text },
-  close: { width: 34, height: 34, borderRadius: 17, backgroundColor: 'rgba(255,255,255,0.14)', alignItems: 'center', justifyContent: 'center' },
+  close: { width: 40, height: 40, borderRadius: ST.radius, borderWidth: 1, borderColor: 'rgba(255,255,255,0.18)', alignItems: 'center', justifyContent: 'center' },
   note: { fontSize: 12, color: AC.muted, textAlign: 'center' },
   card: { padding: 16, gap: 14, marginBottom: 12 },
   cardHead: { flexDirection: 'row', alignItems: 'center', gap: 14 },

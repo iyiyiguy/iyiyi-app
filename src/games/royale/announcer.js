@@ -9,10 +9,11 @@ import { buzz, getPrefs } from '../../lib/gamePrefs'
 import { playSfx } from './weaponsAdapter'
 
 const TONES = {
-  info: { sfx: 'beep', haptic: 'select', color: '#5b6cf0', rate: 1.0, pitch: 1.0 },
-  warn: { sfx: 'beep', haptic: 'warning', color: '#ff8a00', rate: 1.05, pitch: 1.0 },
-  danger: { sfx: 'planted', haptic: 'warning', color: '#d4202f', rate: 1.1, pitch: 0.95 },
-  good: { sfx: 'tap', haptic: 'success', color: '#1f9d6b', rate: 1.0, pitch: 1.05 },
+  // Studio role colours: info = friendly, warn = objective/zone, danger = enemy, good = health.
+  info: { sfx: 'beep', haptic: 'select', color: '#39d5ff', rate: 1.0, pitch: 1.0 },
+  warn: { sfx: 'beep', haptic: 'warning', color: '#ffb21e', rate: 1.05, pitch: 1.0 },
+  danger: { sfx: 'planted', haptic: 'warning', color: '#ff3d52', rate: 1.1, pitch: 0.95 },
+  good: { sfx: 'tap', haptic: 'success', color: '#5cf2a0', rate: 1.0, pitch: 1.05 },
 }
 
 const ABBREV_DIRS = {
@@ -101,7 +102,7 @@ export function speakCallout(text, tone = 'info') {
 }
 
 export function useAnnouncer() {
-  const [banner, setBanner] = useState(null) // { title, sub, color, key }
+  const [banner, setBanner] = useState(null) // { title, sub, color, tone, key }
   const timer = useRef(null)
   const lastText = useRef({ text: '', at: 0 })
 
@@ -111,7 +112,7 @@ export function useAnnouncer() {
     if (lastText.current.text === title && t - lastText.current.at < 6000) return
     lastText.current = { text: title, at: t }
     const def = TONES[tone] || TONES.info
-    setBanner({ title: String(title), sub: sub ? String(sub) : null, color: def.color, key: t })
+    setBanner({ title: String(title), sub: sub ? String(sub) : null, color: def.color, tone: TONES[tone] ? tone : 'info', key: t })
     playSfx(def.sfx)
     buzz(def.haptic)
     if (speak) speakCallout(spokenText(title, sub), tone)

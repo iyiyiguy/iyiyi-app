@@ -8,21 +8,32 @@
 // Roles are private: the host tells each player only their own role with a
 // message addressed to them. If the host drops, the new host asks everyone for
 // their role ("whois") to recover the imposter's identity.
+//
+// Like Among Us, a kill isn't announced: until the body is reported, living crew
+// still see the victim listed as a normal player.
 import React, { useEffect, useMemo, useRef, useState } from 'react'
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
-import { Avatar, Btn, Card, LocationGate, Pill, PlayerRow, PlayerTap, Spectating, formatClock } from './MultiplayerUI'
+import { Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native'
+import { Ionicons } from '@expo/vector-icons'
+import { formatClock } from './MultiplayerUI'
 import { StationImage } from './beside/StationImage'
 import { ScanTask } from './beside/ScanTask'
 import { PUZZLES } from './beside/Puzzles'
 import * as engine from './beside/engine'
 import {
-  bearingDeg, compassLabel, distanceMeters, formatDistance, recordRoundResult,
+  StBanner, StFeed, StGrid, StHero, StLabel, StLocationGate, StMvp, StPlayerRow, StPlayerTile, StResultsFooter,
+  StReveal, StRing, StScreen, StSection, StSpectating, StStats, StTag,
+} from './beside/studioKit'
+import {
+  bearingDeg, compassLabel, distanceMeters, formatDistance, offsetMeters, recordRoundResult,
   useHostLoop, useRoomClock, useRoomPositions, useRoomSnapshot, useSharedLocation,
 } from '../lib/multiplayer'
 import { buzz } from '../lib/gamePrefs'
-import { colors, radii, type } from '../theme'
+import { FONT, ST, StBar, StButton, stGlow, stType, useStudioFonts, withAlpha } from './studio'
+
+const roleColor = (imposter) => (imposter ? ST.enemy : ST.friendly)
 
 export function BesideThemGame({ room, onExit }) {
+  useStudioFonts()
   const snap = useRoomSnapshot(room)
   const positions = useRoomPositions(room)
   const now = useRoomClock(room, 500)
@@ -31,6 +42,7 @@ export function BesideThemGame({ room, onExit }) {
   const [showRole, setShowRole] = useState(false)
   const [activeTask, setActiveTask] = useState(null) // index
   const [killReadyAt, setKillReadyAt] = useState(null)
+  const [pick, setPick] = useState(null) // { key, id } vote selection
   const [notice, setNotice] = useState(null)
   const noticeTimer = useRef(null)
   const secret = useRef(null) // host only
@@ -45,6 +57,7 @@ export function BesideThemGame({ room, onExit }) {
   const amImposter = roleKnown === 'imposter'
   const me = state?.players?.[meId]
   const stations = snap?.info?.settings?.stations || []
+  const area = snap?.info?.settings?.area || null
   const stationById = useMemo(() => Object.fromEntries(stations.map((s) => [s.id, s])), [stations])
 
   const flash = (text) => {
@@ -92,9 +105,10 @@ export function BesideThemGame({ room, onExit }) {
   const phase = state?.phase
   const prevPhase = useRef(phase)
   useEffect(() => {
-    if (phase === 'meeting' && prevPhase.current === 'playing') buzz('warning')
+    if (phase === 'meeting' && prevPhase.current === 'playing') { buzz('warning'); setActiveTask(null) }
     prevPhase.current = phase
   }, [phase])
+  useEffect(() => { setPick(null) }, [state?.meetingNo])
   const alive = me?.alive
   const prevAlive = useRef(alive)
   useEffect(() => {
@@ -197,191 +211,242 @@ export function BesideThemGame({ room, onExit }) {
         const fresh = p && Date.now() - p.at < 15000 ? p : null
         return { id, ...state.players[id], pos: fresh, d: fresh && myPos ? distanceMeters(myPos, fresh) : Infinity }
       })
-      .sort((a, b) => (b.alive - a.alive) || (a.d - b.d))
   }, [state, positions, myPos, meId])
 
   // ---- render ----
   if (!room || !snap) return null
-  if (loc.status !== 'granted') return <LocationGate status={loc.status} onExit={onExit} what="Beside Them" />
-  if (!state) return <Spectating text="Starting…" />
-  if (!me) return <Spectating />
+  if (loc.status !== 'granted') return <StLocationGate status={loc.status} onExit={onExit} what="Beside Them" />
+  if (!state) return <StSpectating title="Starting" text="Choosing the imposter…" />
+  if (!me) return <StSpectating />
 
   const avatarOf = (id) => snap.roster.find((r) => r.id === id)?.avatar
+  const nameOf = (id) => state.players[id]?.name || '?'
+  const playerOf = (id) => ({ id, username: id === meId ? `${nameOf(id)} (you)` : nameOf(id), avatar: avatarOf(id) })
   const present = (id) => snap.roster.some((r) => r.id === id)
 
   if (state.phase === 'countdown') {
     const left = Math.max(0, Math.ceil((state.startsAt - now) / 1000))
     return (
-      <View style={[styles.reveal, { backgroundColor: roleKnown ? (amImposter ? colors.crimson : colors.violet) : colors.inkSurfaceRaised }]}>
-        <Text style={[styles.revealSmall, !roleKnown && { color: colors.textMuted }]}>Your secret role</Text>
-        <Text style={[styles.revealBig, !roleKnown && { color: colors.text }]}>{roleKnown ? (amImposter ? 'IMPOSTER' : 'CREW') : '…'}</Text>
-        <Text style={[styles.revealSmall, !roleKnown && { color: colors.textMuted }]}>
-          {roleKnown ? (amImposter ? 'Eliminate crew up close, sabotage comms, and don’t get caught. Your tasks are fake cover.' : 'Walk to your stations, scan them and solve the puzzles. Find the imposter.') : 'Getting your role…'}
-        </Text>
-        <Text style={[styles.revealCount, !roleKnown && { color: colors.text }]}>{left}</Text>
-        <Text style={[styles.revealSmall, !roleKnown && { color: colors.textMuted }]}>Hide your screen!</Text>
-      </View>
+      <StReveal
+        kicker="Beside Them · your secret role"
+        title={roleKnown ? (amImposter ? 'Imposter' : 'Crew') : 'Dealing'}
+        color={roleKnown ? roleColor(amImposter) : ST.muted}
+        icon={roleKnown ? (amImposter ? 'skull-outline' : 'construct-outline') : 'help-circle-outline'}
+        body={roleKnown ? (amImposter ? 'Eliminate crew up close, sabotage comms, and don’t get caught. Your tasks are fake cover.' : 'Walk to your stations, scan them and solve the puzzles. Find the imposter.') : 'Getting your role…'}
+        count={left}
+        foot="Hide your screen"
+      />
     )
   }
 
-  if (state.phase === 'ended') return <Summary state={state} meId={meId} avatarOf={avatarOf} isHost={isHost} room={room} snap={snap} onExit={onExit} />
+  if (state.phase === 'ended') return <Summary state={state} meId={meId} playerOf={playerOf} avatarOf={avatarOf} isHost={isHost} room={room} snap={snap} onExit={onExit} />
 
   if (state.phase === 'meeting' && state.meeting) {
     const m = state.meeting
     const discussing = now < m.discussUntil
     const myVote = m.votes[meId]
+    const canVote = me.alive && !discussing && myVote === undefined
+    const key = `m-${state.meetingNo}`
+    const sel = pick?.key === key ? pick.id : null
     const vote = (target) => { buzz('select'); room.sendAction({ type: 'vote', target }) }
+    const aliveIds = Object.keys(state.players).filter((id) => state.players[id].alive)
+    const deadIds = Object.keys(state.players).filter((id) => !state.players[id].alive)
+    const votedCount = Object.keys(m.votes).length
+    const total = discussing ? state.discussMs : engine.VOTE_MS
+    const left = Math.max(0, (discussing ? m.discussUntil : m.endsAt) - now)
+    const c = m.kind === 'body' ? ST.enemy : ST.objective
     return (
-      <ScrollView contentContainerStyle={styles.pad}>
-        <Text style={[type.display, { textAlign: 'center' }]}>{m.kind === 'body' ? 'Body reported' : 'Emergency meeting'}</Text>
-        <Text style={[type.caption, { textAlign: 'center', marginTop: 4 }]}>
-          {m.kind === 'body' ? `${state.players[m.calledBy]?.name} found ${state.players[m.body]?.name}.` : `Called by ${state.players[m.calledBy]?.name}.`}
+      <StScreen>
+        <StHero
+          kicker={`${m.kind === 'body' ? 'Body reported' : 'Emergency meeting'} · ${discussing ? 'discussion' : 'voting'}`}
+          color={c}
+          title={m.kind === 'body' ? `${nameOf(m.body)} was found` : 'Who is it?'}
+          sub={m.kind === 'body' ? `${nameOf(m.calledBy)} reported the body.` : `Called by ${nameOf(m.calledBy)}.`}
+        />
+        <View style={styles.ringRow}>
+          <StRing size={78} color={c} progress={left / Math.max(1, total)} value={formatClock(left)} unit={discussing ? 'talk' : 'vote'} />
+        </View>
+        <Text style={[stType.small, { textAlign: 'center', marginBottom: 10 }]}>
+          {discussing ? 'Talk it over — in person or in chat. Voting opens when the timer ends.' : 'Most votes is ejected. A tie, or Skip on top, ejects no one.'}
         </Text>
-        <Card style={{ marginTop: 12, alignItems: 'center' }}>
-          <Text style={type.label}>{discussing ? 'Discussion' : 'Voting'}</Text>
-          <Text style={type.display}>{formatClock((discussing ? m.discussUntil : m.endsAt) - now)}</Text>
-          <Text style={[type.caption, { textAlign: 'center' }]}>
-            {discussing ? 'Talk it over (in person or in chat 💬). Voting opens when the timer ends.' : 'More than half of the living players must agree to eject someone.'}
-          </Text>
-        </Card>
-        <Card>
-          {Object.keys(state.players).filter((id) => state.players[id].alive).map((id) => (
-            <PlayerRow
-              key={id}
-              player={{ username: id === meId ? `${state.players[id].name} (you)` : state.players[id].name, avatar: avatarOf(id) }}
-              subtitle={m.votes[id] !== undefined ? 'Voted ✓' : discussing ? '' : 'Deciding…'}
-              right={me.alive && !discussing && myVote === undefined && id !== meId
-                ? <Btn title="Vote" size="sm" variant="primary" onPress={() => vote(id)} />
-                : myVote === id ? <Pill text="YOUR VOTE" color={colors.magenta} /> : null}
-            />
-          ))}
-        </Card>
-        {me.alive
-          ? !discussing && (myVote === undefined
-            ? <Btn title="Skip vote" onPress={() => vote('skip')} />
-            : <Text style={[type.caption, { textAlign: 'center' }]}>{myVote === 'skip' ? 'You skipped.' : 'Vote cast.'} Waiting for others…</Text>)
-          : <Text style={[type.caption, { textAlign: 'center' }]}>Ghosts can’t vote.</Text>}
-      </ScrollView>
+        <StSection label={`Alive · ${aliveIds.length}`} right={discussing ? null : `${votedCount} voted`}>
+          <StGrid cols={3}>
+            {aliveIds.map((id) => (
+              <StPlayerTile
+                key={id}
+                player={playerOf(id)}
+                tag={m.votes[id] !== undefined ? 'Voted' : id === m.calledBy ? (m.kind === 'body' ? 'Reported' : 'Called') : discussing ? 'Alive' : 'Deciding'}
+                color={ST.enemy}
+                selected={(canVote ? sel : myVote) === id}
+                disabled={!canVote || id === meId}
+                onPress={() => setPick({ key, id })}
+              />
+            ))}
+          </StGrid>
+        </StSection>
+        {canVote ? (
+          <View style={{ flexDirection: 'row', gap: 8, marginBottom: 10 }}>
+            <StButton title={sel ? `Eject ${nameOf(sel)}` : 'Pick a suspect'} tone="danger" disabled={!sel} style={{ flex: 1 }} onPress={() => vote(sel)} />
+            <StButton title="Skip" tone="ghost" style={{ width: 100 }} onPress={() => vote('skip')} />
+          </View>
+        ) : me.alive && !discussing ? (
+          <StBanner icon="checkmark" color={ST.enemy} text={myVote === 'skip' ? 'You skipped. Waiting for others…' : `You voted for ${nameOf(myVote)}. Waiting for others…`} />
+        ) : !me.alive ? (
+          <StBanner icon="eye-outline" color={ST.muted} text="Ghosts can’t vote. Keep it quiet." />
+        ) : null}
+        {deadIds.length ? (
+          <StSection label="Out">
+            {deadIds.map((id) => <StPlayerRow key={id} player={playerOf(id)} dim subtitle={state.players[id].ejected ? 'Ejected' : 'Eliminated'} />)}
+          </StSection>
+        ) : null}
+      </StScreen>
     )
   }
 
   // ---- playing ----
   const sabotaged = !!state.sabotage
   const myTasks = state.tasks[meId] || []
-  const killReady = killReadyAt ?? (state.startsAt + state.killCooldownMs)
+  const lm = state.lastMeeting
+  // Kill cooldown starts at round start and restarts after every meeting (host rule).
+  const killReady = Math.max(killReadyAt || 0, state.startsAt + state.killCooldownMs, lm?.at ? lm.at + state.killCooldownMs : 0)
   const killWait = Math.max(0, killReady - now)
   const meetingWait = Math.max(0, state.meetingReadyAt - now)
-  const lm = state.lastMeeting
   const nearBody = Object.entries(state.bodies).find(([, b]) => !b.reported && engine.within(myPos, b, engine.REPORT_RANGE_M))
   const atAnyStation = stations.some((st) => engine.within(myPos, st, engine.STATION_RANGE_M))
   const task = activeTask != null ? myTasks[activeTask] : null
+  const doneCount = myTasks.filter((t) => t.done).length
+  const hereIndex = myTasks.findIndex((t) => !t.done && stationById[t.stationId] && engine.within(myPos, stationById[t.stationId], engine.STATION_RANGE_M))
+  const hereStation = hereIndex >= 0 ? stationById[myTasks[hereIndex].stationId] : null
+  const hideDeaths = me.alive && !amImposter
+  const shownAlive = (o) => o.alive || (hideDeaths && !o.ejected && state.bodies[o.id] && !state.bodies[o.id].reported)
+  const list = [...others].sort((a, b) => (shownAlive(b) - shownAlive(a)) || (a.d - b.d))
 
   return (
-    <ScrollView contentContainerStyle={styles.pad} keyboardShouldPersistTaps="handled">
-      <Pressable onPress={() => setShowRole((v) => !v)} accessibilityRole="button" accessibilityLabel="Show or hide your role">
-        <View style={[styles.role, { backgroundColor: showRole && roleKnown ? (amImposter ? colors.crimson : colors.violet) : colors.inkSurfaceRaised }]}>
-          {showRole && roleKnown ? (
-            <>
-              <Text style={styles.roleTitle}>{amImposter ? '🎭 Imposter' : '🧑‍🚀 Crew'}</Text>
-              <Text style={styles.roleSub}>{amImposter ? 'Eliminate, sabotage, blend in.' : 'Do your tasks. Find the imposter.'} Tap to hide.</Text>
-            </>
-          ) : (
-            <Text style={[type.body, { textAlign: 'center' }]}>{roleKnown ? 'Tap to see your role' : 'Getting your role…'}</Text>
-          )}
+    <StScreen keyboardShouldPersistTaps="handled">
+      <View style={styles.topRow}>
+        <Pressable
+          onPress={() => setShowRole((v) => !v)}
+          accessibilityRole="button"
+          accessibilityLabel="Show or hide your role"
+          style={[styles.roleChip, showRole && roleKnown ? { backgroundColor: withAlpha(roleColor(amImposter), 0.14), borderLeftColor: roleColor(amImposter) } : null]}
+        >
+          <Text style={[stType.label, showRole && roleKnown ? { color: roleColor(amImposter) } : null]}>Your role</Text>
+          <Text style={[stType.name, { fontSize: 18 }]}>{showRole && roleKnown ? (amImposter ? 'IMPOSTER' : 'CREW') : roleKnown ? 'TAP TO PEEK' : '…'}</Text>
+        </Pressable>
+        <View style={{ flex: 1, alignItems: 'flex-end' }}>
+          <StLabel>{sabotaged ? 'Crew tasks · comms down' : `Crew tasks · ${Math.round(state.progress * 100)}%`}</StLabel>
+          <StBar value={sabotaged ? 0 : state.progress} color={ST.health} height={8} style={{ width: '100%', maxWidth: 160, marginTop: 4 }} />
         </View>
-      </Pressable>
+      </View>
 
       {sabotaged && (
-        <View style={[styles.alert, { backgroundColor: colors.crimson }]}>
-          <Text style={styles.alertText}>📡 Comms down · {formatClock(state.sabotage.until - now)}</Text>
-          <Text style={styles.alertSub}>Progress and player distances are hidden. Fix it at any station.</Text>
-          {me.alive && atAnyStation && <Btn title="Fix comms" size="sm" onPress={() => { buzz('medium'); room.sendAction({ type: 'fix' }) }} style={{ marginTop: 8 }} />}
-        </View>
+        <StBanner solid color={ST.enemy} icon="radio-outline" text={`Comms down · ${formatClock(state.sabotage.until - now)}`} sub="Progress and player distances are hidden. Fix it at any station.">
+          {me.alive && atAnyStation ? <StButton title="Fix comms" tone="white" height={38} onPress={() => { buzz('medium'); room.sendAction({ type: 'fix' }) }} style={{ marginTop: 8 }} /> : null}
+        </StBanner>
       )}
-      {nearBody && me.alive && (
-        <View style={[styles.alert, { backgroundColor: colors.danger }]}>
-          <Text style={styles.alertText}>☠️ {state.players[nearBody[0]]?.name}’s body is here</Text>
-          <Btn title="Report body" size="sm" onPress={() => { buzz('heavy'); room.sendAction({ type: 'report', body: nearBody[0] }) }} style={{ marginTop: 8 }} />
-        </View>
-      )}
-      {!me.alive && <Card><Text style={type.body}>👻 You’re a ghost. You can’t vote or call meetings{amImposter ? '' : ', but your tasks still count'}.</Text></Card>}
-      {!!notice && <Card><Text style={type.body}>{notice}</Text></Card>}
+      {!!notice && <StBanner text={notice} color={ST.objective} icon="information-circle-outline" />}
+      {!me.alive && <StBanner icon="eye-outline" color={ST.muted} text={`You’re a ghost. You can’t vote or call meetings${amImposter ? '' : ', but your tasks still count'}.`} />}
       {lm && now - lm.at < 25000 && (
-        <Card>
-          <Text style={type.body}>
-            {lm.ejected ? `${state.players[lm.ejected]?.name} was ejected. They were ${lm.wasImposter ? '' : 'not '}the imposter.` : `No one was ejected (${lm.skip} skipped).`}
-          </Text>
-        </Card>
+        <StBanner
+          icon={lm.ejected ? 'person-remove-outline' : 'remove-circle-outline'}
+          color={lm.ejected ? (lm.wasImposter ? ST.health : ST.enemy) : ST.muted}
+          text={lm.ejected ? `${nameOf(lm.ejected)} was ejected. They were ${lm.wasImposter ? '' : 'not '}the imposter.` : `No one was ejected (${lm.skip} skipped).`}
+        />
       )}
 
-      <Card>
-        <Text style={type.label}>Crew task progress</Text>
-        {sabotaged ? (
-          <Text style={[type.caption, { marginTop: 6 }]}>Unavailable while comms are down</Text>
-        ) : (
-          <View style={styles.track}><View style={[styles.fill, { width: `${Math.round(state.progress * 100)}%` }]} /></View>
-        )}
-      </Card>
+      <StationMap area={area} stations={stations} myPos={myPos} tasks={myTasks} />
 
-      <Card>
-        <Text style={[type.label, { marginBottom: 6 }]}>{amImposter ? 'Cover tasks (don’t count)' : 'Your tasks'}</Text>
+      <StSection label={`${amImposter ? 'Cover tasks · don’t count' : 'Your tasks'} · ${doneCount} of ${myTasks.length}`}>
         {myTasks.map((t, i) => {
           const st = stationById[t.stationId]
           if (!st) return null
           const d = myPos ? distanceMeters(myPos, st) : Infinity
           const here = engine.within(myPos, st, engine.STATION_RANGE_M)
           return (
-            <View key={`${t.stationId}-${i}`} style={styles.taskRow}>
+            <Pressable
+              key={`${t.stationId}-${i}`}
+              onPress={!t.done && here && state.phase === 'playing' ? () => setActiveTask(i) : undefined}
+              style={[styles.taskRow, t.done && { opacity: 0.55 }, here && !t.done && { borderColor: ST.objective }]}
+              accessibilityRole={!t.done && here ? 'button' : undefined}
+              accessibilityLabel={`${st.name}, ${PUZZLES[t.puzzle]}${t.done ? ', done' : here ? ', you’re here' : ''}`}
+            >
+              <View style={[styles.taskMark, t.done ? { backgroundColor: ST.health, borderColor: ST.health } : { borderColor: ST.objective }]} />
               <StationImage room={room} station={st} assets={snap.assets} style={styles.taskImg} />
-              <View style={{ flex: 1, marginLeft: 10 }}>
-                <Text style={[type.body, t.done && styles.doneText]} numberOfLines={1}>{st.name}</Text>
-                <Text style={type.caption}>{t.done ? 'Done ✓' : `${PUZZLES[t.puzzle]} · ${here ? 'You’re here' : myPos ? `${formatDistance(d)} ${compassLabel(bearingDeg(myPos, st))}` : '—'}`}</Text>
+              <View style={{ flex: 1, minWidth: 0, marginLeft: 10 }}>
+                <Text style={[stType.name, { fontSize: 14, fontFamily: FONT.ui }]} numberOfLines={1}>{st.name} · {PUZZLES[t.puzzle]}</Text>
+                <Text style={[stType.small, { fontSize: 11 }]} numberOfLines={1}>{t.done ? 'Done' : here ? 'You’re here — scan it' : myPos ? `${compassLabel(bearingDeg(myPos, st))} · ${formatDistance(d)}` : '—'}</Text>
               </View>
-              {!t.done && <Btn title="Scan" size="sm" variant="primary" disabled={!here || state.phase !== 'playing'} onPress={() => setActiveTask(i)} />}
-            </View>
+              <Text style={[stType.label, { color: t.done ? ST.health : here ? ST.objective : ST.muted }]}>{t.done ? 'Done' : here ? 'Here' : formatDistance(d)}</Text>
+            </Pressable>
           )
         })}
-      </Card>
+      </StSection>
 
-      <Card>
-        <Text style={[type.label, { marginBottom: 4 }]}>Players</Text>
-        {amImposter && me.alive && (
-          <Text style={[type.caption, { marginBottom: 4 }]}>
-            {killWait > 0 ? `Eliminate ready in ${Math.ceil(killWait / 1000)}s` : `Get within about ${Math.round(engine.KILL_RANGE_M * 3.28)} ft to eliminate.`}
-          </Text>
-        )}
-        {others.map((o) => {
+      {me.alive ? (
+        <View style={styles.actionGrid}>
+          <Pressable
+            onPress={nearBody ? () => { buzz('heavy'); room.sendAction({ type: 'report', body: nearBody[0] }) } : undefined}
+            disabled={!nearBody}
+            accessibilityRole="button"
+            accessibilityState={{ disabled: !nearBody }}
+            accessibilityLabel={nearBody ? `Report ${nameOf(nearBody[0])}’s body` : 'Report body, no body nearby'}
+            style={({ pressed }) => [styles.bigBtn, { backgroundColor: ST.enemy, borderColor: ST.enemy, opacity: nearBody ? (pressed ? 0.85 : 1) : 0.35 }, nearBody && stGlow(ST.enemy, 14)]}
+          >
+            <Text style={[stType.button, { color: '#fff' }]}>Report body</Text>
+            <Text style={[styles.bigSub, { color: '#fff' }]} numberOfLines={1}>{nearBody ? `${nameOf(nearBody[0])} is here` : `Within ${formatDistance(engine.REPORT_RANGE_M)}`}</Text>
+          </Pressable>
+          <Pressable
+            onPress={() => { buzz('heavy'); room.sendAction({ type: 'meeting' }) }}
+            disabled={me.emergencies <= 0 || meetingWait > 0 || sabotaged}
+            accessibilityRole="button"
+            accessibilityState={{ disabled: me.emergencies <= 0 || meetingWait > 0 || sabotaged }}
+            accessibilityLabel="Call an emergency meeting"
+            style={({ pressed }) => [styles.bigBtn, { borderColor: ST.objective, opacity: me.emergencies <= 0 || meetingWait > 0 || sabotaged ? 0.4 : pressed ? 0.8 : 1 }]}
+          >
+            <Text style={[stType.button, { color: ST.objective }]}>Emergency</Text>
+            <Text style={styles.bigSub} numberOfLines={1}>
+              {me.emergencies <= 0 ? 'Used' : sabotaged ? 'Fix comms first' : meetingWait > 0 ? `Ready in ${Math.ceil(meetingWait / 1000)} s` : `${me.emergencies} left`}
+            </Text>
+          </Pressable>
+        </View>
+      ) : null}
+
+      <StButton
+        title={hereStation ? `Scan station · ${hereStation.name}` : 'Walk to a task station'}
+        disabled={!hereStation || state.phase !== 'playing'}
+        onPress={() => setActiveTask(hereIndex)}
+        left={<Ionicons name="scan-outline" size={18} color={ST.ink} />}
+        style={{ marginBottom: 10 }}
+      />
+      {amImposter && me.alive ? (
+        <View style={{ flexDirection: 'row', gap: 8, marginBottom: 10 }}>
+          <View style={[styles.killChip, { borderColor: killWait > 0 ? ST.line : ST.enemy }]}>
+            <Text style={stType.label}>Eliminate</Text>
+            <Text style={[stType.num, { fontSize: 18, color: killWait > 0 ? ST.muted : ST.enemy }]}>{killWait > 0 ? `${Math.ceil(killWait / 1000)} s` : 'READY'}</Text>
+          </View>
+          <StButton title="Sabotage comms" tone="outline" color={ST.enemy} disabled={sabotaged} style={{ flex: 1 }} onPress={() => room.sendAction({ type: 'sabotage' })} />
+        </View>
+      ) : null}
+
+      <StSection label="Players" right={amImposter && me.alive ? `Range ~${Math.round(engine.KILL_RANGE_M * 3.28)} ft` : null}>
+        {list.map((o) => {
+          const showAlive = shownAlive(o)
           const canKill = amImposter && me.alive && o.alive && present(o.id) && killWait === 0 && o.pos && myPos && engine.within(myPos, o.pos, engine.KILL_RANGE_M)
           return (
-            <PlayerRow
+            <StPlayerRow
               key={o.id}
-              player={{ username: o.name, avatar: avatarOf(o.id) }}
-              dim={!o.alive || !present(o.id)}
-              subtitle={!present(o.id) ? 'Disconnected' : o.ejected ? 'Ejected' : !o.alive ? '' : sabotaged ? '—' : o.pos ? `${formatDistance(o.d)} away` : 'No location yet'}
+              player={{ id: o.id, username: o.name, avatar: avatarOf(o.id) }}
+              dim={!showAlive || !present(o.id)}
+              subtitle={!present(o.id) ? 'Disconnected' : o.ejected ? 'Ejected' : !showAlive ? 'Eliminated' : sabotaged ? '—' : o.pos ? `${formatDistance(o.d)} away` : 'No location yet'}
               right={amImposter && me.alive && o.alive
-                ? <Btn title="Eliminate" size="sm" variant="danger" disabled={!canKill} onPress={() => room.sendAction({ type: 'kill', target: o.id })} />
+                ? <StButton title="Kill" tone="danger" height={34} disabled={!canKill} style={{ minWidth: 64, paddingHorizontal: 10 }} onPress={() => room.sendAction({ type: 'kill', target: o.id })} />
                 : null}
             />
           )
         })}
-      </Card>
+      </StSection>
 
-      {me.alive && (
-        <View style={{ gap: 10 }}>
-          <Btn
-            title={me.emergencies <= 0 ? 'Emergency meeting used' : meetingWait > 0 ? `Emergency meeting (${Math.ceil(meetingWait / 1000)}s)` : 'Emergency meeting'}
-            variant="primary"
-            disabled={me.emergencies <= 0 || meetingWait > 0 || sabotaged}
-            onPress={() => { buzz('heavy'); room.sendAction({ type: 'meeting' }) }}
-          />
-          {amImposter && <Btn title="Sabotage comms" variant="danger" disabled={sabotaged} onPress={() => room.sendAction({ type: 'sabotage' })} />}
-        </View>
-      )}
-      {state.feed.length > 0 && (
-        <Card style={{ marginTop: 12 }}>
-          {state.feed.map((f) => <Text key={f.id} style={[type.caption, { marginVertical: 2 }]}>{f.text}</Text>)}
-        </Card>
-      )}
+      <StFeed items={state.feed} />
 
       <ScanTask
         visible={!!task && !task.done}
@@ -397,78 +462,133 @@ export function BesideThemGame({ room, onExit }) {
           room.sendAction({ type: 'task', index: i })
         }}
       />
-    </ScrollView>
+    </StScreen>
+  )
+}
+
+// North-up map of the play area: my task stations (objective, done = green), other
+// stations (outline) and me (friendly triangle). Other players are never drawn.
+function StationMap({ area, stations, myPos, tasks }) {
+  const { width } = useWindowDimensions()
+  const w = Math.max(240, width - 24)
+  const h = Math.min(260, Math.round(w * 0.7))
+  const center = area || myPos || stations[0]
+  if (!center) return null
+  const far = Math.max(30, ...stations.map((st) => distanceMeters(center, st)), myPos ? distanceMeters(center, myPos) : 0)
+  const radiusM = (area ? Math.max(area.r, far) : far) * 1.15
+  const scale = (Math.min(w, h) / 2 - 14) / radiusM
+  const place = (p) => {
+    const { x, y } = offsetMeters(center, p)
+    return { left: w / 2 + x * scale, top: h / 2 - y * scale }
+  }
+  const mine = {}
+  for (const t of tasks) mine[t.stationId] = mine[t.stationId] || (t.done ? 'done' : 'todo')
+  for (const t of tasks) if (!t.done) mine[t.stationId] = 'todo'
+  const me = myPos ? place(myPos) : null
+  const ar = area ? area.r * scale : 0
+  return (
+    <View style={[styles.map, { width: w, height: h }]} accessibilityLabel="Map of task stations">
+      <View style={[styles.mapStripe, { top: h / 2 - 9, left: 0, width: w, height: 18 }]} />
+      <View style={[styles.mapStripe, { left: w / 2 - 9, top: 0, width: 18, height: h }]} />
+      {area ? <View style={[styles.areaRing, { left: w / 2 - ar, top: h / 2 - ar, width: ar * 2, height: ar * 2, borderRadius: ar }]} /> : null}
+      <Text style={[stType.label, { position: 'absolute', top: 6, left: 8 }]}>N ↑</Text>
+      {stations.map((st) => {
+        const p = place(st)
+        const kind = mine[st.id]
+        const right = p.left > w * 0.62
+        return (
+          <View key={st.id} pointerEvents="none" style={[styles.station, { top: p.top - 6 }, right ? { right: w - p.left - 6, flexDirection: 'row-reverse' } : { left: p.left - 6 }]}>
+            <View style={[
+              styles.diamond,
+              kind === 'done' ? { backgroundColor: ST.health } : kind === 'todo' ? [{ backgroundColor: ST.objective }, stGlow(ST.objective, 10)] : { borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.4)' },
+            ]} />
+            <Text style={[styles.stationLabel, right ? { marginRight: 4 } : { marginLeft: 4 }, !kind && { color: ST.muted }]} numberOfLines={1}>{st.name.toUpperCase()}</Text>
+          </View>
+        )
+      })}
+      {me ? <View pointerEvents="none" style={[styles.meArrow, { left: Math.max(0, Math.min(w - 14, me.left - 7)), top: Math.max(0, Math.min(h - 18, me.top - 9)) }]} /> : null}
+    </View>
   )
 }
 
 const REASONS = {
-  'imposter-left': 'The imposter left the game.',
-  ejected: 'The crew voted out the imposter!',
-  tasks: 'The crew finished every task!',
-  outnumbered: 'The imposter outnumbered the crew.',
+  'imposter-left': 'The imposter left the game',
+  ejected: 'The crew voted out the imposter',
+  tasks: 'The crew finished every task',
+  outnumbered: 'The imposter outnumbered the crew',
 }
 
-function Summary({ state, meId, avatarOf, isHost, room, snap, onExit }) {
+function Summary({ state, meId, playerOf, avatarOf, isHost, room, snap, onExit }) {
   const imp = state.players[state.imposterId]
   const iWon = state.imposterId ? (state.winner === 'imposter') === (state.imposterId === meId) : state.winner === 'crew'
   const mvp = state.mvp ? state.players[state.mvp] : null
   const correct = state.stats?.correctVotes || {}
+  const winColor = state.winner === 'crew' ? ST.friendly : ST.enemy
+  const ids = Object.keys(state.players)
+  const mine = state.players[meId]
   return (
-    <ScrollView contentContainerStyle={styles.pad}>
-      <Text style={[type.display, { textAlign: 'center' }]}>{state.winner === 'crew' ? 'Crew wins' : 'Imposter wins'}</Text>
-      <Text style={[type.body, { textAlign: 'center', marginVertical: 6 }]}>{REASONS[state.reason] || ''}</Text>
-      <Text style={[type.title, { textAlign: 'center', marginBottom: 12, color: iWon ? colors.success : colors.danger }]}>{iWon ? 'You won!' : 'You lost'}</Text>
-      <Card>
-        <Text style={type.label}>The imposter was</Text>
-        {imp ? <PlayerRow player={{ id: state.imposterId, username: imp.name, avatar: avatarOf(state.imposterId) }} right={<Text style={{ fontSize: 22 }}>🎭</Text>} /> : <Text style={type.caption}>A player who left the game.</Text>}
-      </Card>
-      {mvp && (
-        <Card>
-          <Text style={type.label}>MVP</Text>
-          <PlayerTap player={{ id: state.mvp, username: mvp.name, avatar: avatarOf(state.mvp) }} style={styles.mvp}>
-            <Avatar uri={avatarOf(state.mvp)} name={mvp.name} size={50} />
-            <View style={{ flex: 1, marginLeft: 12 }}>
-              <Text style={type.title}>{mvp.name}</Text>
-              <Text style={type.caption}>{state.mvp === state.imposterId ? 'Imposter' : `${mvp.tasksDone} tasks · ${correct[state.mvp] || 0} correct votes`}</Text>
-            </View>
-            <Text style={{ fontSize: 28 }}>⭐</Text>
-          </PlayerTap>
-        </Card>
-      )}
-      <Card>
-        <Text style={[type.label, { marginBottom: 4 }]}>Everyone</Text>
-        {Object.entries(state.players).map(([id, p]) => (
-          <PlayerRow
-            key={id}
-            player={{ id, username: id === meId ? `${p.name} (you)` : p.name, avatar: avatarOf(id) }}
-            subtitle={`${id === state.imposterId ? 'Imposter' : 'Crew'} · ${p.ejected ? 'ejected' : p.alive ? 'survived' : 'eliminated'} · ${p.tasksDone} tasks · ${correct[id] || 0} correct votes`}
-          />
-        ))}
-      </Card>
-      {isHost
-        ? <Btn title="Play again" variant="primary" onPress={() => room.setInfo({ round: (snap.info.round || 0) + 1 })} />
-        : <Text style={[type.caption, { textAlign: 'center' }]}>Waiting for the host to start another round…</Text>}
-      <Btn title="Leave" onPress={onExit} style={{ marginTop: 12 }} />
-    </ScrollView>
+    <StScreen>
+      <StHero
+        kicker={`Beside Them · ${REASONS[state.reason] || 'round over'}`}
+        title={iWon ? 'Victory' : 'Defeat'}
+        sub={state.winner === 'crew' ? 'Crew wins' : 'Imposter wins'}
+        color={iWon ? winColor : ST.enemy}
+        big
+      />
+      <StStats items={[
+        { label: 'Crew tasks', value: `${Math.round((state.progress || 0) * 100)}%`, color: ST.health },
+        { label: 'Meetings', value: String(state.meetingNo || 0) },
+        { label: 'Your tasks', value: String(mine?.tasksDone || 0) },
+        { label: 'Good votes', value: String(correct[meId] || 0) },
+      ]} />
+      <StSection label="The imposter was" accent={ST.enemy}>
+        {imp
+          ? <StPlayerRow player={playerOf(state.imposterId)} color={ST.enemy} subtitle={imp.ejected ? 'Ejected' : imp.alive ? 'Survived' : 'Out'} right={<StTag text="Imposter" color={ST.enemy} solid />} />
+          : <Text style={stType.small}>A player who left the game.</Text>}
+      </StSection>
+      {mvp ? (
+        <StMvp
+          player={{ id: state.mvp, username: mvp.name, avatar: avatarOf(state.mvp) }}
+          line={state.mvp === state.imposterId ? 'Imposter' : `${mvp.tasksDone} tasks · ${correct[state.mvp] || 0} correct votes`}
+        />
+      ) : null}
+      <StSection label="Played with · follow on iYiYi">
+        {ids.map((id) => {
+          const p = state.players[id]
+          const isImp = id === state.imposterId
+          return (
+            <StPlayerRow
+              key={id}
+              player={playerOf(id)}
+              color={roleColor(isImp)}
+              subtitle={`${p.ejected ? 'Ejected' : p.alive ? 'Survived' : 'Eliminated'} · ${p.tasksDone} tasks · ${correct[id] || 0} correct votes`}
+              right={<StTag text={isImp ? 'Imposter' : 'Crew'} color={roleColor(isImp)} />}
+            />
+          )
+        })}
+      </StSection>
+      <StFeed items={state.feed} />
+      <StResultsFooter isHost={isHost} onAgain={() => room.setInfo({ round: (snap.info.round || 0) + 1 })} onExit={onExit} />
+    </StScreen>
   )
 }
 
 const styles = StyleSheet.create({
-  pad: { padding: 12, paddingBottom: 40 },
-  reveal: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 28 },
-  revealSmall: { ...type.body, color: colors.onBrandMuted, textAlign: 'center', marginTop: 8 },
-  revealBig: { fontSize: 48, fontWeight: '800', letterSpacing: 3, color: colors.onBrand, marginTop: 8 },
-  revealCount: { fontSize: 72, fontWeight: '800', color: colors.onBrand, marginTop: 20 },
-  role: { borderRadius: radii.md, padding: 16, marginBottom: 12, minHeight: 64, justifyContent: 'center' },
-  roleTitle: { ...type.title, color: colors.onBrand },
-  roleSub: { ...type.caption, color: colors.onBrandMuted, marginTop: 4 },
-  alert: { borderRadius: radii.md, padding: 14, marginBottom: 12 },
-  alertText: { ...type.body, fontWeight: '700', color: colors.onBrand },
-  alertSub: { ...type.caption, color: colors.onBrandMuted, marginTop: 4 },
-  track: { height: 10, borderRadius: 5, backgroundColor: colors.hairline, overflow: 'hidden', marginTop: 8 },
-  fill: { height: 10, borderRadius: 5, backgroundColor: colors.success },
-  taskRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 8 },
-  taskImg: { width: 52, height: 52 },
-  doneText: { color: colors.textFaint, textDecorationLine: 'line-through' },
-  mvp: { flexDirection: 'row', alignItems: 'center', marginTop: 8 },
+  ringRow: { alignItems: 'center', marginBottom: 8 },
+  topRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 10 },
+  roleChip: { paddingVertical: 6, paddingHorizontal: 12, borderLeftWidth: 3, borderLeftColor: ST.lineStrong, backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: ST.radius, minWidth: 130 },
+  map: { alignSelf: 'center', backgroundColor: '#18202a', borderWidth: 1, borderColor: ST.line, overflow: 'hidden', marginBottom: 10, borderRadius: ST.radius },
+  mapStripe: { position: 'absolute', backgroundColor: 'rgba(255,255,255,0.05)' },
+  areaRing: { position: 'absolute', borderWidth: 1, borderColor: withAlpha(ST.friendly, 0.35), borderStyle: 'dashed' },
+  station: { position: 'absolute', flexDirection: 'row', alignItems: 'center' },
+  diamond: { width: 12, height: 12, transform: [{ rotate: '45deg' }] },
+  stationLabel: { fontFamily: FONT.ui, fontSize: 11, color: ST.text, paddingHorizontal: 4, backgroundColor: 'rgba(8,10,14,0.8)', maxWidth: 120 },
+  meArrow: { position: 'absolute', width: 0, height: 0, borderLeftWidth: 7, borderRightWidth: 7, borderBottomWidth: 18, borderLeftColor: 'transparent', borderRightColor: 'transparent', borderBottomColor: ST.friendly },
+  taskRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 6, paddingHorizontal: 8, marginVertical: 2, backgroundColor: 'rgba(255,255,255,0.04)', borderRadius: ST.radius, borderWidth: 1, borderColor: 'transparent' },
+  taskMark: { width: 10, height: 10, borderWidth: 1.5, marginRight: 8 },
+  taskImg: { width: 36, height: 36 },
+  actionGrid: { flexDirection: 'row', gap: 8, marginBottom: 8 },
+  bigBtn: { flex: 1, height: 64, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderRadius: ST.radius, paddingHorizontal: 6 },
+  bigSub: { fontFamily: FONT.uiSemi, fontSize: 11, color: ST.text, marginTop: 2 },
+  killChip: { width: 110, paddingHorizontal: 10, justifyContent: 'center', borderWidth: 1, borderRadius: ST.radius },
 })

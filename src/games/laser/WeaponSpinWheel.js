@@ -1,230 +1,219 @@
-// Spin-wheel weapon picker for Laser Tag. Opened by tapping the weapon chip.
+// Radial weapon wheel for Laser Tag (studio "Wheel" board). Opened by tapping the weapon
+// card (or CHANGE WEAPON on the tagged-out screen).
 //
-// Weapons sit on an arc; swipe left/right (or drag along the arc) to spin it, with
-// momentum, snapping and a haptic tick on every slot. The centred weapon is larger and
-// its stats are shown. Tap the centred weapon — or release slowly on one — to equip;
-// tap outside or swipe down to close. All transforms run on the native driver: the only
-// JS work while spinning is a slot-change tick.
+// Every owned weapon sits on a ring around the selected one. Tap a slot, or drag a finger
+// round the ring, to select it (haptic tick per slot); its stats show below as 10-cell bars.
+// EQUIP (or tapping the centre) equips it; CLOSE, the backdrop or Android back closes.
+// The match keeps running behind the wheel; firing is paused while it's open.
 import React, { useEffect, useMemo, useRef, useState } from 'react'
-import { Animated, Easing, PanResponder, Pressable, StyleSheet, Text, View, useWindowDimensions, Image } from 'react-native'
-import { HUD, hudSheet, hudType } from './HudPro'
+import { Animated, Easing, Image, PanResponder, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native'
 import { buzz } from '../../lib/gamePrefs'
 import { fireRateLabel, gunRatings } from '../../lib/guns'
 import { gunArt } from '../../lib/gunArt'
-
-const SLOT_PX = 92 // horizontal drag per slot
-const STEP_DEG = 36 // arc angle between slots
-const VISIBLE = 3 // slots shown each side
-const GOLD = '#ffc94d'
+import { FONT, ST, stType } from '../studio'
 
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v))
-const modeLabel = (w) => (w?.fireMode === 'automatic' ? 'AUTO' : (w?.shotsPerClick || 1) > 1 ? 'BURST' : 'SEMI')
+const modeLabel = (w) => (w?.fireMode === 'automatic' ? 'AUTO' : (w?.shotsPerClick || 1) > 1 ? `BURST ${w.shotsPerClick}` : 'SEMI')
+const STATS = [['DAMAGE', 'power'], ['FIRE RATE', 'fireRate'], ['ACCURACY', 'accuracy'], ['RANGE', 'range']]
 
 export function WeaponSpinWheel({ visible, loadout, currentId, onPick, onClose, insets }) {
   if (!visible || !Array.isArray(loadout) || loadout.length === 0) return null
-  return <Wheel loadout={loadout} currentId={currentId} onPick={onPick} onClose={onClose} bottomInset={insets?.bottom || 0} />
+  return <Wheel loadout={loadout} currentId={currentId} onPick={onPick} onClose={onClose} insets={insets || {}} />
 }
 
-function Wheel({ loadout, currentId, onPick, onClose, bottomInset = 0 }) {
-  const { width } = useWindowDimensions()
+function Wheel({ loadout, currentId, onPick, onClose, insets }) {
+  const { width, height } = useWindowDimensions()
   const n = loadout.length
   const startIdx = Math.max(0, loadout.findIndex((w) => w.id === currentId))
-  const R = clamp(width * 0.42, 130, 190)
-
-  const pos = useRef(new Animated.Value(startIdx)).current
+  const [sel, setSel] = useState(startIdx)
+  const selRef = useRef(startIdx)
+  selRef.current = sel
   const show = useRef(new Animated.Value(0)).current
-  const posNow = useRef(startIdx)
-  const lastTick = useRef(startIdx)
-  const [centerIdx, setCenterIdx] = useState(startIdx)
   const closing = useRef(false)
   const cb = useRef({})
   cb.current = { onPick, onClose, loadout }
 
-  useEffect(() => {
-    Animated.spring(show, { toValue: 1, useNativeDriver: true, damping: 16, stiffness: 240 }).start()
-    const id = pos.addListener(({ value }) => {
-      posNow.current = value
-      const slot = clamp(Math.round(value), 0, n - 1)
-      if (slot !== lastTick.current) {
-        lastTick.current = slot
-        buzz('select')
-        setCenterIdx(slot)
-      }
-    })
-    return () => {
-      pos.removeListener(id)
-      pos.stopAnimation()
-      show.stopAnimation()
-    }
-  }, [pos, show, n])
+  // Ring size: whatever is left after the header, the stats panel and the buttons.
+  const top = (insets.top || 0) + 14
+  const bottom = (insets.bottom || 0) + 12
+  const compact = height < 720
+  const statsH = compact ? 132 : 150
+  const avail = height - top - bottom - 50 - statsH - 48 - 3 * (compact ? 10 : 16)
+  const ring = Math.round(clamp(Math.min(width - 32, avail), 210, 360))
+  const slotW = Math.round(clamp((Math.PI * ring * 0.8) / Math.max(n, 1) - 8, 54, 80))
+  const slotH = Math.round(slotW * 0.8)
+  const R = ring / 2 - slotH / 2 - 2
+  const half = ring / 2
 
-  const finish = (kind, idx) => {
+  const slots = useMemo(() => loadout.map((w, i) => {
+    const a = (i / n) * Math.PI * 2 - Math.PI / 2
+    return { w, i, cx: half + Math.cos(a) * R, cy: half + Math.sin(a) * R }
+  }), [loadout, n, half, R])
+
+  useEffect(() => {
+    Animated.timing(show, { toValue: 1, duration: 180, easing: Easing.out(Easing.cubic), useNativeDriver: true }).start()
+    return () => show.stopAnimation()
+  }, [show])
+
+  const finish = (kind) => {
     if (closing.current) return
     closing.current = true
-    Animated.timing(show, { toValue: 0, duration: kind === 'pick' ? 170 : 140, easing: Easing.in(Easing.quad), useNativeDriver: true }).start(() => {
+    Animated.timing(show, { toValue: 0, duration: 130, easing: Easing.in(Easing.quad), useNativeDriver: true }).start(() => {
       const { onPick: pick, onClose: close, loadout: l } = cb.current
-      if (kind === 'pick' && l[idx]) pick?.(l[idx].id)
+      if (kind === 'pick' && l[selRef.current]) pick?.(l[selRef.current].id)
       else close?.()
     })
   }
 
-  const snapTo = (target, then) => {
-    const t = clamp(Math.round(target), 0, n - 1)
-    Animated.spring(pos, { toValue: t, useNativeDriver: true, damping: 18, stiffness: 180, mass: 0.9 }).start(({ finished }) => {
-      if (finished) then?.(t)
-    })
-    return t
+  const choose = (i) => {
+    const k = clamp(i, 0, n - 1)
+    if (k !== selRef.current) {
+      selRef.current = k
+      setSel(k)
+      buzz('select')
+    }
+  }
+
+  // Which slot is under (x, y) in ring coordinates: 'centre', a slot index, or null.
+  const hitTest = (x, y, dragging) => {
+    const dx = x - half
+    const dy = y - half
+    const dist = Math.hypot(dx, dy)
+    if (!dragging && dist < R - slotH * 0.6) return 'centre'
+    if (dist < R * 0.45) return null
+    const ang = Math.atan2(dy, dx) + Math.PI / 2 // 0 = 12 o'clock
+    const norm = ((ang % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2)
+    return Math.round((norm / (Math.PI * 2)) * n) % n
   }
 
   const pan = useMemo(() => {
-    let start = 0
+    let x0 = 0
+    let y0 = 0
     return PanResponder.create({
       onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dx) > 4 || Math.abs(g.dy) > 4,
+      onMoveShouldSetPanResponder: () => true,
       onPanResponderTerminationRequest: () => false,
-      onPanResponderGrant: () => {
-        try { pos.stopAnimation((v) => { posNow.current = v }); start = posNow.current } catch {}
+      onPanResponderGrant: (e) => {
+        x0 = e.nativeEvent.locationX
+        y0 = e.nativeEvent.locationY
       },
       onPanResponderMove: (_, g) => {
         try {
-          if (closing.current) return
-          let v = start - g.dx / SLOT_PX
-          if (v < 0) v = v / 3 // rubber band past the ends
-          else if (v > n - 1) v = n - 1 + (v - (n - 1)) / 3
-          pos.setValue(v)
+          if (closing.current || Math.hypot(g.dx, g.dy) < 10) return
+          const hit = hitTest(x0 + g.dx, y0 + g.dy, true)
+          if (typeof hit === 'number') choose(hit)
         } catch {}
       },
-      onPanResponderRelease: (e, g) => {
+      onPanResponderRelease: (_, g) => {
         try {
-          if (closing.current) return
-          // Swipe down closes.
-          if (g.dy > 70 && Math.abs(g.dy) > Math.abs(g.dx) * 1.3) { finish('close'); return }
-          const moved = Math.abs(g.dx) > 8 || Math.abs(g.dy) > 8
-          if (!moved) {
-            // Tap: the centre slot equips; either side steps the wheel toward that side.
-            const x = e.nativeEvent.locationX
-            const cx = width / 2
-            const cur = clamp(Math.round(posNow.current), 0, n - 1)
-            if (!Number.isFinite(x) || Math.abs(x - cx) < 62) { snapTo(cur); finish('pick', cur); return }
-            snapTo(cur + (x > cx ? 1 : -1))
-            return
-          }
-          // Momentum: project the fling, then snap. A slow release on a slot equips it.
-          const slow = Math.abs(g.vx) < 0.25
-          const projected = posNow.current - (g.vx * 260) / SLOT_PX
-          snapTo(projected, slow ? (t) => finish('pick', t) : undefined)
+          if (closing.current || Math.hypot(g.dx, g.dy) >= 10) return
+          const hit = hitTest(x0, y0, false)
+          if (hit === 'centre') finish('pick')
+          else if (typeof hit === 'number') choose(hit)
         } catch {}
       },
-      onPanResponderTerminate: () => { try { snapTo(posNow.current) } catch {} },
     })
-  }, [n, width]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [n, half, R, slotH]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const centred = loadout[clamp(centerIdx, 0, n - 1)]
-  const ratings = (() => {
-    try { return gunRatings(centred) } catch { return null }
-  })()
-  const opacity = show
-  const lift = show.interpolate({ inputRange: [0, 1], outputRange: [60, 0] })
-  const arcH = R * (1 - Math.cos((STEP_DEG * VISIBLE * Math.PI) / 180)) + 90
+  const w = loadout[clamp(sel, 0, n - 1)]
+  const ratings = (() => { try { return gunRatings(w) } catch { return null } })()
+  const rate = (() => { try { return fireRateLabel(w) } catch { return '' } })()
+  const equipped = w?.id === currentId
+  const scale = show.interpolate({ inputRange: [0, 1], outputRange: [0.94, 1] })
 
   return (
     <View style={[StyleSheet.absoluteFill, st.root]}>
-      <Pressable style={st.backdrop} onPress={() => finish('close')} accessibilityLabel="Close weapon wheel" />
-      <Animated.View style={[st.dock, { paddingBottom: bottomInset, opacity, transform: [{ translateY: lift }] }]} pointerEvents="box-none">
-        {/* Centred weapon details */}
-        <View style={st.info} pointerEvents="none">
-          <View style={st.infoHead}>
-            <Text style={st.infoName} numberOfLines={1}>{centred?.name}</Text>
-            <View style={[st.badge, centred?.fireMode === 'automatic' && st.badgeAuto]}><Text style={st.badgeText}>{modeLabel(centred)}</Text></View>
-            <Text style={st.rate} numberOfLines={1}>{(() => { try { return fireRateLabel(centred) } catch { return '' } })()}</Text>
-          </View>
-          {ratings && (
-            <View style={st.stats}>
-              <Stat label="Power" v={ratings.power} />
-              <Stat label="Rate" v={ratings.fireRate} />
-              <Stat label="Accuracy" v={ratings.accuracy} />
-              <Stat label="Range" v={ratings.range} />
-            </View>
-          )}
-          <Text style={st.hint}>{n > 1 ? 'Swipe to spin · tap the centre to equip · swipe down to close' : 'Tap to equip · buy more weapons in the Shop'}</Text>
+      <Pressable style={st.backdrop} onPress={() => finish('close')} accessibilityRole="button" accessibilityLabel="Close weapon wheel" />
+      <Animated.View style={[st.body, { paddingTop: top, paddingBottom: bottom, opacity: show, gap: compact ? 10 : 16 }]} pointerEvents="box-none">
+        <View style={st.head}>
+          <Text style={[stType.kicker, { letterSpacing: 2.6 }]}>LOADOUT</Text>
+          <Text style={st.title}>SELECT WEAPON</Text>
         </View>
 
-        {/* The wheel */}
-        <View style={[st.wheel, { height: arcH + 40 }]} {...pan.panHandlers} accessibilityRole="adjustable" accessibilityLabel={`Weapon wheel. ${centred?.name}`}>
-          <View style={[st.slotRing, { left: width / 2 - 50, top: -7 }]} pointerEvents="none" />
-          {loadout.map((w, i) => {
-            const input = []
-            const tx = []
-            const ty = []
-            const sc = []
-            const op = []
-            for (let k = -VISIBLE; k <= VISIBLE; k++) {
-              const off = -k // offset of item i from the centre when pos = i + k
-              const a = (off * STEP_DEG * Math.PI) / 180
-              input.push(i + k)
-              tx.push(R * Math.sin(a))
-              ty.push(R * (1 - Math.cos(a)))
-              sc.push(off === 0 ? 1.25 : Math.abs(off) === 1 ? 0.88 : 0.72)
-              op.push(Math.abs(off) === VISIBLE ? 0 : off === 0 ? 1 : Math.abs(off) === 1 ? 0.85 : 0.5)
-            }
-            const style = {
-              opacity: pos.interpolate({ inputRange: input, outputRange: op, extrapolate: 'clamp' }),
-              transform: [
-                { translateX: pos.interpolate({ inputRange: input, outputRange: tx, extrapolate: 'clamp' }) },
-                { translateY: pos.interpolate({ inputRange: input, outputRange: ty, extrapolate: 'clamp' }) },
-                { scale: pos.interpolate({ inputRange: input, outputRange: sc, extrapolate: 'clamp' }) },
-              ],
-            }
-            const on = i === centerIdx
+        <Animated.View
+          style={{ width: ring, height: ring, alignSelf: 'center', transform: [{ scale }] }}
+          {...pan.panHandlers}
+          accessible
+          accessibilityRole="adjustable"
+          accessibilityLabel={`Weapon wheel. ${w?.name} selected${equipped ? ', equipped' : ''}. Swipe up or down to change, double-tap the Equip button to equip.`}
+          accessibilityActions={[{ name: 'increment' }, { name: 'decrement' }, { name: 'activate' }]}
+          onAccessibilityAction={(e) => {
+            const a = e.nativeEvent.actionName
+            if (a === 'increment') choose((selRef.current + 1) % n)
+            else if (a === 'decrement') choose((selRef.current - 1 + n) % n)
+            else if (a === 'activate') finish('pick')
+          }}
+        >
+          <View pointerEvents="none" style={[st.ringLine, { left: half - R, top: half - R, width: R * 2, height: R * 2, borderRadius: R }]} />
+          {slots.map(({ w: g, i, cx, cy }) => {
+            const on = i === sel
             return (
-              <Animated.View key={w.id} style={[st.item, { left: width / 2 - 44 }, style]} pointerEvents="none">
-                <View style={[st.disc, on && st.discOn, w.id === currentId && st.discCurrent]}>
-                  <Image source={gunArt(w.id)} style={st.img} resizeMode="contain" />
-                </View>
-                <Text style={[st.itemName, on && { color: '#fff' }]} numberOfLines={1}>{w.name}</Text>
-              </Animated.View>
+              <View key={g.id} pointerEvents="none" style={[st.slot, { left: cx - slotW / 2, top: cy - slotH / 2, width: slotW, height: slotH }, on && st.slotOn]}>
+                <Image source={gunArt(g.id)} style={{ width: slotW * 0.72, height: slotH * 0.38, tintColor: on ? ST.friendly : ST.text }} resizeMode="contain" />
+                <Text style={[st.slotName, slotW < 64 && { fontSize: 9 }]} numberOfLines={1}>{String(g.name || '').toUpperCase()}</Text>
+                {g.id === currentId ? <View style={st.equippedDot} /> : null}
+              </View>
             )
           })}
+          <View pointerEvents="none" style={[st.centre, { left: half - 75, top: half - 52, width: 150, height: 104 }]}>
+            <Text style={st.centreName} numberOfLines={2}>{String(w?.name || '').toUpperCase()}</Text>
+            <Text style={st.centreMode}>{modeLabel(w)}</Text>
+            <Text style={st.centreHint}>{equipped ? 'EQUIPPED' : 'TAP TO EQUIP'}</Text>
+          </View>
+        </Animated.View>
+
+        <View style={[st.stats, compact && { paddingVertical: 10, gap: 8 }]}>
+          {ratings ? STATS.map(([label, key]) => {
+            const cells = Math.round(clamp(Number(ratings[key]) || 0, 0, 1) * 10)
+            return (
+              <View key={key} style={st.statRow}>
+                <Text style={st.statLabel}>{label}</Text>
+                <View style={st.cells}>
+                  {Array.from({ length: 10 }, (_, j) => <View key={j} style={[st.cell, { backgroundColor: j < cells ? ST.friendly : 'rgba(255,255,255,0.14)' }]} />)}
+                </View>
+              </View>
+            )
+          }) : null}
+          <Text style={st.blurb} numberOfLines={2}>{[w?.description, rate].filter(Boolean).join(' · ')}</Text>
+        </View>
+
+        <View style={st.buttons}>
+          <Pressable onPress={() => finish('pick')} style={({ pressed }) => [st.equip, pressed && { opacity: 0.85 }]} accessibilityRole="button" accessibilityLabel={`Equip ${w?.name}`}>
+            <Text style={st.equipText}>{equipped ? 'KEEP' : 'EQUIP'}</Text>
+          </Pressable>
+          <Pressable onPress={() => finish('close')} style={({ pressed }) => [st.closeBtn, pressed && { opacity: 0.75 }]} accessibilityRole="button" accessibilityLabel="Close weapon wheel">
+            <Text style={st.closeText}>CLOSE</Text>
+          </Pressable>
         </View>
       </Animated.View>
     </View>
   )
 }
 
-function Stat({ label, v }) {
-  const pct = Math.round(clamp(Number(v) || 0, 0, 1) * 100)
-  return (
-    <View style={st.stat}>
-      <Text style={st.statLabel}>{label}</Text>
-      <View style={st.track}><View style={[st.fill, { width: `${pct}%` }]} /></View>
-    </View>
-  )
-}
-
 const st = StyleSheet.create({
   root: { zIndex: 60, elevation: 60 },
-  backdrop: { ...StyleSheet.absoluteFill, backgroundColor: 'rgba(0,0,0,0.5)' },
-  dock: { position: 'absolute', left: 0, right: 0, bottom: 0 },
-  info: { marginHorizontal: 16, marginBottom: 8, padding: 14, ...hudSheet, borderRadius: 14 },
-  infoHead: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 },
-  infoName: { flexShrink: 1, fontSize: 16, fontWeight: '900', color: '#fff', letterSpacing: 1.2, textTransform: 'uppercase' },
-  badge: { paddingHorizontal: 7, paddingVertical: 2, borderRadius: 6, backgroundColor: 'rgba(255,255,255,0.16)' },
-  badgeAuto: { backgroundColor: HUD.red },
-  rate: { flexShrink: 1, fontSize: 11, fontWeight: '700', color: GOLD },
-  badgeText: { fontSize: 10, fontWeight: '900', color: '#fff', letterSpacing: 0.8 },
-  stats: { flexDirection: 'row', flexWrap: 'wrap', rowGap: 6, columnGap: 14 },
-  stat: { width: '46%', flexDirection: 'row', alignItems: 'center', gap: 6 },
-  statLabel: { ...hudType.label, fontSize: 9, width: 58 },
-  track: { flex: 1, height: 5, borderRadius: 3, backgroundColor: 'rgba(255,255,255,0.1)', overflow: 'hidden' },
-  fill: { height: 5, borderRadius: 3, backgroundColor: GOLD },
-  hint: { ...hudType.label, fontSize: 9, textAlign: 'center', marginTop: 10 },
-  wheel: { width: '100%', paddingBottom: 30 },
-  slotRing: { position: 'absolute', width: 100, height: 100, borderRadius: 50, borderWidth: 2, borderColor: 'rgba(255,201,77,0.55)' },
-  item: { position: 'absolute', top: 10, width: 88, alignItems: 'center' },
-  disc: { width: 70, height: 70, borderRadius: 35, backgroundColor: 'rgba(12,14,26,0.9)', borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.18)', alignItems: 'center', justifyContent: 'center' },
-  discOn: { borderColor: GOLD, backgroundColor: 'rgba(255,201,77,0.18)' },
-  discCurrent: { borderStyle: 'dashed' },
-  icon: { fontSize: 32 },
-  img: { width: '86%', height: '52%' },
-  itemName: { marginTop: 4, fontSize: 10, fontWeight: '700', color: 'rgba(255,255,255,0.7)', maxWidth: 88, textAlign: 'center' },
+  backdrop: { ...StyleSheet.absoluteFill, backgroundColor: 'rgba(6,8,12,0.82)' },
+  body: { flex: 1, paddingHorizontal: 24, justifyContent: 'center' },
+  head: { alignItems: 'center', gap: 2 },
+  title: { fontFamily: FONT.display, fontSize: 20, letterSpacing: 1, color: ST.text },
+  ringLine: { position: 'absolute', borderWidth: 1, borderColor: 'rgba(255,255,255,0.14)' },
+  slot: { position: 'absolute', alignItems: 'center', justifyContent: 'center', gap: 4, borderRadius: ST.radius, backgroundColor: 'rgba(8,10,14,0.85)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.16)' },
+  slotOn: { backgroundColor: 'rgba(57,213,255,0.18)', borderWidth: 2, borderColor: ST.friendly },
+  slotName: { fontFamily: FONT.display, fontSize: 10, letterSpacing: 0.4, color: '#ffffff', maxWidth: '92%' },
+  equippedDot: { position: 'absolute', top: 4, right: 4, width: 6, height: 6, backgroundColor: ST.friendly, transform: [{ rotate: '45deg' }] },
+  centre: { position: 'absolute', alignItems: 'center', justifyContent: 'center', gap: 4 },
+  centreName: { fontFamily: FONT.display, fontSize: 17, letterSpacing: 0.8, color: ST.text, textAlign: 'center' },
+  centreMode: { fontFamily: FONT.ui, fontSize: 10, letterSpacing: 1.6, color: ST.friendly },
+  centreHint: { fontFamily: FONT.ui, fontSize: 9, letterSpacing: 1.6, color: ST.faint },
+  stats: { paddingHorizontal: 16, paddingVertical: 14, borderRadius: ST.radius, backgroundColor: 'rgba(8,10,14,0.85)', borderWidth: 1, borderColor: ST.line, gap: 10, maxWidth: 420, width: '100%', alignSelf: 'center' },
+  statRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  statLabel: { width: 70, fontFamily: FONT.ui, fontSize: 10, letterSpacing: 1.6, color: 'rgba(242,244,247,0.65)' },
+  cells: { flex: 1, flexDirection: 'row', gap: 3 },
+  cell: { flex: 1, height: 6 },
+  blurb: { fontFamily: FONT.uiSemi, fontSize: 12, color: 'rgba(242,244,247,0.8)' },
+  buttons: { flexDirection: 'row', gap: 10, maxWidth: 420, width: '100%', alignSelf: 'center' },
+  equip: { flex: 1, height: 48, borderRadius: ST.radius, backgroundColor: ST.friendly, alignItems: 'center', justifyContent: 'center' },
+  equipText: { fontFamily: FONT.display, fontSize: 15, letterSpacing: 2, color: ST.ink },
+  closeBtn: { width: 100, height: 48, borderRadius: ST.radius, borderWidth: 1, borderColor: 'rgba(255,255,255,0.22)', alignItems: 'center', justifyContent: 'center' },
+  closeText: { fontFamily: FONT.ui, fontSize: 13, letterSpacing: 1.4, color: '#ffffff' },
 })

@@ -19,6 +19,9 @@ export const GAS_DPS = [1, 2, 3, 4, 6, 8, 10, 15]
 // How fast the gas edge moves (m/s). Small areas are on foot; big ones assume people will
 // also travel (as passengers) between zones, so the edge moves faster.
 export const GAS_SPEED = { '1mi': 1.1, '2mi': 1.8, '3mi': 2.6, '5mi': 4 }
+// A steady walk (m/s). Areas whose gas moves no faster than this are on-foot areas: the
+// schedule guarantees a walker can always reach the next circle (zone.js).
+export const WALK_MPS = 1.3
 export const PACE = {
   fast: { id: 'fast', label: 'Fast', speed: 1.6, wait: 0.6 },
   normal: { id: 'normal', label: 'Normal', speed: 1, wait: 1 },
@@ -54,14 +57,16 @@ export const MAP_MAX_DOTS = 60
 export const MAP_MAX_CLUSTERS = 40
 export const MAP_MAX_LOOT = 80
 
+// Studio HUD roles: zone = objective amber, you = friendly cyan, everyone else = enemy red.
 export const ROYALE_COLORS = {
-  zone: '#e8f1ff',
+  zone: '#ffb21e',
   next: '#ffffff',
-  gas: '#a14dff',
-  enemy: '#ff5d6c',
-  me: '#3ad1ff',
-  loot: '#ffc94d',
-  follow: '#2fdc8f',
+  gas: '#ffb21e',
+  enemy: '#ff3d52',
+  me: '#39d5ff',
+  loot: '#ffb21e',
+  follow: '#39d5ff',
+  transit: '#8a93a3',
   cover: ['#ff8a00', '#ff2e63', '#5b1cff'],
 }
 

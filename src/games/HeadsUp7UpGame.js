@@ -4,20 +4,36 @@
 // Each picker secretly taps one person. Tapped players then try to guess who
 // tapped them. Correct guesses swap places with the picker.
 // Host-authoritative via the existing Room system.
-import React, { useEffect, useMemo, useRef, useState } from 'react'
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
-import { Avatar, Btn, Card, Pill, PlayerRow, Spectating, formatClock } from './MultiplayerUI'
+//
+// Rules:
+// - 7 pickers, or fewer with a small group (never more than half the room), so there
+//   are always enough heads-down players. Each sitter can be tapped only once.
+// - Who tapped whom stays host-only until the reveal: during guessing the shared state
+//   only says *that* a sitter was tapped (tappedBy: true).
+// - Scoring: a sitter who names their picker scores 1 and swaps in as a picker next
+//   round; a picker who isn't caught scores 1 and stays a picker.
+// - Host migration: pickers know their own tap, so a new host asks them ("hu_whois")
+//   and carries on.
+import React, { useEffect, useRef, useState } from 'react'
+import { StyleSheet, Text, View } from 'react-native'
+import { Ionicons } from '@expo/vector-icons'
 import {
   recordRoundResult,
   useHostLoop, useRoomClock, useRoomSnapshot,
 } from '../lib/multiplayer'
 import { buzz } from '../lib/gamePrefs'
-import { colors, radii, type } from '../theme'
+import { ST, StButton, stType, useStudioFonts } from './studio'
+import {
+  StBanner, StFeed, StGrid, StHero, StPlayerRow, StPlayerTile, StResultsFooter, StReveal, StRing, StScreen,
+  StLabel, StSection, StSpectating, StStats, StTag,
+} from './beside/studioKit'
 
 // ─── Timing ───────────────────────────────────────────────────────────────────
 const COUNTDOWN_MS = 5000
 const PICK_MS = 30000
 const GUESS_MS = 20000
+const RECOVER_MS = 6000
+const MAX_PICKERS = 7
 
 function shuffled(arr) {
   const a = [...arr]
@@ -25,26 +41,32 @@ function shuffled(arr) {
   return a
 }
 
-// ─── Engine ───────────────────────────────────────────────────────────────────
-function initialState(roster, info, now) {
+// ─── Engine (pure; `sec` = host-only { round, picks: { pickerId: sitterId } }) ─
+export const pickerCountFor = (n) => Math.max(n >= 2 ? 1 : 0, Math.min(MAX_PICKERS, Math.floor(n / 2)))
+
+function initialState(roster, info, now, shuffle = shuffled) {
   const ids = roster.map((p) => p.id)
   const n = ids.length
-  const pickerCount = Math.min(7, Math.floor(n / 2)) // At least half sit
-  const shuffledIds = shuffled(ids)
-  const pickers = new Set(shuffledIds.slice(0, pickerCount))
+  const pickerCount = pickerCountFor(n)
+  // Last round's pickers (with correct guessers swapped in) stay on; fill the rest at random.
+  const carried = (Array.isArray(info._pickers) ? info._pickers : []).filter((id) => ids.includes(id)).slice(0, pickerCount)
+  const fill = shuffle(ids.filter((id) => !carried.includes(id))).slice(0, pickerCount - carried.length)
+  const pickers = new Set([...carried, ...fill])
 
   const players = {}
   for (const p of roster) {
     players[p.id] = {
       name: p.username,
       isPicker: pickers.has(p.id),
-      tappedBy: null,    // who tapped this sitter (null if untapped or if picker)
-      pickedTarget: null, // who this picker chose (null if sitter or not yet chosen)
+      tappedBy: null,    // sitter: true once tapped (the picker's id only at the reveal)
+      pickedTarget: null, // picker: true once picked (the sitter's id only at the reveal)
       guess: null,        // sitter's guess of who tapped them
       correct: false,     // did the guess match?
-      score: 0,
+      score: 0,           // points this round
     }
   }
+  const scores = { ...(info._scores || {}) }
+  for (const id of ids) if (typeof scores[id] !== 'number') scores[id] = 0
 
   return {
     game: 'heads-up',
@@ -58,18 +80,109 @@ function initialState(roster, info, now) {
     guessUntil: 0,
     feed: [],
     results: null, // filled at reveal
-    scores: info._scores || {}, // cumulative scores across rounds
+    scores, // cumulative scores across rounds
+    nextPickers: null,
   }
 }
 
+// Picker `from` taps `target`. Returns { state?, replies[] }.
+function pickAction(s, sec, from, target) {
+  const replies = []
+  if (s.phase !== 'picking' || !s.players[from]?.isPicker || sec.picks[from]) return { replies }
+  if (!s.players[target] || s.players[target].isPicker) return { replies }
+  if (Object.values(sec.picks).includes(target)) {
+    replies.push({ to: from, type: 'notice', data: { text: `Someone already tapped ${s.players[target].name}. Pick someone else.`, retry: true } })
+    return { replies }
+  }
+  sec.picks[from] = target
+  replies.push({ to: from, type: 'notice', data: { text: `You tapped ${s.players[target].name}. Keep a straight face.` } })
+  return { state: { ...s, players: { ...s.players, [from]: { ...s.players[from], pickedTarget: true } } }, replies }
+}
+
+const allPicked = (s, sec, presentIds) => Object.keys(s.players)
+  .filter((id) => s.players[id].isPicker && (!presentIds || presentIds.has(id)))
+  .every((id) => sec.picks[id])
+
+// Picking → guessing: auto-pick for pickers who ran out of time, then tell the tapped.
+function revealTaps(s, sec, t, shuffle = shuffled) {
+  const players = { ...s.players }
+  const pickers = Object.keys(players).filter((id) => players[id].isPicker)
+  const sitters = Object.keys(players).filter((id) => !players[id].isPicker)
+  const tapped = new Set(Object.values(sec.picks))
+  for (const pid of pickers) {
+    if (sec.picks[pid]) continue
+    const available = sitters.filter((id) => !tapped.has(id))
+    if (!available.length) continue
+    const pick = shuffle(available)[0]
+    sec.picks[pid] = pick
+    tapped.add(pick)
+  }
+  const replies = []
+  for (const [pickerId, targetId] of Object.entries(sec.picks)) {
+    if (!players[targetId] || !players[pickerId]) continue
+    players[targetId] = { ...players[targetId], tappedBy: true }
+    players[pickerId] = { ...players[pickerId], pickedTarget: true }
+    replies.push({ to: targetId, type: 'tapped', data: {} })
+  }
+  return { state: { ...s, phase: 'guessing', players, guessUntil: t + GUESS_MS }, replies }
+}
+
+function guessAction(s, from, target) {
+  const me = s.players[from]
+  if (s.phase !== 'guessing' || !me?.tappedBy || me.guess || !s.players[target]?.isPicker) return null
+  return { ...s, players: { ...s.players, [from]: { ...me, guess: target } } }
+}
+
+const allGuessed = (s, presentIds) => Object.keys(s.players)
+  .filter((id) => s.players[id].tappedBy && (!presentIds || presentIds.has(id)))
+  .every((id) => s.players[id].guess)
+
+function resolveGuesses(s, sec) {
+  const players = { ...s.players }
+  const feed = []
+  const scores = { ...s.scores }
+  const tappedBy = {}
+  for (const [pickerId, targetId] of Object.entries(sec.picks)) tappedBy[targetId] = pickerId
+  const nextPickers = Object.keys(players).filter((id) => players[id].isPicker)
+  let correctCount = 0
+  for (const [pickerId, targetId] of Object.entries(sec.picks)) {
+    const sitter = players[targetId]
+    if (!sitter || !players[pickerId]) continue
+    const correct = sitter.guess === pickerId
+    players[targetId] = { ...sitter, tappedBy: pickerId, correct, score: correct ? 1 : 0 }
+    players[pickerId] = { ...players[pickerId], pickedTarget: targetId, score: correct ? 0 : 1 }
+    const winner = correct ? targetId : pickerId
+    scores[winner] = (scores[winner] || 0) + 1
+    if (correct) {
+      correctCount += 1
+      nextPickers[nextPickers.indexOf(pickerId)] = targetId // swap places
+      feed.push({ id: `correct-${targetId}`, text: `${sitter.name} caught ${players[pickerId].name} and swaps in.` })
+    } else {
+      feed.push({ id: `wrong-${targetId}`, text: sitter.guess
+        ? `${sitter.name} guessed ${players[sitter.guess]?.name || '?'} — it was ${players[pickerId].name}.`
+        : `${sitter.name} didn’t guess — it was ${players[pickerId].name}.` })
+    }
+  }
+  const tappedCount = Object.keys(tappedBy).length
+  feed.unshift({ id: `summary-${s.roundNumber}`, text: `Round ${s.roundNumber}: ${correctCount}/${tappedCount} caught their picker.` })
+  return { ...s, phase: 'reveal', players, results: { correctCount, tappedCount }, feed: feed.slice(0, 20), scores, nextPickers }
+}
+
+// Pure rules, exported for headless tests.
+export const headsUpEngine = { pickerCountFor, initialState, pickAction, allPicked, revealTaps, guessAction, allGuessed, resolveGuesses }
+
 // ─── Component ────────────────────────────────────────────────────────────────
 export function HeadsUp7UpGame({ room, onExit }) {
+  useStudioFonts()
   const snap = useRoomSnapshot(room)
   const now = useRoomClock(room, 500)
   const [myInfo, setMyInfo] = useState(null) // { round, isPicker }
+  const [myTap, setMyTap] = useState(null) // picker: { round, target } (answers a new host's hu_whois)
+  const [pick, setPick] = useState(null) // { key, id } local selection
   const [notice, setNotice] = useState(null)
   const noticeTimer = useRef(null)
   const secret = useRef(null) // host only: { round, picks: { pickerId: targetId } }
+  const recovery = useRef({ round: null, since: 0, picks: {} }) // host only, after migration
 
   const meId = snap?.me?.id
   const isHost = !!snap?.isHost
@@ -90,19 +203,32 @@ export function HeadsUp7UpGame({ room, onExit }) {
       room.onMessage('role_hu', (d) => {
         if (d && typeof d.round === 'number') setMyInfo({ round: d.round, isPicker: !!d.isPicker })
       }),
-      room.onMessage('notice', (d) => { buzz('warning'); flash(String(d?.text || '')) }),
-      room.onMessage('tapped', () => { buzz('heavy'); flash('Someone tapped you! Get ready to guess.') }),
+      room.onMessage('notice', (d) => {
+        buzz('warning')
+        flash(String(d?.text || ''))
+        if (d?.retry) setMyTap(null) // the host turned the pick down: pick again
+      }),
+      room.onMessage('tapped', () => { buzz('heavy'); flash('Someone tapped you. Heads up — guess who.') }),
     ]
     return () => offs.forEach((off) => off())
   }, [room])
 
+  useEffect(() => {
+    if (!room) return undefined
+    return room.onMessage('hu_whois', (d, from) => {
+      if (myTap && d?.round === round && myTap.round === round) room.send('hu_iam', { round, target: myTap.target }, { to: from })
+    })
+  }, [room, myTap, round])
+
   useEffect(() => { setMyInfo(null) }, [round])
+  const phaseKey = state ? `${state.round}-${state.phase}` : ''
+  useEffect(() => { setPick(null) }, [phaseKey])
 
   // Record result
   useEffect(() => {
     if (state?.phase === 'reveal' && state.results && meId) {
       const me = state.players[meId]
-      if (me) recordRoundResult(room, { result: me.correct ? 'win' : 'loss', score: me.score })
+      if (me && (me.tappedBy || me.isPicker)) recordRoundResult(room, { result: me.score > 0 ? 'win' : 'loss', score: me.score })
     }
   }, [state?.phase]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -111,13 +237,23 @@ export function HeadsUp7UpGame({ room, onExit }) {
     if (to === meId) room.emitter.emit(`msg:${t}`, data, meId)
     else room.send(t, data, { to })
   }
+  const send = (replies) => { for (const r of replies) notify(r.to, r.type, r.data) }
 
   useEffect(() => {
     if (!room || !isHost) return undefined
-    return room.onMessage('role_req_hu', (d, from) => {
-      const s = room.getState()
-      if (s && d?.round === s.round) notify(from, 'role_hu', { round: s.round, isPicker: !!s.players[from]?.isPicker })
-    })
+    const offs = [
+      room.onMessage('role_req_hu', (d, from) => {
+        const s = room.getState()
+        if (s && d?.round === s.round) notify(from, 'role_hu', { round: s.round, isPicker: !!s.players[from]?.isPicker })
+      }),
+      room.onMessage('hu_iam', (d, from) => {
+        const s = room.getState()
+        if (!s || d?.round !== s.round || !s.players[from]?.isPicker || !s.players[d.target]) return
+        if (recovery.current.round !== s.round) recovery.current = { round: s.round, since: room.now(), picks: {} }
+        recovery.current.picks[from] = d.target
+      }),
+    ]
+    return () => offs.forEach((off) => off())
   }, [room, isHost]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useHostLoop(room, isHost, {
@@ -132,9 +268,30 @@ export function HeadsUp7UpGame({ room, onExit }) {
         for (const id of Object.keys(next.players)) notify(id, 'role_hu', { round: roundNo, isPicker: next.players[id].isPicker })
         return
       }
-      if (!s) return
+      if (!s || s.phase === 'reveal') return
+      if (!secret.current || secret.current.round !== s.round) {
+        // Host migrated mid-round.
+        if (s.phase === 'countdown' || s.phase === 'picking') {
+          // Picks so far are lost: let the pickers pick again.
+          secret.current = { round: s.round, picks: {} }
+          const players = {}
+          for (const [id, p] of Object.entries(s.players)) players[id] = { ...p, pickedTarget: null }
+          room.publishState({ ...s, players, pickUntil: s.phase === 'picking' ? t + PICK_MS : s.pickUntil })
+          return
+        }
+        // Guessing: pickers know their own tap.
+        if (recovery.current.round !== s.round) recovery.current = { round: s.round, since: t, picks: {} }
+        if (myTap?.round === s.round) recovery.current.picks[meId] = myTap.target
+        const present = room.presentIds()
+        const pickers = Object.keys(s.players).filter((id) => s.players[id].isPicker && present.has(id))
+        if (pickers.every((id) => recovery.current.picks[id]) || t - recovery.current.since > RECOVER_MS) {
+          secret.current = { round: s.round, picks: { ...recovery.current.picks } }
+        } else {
+          room.send('hu_whois', { round: s.round })
+        }
+        return
+      }
       const sec = secret.current
-      if (!sec || sec.round !== s.round) return
 
       // Countdown → picking
       if (s.phase === 'countdown' && t >= s.startsAt) {
@@ -143,167 +300,119 @@ export function HeadsUp7UpGame({ room, onExit }) {
       }
 
       // Picking → guessing (auto-pick for any picker who didn't choose)
-      if (s.phase === 'picking' && t >= s.pickUntil) {
-        const players = { ...s.players }
-        const pickers = Object.keys(players).filter((id) => players[id].isPicker)
-        const sitters = Object.keys(players).filter((id) => !players[id].isPicker)
-        const tapped = new Set(Object.values(sec.picks))
-
-        for (const pid of pickers) {
-          if (!sec.picks[pid] && sitters.length > 0) {
-            const available = sitters.filter((id) => !tapped.has(id))
-            if (available.length > 0) {
-              const pick = shuffled(available)[0]
-              sec.picks[pid] = pick
-              tapped.add(pick)
-            }
-          }
-        }
-
-        for (const [pickerId, targetId] of Object.entries(sec.picks)) {
-          players[targetId] = { ...players[targetId], tappedBy: pickerId }
-          players[pickerId] = { ...players[pickerId], pickedTarget: targetId }
-          notify(targetId, 'tapped', {})
-        }
-
-        room.publishState({ ...s, phase: 'guessing', players, guessUntil: t + GUESS_MS })
+      if (s.phase === 'picking' && (t >= s.pickUntil || allPicked(s, sec, room.presentIds()))) {
+        const r = revealTaps(s, sec, t)
+        room.publishState(r.state)
+        send(r.replies)
         return
       }
 
       // Guessing → reveal
-      if (s.phase === 'guessing' && t >= s.guessUntil) {
-        resolveGuesses(s, sec)
-        return
+      if (s.phase === 'guessing' && (t >= s.guessUntil || allGuessed(s, room.presentIds()))) {
+        room.publishState(resolveGuesses(s, sec))
       }
     },
     onAction: (action, from) => {
       const s = room.getState()
       const sec = secret.current
-      if (!s || s.game !== 'heads-up' || !sec || sec.round !== s.round) return
+      if (!s || s.game !== 'heads-up' || !sec || sec.round !== s.round || !action) return
 
-      if (action.type === 'pick' && s.phase === 'picking' && s.players[from]?.isPicker && !sec.picks[from]) {
-        const target = action.target
-        if (!s.players[target] || s.players[target].isPicker) return
-        if (Object.values(sec.picks).includes(target)) return // already tapped
-        sec.picks[from] = target
-        notify(from, 'notice', { text: `You tapped ${s.players[target].name}. Wait for everyone.` })
-        // Check if all pickers have picked
-        const pickers = Object.keys(s.players).filter((id) => s.players[id].isPicker)
-        if (pickers.every((id) => sec.picks[id])) {
-          // Advance to guessing immediately
-          const players = { ...s.players }
-          for (const [pickerId, targetId] of Object.entries(sec.picks)) {
-            players[targetId] = { ...players[targetId], tappedBy: pickerId }
-            players[pickerId] = { ...players[pickerId], pickedTarget: targetId }
-            notify(targetId, 'tapped', {})
-          }
-          room.publishState({ ...s, phase: 'guessing', players, guessUntil: room.now() + GUESS_MS })
+      if (action.type === 'pick') {
+        const r = pickAction(s, sec, from, action.target)
+        send(r.replies)
+        if (!r.state) return
+        if (allPicked(r.state, sec, room.presentIds())) {
+          const rv = revealTaps(r.state, sec, room.now())
+          room.publishState(rv.state)
+          send(rv.replies)
+        } else {
+          room.publishState(r.state)
         }
       }
 
-      if (action.type === 'guess' && s.phase === 'guessing' && s.players[from]?.tappedBy && !s.players[from].guess) {
-        const newPlayers = { ...s.players, [from]: { ...s.players[from], guess: action.target } }
-        room.publishState({ ...s, players: newPlayers })
-        // Check if all tapped players have guessed
-        const tappedIds = Object.keys(newPlayers).filter((id) => newPlayers[id].tappedBy)
-        if (tappedIds.every((id) => newPlayers[id].guess)) {
-          resolveGuesses({ ...s, players: newPlayers }, sec)
-        }
+      if (action.type === 'guess') {
+        const next = guessAction(s, from, action.target)
+        if (!next) return
+        room.publishState(allGuessed(next, room.presentIds()) ? resolveGuesses(next, sec) : next)
       }
     },
   }, 500)
 
-  function resolveGuesses(s, sec) {
-    const players = { ...s.players }
-    const feed = []
-    const scores = { ...s.scores }
-
-    for (const [id, p] of Object.entries(players)) {
-      if (p.tappedBy && p.guess) {
-        const correct = p.guess === p.tappedBy
-        players[id] = { ...players[id], correct, score: correct ? 1 : 0 }
-        if (!scores[id]) scores[id] = 0
-        if (correct) {
-          scores[id]++
-          feed.push({ id: `correct-${id}`, text: `✅ ${p.name} correctly guessed ${players[p.tappedBy]?.name || '?'}!` })
-        } else {
-          feed.push({ id: `wrong-${id}`, text: `❌ ${p.name} guessed wrong. It was ${players[p.tappedBy]?.name || '?'}.` })
-        }
-      }
-    }
-
-    const correctCount = Object.values(players).filter((p) => p.correct).length
-    const tappedCount = Object.values(players).filter((p) => p.tappedBy).length
-    feed.unshift({ id: `summary-${s.roundNumber}`, text: `Round ${s.roundNumber}: ${correctCount}/${tappedCount} correct guesses.` })
-
-    room.publishState({ ...s, phase: 'reveal', players, results: { correctCount, tappedCount }, feed: feed.slice(0, 20), scores })
-  }
-
   // ── Render ──
   if (!room || !snap) return null
-  if (!state) return <Spectating text="Starting…" />
+  if (!state) return <StSpectating title="Starting" text="Choosing the pickers…" />
   const me = state.players[meId]
-  if (!me) return <Spectating />
+  if (!me) return <StSpectating />
 
   const avatarOf = (id) => snap.roster.find((r) => r.id === id)?.avatar
+  const nameOf = (id) => state.players[id]?.name || '?'
+  const playerOf = (id) => ({ id, username: id === meId ? `${nameOf(id)} (you)` : nameOf(id), avatar: avatarOf(id) })
   const isPicker = myInfo?.round === round ? myInfo.isPicker : me.isPicker
-  const pickers = Object.entries(state.players).filter(([, p]) => p.isPicker)
-  const sitters = Object.entries(state.players).filter(([, p]) => !p.isPicker)
+  const ids = Object.keys(state.players)
+  const pickers = ids.filter((id) => state.players[id].isPicker)
+  const sitters = ids.filter((id) => !state.players[id].isPicker)
+  const myScore = state.scores?.[meId] || 0
+  const kicker = `Round ${state.roundNumber}`
 
   // ── Countdown ──
   if (state.phase === 'countdown') {
-    const left = Math.max(0, Math.ceil((state.startsAt - now) / 1000))
     return (
-      <View style={[styles.reveal, { backgroundColor: isPicker ? '#8b5cf6' : '#3b82f6' }]}>
-        <Text style={styles.revealIcon}>{isPicker ? '👆' : '😴'}</Text>
-        <Text style={styles.revealSmall}>You are a</Text>
-        <Text style={styles.revealBig}>{isPicker ? 'PICKER' : 'SITTER'}</Text>
-        <Text style={styles.revealSmall}>
-          {isPicker ? "You'll secretly tap someone. Don't let them guess it was you!" : "Put your head down. Someone will tap you."}
-        </Text>
-        <Text style={styles.revealCount}>{left}</Text>
-      </View>
+      <StReveal
+        kicker={`Heads Up 7 Up · ${kicker} · you are`}
+        title={isPicker ? 'A picker' : 'Heads down'}
+        color={isPicker ? ST.objective : ST.friendly}
+        icon={isPicker ? 'hand-left-outline' : 'eye-off-outline'}
+        body={isPicker ? 'You’ll secretly tap one person. Don’t let them guess it was you.' : 'Put your head down and your phone face-down. Someone might tap you.'}
+        count={Math.max(0, Math.ceil((state.startsAt - now) / 1000))}
+        foot={`${state.pickerCount} picker${state.pickerCount === 1 ? '' : 's'} · ${sitters.length} heads down`}
+      />
     )
   }
 
   // ── Picking phase ──
   if (state.phase === 'picking') {
     const timeLeft = Math.max(0, state.pickUntil - now)
+    const ring = <StRing size={74} progress={timeLeft / PICK_MS} color={ST.objective} value={Math.ceil(timeLeft / 1000)} />
     if (isPicker) {
-      const alreadyPicked = !!me.pickedTarget
+      const alreadyPicked = !!me.pickedTarget || myTap?.round === round
+      const sel = pick?.key === 'pick' ? pick.id : null
       return (
-        <ScrollView contentContainerStyle={styles.pad}>
-          <Card style={styles.phaseCard}>
-            <Text style={styles.phaseIcon}>👆</Text>
-            <Text style={[type.display, { textAlign: 'center' }]}>Choose someone to tap</Text>
-            <Text style={[type.display, { textAlign: 'center', marginTop: 8 }]}>{formatClock(timeLeft)}</Text>
-          </Card>
+        <StScreen>
+          <StHero kicker={`${kicker} · you are a picker`} color={ST.objective} title="Tap someone" sub="Pick one person with their head down. They’ll try to guess it was you." />
+          <View style={styles.ringRow}>{ring}</View>
           {alreadyPicked ? (
-            <Card><Text style={[type.body, { textAlign: 'center' }]}>✓ You've made your pick. Waiting for other pickers…</Text></Card>
+            <StBanner icon="checkmark" color={ST.objective} text={myTap?.round === round ? `You tapped ${nameOf(myTap.target)}.` : 'You’ve made your pick.'} sub="Keep a straight face. Waiting for the other pickers…" />
           ) : (
-            <Card>
-              <Text style={[type.label, { marginBottom: 6 }]}>Sitters (tap one)</Text>
-              {sitters.map(([id, p]) => (
-                <PlayerRow key={id} player={{ id, username: p.name, avatar: avatarOf(id) }}
-                  follow={false} right={<Btn title="Tap" size="sm" variant="primary" onPress={() => { buzz('select'); room.sendAction({ type: 'pick', target: id }) }} />}
-                />
-              ))}
-            </Card>
+            <>
+              <StLabel>Heads down · {sitters.length}</StLabel>
+              <StGrid cols={2} style={{ marginTop: 6 }}>
+                {sitters.map((id) => (
+                  <StPlayerTile key={id} compact player={playerOf(id)} color={ST.objective} selected={sel === id} onPress={() => setPick({ key: 'pick', id })} />
+                ))}
+              </StGrid>
+              <StButton
+                title={sel ? `Tap ${nameOf(sel)}` : 'Choose someone'}
+                tone="objective"
+                disabled={!sel}
+                style={{ marginTop: 8, marginBottom: 10 }}
+                onPress={() => { buzz('select'); setMyTap({ round, target: sel }); room.sendAction({ type: 'pick', target: sel }) }}
+              />
+            </>
           )}
-          {!!notice && <Card><Text style={type.body}>{notice}</Text></Card>}
-        </ScrollView>
+          {!!notice && <StBanner text={notice} color={ST.objective} icon="information-circle-outline" />}
+          <Text style={[stType.small, { color: 'rgba(242,244,247,0.55)' }]}>Long-press a player for their iYiYi profile.</Text>
+        </StScreen>
       )
     }
     // Sitter during picking
     return (
-      <View style={[styles.reveal, { backgroundColor: colors.inkSurfaceRaised }]}>
-        <Text style={styles.revealIcon}>😴</Text>
-        <Text style={[type.display, { textAlign: 'center' }]}>Heads down!</Text>
-        <Text style={[type.body, { textAlign: 'center', marginTop: 8, color: colors.textMuted }]}>
-          The pickers are choosing. Keep your eyes closed…
-        </Text>
-        <Text style={[type.display, { textAlign: 'center', marginTop: 16 }]}>{formatClock(timeLeft)}</Text>
-      </View>
+      <StScreen scroll={false} style={styles.center}>
+        <Ionicons name="eye-off-outline" size={44} color={ST.friendly} />
+        <Text style={[stType.kicker, { marginTop: 14 }]}>{kicker} · heads down</Text>
+        <Text style={[stType.display, { textAlign: 'center' }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.5}>Heads down</Text>
+        <Text style={[stType.body, { textAlign: 'center', marginTop: 8, maxWidth: 320 }]}>The pickers are choosing. Phone face-down, eyes closed — you’ll feel a buzz if you’re tapped.</Text>
+        <View style={{ marginTop: 22 }}>{ring}</View>
+      </StScreen>
     )
   }
 
@@ -312,81 +421,113 @@ export function HeadsUp7UpGame({ room, onExit }) {
     const timeLeft = Math.max(0, state.guessUntil - now)
     const wasTapped = !!me.tappedBy
     const hasGuessed = !!me.guess
-
+    const sel = pick?.key === 'guess' ? pick.id : null
+    const tappedIds = ids.filter((id) => state.players[id].tappedBy)
     return (
-      <ScrollView contentContainerStyle={styles.pad}>
-        <Card style={styles.phaseCard}>
-          <Text style={styles.phaseIcon}>🤔</Text>
-          <Text style={[type.display, { textAlign: 'center' }]}>Heads Up!</Text>
-          <Text style={[type.display, { textAlign: 'center', marginTop: 8 }]}>{formatClock(timeLeft)}</Text>
-          <Text style={[type.caption, { textAlign: 'center', marginTop: 4 }]}>
-            {wasTapped ? 'You were tapped! Guess who did it.' : isPicker ? 'Wait for guesses. Keep a straight face!' : "You weren't tapped this round."}
-          </Text>
-        </Card>
+      <StScreen>
+        <StHero
+          kicker={wasTapped ? `${kicker} · you were tapped` : isPicker ? `${kicker} · you are a picker` : `${kicker} · heads up`}
+          color={ST.objective}
+          title={wasTapped ? 'Who tapped you?' : isPicker ? 'Straight face' : 'Not tapped'}
+          sub={wasTapped ? 'Guess right and you swap in as a picker.' : isPicker ? 'The tapped players are guessing. Don’t give it away.' : 'You weren’t tapped this round. Watch the guesses.'}
+        />
+        <View style={styles.ringRow}><StRing size={74} progress={timeLeft / GUESS_MS} color={ST.objective} value={Math.ceil(timeLeft / 1000)} /></View>
 
-        {wasTapped && !hasGuessed && (
-          <Card>
-            <Text style={[type.label, { marginBottom: 6 }]}>Who tapped you?</Text>
-            {pickers.map(([id, p]) => (
-              <PlayerRow key={id} player={{ id, username: p.name, avatar: avatarOf(id) }}
-                follow={false} right={<Btn title="Guess" size="sm" variant="primary" onPress={() => { buzz('select'); room.sendAction({ type: 'guess', target: id }) }} />}
-              />
+        {wasTapped && !hasGuessed ? (
+          <>
+            <StLabel>The {pickers.length} picker{pickers.length === 1 ? '' : 's'}</StLabel>
+            <StGrid cols={2} style={{ marginTop: 6 }}>
+              {pickers.map((id) => (
+                <StPlayerTile key={id} compact player={playerOf(id)} color={ST.objective} selected={sel === id} onPress={() => setPick({ key: 'guess', id })} />
+              ))}
+            </StGrid>
+          </>
+        ) : null}
+        <StStats style={{ marginTop: 10 }} items={[
+          { label: 'Your pts', value: String(myScore) },
+          { label: 'Guessing', value: `${tappedIds.filter((id) => state.players[id].guess).length}/${tappedIds.length}` },
+          { label: 'Players', value: String(ids.length) },
+        ]} />
+        {wasTapped && !hasGuessed ? (
+          <StButton
+            title={sel ? `Lock in ${nameOf(sel)}` : 'Pick a picker'}
+            tone="objective"
+            disabled={!sel}
+            style={{ marginBottom: 10 }}
+            onPress={() => { buzz('select'); room.sendAction({ type: 'guess', target: sel }) }}
+          />
+        ) : null}
+        {wasTapped && hasGuessed ? <StBanner icon="lock-closed-outline" color={ST.objective} text={`You guessed ${nameOf(me.guess)}.`} sub="Waiting for the others…" /> : null}
+        {!wasTapped ? (
+          <StSection label="Tapped players">
+            {tappedIds.map((id) => (
+              <StPlayerRow key={id} player={playerOf(id)} subtitle={state.players[id].guess ? `Guessed ${nameOf(state.players[id].guess)}` : 'Thinking…'} right={state.players[id].guess ? <StTag text="Locked" color={ST.objective} /> : null} />
             ))}
-          </Card>
-        )}
-
-        {wasTapped && hasGuessed && (
-          <Card><Text style={[type.body, { textAlign: 'center' }]}>✓ Guess submitted! Waiting for others…</Text></Card>
-        )}
-
-        {!!notice && <Card><Text style={type.body}>{notice}</Text></Card>}
-      </ScrollView>
+          </StSection>
+        ) : null}
+        {!!notice && <StBanner text={notice} color={ST.objective} icon="information-circle-outline" />}
+      </StScreen>
     )
   }
 
   // ── Reveal ──
   if (state.phase === 'reveal') {
-    const sortedScores = Object.entries(state.scores)
-      .map(([id, s]) => ({ id, name: state.players[id]?.name || id, score: s }))
+    const sortedScores = Object.entries(state.scores || {})
+      .filter(([id]) => state.players[id])
+      .map(([id, sc]) => ({ id, score: sc }))
       .sort((a, b) => b.score - a.score)
-
+    const top = sortedScores[0]?.score ?? 0
+    const pairs = pickers.map((pid) => {
+      const target = typeof state.players[pid].pickedTarget === 'string' ? state.players[pid].pickedTarget : null
+      return { pid, target, caught: target ? !!state.players[target]?.correct : false }
+    })
+    const next = Array.isArray(state.nextPickers) ? state.nextPickers.filter((id) => state.players[id]) : null
+    const r = state.results
     return (
-      <ScrollView contentContainerStyle={styles.pad}>
-        <Card style={styles.phaseCard}>
-          <Text style={styles.phaseIcon}>🎉</Text>
-          <Text style={[type.display, { textAlign: 'center' }]}>Results</Text>
-          {state.results && (
-            <Text style={[type.body, { textAlign: 'center', marginTop: 6 }]}>
-              {state.results.correctCount}/{state.results.tappedCount} guessed correctly!
-            </Text>
-          )}
-        </Card>
-
-        <Card>
-          <Text style={[type.label, { marginBottom: 6 }]}>This round</Text>
-          {state.feed.map((f) => <Text key={f.id} style={[type.body, { marginVertical: 3 }]}>{f.text}</Text>)}
-        </Card>
-
-        {sortedScores.length > 0 && (
-          <Card>
-            <Text style={[type.label, { marginBottom: 6 }]}>Scoreboard</Text>
-            {sortedScores.map((s, i) => (
-              <PlayerRow key={s.id}
-                player={{ id: s.id, username: s.id === meId ? `${s.name} (you)` : s.name, avatar: avatarOf(s.id) }}
-                right={<View style={styles.scoreBadge}>
-                  <Text style={styles.scoreText}>{s.score}</Text>
-                </View>}
-                subtitle={i === 0 ? '👑 Leading' : ''}
-              />
-            ))}
-          </Card>
-        )}
-
-        {isHost
-          ? <Btn title="Next round" variant="primary" onPress={() => room.setInfo({ round: (snap.info.round || 0) + 1, _scores: state.scores })} />
-          : <Text style={[type.caption, { textAlign: 'center' }]}>Waiting for the host to start the next round…</Text>}
-        <Btn title="Leave" onPress={onExit} style={{ marginTop: 12 }} />
-      </ScrollView>
+      <StScreen>
+        <StHero
+          kicker={`Heads Up 7 Up · ${kicker} results`}
+          color={ST.objective}
+          title={r ? `${r.correctCount}/${r.tappedCount} caught` : 'Results'}
+          sub={me.score > 0 ? (me.isPicker ? 'You weren’t caught. +1' : 'You caught your picker. +1') : me.tappedBy ? 'Not this time.' : me.isPicker ? 'You got caught.' : 'You weren’t tapped this round.'}
+          big
+        />
+        <StSection label="This round">
+          {pairs.map(({ pid, target, caught }) => (
+            <StPlayerRow
+              key={pid}
+              player={playerOf(pid)}
+              color={caught ? ST.enemy : ST.health}
+              subtitle={target ? `Tapped ${nameOf(target)} · ${state.players[target]?.guess ? `guessed ${nameOf(state.players[target].guess)}` : 'no guess'}` : 'Didn’t tap anyone'}
+              right={target ? <StTag text={caught ? 'Caught' : 'Fooled'} color={caught ? ST.enemy : ST.health} /> : null}
+            />
+          ))}
+        </StSection>
+        {next?.length ? (
+          <StSection label="Next round’s pickers">
+            <Text style={stType.body}>{next.map(nameOf).join(' · ')}</Text>
+          </StSection>
+        ) : null}
+        <StSection label="Scoreboard · follow on iYiYi">
+          {sortedScores.map((sc) => (
+            <StPlayerRow
+              key={sc.id}
+              player={playerOf(sc.id)}
+              subtitle={sc.score === top && top > 0 ? 'Leading' : null}
+              subtitleColor={ST.objective}
+              right={<Text style={[stType.num, styles.score, sc.score === top && top > 0 && { color: ST.objective }]}>{sc.score}</Text>}
+            />
+          ))}
+        </StSection>
+        <StFeed items={state.feed} label="Guesses" max={20} />
+        <StResultsFooter
+          isHost={isHost}
+          againTitle="Next round"
+          waiting="Waiting for the host to start the next round…"
+          onAgain={() => room.setInfo({ round: (snap.info.round || 0) + 1, _scores: state.scores, _pickers: next || undefined })}
+          onExit={onExit}
+        />
+      </StScreen>
     )
   }
 
@@ -395,14 +536,7 @@ export function HeadsUp7UpGame({ room, onExit }) {
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
-  pad: { padding: 12, paddingBottom: 40 },
-  reveal: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 28, borderRadius: radii.lg },
-  revealIcon: { fontSize: 64, marginBottom: 12 },
-  revealSmall: { ...type.body, color: 'rgba(255,255,255,0.8)', textAlign: 'center', marginTop: 8 },
-  revealBig: { fontSize: 40, fontWeight: '800', letterSpacing: 2, color: '#ffffff', marginTop: 8 },
-  revealCount: { fontSize: 72, fontWeight: '800', color: '#ffffff', marginTop: 20 },
-  phaseCard: { alignItems: 'center', paddingVertical: 24 },
-  phaseIcon: { fontSize: 48, marginBottom: 8 },
-  scoreBadge: { backgroundColor: colors.magenta, borderRadius: radii.pill, paddingHorizontal: 12, paddingVertical: 4, minWidth: 36, alignItems: 'center' },
-  scoreText: { ...type.body, fontWeight: '800', color: colors.onBrand },
+  center: { alignItems: 'center', justifyContent: 'center', padding: 24 },
+  ringRow: { alignItems: 'center', marginBottom: 12 },
+  score: { fontSize: 20, minWidth: 30, textAlign: 'right' },
 })

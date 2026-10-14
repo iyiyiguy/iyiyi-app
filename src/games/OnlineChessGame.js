@@ -1,26 +1,33 @@
 // Online chess over a multiplayer room (Supabase Realtime). The room host is the
 // referee: players send moves as actions, the host checks them with chess.js and
 // broadcasts the new position. Handles resign, draw offers, disconnects (win by
-// abandonment after ~1 minute) and rematches (colours swap).
-// Around the board: an opponent card (profile, rating, chat, video call), a light chat
-// sheet over the board and a picture-in-picture WebRTC video call.
+// abandonment after ~1 minute), clocks (10+0 by default; only the side to move runs, from
+// each side's first move like Lichess; time-out loses unless the opponent can't mate) and
+// rematches (colours swap).
+// Around the board: an opponent card (profile, rating, follow), clocks, a move list, an
+// action row (draw / resign / chat / call), a light chat sheet over the board and a
+// picture-in-picture WebRTC video call. Studio look (see ./studio).
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Alert, Modal, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native'
+import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { Chess } from 'chess.js'
-import { AC, ArcadeBackground, GhostButton, PlayButton } from './arcadeUI'
-import { BOARD_DARK, BOARD_LIGHT, FILES, GLYPHS, PROMOTION_CHOICES, capturedBy, describeResult } from './ChessGame'
+import { FONT, ST, StButton, StHeader, stType, useStudioFonts, withAlpha } from './studio'
+import {
+  ActionTile, ChessBoard, ChessClock, ChessResultSheet, ChessSeat, MoveList, PromotionPicker, SeatAvatar,
+  capturedBy, capturedText, describeResult, formatClock, reasonLabel,
+} from './ChessGame'
 import { useHostLoop, useRoomSnapshot } from '../lib/multiplayer'
 import { loadArcadeStats, recordGameResult } from '../lib/arcadeStats'
 import { buzz } from '../lib/gamePrefs'
 import { useOpenProfile } from '../lib/profileNav'
 import GameFollowButton from '../components/GameFollowButton'
-import OpponentCard, { PlayerAvatar } from '../components/OpponentCard'
+import OpponentCard from '../components/OpponentCard'
 import MatchChat, { useUnreadChat } from '../components/MatchChat'
-import { VideoCallButton, VideoCallLayer, useVideoCall } from '../components/VideoCall'
-import { font } from '../theme'
+import { VideoCallLayer, useVideoCall } from '../components/VideoCall'
 
 const ABANDON_MS = 40000 // on top of the room's ~20 s presence grace period
+export const FIRST_MOVE_MS = 45000 // no first move in time: the game is aborted (no result recorded)
+const DEFAULT_TC = { base: 10 * 60 * 1000, inc: 0 }
 const recorded = new Set() // `${code}:${round}:${gameNo}` already counted on this device
 
 const other = (c) => (c === 'w' ? 'b' : 'w')
@@ -33,7 +40,61 @@ function replay(moves) {
   return g
 }
 
-export function newChessState(roster, info, hostId) {
+// ---------------------------------------------------------------------------------------
+// Pure rules (exported for tests)
+
+/** Time control from room settings ("5+3", "none"), else 10+0. */
+export function timeControl(info) {
+  const raw = info?.settings?.clock ?? info?.settings?.timeControl
+  if (raw === 'none' || raw === 'off' || raw === false) return null
+  const m = /^(\d+)\+(\d+)$/.exec(String(raw ?? ''))
+  if (m && Number(m[1]) > 0) return { base: Number(m[1]) * 60000, inc: Number(m[2]) * 1000 }
+  return { ...DEFAULT_TC }
+}
+
+export const turnOf = (state) => ((state?.moves?.length || 0) % 2 === 0 ? 'w' : 'b')
+
+/** Clocks run once both sides have made their first move, until the game ends. */
+export const clocksRunning = (state) => !!state?.clock && !state.result && (state.moves?.length || 0) >= 2
+
+/** Milliseconds left on `color`'s clock at host time `now` (null when the game has no clock). */
+export function clockLeft(state, color, now) {
+  if (!state?.clock) return null
+  const base = Number(state.clock[color]) || 0
+  if (!clocksRunning(state) || turnOf(state) !== color) return base
+  return Math.max(0, base - Math.max(0, now - (state.turnAt ?? now)))
+}
+
+/** Can `color` still possibly checkmate? A lone king or king + one minor piece cannot. */
+export function hasMatingMaterial(fen, color) {
+  const placement = String(fen || '').split(' ')[0]
+  let minors = 0
+  for (const ch of placement) {
+    if (!/[a-z]/i.test(ch)) continue
+    const mine = color === 'w' ? ch === ch.toUpperCase() : ch === ch.toLowerCase()
+    if (!mine) continue
+    const t = ch.toLowerCase()
+    if (t === 'p' || t === 'r' || t === 'q') return true
+    if (t === 'n' || t === 'b') minors += 1
+  }
+  return minors >= 2
+}
+
+/** Result when `flagged` runs out of time. */
+export function timeoutResult(state, flagged) {
+  const winner = other(flagged)
+  if (!hasMatingMaterial(state.fen, winner)) return { winner: null, reason: 'timeout vs insufficient material' }
+  return { winner, reason: 'timeout' }
+}
+
+// Freeze the running clock at `now` (used when the game ends mid-turn).
+function settledClock(state, now) {
+  if (!clocksRunning(state)) return state.clock ?? null
+  const c = turnOf(state)
+  return { ...state.clock, [c]: clockLeft(state, c, now) }
+}
+
+export function newChessState(roster, info, hostId, now = Date.now()) {
   const players = (roster || []).slice(0, 2)
   const host = players.find((p) => p.id === hostId) || players[0]
   const guest = players.find((p) => p.id !== host?.id) || null
@@ -41,7 +102,11 @@ export function newChessState(roster, info, hostId) {
   const hostColor = pref === 'w' || pref === 'b' ? pref : Math.random() < 0.5 ? 'w' : 'b'
   const seat = (p) => (p ? { id: p.id, name: p.username || 'Player', avatar: p.avatar || null } : null)
   const seats = hostColor === 'w' ? { w: seat(host), b: seat(guest) } : { w: seat(guest), b: seat(host) }
-  return { game: 'chess', round: info?.round || 1, gameNo: 1, players: seats, moves: [], fen: new Chess().fen(), lastMove: null, result: null, drawOffer: null, rematch: {} }
+  const tc = timeControl(info)
+  return {
+    game: 'chess', round: info?.round || 1, gameNo: 1, players: seats, moves: [], fen: new Chess().fen(), lastMove: null, result: null, drawOffer: null, rematch: {},
+    tc, clock: tc ? { w: tc.base, b: tc.base } : null, turnAt: now,
+  }
 }
 
 function colorOf(state, id) {
@@ -50,8 +115,20 @@ function colorOf(state, id) {
   return null
 }
 
+/** Host only: flag fall / first-move abort. Returns the next state (or the same one). */
+export function checkClock(state, now) {
+  if (!state || state.result || !state.clock) return state
+  const c = turnOf(state)
+  if ((state.moves?.length || 0) < 2) {
+    if (typeof state.turnAt === 'number' && now - state.turnAt > FIRST_MOVE_MS) return { ...state, result: { winner: null, reason: 'aborted', by: c }, drawOffer: null }
+    return state
+  }
+  if (clockLeft(state, c, now) <= 0) return { ...state, clock: { ...state.clock, [c]: 0 }, result: timeoutResult(state, c), drawOffer: null }
+  return state
+}
+
 // Host only: apply one player action. Returns the next state (or the same one).
-function applyAction(state, action, from) {
+export function applyAction(state, action, from, now = Date.now()) {
   const color = colorOf(state, from)
   if (!color || !action) return state
   switch (action.type) {
@@ -60,6 +137,11 @@ function applyAction(state, action, from) {
       if (typeof action.ply === 'number' && action.ply !== state.moves.length) return state // stale
       const g = replay(state.moves)
       if (g.turn() !== color) return state
+      const running = clocksRunning(state)
+      const left = running ? clockLeft(state, color, now) : null
+      if (running && left <= 0) {
+        return { ...state, clock: { ...state.clock, [color]: 0 }, result: timeoutResult(state, color), drawOffer: null }
+      }
       let mv
       try {
         mv = g.move({ from: action.from, to: action.to, promotion: action.promotion || undefined })
@@ -68,17 +150,27 @@ function applyAction(state, action, from) {
       }
       if (!mv) return state
       const r = describeResult(g)
-      return { ...state, moves: [...state.moves, mv.san], fen: g.fen(), lastMove: { from: mv.from, to: mv.to }, drawOffer: null, result: r || null }
+      const clock = state.clock ? (running ? { ...state.clock, [color]: left + (state.tc?.inc || 0) } : state.clock) : state.clock
+      return {
+        ...state,
+        moves: [...state.moves, mv.san],
+        fen: g.fen(),
+        lastMove: { from: mv.from, to: mv.to },
+        // Moving declines the opponent's offer; your own offer stands until they answer or move.
+        drawOffer: !r && state.drawOffer === color ? color : null,
+        result: r || null,
+        ...(state.clock ? { clock, turnAt: now } : null),
+      }
     }
     case 'resign':
       if (state.result) return state
-      return { ...state, result: { winner: other(color), reason: 'resignation' }, drawOffer: null }
+      return { ...state, result: { winner: other(color), reason: 'resignation' }, drawOffer: null, ...(state.clock ? { clock: settledClock(state, now) } : null) }
     case 'draw_offer':
       if (state.result || state.drawOffer) return state
       return { ...state, drawOffer: color }
     case 'draw_accept':
       if (state.result || !state.drawOffer || state.drawOffer === color) return state
-      return { ...state, result: { winner: null, reason: 'agreement' }, drawOffer: null }
+      return { ...state, result: { winner: null, reason: 'agreement' }, drawOffer: null, ...(state.clock ? { clock: settledClock(state, now) } : null) }
     case 'draw_decline':
       if (!state.drawOffer || state.drawOffer === color) return state
       return { ...state, drawOffer: null }
@@ -87,6 +179,7 @@ function applyAction(state, action, from) {
       const rematch = { ...state.rematch, [from]: true }
       const both = state.players.w && state.players.b && rematch[state.players.w.id] && rematch[state.players.b.id]
       if (!both) return { ...state, rematch }
+      const tc = state.tc || null
       return {
         ...state,
         gameNo: (state.gameNo || 1) + 1,
@@ -97,12 +190,15 @@ function applyAction(state, action, from) {
         result: null,
         drawOffer: null,
         rematch: {},
+        ...(state.clock || tc ? { clock: tc ? { w: tc.base, b: tc.base } : null, turnAt: now } : null),
       }
     }
     default:
       return state
   }
 }
+
+// ---------------------------------------------------------------------------------------
 
 // Ratings are shared between the two players with a small room message.
 function useRatings(room, meId, opponentId) {
@@ -143,22 +239,23 @@ function useRatings(room, meId, opponentId) {
 }
 
 export function OnlineChessGame({ room, onExit }) {
+  useStudioFonts()
   const snap = useRoomSnapshot(room)
   const { width } = useWindowDimensions()
-  const boardSize = Math.min(width - 24, 520)
-  const sq = boardSize / 8
+  const boardSize = Math.floor(Math.min(width - 24, 520) / 8) * 8
   const meId = snap?.me?.id
   const isHost = !!snap?.isHost
   const state = snap?.state?.game === 'chess' && snap.state.players && Array.isArray(snap.state.moves) ? snap.state : null
   const myColor = colorOf(state, meId)
   const [selected, setSelected] = useState(null)
   const [targets, setTargets] = useState([])
-  const [pending, setPending] = useState(null) // optimistic { fen, lastMove, ply }
+  const [pending, setPending] = useState(null) // optimistic { fen, lastMove, ply, at }
   const [promo, setPromo] = useState(null)
   const [showResult, setShowResult] = useState(false)
   const [chatOpen, setChatOpen] = useState(false)
   const [bubble, setBubble] = useState(null)
   const [bounds, setBounds] = useState(null)
+  const [now, setNow] = useState(() => (room ? room.now() : Date.now()))
   const absentSince = useRef({})
   const openProfile = useOpenProfile()
 
@@ -202,19 +299,21 @@ export function OnlineChessGame({ room, onExit }) {
       const s = room.getState()
       const roundNo = room.info.round || 0
       if (roundNo > 0 && (!s || s.game !== 'chess' || s.round !== roundNo)) {
-        if (room.roster.length >= 2) room.publishState(newChessState(room.roster, room.info, room.hostId))
+        if (room.roster.length >= 2) room.publishState(newChessState(room.roster, room.info, room.hostId, Date.now()))
         return
       }
       if (!s || s.result) return
+      const t = Date.now()
+      const flagged = checkClock(s, t)
+      if (flagged !== s) { room.publishState(flagged); return }
       const present = room.presentIds()
-      const now = Date.now()
       for (const c of ['w', 'b']) {
         const id = s.players?.[c]?.id
         if (!id) continue
         if (present.has(id)) { delete absentSince.current[id]; continue }
-        if (!absentSince.current[id]) absentSince.current[id] = now
-        if (now - absentSince.current[id] > ABANDON_MS) {
-          room.publishState({ ...s, result: { winner: other(c), reason: 'abandonment' }, drawOffer: null })
+        if (!absentSince.current[id]) absentSince.current[id] = t
+        if (t - absentSince.current[id] > ABANDON_MS) {
+          room.publishState({ ...s, result: { winner: other(c), reason: 'abandonment' }, drawOffer: null, ...(s.clock ? { clock: settledClock(s, t) } : null) })
           return
         }
       }
@@ -222,10 +321,10 @@ export function OnlineChessGame({ room, onExit }) {
     onAction: (action, from) => {
       const s = room.getState()
       if (!s || s.game !== 'chess') return
-      const next = applyAction(s, action, from)
+      const next = applyAction(s, action, from, Date.now())
       if (next !== s) room.publishState(next)
     },
-  }, 1000)
+  }, 500)
 
   // Optimistic move clears once the host's position arrives (or after a few seconds).
   const plies = state?.moves?.length ?? 0
@@ -238,6 +337,20 @@ export function OnlineChessGame({ room, onExit }) {
     return () => clearTimeout(t)
   }, [pending])
 
+  // Clock display: tick while a clock (or the first-move window) is counting down; tenths
+  // of a second are shown under 10 s, so tick faster there.
+  const ticking = !!state?.clock && !state.result
+  const fastTick = ticking && clocksRunning(state) && clockLeft(state, turnOf(state), now) < 10500
+  useEffect(() => {
+    if (!ticking || !room) return undefined
+    const id = setInterval(() => setNow(room.now()), fastTick ? 100 : 250)
+    return () => clearInterval(id)
+  }, [ticking, fastTick, room])
+
+  // Stable square handler so the memoized board doesn't re-render on every clock tick.
+  const onSquareRef = useRef(null)
+  const onSquareStable = useCallback((sq) => onSquareRef.current?.(sq), [])
+
   // Feedback when the opponent moves.
   const prevPlies = useRef(plies)
   useEffect(() => {
@@ -248,16 +361,18 @@ export function OnlineChessGame({ room, onExit }) {
     prevPlies.current = plies
   }, [plies]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Result: show the sheet and record it once.
+  // Result: show the sheet and record it once (aborted games aren't recorded).
   const resultKey = state?.result ? `${snap?.code}:${state.round}:${state.gameNo}` : null
   useEffect(() => {
     if (!resultKey || !state?.result) return
     setShowResult(true)
     setSelected(null)
     setTargets([])
+    setPromo(null)
     if (!myColor || recorded.has(resultKey)) return
     recorded.add(resultKey)
     const r = state.result
+    if (r.reason === 'aborted') { buzz('warning'); return }
     const outcome = !r.winner ? 'draw' : r.winner === myColor ? 'win' : 'loss'
     buzz(outcome === 'win' ? 'success' : outcome === 'loss' ? 'error' : 'warning')
     Promise.resolve().then(() => recordGameResult('chess', { result: outcome })).catch(() => {})
@@ -272,6 +387,7 @@ export function OnlineChessGame({ room, onExit }) {
   }, [fen])
   const board = useMemo(() => game.board(), [game])
   const captured = useMemo(() => capturedBy(board), [board])
+  const targetSet = useMemo(() => new Map(targets.map((m) => [m.to, m])), [targets])
 
   const viewProfile = useCallback(() => {
     if (opponent?.id) openProfile(opponent.id)
@@ -295,12 +411,14 @@ export function OnlineChessGame({ room, onExit }) {
   if (!state) {
     return (
       <View style={styles.root} onLayout={onLayout}>
-        <ArcadeBackground />
         <View style={styles.center}>
-          <Text style={styles.waitGlyph} allowFontScaling={false}>♞</Text>
-          <Text style={styles.waitTitle}>Setting up the board…</Text>
-          <Text style={styles.caption}>{opponent ? `Waiting for ${opponent.name || 'your opponent'} to connect.` : 'Waiting for both players to connect.'}</Text>
-          <GhostButton title="Leave" icon="exit-outline" small onPress={onExit} style={{ marginTop: 20 }} />
+          <ActivityIndicator color={ST.friendly} style={{ marginBottom: 18 }} />
+          <StHeader
+            kicker="Online chess"
+            title="Setting up the board"
+            sub={opponent ? `Waiting for ${opponent.name || 'your opponent'} to connect.` : 'Waiting for both players to connect.'}
+          />
+          <StButton title="Leave" tone="ghost" height={44} onPress={onExit} style={{ marginTop: 24, minWidth: 160 }} />
         </View>
         {overlays}
       </View>
@@ -313,7 +431,18 @@ export function OnlineChessGame({ room, onExit }) {
   const lastMove = pending?.lastMove || state.lastMove
   const inCheck = game.inCheck()
   const checkedKing = inCheck ? game.findPiece({ type: 'k', color: turn })[0] : null
-  const targetSet = new Map(targets.map((m) => [m.to, m]))
+  const r = state.result
+  const hasClock = !!state.clock
+  const firstMoveWindow = hasClock && !r && state.moves.length < 2
+  const firstMoveLeft = firstMoveWindow ? Math.max(0, FIRST_MOVE_MS - Math.max(0, now - (state.turnAt ?? now))) : null
+
+  // While my move is in flight, my clock stops at the moment I moved.
+  const clockFor = (c) => {
+    if (!hasClock) return null
+    if (pending && c === myColor) return clockLeft(state, c, pending.at)
+    return clockLeft(state, c, now)
+  }
+  const clockActive = (c) => clocksRunning(state) && !pending && turnOf(state) === c
 
   const send = (action) => { try { room.sendAction(action) } catch { /* ignore */ } }
 
@@ -324,7 +453,7 @@ export function OnlineChessGame({ room, onExit }) {
     let mv = null
     try { g = new Chess(state.fen); mv = g.move({ from, to, promotion }) } catch { mv = null }
     if (!mv || !g) return
-    setPending({ fen: g.fen(), lastMove: { from: mv.from, to: mv.to }, ply: state.moves.length })
+    setPending({ fen: g.fen(), lastMove: { from: mv.from, to: mv.to }, ply: state.moves.length, at: room.now() })
     buzz('light')
     send({ type: 'move', from, to, promotion: promotion || null, ply: state.moves.length })
   }
@@ -346,6 +475,8 @@ export function OnlineChessGame({ room, onExit }) {
     setTargets([])
   }
 
+  onSquareRef.current = onSquare
+
   const resign = () => {
     Alert.alert('Resign?', 'Your opponent wins this game.', [
       { text: 'Cancel', style: 'cancel' },
@@ -353,214 +484,220 @@ export function OnlineChessGame({ room, onExit }) {
     ])
   }
 
-  const r = state.result
-  const resultTitle = !r ? '' : !r.winner ? 'Draw' : r.winner === myColor ? 'You win!' : myColor ? 'You lost' : `${state.players[r.winner]?.name} wins`
+  const colorName = (c) => (c === 'w' ? 'White' : 'Black')
+  const aborted = r?.reason === 'aborted'
+  const tone = !r ? 'draw' : aborted || !r.winner ? 'draw' : !myColor ? 'win' : r.winner === myColor ? 'win' : 'loss'
+  const resultTitle = !r ? '' : aborted ? 'Aborted' : !r.winner ? 'Draw' : !myColor ? `${colorName(r.winner)} wins` : r.winner === myColor ? 'Victory' : 'Defeat'
+  const resultSub = !r ? '' : aborted
+    ? `${colorName(r.by || turn)} didn’t make a first move · not rated`
+    : r.winner
+      ? `${r.winner === myColor ? 'You' : state.players[r.winner]?.name || colorName(r.winner)} won by ${reasonLabel(r.reason).toLowerCase()} · ${Math.ceil(state.moves.length / 2)} moves`
+      : `Draw by ${reasonLabel(r.reason).toLowerCase()} · ${Math.ceil(state.moves.length / 2)} moves`
   const iWantRematch = !!state.rematch?.[meId]
   const theyWantRematch = !!opponent && !!state.rematch?.[opponent.id]
+  const callBusy = call?.status && call.status !== 'idle'
 
-  let status
-  if (r) status = r.winner ? `${state.players[r.winner]?.name || (r.winner === 'w' ? 'White' : 'Black')} wins by ${r.reason}` : `Draw by ${r.reason}`
-  else if (!myColor) status = `${turn === 'w' ? 'White' : 'Black'} to move`
-  else if (pending) status = 'Sending move…'
-  else if (myTurn) status = inCheck ? 'Check! Your move' : 'Your move'
-  else status = `${opponent?.name || 'Opponent'} is thinking…`
-
-  const rows = flipped ? [7, 6, 5, 4, 3, 2, 1, 0] : [0, 1, 2, 3, 4, 5, 6, 7]
-  const cols = flipped ? [7, 6, 5, 4, 3, 2, 1, 0] : [0, 1, 2, 3, 4, 5, 6, 7]
-  const topColor = flipped ? 'w' : 'b'
-  const bottomColor = flipped ? 'b' : 'w'
-  const capText = (c) => {
-    const list = captured[c] || []
-    const adv = c === 'w' ? captured.diff : -captured.diff
-    return `${list.map((t) => GLYPHS[t]).join('')}${adv > 0 ? `  +${adv}` : ''}`
-  }
+  // My seat status line (friendly when it's my move, enemy for check).
+  let mySub = { text: '', color: ST.muted }
+  if (r) mySub = { text: aborted ? 'Game aborted' : !r.winner ? `Draw · ${reasonLabel(r.reason)}` : r.winner === myColor ? `Won · ${reasonLabel(r.reason)}` : `Lost · ${reasonLabel(r.reason)}`, color: r.winner === myColor ? ST.objective : ST.muted }
+  else if (pending) mySub = { text: 'Sending move…', color: ST.muted }
+  else if (myTurn && firstMoveWindow) mySub = { text: `Make your first move · ${Math.ceil(firstMoveLeft / 1000)}s`, color: firstMoveLeft < 15000 ? ST.enemy : ST.friendly }
+  else if (myTurn) mySub = { text: inCheck ? 'Check · your move' : 'Your move', color: inCheck ? ST.enemy : ST.friendly }
+  else mySub = { text: `${opponent?.name || 'Opponent'} to move`, color: ST.muted }
 
   // Spectators (no seat) see both seats as plain rows.
-  const seatRow = (c) => {
+  const spectatorSeat = (c) => {
     const p = state.players[c]
     const here = p && roster.some((x) => x.id === p.id)
-    const isMe = p?.id === meId
     return (
-      <View style={styles.seat}>
-        <PlayerAvatar uri={p?.avatar} name={p?.name} size={32} ring={turn === c && !r ? AC.live : AC.border} />
-        <View style={{ flex: 1, minWidth: 0 }}>
-          <Text style={styles.seatName} numberOfLines={1}>{isMe ? 'You' : p?.name || 'Waiting…'}</Text>
-          <Text style={styles.seatMeta} numberOfLines={1}>
-            {c === 'w' ? 'White' : 'Black'}
-            {isMe && ratings.mine != null ? ` · ${ratings.mine}` : ''}
-            {p && !here ? ' · disconnected' : ''}
-          </Text>
-        </View>
-        <Text style={styles.captured} numberOfLines={1}>{capText(c)}</Text>
-      </View>
+      <ChessSeat
+        name={p?.name || 'Waiting…'}
+        sub={`${colorName(c)}${p && !here ? ' · disconnected' : ''}${turn === c && !r ? ' · to move' : ''}`}
+        subColor={turn === c && !r ? ST.friendly : ST.muted}
+        avatar={p?.avatar}
+        accent={c === 'w' ? '#ffffff' : ST.faint}
+        right={hasClock ? <ChessClock ms={clockFor(c)} active={clockActive(c)} /> : <Text style={styles.captured}>{capturedText(captured, c)}</Text>}
+      />
     )
   }
 
-  const statusTone = r ? AC.gold : myTurn ? AC.live : AC.muted
+  const opponentClock = hasClock && myColor ? (
+    <View style={styles.clockRow}>
+      {firstMoveWindow && turn === opponentColor ? <Text style={[stType.label, { flex: 1 }]}>First move · {Math.ceil(firstMoveLeft / 1000)}s</Text> : <View style={{ flex: 1 }} />}
+      <ChessClock ms={clockFor(opponentColor)} active={clockActive(opponentColor)} />
+    </View>
+  ) : null
 
   return (
     <View style={styles.root} onLayout={onLayout}>
-      <ArcadeBackground />
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
         {myColor && opponent ? (
           <View style={{ alignSelf: 'stretch', zIndex: 10 }}>
             <OpponentCard
               player={opponent}
               rating={ratings.of(opponent.id)}
-              sideLabel={opponentColor === 'w' ? 'White' : 'Black'}
-              captured={capText(opponentColor)}
+              sideLabel={colorName(opponentColor)}
+              captured={capturedText(captured, opponentColor)}
               thinking={!r && turn === opponentColor}
               connected={opponentHere}
               onViewProfile={viewProfile}
               onChat={() => setChatOpen(true)}
-              unread={unread}
               bubble={bubble}
-              videoButton={<VideoCallButton call={call} disabled={!opponentHere && call.status === 'idle'} />}
+              actions={false}
             />
           </View>
-        ) : seatRow(topColor)}
+        ) : spectatorSeat(flipped ? 'w' : 'b')}
 
-        <View style={styles.statusRow}>
-          <View style={[styles.statusDot, { backgroundColor: statusTone }]} />
-          <Text style={[styles.status, { color: r ? AC.gold : AC.text }]} numberOfLines={1}>{status}</Text>
-          {state.moves.length > 0 ? <Text style={styles.moveNo}>Move {Math.ceil(state.moves.length / 2)}</Text> : null}
-        </View>
+        {opponentClock}
 
         {!r && opponent && !opponentHere && (
-          <View style={styles.banner}>
-            <Ionicons name="cloud-offline" size={15} color={AC.gold} />
-            <Text style={styles.bannerText}>{opponent.name} lost connection — waiting for them to come back…</Text>
+          <View style={[styles.banner, { borderColor: withAlpha(ST.objective, 0.5), backgroundColor: withAlpha(ST.objective, 0.08) }]}>
+            <Ionicons name="cloud-offline" size={15} color={ST.objective} />
+            <Text style={styles.bannerText}>{opponent.name} lost connection. Waiting for them to come back…</Text>
           </View>
         )}
         {!r && state.drawOffer && state.drawOffer !== myColor && myColor && (
-          <View style={styles.offer}>
-            <Text style={[styles.body, { flex: 1 }]}>{opponent?.name || 'Your opponent'} offers a draw</Text>
-            <GhostButton title="Decline" small onPress={() => send({ type: 'draw_decline' })} />
-            <PlayButton title="Accept" icon={null} small onPress={() => send({ type: 'draw_accept' })} />
+          <View style={[styles.banner, { borderColor: ST.objective }]}>
+            <Text style={[styles.bannerText, { color: ST.objective }]} numberOfLines={2}>{opponent?.name || 'Your opponent'} offers a draw</Text>
+            <StButton title="Decline" tone="ghost" height={36} onPress={() => send({ type: 'draw_decline' })} style={{ paddingHorizontal: 12 }} />
+            <StButton title="Accept" tone="objective" height={36} onPress={() => send({ type: 'draw_accept' })} style={{ paddingHorizontal: 12 }} />
           </View>
         )}
 
-        <View style={[styles.boardFrame, { width: boardSize + 8, height: boardSize + 8 }]}>
-          <View style={[styles.board, { width: boardSize, height: boardSize }]}>
-            {rows.map((row) => (
-              <View key={row} style={styles.boardRow}>
-                {cols.map((col) => {
-                  const square = FILES[col] + (8 - row)
-                  const piece = board[row]?.[col]
-                  const light = (row + col) % 2 === 0
-                  const target = targetSet.get(square)
-                  return (
-                    <Pressable
-                      key={square}
-                      onPress={() => onSquare(square)}
-                      style={[styles.square, { width: sq, height: sq, backgroundColor: light ? BOARD_LIGHT : BOARD_DARK }]}
-                      accessibilityLabel={`${square}${piece ? ` ${piece.color === 'w' ? 'white' : 'black'} ${piece.type}` : ''}`}
-                    >
-                      {lastMove && (lastMove.from === square || lastMove.to === square) && <View style={[StyleSheet.absoluteFill, styles.lastMove]} />}
-                      {selected === square && <View style={[StyleSheet.absoluteFill, styles.selectedSq]} />}
-                      {checkedKing === square && <View style={[StyleSheet.absoluteFill, styles.checkSq]} />}
-                      {cols[0] === col && <Text style={[styles.coord, styles.rankCoord, { color: light ? BOARD_DARK : BOARD_LIGHT }]}>{8 - row}</Text>}
-                      {rows[7] === row && <Text style={[styles.coord, styles.fileCoord, { color: light ? BOARD_DARK : BOARD_LIGHT }]}>{FILES[col]}</Text>}
-                      {piece && (
-                        <Text allowFontScaling={false} style={[styles.piece, { fontSize: sq * 0.78, lineHeight: sq * 0.95 }, piece.color === 'w' ? styles.whitePiece : styles.blackPiece]}>
-                          {GLYPHS[piece.type]}
-                        </Text>
-                      )}
-                      {target && (piece || String(target.flags || '').includes('e')
-                        ? <View style={[styles.captureRing, { width: sq - 4, height: sq - 4, borderRadius: sq }]} />
-                        : <View style={[styles.moveDot, { width: sq * 0.3, height: sq * 0.3, borderRadius: sq }]} />)}
-                    </Pressable>
-                  )
-                })}
-              </View>
-            ))}
-          </View>
+        <View style={{ marginVertical: 10 }}>
+          <ChessBoard
+            board={board}
+            size={boardSize}
+            flipped={flipped}
+            selected={selected}
+            targets={targetSet}
+            lastMove={lastMove}
+            checkedKing={checkedKing}
+            onSquare={onSquareStable}
+          />
         </View>
 
-        {seatRow(bottomColor)}
+        <View style={styles.clockRow}>
+          <MoveList moves={state.moves} style={{ flex: 1, marginBottom: 0 }} />
+          {hasClock && myColor ? <ChessClock ms={clockFor(myColor)} active={clockActive(myColor)} mine /> : null}
+        </View>
 
-        <ScrollView horizontal style={styles.moveList} contentContainerStyle={styles.moveListContent} showsHorizontalScrollIndicator={false}>
-          {state.moves.length === 0 ? (
-            <Text style={styles.caption}>White moves first</Text>
-          ) : (
-            state.moves.reduce((acc, san, i) => {
-              if (i % 2 === 0) acc.push([san])
-              else acc[acc.length - 1].push(san)
-              return acc
-            }, []).map((pair, i) => (
-              <Text key={i} style={styles.moveText}><Text style={styles.caption}>{i + 1}. </Text>{pair.join(' ')}</Text>
-            ))
-          )}
-        </ScrollView>
+        {myColor ? (
+          <ChessSeat
+            name={`You · ${colorName(myColor)}`}
+            sub={`${mySub.text}${ratings.mine != null ? ` · ${ratings.mine}` : ''}`}
+            subColor={mySub.color}
+            avatar={snap?.me?.avatar}
+            accent={ST.friendly}
+            style={[{ marginTop: 10 }, myTurn && { borderLeftWidth: 3, borderLeftColor: ST.friendly }]}
+            right={<Text style={styles.captured} numberOfLines={1}>{capturedText(captured, myColor)}</Text>}
+          />
+        ) : <View style={{ alignSelf: 'stretch', marginTop: 10 }}>{spectatorSeat(flipped ? 'b' : 'w')}</View>}
 
-        {myColor && !r && (
-          <View style={styles.controls}>
-            <GhostButton
-              title={state.drawOffer === myColor ? 'Draw offered' : 'Offer draw'}
-              icon="hand-left-outline"
-              small
-              disabled={!!state.drawOffer || state.moves.length < 2}
-              onPress={() => { buzz('select'); send({ type: 'draw_offer' }) }}
-              style={{ flex: 1 }}
+        {myColor ? (
+          <View style={styles.actions}>
+            {!r ? (
+              <ActionTile
+                label={state.drawOffer === myColor ? 'Offered' : 'Draw'}
+                icon="hand-left-outline"
+                disabled={!!state.drawOffer || state.moves.length < 2}
+                onPress={() => { buzz('select'); send({ type: 'draw_offer' }) }}
+                accessibilityLabel={state.drawOffer === myColor ? 'Draw offered' : 'Offer draw'}
+              />
+            ) : (
+              <ActionTile label="Result" icon="podium" tone="objective" onPress={() => setShowResult(true)} />
+            )}
+            {!r ? <ActionTile label="Resign" icon="flag" tone="danger" onPress={resign} /> : (
+              <ActionTile
+                label={iWantRematch ? 'Waiting' : 'Rematch'}
+                icon="refresh"
+                tone="friendly"
+                disabled={iWantRematch || !opponentHere}
+                onPress={() => { buzz('medium'); send({ type: 'rematch' }) }}
+              />
+            )}
+            <ActionTile label="Chat" icon="chatbubble-ellipses" onPress={() => setChatOpen(true)} badge={unread > 0 ? (unread > 9 ? '9+' : String(unread)) : null} accessibilityLabel={unread ? `Chat, ${unread} unread` : 'Chat'} />
+            <ActionTile
+              label={callBusy ? 'End' : 'Call'}
+              icon={callBusy ? 'videocam-off' : 'videocam'}
+              tone={callBusy ? 'danger' : undefined}
+              disabled={!opponentHere && !callBusy}
+              onPress={callBusy ? call.hangup : call.start}
+              accessibilityLabel={callBusy ? 'End video call' : 'Video call'}
             />
-            <PlayButton title="Resign" icon="flag" small colors={[AC.danger, '#c23a4a']} onPress={resign} style={{ flex: 1 }} />
           </View>
-        )}
-        {r && !showResult && <PlayButton title="Show result" icon="trophy" small onPress={() => setShowResult(true)} style={{ alignSelf: 'stretch', marginTop: 12 }} />}
+        ) : null}
+        {hasClock && state.tc ? (
+          <Text style={[stType.label, { marginTop: 10, color: ST.faint }]}>
+            {Math.round(state.tc.base / 60000)}+{Math.round((state.tc.inc || 0) / 1000)} · clocks start after each side’s first move
+          </Text>
+        ) : null}
       </ScrollView>
 
       {overlays}
 
-      {/* Promotion */}
-      <Modal visible={!!promo} transparent animationType="fade" onRequestClose={() => setPromo(null)}>
-        <View style={styles.overlay}>
-          <View style={styles.modal}>
-            <Text style={[styles.modalTitle, { marginBottom: 16 }]}>Promote pawn to</Text>
-            <View style={styles.promoRow}>
-              {PROMOTION_CHOICES.map((p) => (
-                <Pressable key={p} onPress={() => { const x = promo; setPromo(null); if (x) tryMove(x.from, x.to, p) }} style={({ pressed }) => [styles.promoBtn, pressed && { opacity: 0.7 }]} accessibilityLabel={`Promote to ${p}`}>
-                  <Text allowFontScaling={false} style={[styles.promoPiece, myColor === 'w' ? styles.whitePiece : styles.blackPiece]}>{GLYPHS[p]}</Text>
-                </Pressable>
-              ))}
-            </View>
-            <Pressable onPress={() => setPromo(null)} style={styles.link}><Text style={styles.linkText}>Cancel</Text></Pressable>
-          </View>
-        </View>
-      </Modal>
+      <PromotionPicker
+        visible={!!promo && myTurn}
+        color={myColor}
+        onPick={(p) => { const x = promo; setPromo(null); if (x) tryMove(x.from, x.to, p) }}
+        onCancel={() => setPromo(null)}
+      />
 
-      {/* Result */}
-      <Modal visible={showResult && !!r} transparent animationType="fade" onRequestClose={() => setShowResult(false)}>
-        <View style={styles.overlay}>
-          <View style={styles.modal}>
-            <Text style={styles.resultGlyph} allowFontScaling={false}>{!r?.winner ? '🤝' : r.winner === myColor ? '🏆' : '♚'}</Text>
-            <Text style={styles.resultTitle}>{resultTitle}</Text>
-            <Text style={styles.resultReason}>by {r?.reason}</Text>
-            {myColor && opponent ? (
-              <Pressable onPress={() => { setShowResult(false); viewProfile() }} style={styles.resultOpp} accessibilityRole="button" accessibilityLabel={`View ${opponent.name}’s profile`}>
-                <PlayerAvatar uri={opponent.avatar} name={opponent.name} size={30} />
-                <Text style={styles.resultOppName} numberOfLines={1}>vs {opponent.name}</Text>
-                <Ionicons name="chevron-forward" size={16} color={AC.muted} />
-              </Pressable>
-            ) : null}
-            {myColor && opponent?.id ? <GameFollowButton userId={opponent.id} name={opponent.name} style={{ alignSelf: 'center', marginBottom: 12 }} /> : null}
-            {myColor && (
+      <ChessResultSheet
+        visible={showResult && !!r}
+        tone={tone}
+        kicker={`Online chess · ${reasonLabel(r?.reason)}`}
+        title={resultTitle}
+        sub={resultSub}
+        onRequestClose={() => setShowResult(false)}
+        stats={[
+          { label: 'Moves', value: String(Math.ceil(state.moves.length / 2)) },
+          ...(myColor ? [{ label: 'Colour', value: colorName(myColor) }] : []),
+          ...(hasClock && myColor ? [{ label: 'Your clock', value: formatClock(clockFor(myColor)), color: ST.friendly }] : []),
+          ...(myColor && ratings.mine != null ? [{ label: 'Rating', value: String(ratings.mine) }] : []),
+        ]}
+        actions={(
+          <>
+            {myColor ? (
               opponentHere ? (
-                <PlayButton
+                <StButton
                   title={iWantRematch ? 'Waiting for opponent…' : theyWantRematch ? 'Accept rematch' : 'Rematch'}
-                  icon="refresh"
                   disabled={iWantRematch}
                   onPress={() => { buzz('medium'); send({ type: 'rematch' }) }}
                 />
               ) : (
-                <Text style={[styles.caption, { textAlign: 'center' }]}>Your opponent left the game.</Text>
+                <Text style={[stType.small, { textAlign: 'center' }]}>Your opponent left the game.</Text>
               )
-            )}
-            {theyWantRematch && !iWantRematch && <Text style={[styles.caption, { textAlign: 'center', marginTop: 6 }]}>{opponent?.name} wants a rematch</Text>}
-            <Pressable onPress={() => setShowResult(false)} style={styles.link}><Text style={styles.linkText}>View board</Text></Pressable>
-            <Pressable onPress={onExit} style={styles.link}><Text style={styles.linkText}>Leave</Text></Pressable>
+            ) : null}
+            {theyWantRematch && !iWantRematch ? <Text style={[stType.small, { textAlign: 'center', color: ST.objective }]}>{opponent?.name} wants a rematch · you’ll swap colours</Text> : null}
+            <View style={{ flexDirection: 'row', gap: 8 }}>
+              <StButton title="View board" tone="ghost" height={44} onPress={() => setShowResult(false)} style={{ flex: 1 }} />
+              <StButton title="Leave" tone="ghost" height={44} onPress={onExit} style={{ flex: 1 }} />
+            </View>
+          </>
+        )}
+      >
+        {myColor && opponent ? (
+          <View style={{ marginTop: 18 }}>
+            <Text style={[stType.label, { marginBottom: 6 }]}>Played with · follow on iYiYi</Text>
+            <View style={styles.playedRow}>
+              <SeatAvatar uri={opponent.avatar} name={opponent.name} accent={ST.enemy} size={36} />
+              <Pressable
+                onPress={() => { setShowResult(false); viewProfile() }}
+                style={{ flex: 1, minWidth: 0 }}
+                accessibilityRole="button"
+                accessibilityLabel={`View ${opponent.name}’s profile`}
+              >
+                <Text style={styles.playedName} numberOfLines={1}>{opponent.name}</Text>
+                <Text style={styles.playedLine} numberOfLines={1}>
+                  {ratings.of(opponent.id) != null ? `Rated ${ratings.of(opponent.id)} · ` : ''}{colorName(opponentColor)}{opponentHere ? '' : ' · left'}
+                </Text>
+              </Pressable>
+              {opponent?.id ? <GameFollowButton userId={opponent.id} name={opponent.name} /> : null}
+            </View>
           </View>
-        </View>
-      </Modal>
+        ) : null}
+      </ChessResultSheet>
     </View>
   )
 }
@@ -568,54 +705,18 @@ export function OnlineChessGame({ room, onExit }) {
 export default OnlineChessGame
 
 const styles = StyleSheet.create({
-  root: { flex: 1, overflow: 'hidden' },
+  root: { flex: 1, overflow: 'hidden', backgroundColor: ST.ground },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
-  waitGlyph: { fontSize: 64, color: 'rgba(255,255,255,0.85)', marginBottom: 8 },
-  waitTitle: { fontSize: 20, ...font.bold, color: AC.text, letterSpacing: -0.3 },
-  caption: { fontSize: 13, ...font.regular, color: AC.muted, marginTop: 4 },
-  body: { fontSize: 15, ...font.regular, color: AC.text },
   scroll: { alignItems: 'center', paddingHorizontal: 12, paddingTop: 10, paddingBottom: 48 },
-  statusRow: { flexDirection: 'row', alignItems: 'center', alignSelf: 'stretch', gap: 8, paddingHorizontal: 4, marginTop: 12, marginBottom: 8 },
-  statusDot: { width: 8, height: 8, borderRadius: 4 },
-  status: { flex: 1, fontSize: 17, ...font.bold, letterSpacing: -0.2 },
-  moveNo: { fontSize: 12, ...font.bold, color: AC.faint, letterSpacing: 0.6, textTransform: 'uppercase' },
-  banner: { alignSelf: 'stretch', flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: 'rgba(255,201,77,0.12)', borderWidth: 1, borderColor: 'rgba(255,201,77,0.3)', borderRadius: 14, padding: 10, marginBottom: 8 },
-  bannerText: { flex: 1, fontSize: 13, ...font.medium, color: AC.text },
-  offer: { alignSelf: 'stretch', flexDirection: 'row', alignItems: 'center', gap: 8, padding: 10, borderRadius: 16, borderWidth: 1, borderColor: AC.border, backgroundColor: AC.cardStrong, marginBottom: 8 },
-  seat: { flexDirection: 'row', alignItems: 'center', alignSelf: 'stretch', gap: 10, paddingHorizontal: 6, paddingVertical: 10 },
-  seatName: { fontSize: 15, ...font.bold, color: AC.text },
-  seatMeta: { fontSize: 12, ...font.medium, color: AC.muted, marginTop: 1 },
-  captured: { fontSize: 15, color: AC.muted, maxWidth: '40%' },
-  boardFrame: { padding: 4, borderRadius: 12, backgroundColor: 'rgba(255,255,255,0.06)', borderWidth: 1, borderColor: AC.border, shadowColor: '#7c8cff', shadowOpacity: 0.25, shadowRadius: 18, shadowOffset: { width: 0, height: 6 } },
-  board: { borderRadius: 8, overflow: 'hidden' },
-  boardRow: { flexDirection: 'row', flex: 1 },
-  square: { alignItems: 'center', justifyContent: 'center' },
-  lastMove: { backgroundColor: 'rgba(240, 220, 60, 0.38)' },
-  selectedSq: { backgroundColor: 'rgba(80, 160, 255, 0.45)' },
-  checkSq: { backgroundColor: 'rgba(224, 40, 40, 0.65)' },
-  coord: { position: 'absolute', fontSize: 9, ...font.bold },
-  rankCoord: { top: 2, left: 3 },
-  fileCoord: { bottom: 1, right: 3 },
-  piece: { textAlign: 'center', includeFontPadding: false },
-  whitePiece: { color: '#fbfaf7', textShadowColor: 'rgba(0,0,0,0.85)', textShadowRadius: 2, textShadowOffset: { width: 0, height: 0 } },
-  blackPiece: { color: '#1d1a22', textShadowColor: 'rgba(255,255,255,0.35)', textShadowRadius: 1, textShadowOffset: { width: 0, height: 0 } },
-  moveDot: { position: 'absolute', backgroundColor: 'rgba(20, 20, 30, 0.32)' },
-  captureRing: { position: 'absolute', borderWidth: 4, borderColor: 'rgba(20, 20, 30, 0.35)' },
-  moveList: { alignSelf: 'stretch', marginTop: 4, maxHeight: 36 },
-  moveListContent: { alignItems: 'center', gap: 12, paddingHorizontal: 6 },
-  moveText: { fontSize: 14, ...font.semibold, color: AC.text },
-  controls: { flexDirection: 'row', gap: 10, alignSelf: 'stretch', marginTop: 14 },
-  overlay: { flex: 1, backgroundColor: 'rgba(2,3,10,0.66)', justifyContent: 'center', alignItems: 'center', padding: 24 },
-  modal: { width: '100%', maxWidth: 340, padding: 22, borderRadius: 28, backgroundColor: '#0d1126', borderWidth: 1, borderColor: AC.border },
-  modalTitle: { fontSize: 20, ...font.bold, color: AC.text, textAlign: 'center' },
-  promoRow: { flexDirection: 'row', gap: 8 },
-  promoBtn: { flex: 1, aspectRatio: 1, borderRadius: 12, backgroundColor: BOARD_LIGHT, alignItems: 'center', justifyContent: 'center' },
-  promoPiece: { fontSize: 44, lineHeight: 52, textAlign: 'center' },
-  resultGlyph: { fontSize: 46, textAlign: 'center', color: AC.gold },
-  resultTitle: { fontSize: 32, ...font.heavy, letterSpacing: -0.8, color: AC.text, textAlign: 'center', marginTop: 4 },
-  resultReason: { fontSize: 15, ...font.regular, color: AC.muted, textAlign: 'center', marginTop: 4, marginBottom: 14 },
-  resultOpp: { flexDirection: 'row', alignItems: 'center', gap: 10, alignSelf: 'stretch', padding: 10, borderRadius: 16, backgroundColor: AC.card, borderWidth: 1, borderColor: AC.border, marginBottom: 14 },
-  resultOppName: { flex: 1, fontSize: 15, ...font.semibold, color: AC.text },
-  link: { paddingVertical: 12, alignItems: 'center' },
-  linkText: { fontSize: 15, ...font.semibold, color: AC.muted },
+  clockRow: { flexDirection: 'row', alignItems: 'center', alignSelf: 'stretch', gap: 10, marginTop: 8 },
+  banner: {
+    alignSelf: 'stretch', flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8,
+    borderWidth: 1, borderRadius: ST.radius, padding: 10, backgroundColor: ST.panel,
+  },
+  bannerText: { flex: 1, fontSize: 13, fontFamily: FONT.uiSemi, color: ST.text },
+  captured: { fontSize: 15, color: ST.muted, maxWidth: 140 },
+  actions: { flexDirection: 'row', gap: 6, alignSelf: 'stretch', marginTop: 10 },
+  playedRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8, paddingHorizontal: 10, backgroundColor: 'rgba(255,255,255,0.04)', borderRadius: ST.radius },
+  playedName: { fontFamily: FONT.ui, fontSize: 15, color: ST.text },
+  playedLine: { fontFamily: FONT.uiSemi, fontSize: 11, color: 'rgba(242,244,247,0.6)' },
 })

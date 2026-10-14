@@ -12,6 +12,7 @@ import { useAim } from '../laser/useAim'
 import { classifyHit, photoRectToScreen, pickVisionTarget, useVisionCapture, visionAvailable } from '../laser/vision'
 import { angleDiff, bearingDeg, distanceMeters, formatDistance } from '../../lib/multiplayer'
 import { buzz, useGamePrefs } from '../../lib/gamePrefs'
+import { FONT, ST, stShadow, stType, withAlpha } from '../studio'
 import { playShot, useWeaponTrigger } from './weaponsAdapter'
 
 const COMPASS_SLACK = { 3: 4, 2: 8, 1: 12, 0: 15 }
@@ -28,7 +29,19 @@ function hitChance(d, gun, offCenter) {
   return Math.max(0.05, Math.min(0.95, p))
 }
 
-const hudShadow = { textShadowColor: 'rgba(0,0,0,0.85)', textShadowRadius: 4, textShadowOffset: { width: 0, height: 1 } }
+// Studio reticle (Kit board): four ticks + a centre dot when idle; red ticks + ring on target.
+function Reticle({ on }) {
+  const c = on ? ST.enemy : '#ffffff'
+  return (
+    <View style={s.reticle}>
+      <View style={[s.tickV, { top: 0, backgroundColor: c }]} />
+      <View style={[s.tickV, { bottom: 0, backgroundColor: c }]} />
+      <View style={[s.tickH, { left: 0, backgroundColor: c }]} />
+      <View style={[s.tickH, { right: 0, backgroundColor: c }]} />
+      {on ? <View style={s.ring} /> : <View style={s.dotC} />}
+    </View>
+  )
+}
 
 /**
  * props:
@@ -148,8 +161,8 @@ export const CombatView = memo(function CombatView({ room, weapon, myPos, oppone
       ) : (
         <View style={[StyleSheet.absoluteFill, s.noCam]}>
           {cameraOn && (
-            <Pressable onPress={() => requestCamPerm().catch(() => {})} style={s.allow} accessibilityRole="button">
-              <Text style={s.allowText}>Allow the camera to aim</Text>
+            <Pressable onPress={() => requestCamPerm().catch(() => {})} style={({ pressed }) => [s.allow, pressed && { opacity: 0.8 }]} accessibilityRole="button">
+              <Text style={s.allowText}>ALLOW THE CAMERA TO AIM</Text>
             </Pressable>
           )}
         </View>
@@ -171,18 +184,15 @@ export const CombatView = memo(function CombatView({ room, weapon, myPos, oppone
         try { r = photoRectToScreen(b.box, b, view) } catch { r = null }
         if (!r || !Number.isFinite(r.left) || !Number.isFinite(r.top)) return null
         const on = !!classifyHit([b])
-        return <View key={i} pointerEvents="none" style={[s.bracket, { left: r.left, top: r.top, width: Math.max(0, r.width), height: Math.max(0, r.height), borderColor: on ? '#ff5d6c' : 'rgba(255,255,255,0.4)' }]} />
+        return <View key={i} pointerEvents="none" style={[s.bracket, { left: r.left, top: r.top, width: Math.max(0, r.width), height: Math.max(0, r.height), borderColor: on ? ST.enemy : 'rgba(255,255,255,0.4)' }]} />
       })}
 
       {cameraOn && (
         <View style={[s.center, Number.isFinite(centerTop) && { top: centerTop }, Number.isFinite(centerBottom) && { bottom: centerBottom }]} pointerEvents="none">
           {topMode ? (
-            <Text style={[s.arrow, red && { color: '#ff5d6c' }]}>▲</Text>
+            <View style={[s.arrow, { borderBottomColor: red ? ST.enemy : '#ffffff' }]} />
           ) : (
-            <View style={[s.cross, red && { borderColor: '#ff5d6c' }]}>
-              <View style={[s.crossH, red && { backgroundColor: '#ff5d6c' }]} />
-              <View style={[s.crossV, red && { backgroundColor: '#ff5d6c' }]} />
-            </View>
+            <Reticle on={red} />
           )}
           <Text style={s.sight}>
             {!canFire
@@ -201,7 +211,7 @@ export const CombatView = memo(function CombatView({ room, weapon, myPos, oppone
           onPressIn={trigger.onPressIn}
           onPressOut={trigger.onPressOut}
           disabled={!canFire}
-          style={({ pressed }) => [s.fire, fireButtonStyle, { opacity: !canFire ? 0.4 : pressed ? 0.75 : 1 }]}
+          style={({ pressed }) => [s.fire, fireButtonStyle, { opacity: !canFire ? 0.4 : pressed ? 0.75 : 1 }, pressed && { transform: [{ scale: 0.96 }] }]}
           accessibilityRole="button"
           accessibilityLabel="Fire"
         >
@@ -213,18 +223,20 @@ export const CombatView = memo(function CombatView({ room, weapon, myPos, oppone
 })
 
 const s = StyleSheet.create({
-  noCam: { backgroundColor: '#0b0d18', alignItems: 'center', justifyContent: 'center' },
-  allow: { paddingHorizontal: 16, paddingVertical: 10, borderRadius: 999, backgroundColor: 'rgba(255,255,255,0.12)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.25)' },
-  allowText: { color: '#fff', fontWeight: '700', fontSize: 14 },
+  noCam: { backgroundColor: ST.ground, alignItems: 'center', justifyContent: 'center' },
+  allow: { paddingHorizontal: 16, height: 44, justifyContent: 'center', borderRadius: ST.radius, backgroundColor: ST.panel, borderWidth: 1, borderColor: ST.lineStrong },
+  allowText: { fontFamily: FONT.ui, fontSize: 13, letterSpacing: 1.2, color: '#fff' },
   center: { ...StyleSheet.absoluteFill, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 30 },
-  cross: { width: 64, height: 64, borderRadius: 32, borderWidth: 2, borderColor: '#fff', alignItems: 'center', justifyContent: 'center' },
-  crossH: { position: 'absolute', width: 28, height: 2, backgroundColor: '#fff' },
-  crossV: { position: 'absolute', width: 2, height: 28, backgroundColor: '#fff' },
-  arrow: { fontSize: 60, color: '#fff', ...hudShadow },
-  sight: { fontSize: 13, color: '#fff', marginTop: 10, textAlign: 'center', ...hudShadow },
-  bracket: { position: 'absolute', borderWidth: 1.5, borderRadius: 6 },
-  fire: { position: 'absolute', width: 96, height: 96, borderRadius: 48, backgroundColor: '#d4202f', alignItems: 'center', justifyContent: 'center', borderWidth: 3, borderColor: '#fff' },
-  fireText: { fontSize: 18, fontWeight: '800', color: '#fff', letterSpacing: 2 },
+  reticle: { width: 56, height: 56, alignItems: 'center', justifyContent: 'center' },
+  tickV: { position: 'absolute', left: 27, width: 2, height: 14 },
+  tickH: { position: 'absolute', top: 27, width: 14, height: 2 },
+  dotC: { width: 3, height: 3, borderRadius: 2, backgroundColor: '#ffffff' },
+  ring: { width: 24, height: 24, borderRadius: 12, borderWidth: 1.4, borderColor: ST.enemy },
+  arrow: { width: 0, height: 0, borderLeftWidth: 18, borderRightWidth: 18, borderBottomWidth: 40, borderLeftColor: 'transparent', borderRightColor: 'transparent' },
+  sight: { ...stType.label, fontSize: 12, color: ST.text, marginTop: 10, textAlign: 'center', ...stShadow },
+  bracket: { position: 'absolute', borderWidth: 1.5, borderRadius: 0 },
+  fire: { position: 'absolute', width: 96, height: 96, borderRadius: 48, backgroundColor: withAlpha(ST.enemy, 0.85), alignItems: 'center', justifyContent: 'center', borderWidth: 3, borderColor: 'rgba(255,255,255,0.8)' },
+  fireText: { fontFamily: FONT.display, fontSize: 16, letterSpacing: 1.5, color: '#fff', includeFontPadding: false },
 })
 
 export default CombatView
