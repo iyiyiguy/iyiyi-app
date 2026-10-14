@@ -1,19 +1,34 @@
 // Laser Tag land mines: a purchased balance (arcadeStats, per account) bought in packs of 5
 // (LAND_MINE_PACK, a consumable In-App Purchase). Place on the ground, triggers on proximity.
 // The arcade owner accounts have unlimited land mines. Every export is defensive: nothing throws into render.
+// Fair play: use as many as you own, but at most LAND_MINES_PER_MATCH per match (matchLimits.js; the
+// owner account too). Pass { matchKey } (`${code}:${round}`) to spendLandMine().
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { loadArcadeStats, subscribeArcadeStats, _spendLandMine } from './arcadeStats'
 import { isArcadeOwner } from './guns'
+import { MATCH_LIMITS, matchCheck, returnMatchUse, takeMatchUse } from './matchLimits'
 import { LAND_MINE_PACK, fetchLandMineProduct, isUserCancelled, purchaseLandMinePack, recoverLandMinePurchases } from './iap'
 
 export { LAND_MINE_PACK }
 
-/** Spend one land mine. Resolves true on success. Never rejects. */
-export async function spendLandMine() {
+export const LAND_MINES_PER_MATCH = MATCH_LIMITS.landMine
+
+/** { ok, left, cap, text }: can another land mine be used in this match? Check before spending. */
+export const landMineMatchCheck = (matchKey) => matchCheck('landMine', matchKey)
+
+/**
+ * Spend one land mine (counts toward the per-match limit). Resolves true on success, false when
+ * none are left OR the match limit is reached (see landMineMatchCheck for the message). Never rejects.
+ */
+export async function spendLandMine({ matchKey } = {}) {
+  if (!takeMatchUse('landMine', matchKey)) return false
   try {
     if (await isArcadeOwner()) return true
-    return !!(await _spendLandMine())
+    const ok = !!(await _spendLandMine())
+    if (!ok) returnMatchUse('landMine', matchKey)
+    return ok
   } catch {
+    returnMatchUse('landMine', matchKey)
     return false
   }
 }

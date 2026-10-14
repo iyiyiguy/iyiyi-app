@@ -82,6 +82,7 @@ export default function ScopeChips({ options = SCOPES, value, onChange, style })
             }}
             accessibilityRole="button"
             accessibilityState={{ selected: active }}
+            hitSlop={{ top: 5, bottom: 5 }}
             style={({ pressed }) => [pressed && { transform: [{ scale: 0.96 }] }]}
           >
             {active ? (
@@ -120,6 +121,7 @@ export function Segmented({ options, value, onChange, style }) {
               }}
               accessibilityRole="button"
               accessibilityState={{ selected: active }}
+              hitSlop={{ top: 7, bottom: 7 }}
               style={[styles.seg, active && styles.segActive]}
             >
               <Text style={[styles.segText, active && styles.segTextActive]} numberOfLines={1}>{labelText(t, o.label)}</Text>

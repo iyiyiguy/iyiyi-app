@@ -109,7 +109,7 @@ export const MP_GAMES = {
     maxPlayers: 10,
     usesLocation: true,
     usesCamera: true,
-    blurb: 'Real-world laser tag. Raise your phone and shoot — your camera sees who is under the crosshair, and GPS works out which player it is.',
+    blurb: 'Real-world laser tag. Raise your phone and shoot — your camera sees who is under the crosshair, and GPS works out which player it is. Rockets explode on impact; place as many sticky bombs as you carry and DETONATE ALL at once. Firing locks at vehicle speed.',
     settings: {
       mode: { label: 'Mode', options: ['ffa', 'tdm', 'snd'], labels: { ffa: 'Free-for-all', tdm: 'Team Deathmatch', snd: 'Search & Destroy' }, default: 'ffa' },
       visibility: { label: 'Lobby', options: ['public', 'private'], labels: { public: 'Public', private: 'Private (code only)' }, default: 'public' },
@@ -138,9 +138,17 @@ export const MP_GAMES = {
     maxPlayers: 10,
     usesLocation: true,
     usesCamera: true,
-    blurb: 'Social deduction in the real world. Crew walk to real task stations you scanned around you; a secret imposter eliminates people up close.',
+    blurb: 'Social deduction in the real world. Crew walk to task stations — auto GPS waypoints outdoors, Walk & place (with floors) or QR markers indoors, or optional photo stations. A secret imposter eliminates up close (a short hold by default; the host can pick instant). Most votes ejects; a tie or Skip ejects no one.',
     settings: {
-      stationMode: { label: 'Who scans stations', options: ['host', 'all'], labels: { host: 'Host only', all: 'Everyone' }, default: 'host' },
+      // Only matters for photo stations (settings.stationKind 'photo', or an older lobby whose
+      // stations are all photos); auto GPS and QR stations are made by the host's phone.
+      stationMode: {
+        label: 'Who can add photo stations',
+        options: ['host', 'all'],
+        labels: { host: 'Host only', all: 'Everyone' },
+        default: 'host',
+        when: (s) => s?.stationKind === 'photo' || (!s?.stationKind && Array.isArray(s?.stations) && s.stations.length > 0 && s.stations.every((st) => !st?.kind || st.kind === 'photo')),
+      },
       tasksPerPlayer: { label: 'Tasks per player', options: [3, 4, 5], default: 4 },
       killCooldown: { label: 'Elimination cooldown', options: [20, 30, 45], default: 30, unit: 's' },
       discussSeconds: { label: 'Discussion time', options: [30, 60, 90], default: 60, unit: 's' },
@@ -155,10 +163,11 @@ export const MP_GAMES = {
     maxPlayers: 100,
     usesLocation: true,
     usesCamera: true,
-    blurb: 'Real-world battle royale for up to 100 players. One life, a shrinking gas zone on the real map, loot dropped by the fallen. Last one standing wins.',
+    blurb: 'Real-world battle royale for up to 100 players. Start with your fists, grab weapons scattered across the zone and from supply drops, and outlast a shrinking gas zone on the real map. The host sets the area: ¼ mi, a 20-25 minute Quick ⅓ mi, 1, 5 or 10 mi, or a custom radius. One life, last one standing wins.',
     settings: {
       visibility: { label: 'Lobby', options: ['public', 'private'], labels: { public: 'Public', private: 'Private (code only)' }, default: 'public' },
-      areaId: { label: 'Starting area', options: ['1mi', '2mi', '3mi', '5mi'], labels: { '1mi': '1 mi', '2mi': '2 mi', '3mi': '3 mi', '5mi': '5 mi' }, default: '1mi' },
+      // Preset radius, or 'custom' (radius in settings.radiusM, 100 m - 16 km; see royale/constants.js).
+      areaId: { label: 'Starting area', options: ['qtr', 'quick', '1mi', '5mi', '10mi', 'custom'], labels: { qtr: '¼ mi', quick: 'Quick · ⅓ mi', '1mi': '1 mi', '5mi': '5 mi', '10mi': '10 mi', custom: 'Custom' }, default: 'quick' },
       pace: { label: 'Gas pace', options: ['fast', 'normal', 'long'], labels: { fast: 'Fast', normal: 'Normal', long: 'Long' }, default: 'normal' },
     },
   },
@@ -170,9 +179,11 @@ export const MP_GAMES = {
     minPlayers: 2,
     maxPlayers: 2,
     usesLocation: false,
-    blurb: 'Online chess against someone you follow, a follower or a player nearby. Every move syncs live and is checked by the rules engine.',
+    blurb: 'Online chess against someone you follow, a follower or a player nearby. Every move syncs live and is checked by the rules engine. Online games have their own rating, separate from your rating vs the computer.',
     settings: {
       hostColor: { label: 'Host plays', options: ['random', 'w', 'b'], labels: { random: 'Random', w: 'White', b: 'Black' }, default: 'random' },
+      // Time control "<minutes>+<increment seconds>" (read by OnlineChessGame timeControl()).
+      clock: { label: 'Time control', options: ['3+2', '5+0', '10+0', 'none'], labels: { '3+2': '3 + 2', '5+0': '5 min', '10+0': '10 min', none: 'No clock' }, default: '10+0' },
     },
   },
   mafia: {
@@ -195,10 +206,12 @@ export const MP_GAMES = {
     codePrefix: 'H',
     name: 'Heads Up 7 Up',
     icon: '👆',
-    minPlayers: 8,
+    // Playable from 4: the picker count scales (half the room, up to 7), so 4 players = 2
+    // pickers + 2 sitters, 8 = 4 + 4, 14+ = the classic 7.
+    minPlayers: 4,
     maxPlayers: 30,
     usesLocation: false,
-    blurb: 'The classic classroom game. 7 pickers secretly tap a sitter each; then everyone guesses who tapped them. Correct guessers swap into the picker role.',
+    blurb: 'The classic classroom game, from 4 players. Pickers (up to 7, about half the room in small groups) secretly tap a sitter each; then everyone guesses who tapped them. Correct guessers swap into the picker role.',
     settings: {
       pickSeconds: { label: 'Picking time', options: [20, 30, 45], default: 30, unit: 's' },
       guessSeconds: { label: 'Guessing time', options: [15, 20, 30], default: 20, unit: 's' },
@@ -215,11 +228,17 @@ export const AREA_PRESETS = {
 }
 
 // Battle Royale starting areas (radius in metres around the centre the host picks).
+// No public cap: the host picks any preset or a custom radius (custom: settings.radiusM).
+// 2 mi / 3 mi are no longer offered but still resolve for lobbies created by older builds.
 export const ROYALE_AREAS = {
+  qtr: { id: 'qtr', label: '¼ mi', r: 402.34 },
+  quick: { id: 'quick', label: '⅓ mi', r: 560 },
   '1mi': { id: '1mi', label: '1 mi', r: 1609.34 },
-  '2mi': { id: '2mi', label: '2 mi', r: 3218.69 },
-  '3mi': { id: '3mi', label: '3 mi', r: 4828.03 },
+  '2mi': { id: '2mi', label: '2 mi', r: 3218.69, legacy: true },
+  '3mi': { id: '3mi', label: '3 mi', r: 4828.03, legacy: true },
   '5mi': { id: '5mi', label: '5 mi', r: 8046.72 },
+  '10mi': { id: '10mi', label: '10 mi', r: 16093.44 },
+  custom: { id: 'custom', label: 'Custom', r: null },
 }
 
 // The always-on public Laser Tag arena: an endless Free-for-all anyone can drop into.
@@ -239,6 +258,11 @@ export function howToPlay(gameId, settings = {}) {
       'Head shots do double damage (about 50), body shots about 25, arms and legs about 15. Your gun changes these. Damage drops off past 20 m and camera aim reaches about 30 m.',
       'The mode switches automatically as you rotate the phone (shown at the top of the screen). You can force one — or the classic crosshair with a FIRE button — in the menu under Settings → Aim & fire.',
     ]
+    const gear = [
+      'Rockets explode where they hit — a wall, the ground or a player — and splash anyone close to the blast.',
+      'Sticky bombs: place as many as you carry, one tap each. Then tap DETONATE ALL to set every one of them off at once.',
+      'Speed lock: above about 15 km/h (9 mph) — on a bike, scooter or in a car — you can’t fire or place anything until you slow back to walking pace.',
+    ]
     const byMode = {
       ffa: ['Every hit scores 10 points (+10 for a headshot) and a tag-out scores 100.', 'Tagged-out players are back in after 8 seconds, with 2 seconds of spawn protection.', 'Most points when time runs out wins.'],
       tdm: ['You are on Red or Blue. You can\'t hit your own team.', 'Tagged-out players are back in after 8 seconds, with 2 seconds of spawn protection.', 'The team with the most tag-outs when time runs out wins.'],
@@ -254,21 +278,23 @@ export function howToPlay(gameId, settings = {}) {
     if (settings?.endless) {
       return {
         title: 'Laser Tag · Public Arena',
-        steps: [SAFETY, 'An endless Free-for-all. Players join and leave at any time — there is no setup and no final whistle.', ...aim, ...byMode.ffa.slice(0, 2), 'Your score is kept while you are in the arena. Leave whenever you like; points are added to your arcade balance.'],
+        steps: [SAFETY, 'An endless Free-for-all. Players join and leave at any time — there is no setup and no final whistle.', ...aim, ...gear, ...byMode.ffa.slice(0, 2), 'Your score is kept while you are in the arena. Leave whenever you like; points are added to your arcade balance.'],
       }
     }
-    return { title: `Laser Tag · ${LASER_MODES[mode]?.name || ''}`, steps: [SAFETY, ...aim, ...byMode[mode]] }
+    return { title: `Laser Tag · ${LASER_MODES[mode]?.name || ''}`, steps: [SAFETY, ...aim, ...gear, ...byMode[mode]] }
   }
   if (gameId === 'royale') {
     return {
       title: 'Battle Royale',
       steps: [
         SAFETY,
-        `Never play while driving. Above about 15 mph you go "In transit": you can't fire and can't be hit until you've slowed to walking pace for a few seconds. The gas still hurts you.`,
-        'Everyone starts with the free Starter Pistol and Street SMG and one life. Aim and fire exactly like Laser Tag: raise your phone and put the crosshair on a player.',
+        'The host sets the starting area: ¼ mi, Quick ⅓ mi (about 20-25 minutes), 1 mi, 5 mi, 10 mi or a custom radius (100 m to 16 km). The lobby shows the estimated match length. Up to a few miles is played on foot and the gas always gives walkers time to reach the next zone.',
+        '5+ mile games assume players may travel as passengers — never play while driving. Above about 15 mph you go "In transit": you can\'t fire, be hit or pick up loot until you\'ve slowed to walking pace, and the gas is paused for you (up to 5 minutes per match).',
+        'Everyone starts with only their fists: a melee strike for someone within about 3 m (a person filling a big part of the camera, or very close on GPS). Low damage, fast swings. Aim and fire exactly like Laser Tag.',
+        'Weapons are scattered at random across the zone: common, rare, epic and legendary (rarer guns are stronger). More drop into the next zone every time the gas moves, and supply drops with top-tier weapons are announced on the map. No ammo — they never run out.',
+        `Walk within about 30 ft of a weapon (shown on the map, and on the camera within ~50 m) and tap Pick up. You carry your fists plus 2 weapons; with both slots full, picking up swaps out the weapon you're holding and drops it there. Only go where it's safe and legal to walk.`,
         'The safe zone shrinks in phases on the real map. The next circle is shown (dashed) before the gas moves. Outside the zone you lose health every second — more in later phases.',
-        `Weapon caches are scattered around the area and every eliminated player drops their weapon. Walk within about 30 ft of one and tap Pick up. Only go where it's safe and legal to walk.`,
-        `When you're eliminated you can spectate the players who are left, or leave.`,
+        `Every eliminated player drops their weapons. When you're eliminated you can spectate the players who are left, or leave.`,
         'Last player standing wins. Results show your placement, kills and how long you survived.',
       ],
     }
@@ -283,6 +309,7 @@ export function howToPlay(gameId, settings = {}) {
         'You can offer a draw or resign at any time.',
         'If your opponent loses connection, the game waits about a minute for them to come back before you win by abandonment.',
         'After the game, tap Rematch — colours swap when you both accept.',
+        'Rated: every finished online game updates your Online rating (kept on this device), separate from your rating vs the computer. Aborted games don’t count.',
       ],
     }
   }
@@ -309,7 +336,7 @@ export function howToPlay(gameId, settings = {}) {
         `Day: if someone was eliminated, it's announced. Discuss who you suspect — then vote.`,
         'The player with the most votes is eliminated and their role is revealed.',
         'Town wins when all Mafia are eliminated. Mafia wins when they equal or outnumber the Town.',
-        '5–6 players: 1 Mafia. 7–9 players: 2 Mafia + Doctor + Detective. 10+: 3 Mafia.',
+        '5 players: 1 Mafia + a Doctor. 6: a Detective joins. 7–9 players: 2 Mafia. 10+: 3 Mafia.',
       ],
     }
   }
@@ -317,7 +344,7 @@ export function howToPlay(gameId, settings = {}) {
     return {
       title: 'Heads Up 7 Up',
       steps: [
-        '7 players are chosen as pickers. Everyone else is a sitter.',
+        'Up to 7 players are chosen as pickers (about half the room in smaller groups: 2 pickers with 4 players). Everyone else is a sitter.',
         'Sitters close their eyes (put your phone face-down). Each picker secretly taps one sitter.',
         `Once all pickers have chosen, it's "heads up!" — every tapped sitter tries to guess which picker tapped them.`,
         'Correct guesses swap you into the picker role next round. Wrong guesses keep you sitting.',
@@ -330,12 +357,12 @@ export function howToPlay(gameId, settings = {}) {
     title: 'Beside Them',
     steps: [
       SAFETY,
-      'Before the game, task stations are made by scanning real objects inside the play area — a bench, a door, a sign.',
-      'Everyone gets a secret role. One player is the imposter; everyone else is crew.',
-      'Crew: walk to your assigned stations, scan the object (match the reference photo), then solve the puzzle.',
-      'The imposter can eliminate crew within about 10 m (with a cooldown) and can sabotage comms. Imposter tasks are fake.',
-      'Found a body? Report it when you are close. Or use your one emergency meeting.',
-      'Meetings have a discussion period, then a vote. More than half the living players must agree to eject someone.',
+      'Task stations: by default the host’s phone drops auto GPS waypoints around the play area — walk there and the task opens. Indoors, use QR markers (print or show the codes and tape them up). Photo stations of real objects are optional.',
+      'Everyone gets a secret role. One player is the imposter; everyone else is crew. Everyone’s screen looks the same.',
+      'Crew: walk to your stations (or scan the station’s QR code), then solve the puzzle.',
+      'The imposter eliminates someone within arm’s reach — by default a 1.5-second hold (the host can choose instant, 1 s or 2 s), with a cooldown; stepping away or being on another floor cancels it. The imposter can also sabotage comms, and their tasks are fake.',
+      'Eliminated? Sit down where you are until someone reports you. Found a body? Report it when you are close, or use your one emergency meeting.',
+      'Meetings have a discussion period, then a vote. The player with the most votes is ejected; a tie, or Skip getting as many votes, ejects no one.',
       'Crew win by finishing every task or ejecting the imposter. The imposter wins once crew are outnumbered.',
     ],
   }

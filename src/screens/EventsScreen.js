@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useMemo, useRef, useState } from 'react'
 import { View, Text, Pressable, StyleSheet, FlatList, Image, ScrollView } from 'react-native'
 import { useFocusEffect } from '@react-navigation/native'
 import { Ionicons } from '@expo/vector-icons'
@@ -9,7 +9,14 @@ import { GlassButton } from '../components/GlassButton'
 import { colors, radii, type } from '../theme'
 import { supabase } from '../lib/supabase'
 import { getGame } from '../lib/games'
-import { CATEGORIES, fetchEvents, fetchProfiles, getCategory, isUnlimited, formatEventWhen, defaultEnd, eventPlace } from '../lib/events'
+import * as Location from 'expo-location'
+import {
+  CATEGORIES, fetchEvents, fetchHostedEvents, fetchPastEvents, fetchProfiles, getCategory, isUnlimited, formatEventWhen,
+  eventPlace, eventDistanceM, categoryLabel,
+} from '../lib/events'
+import { getPositionFast } from '../lib/location'
+import { useT } from '../i18n'
+import strings from '../i18n/strings/events'
 
 // Kept for any older imports: id -> username.
 export async function fetchUsernames(ids) {
@@ -17,51 +24,89 @@ export async function fetchUsernames(ids) {
   return Object.fromEntries(Object.entries(profiles).map(([id, p]) => [id, p.username]))
 }
 
+// Labels are keys in i18n/strings/events.
 const TABS = [
-  { key: 'upcoming', label: 'Upcoming' },
-  { key: 'mine', label: 'My events' },
-  { key: 'past', label: 'Past' },
+  { key: 'upcoming', label: 'tabUpcoming' },
+  { key: 'mine', label: 'tabMine' },
+  { key: 'past', label: 'tabPast' },
 ]
 
 // Lists real events from the `events` table. No placeholder data: on failure an error with
 // Retry is shown, otherwise an empty state.
+// Upcoming events come from a server-side filter (started in the last few hours or later),
+// soonest day first and nearest first within a day when your location is available. Past and
+// hosted events are their own small queries.
+async function myPosition() {
+  try {
+    // Only when location is already allowed: this screen never prompts for it.
+    const { status } = await Location.getForegroundPermissionsAsync()
+    if (status !== 'granted') return null
+    const pos = await getPositionFast()
+    return pos?.coords ?? null
+  } catch {
+    return null
+  }
+}
+
+const formatMeters = (m) => {
+  if (m == null) return null
+  const mi = m / 1609.34
+  return mi < 0.1 ? `${Math.max(50, Math.round((m * 3.28084) / 50) * 50)} ft` : `${mi < 10 ? mi.toFixed(1) : Math.round(mi)} mi`
+}
+
 export default function EventsScreen({ navigation }) {
-  const [events, setEvents] = useState([])
+  const t = useT(strings)
+  const [upcomingRows, setUpcomingRows] = useState([])
+  const [pastRows, setPastRows] = useState([])
+  const [hostedRows, setHostedRows] = useState([])
+  const [near, setNear] = useState(null)
   const [profiles, setProfiles] = useState({})
   const [userId, setUserId] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [tab, setTab] = useState('upcoming')
   const [category, setCategory] = useState(null)
+  const seq = useRef(0)
 
   const load = useCallback(async () => {
+    const my = ++seq.current
     setLoading(true)
     setError(null)
     try {
-      const { data: auth } = await supabase.auth.getUser()
-      setUserId(auth?.user?.id ?? null)
-      const rows = await fetchEvents()
-      setEvents(rows)
-      setProfiles(await fetchProfiles(rows.map((e) => e.creator_id)))
+      const [{ data: auth }, coords] = await Promise.all([supabase.auth.getUser(), myPosition()])
+      const uid = auth?.user?.id ?? null
+      const [up, past, hosted] = await Promise.all([
+        fetchEvents({ near: coords }),
+        fetchPastEvents().catch(() => []),
+        fetchHostedEvents(uid).catch(() => []),
+      ])
+      if (my !== seq.current) return
+      setUserId(uid)
+      setNear(coords)
+      setUpcomingRows(up)
+      setPastRows(past)
+      setHostedRows(hosted)
+      setProfiles(await fetchProfiles([...up, ...past, ...hosted].map((e) => e.creator_id)))
     } catch (e) {
       console.warn('Failed to load events', e)
-      setEvents([])
-      setError('Couldn’t load events. Check your connection and try again.')
+      if (my !== seq.current) return
+      setUpcomingRows([])
+      setError('load')
     } finally {
-      setLoading(false)
+      if (my === seq.current) setLoading(false)
     }
   }, [])
 
   useFocusEffect(useCallback(() => { load() }, [load]))
 
   const { upcoming, past, mine } = useMemo(() => {
-    const now = Date.now()
-    const endOf = (e) => (defaultEnd(e) || new Date(e.event_date)).getTime()
-    const up = events.filter((e) => endOf(e) > now)
-    const pa = events.filter((e) => endOf(e) <= now).reverse()
-    const my = userId ? events.filter((e) => e.creator_id === userId || e.attendeeIds.includes(userId)) : []
-    return { upcoming: up, past: pa, mine: my }
-  }, [events, userId])
+    const byId = new Map()
+    ;[...hostedRows, ...upcomingRows, ...pastRows].forEach((e) => {
+      if (userId && (e.creator_id === userId || e.attendeeIds.includes(userId))) byId.set(String(e.id), e)
+    })
+    const my = [...byId.values()].sort((a, b) => new Date(b.event_date).getTime() - new Date(a.event_date).getTime())
+    return { upcoming: upcomingRows, past: pastRows, mine: my }
+  }, [upcomingRows, pastRows, hostedRows, userId])
 
   const base = tab === 'upcoming' ? upcoming : tab === 'past' ? past : mine
   const shown = category ? base.filter((e) => (e.category || (getGame(e.game_id) ? 'gaming' : null)) === category) : base
@@ -73,11 +118,24 @@ export default function EventsScreen({ navigation }) {
     const start = new Date(event.event_date)
     const host = profiles[event.creator_id]
     const isMine = event.creator_id === userId
+    const dist = tab === 'upcoming' ? formatMeters(eventDistanceM(event, near)) : null
+    const going = isUnlimited(event.max_players)
+      ? t('goingN', { n: event.goingCount })
+      : t('goingOf', { n: event.goingCount, max: event.max_players })
     return (
       <Pressable
         onPress={() => navigation.navigate('EventDetails', { eventId: event.id })}
         style={({ pressed }) => [styles.cardWrap, pressed && { transform: [{ scale: 0.985 }] }]}
         accessibilityRole="button"
+        accessibilityLabel={[
+          event.name,
+          formatEventWhen(event.event_date, event.ends_at),
+          eventPlace(event),
+          dist,
+          going,
+          isMine ? t('hosting') : null,
+          event.visibility === 'invite' ? t('inviteOnly') : null,
+        ].filter(Boolean).join(', ')}
       >
         <GlassPanel radius={radii.md} animateIn={false}>
           <View style={styles.cover}>
@@ -90,13 +148,13 @@ export default function EventsScreen({ navigation }) {
               {cat || game ? (
                 <View style={styles.badge}>
                   <Ionicons name={cat?.icon || 'game-controller-outline'} size={11} color="#fff" />
-                  <Text style={styles.badgeText}>{cat?.label || game?.name}</Text>
+                  <Text style={styles.badgeText}>{cat ? categoryLabel(cat) : game?.name}</Text>
                 </View>
               ) : null}
               {event.visibility === 'invite' ? (
-                <View style={styles.badge}><Ionicons name="lock-closed" size={10} color="#fff" /><Text style={styles.badgeText}>Invite only</Text></View>
+                <View style={styles.badge}><Ionicons name="lock-closed" size={10} color="#fff" /><Text style={styles.badgeText}>{t('inviteOnly')}</Text></View>
               ) : null}
-              {isMine ? <View style={styles.badge}><Text style={styles.badgeText}>Hosting</Text></View> : null}
+              {isMine ? <View style={styles.badge}><Text style={styles.badgeText}>{t('hosting')}</Text></View> : null}
             </View>
             <View style={styles.dateTile}>
               <Text style={styles.dateMonth}>{Number.isNaN(start.getTime()) ? '' : start.toLocaleDateString(undefined, { month: 'short' }).toUpperCase()}</Text>
@@ -108,14 +166,16 @@ export default function EventsScreen({ navigation }) {
             <Text style={styles.eventName} numberOfLines={2}>{event.name}</Text>
             <View style={styles.metaRow}>
               <Ionicons name="location-outline" size={13} color={colors.textMuted} />
-              <Text style={styles.meta} numberOfLines={1}>{eventPlace(event)}</Text>
+              <Text style={styles.meta} numberOfLines={1}>
+                {eventPlace(event)}{dist ? ` · ${dist}` : ''}
+              </Text>
             </View>
             <View style={styles.footer}>
               <Text style={styles.meta}>
-                {isUnlimited(event.max_players) ? `${event.goingCount} going` : `${event.goingCount}/${event.max_players} going`}
-                {event.interestedCount ? ` · ${event.interestedCount} interested` : ''}
+                {going}
+                {event.interestedCount ? ` · ${t('interestedN', { n: event.interestedCount })}` : ''}
               </Text>
-              {host?.username ? <Text style={styles.host} numberOfLines={1}>by {host.username}</Text> : null}
+              {host?.username ? <Text style={styles.host} numberOfLines={1}>{t('byHost', { name: host.username })}</Text> : null}
             </View>
           </View>
         </GlassPanel>
@@ -126,33 +186,46 @@ export default function EventsScreen({ navigation }) {
   return (
     <View style={styles.screen}>
       <BrandHeader
-        title="Events"
+        title={t('events')}
         onBack={() => navigation.goBack()}
         right={
-          <GlassButton size="sm" variant="primary" onPress={() => navigation.navigate('CreateEvent')} icon={<Ionicons name="add" size={16} color={colors.ink} />}>
-            Create
+          <GlassButton size="sm" variant="primary" onPress={() => navigation.navigate('CreateEvent')} icon={<Ionicons name="add" size={16} color={colors.ink} />} accessibilityLabel={t('createEventA11y')}>
+            {t('create')}
           </GlassButton>
         }
       />
       <View style={styles.tabs}>
-        {TABS.map((t) => {
-          const active = tab === t.key
+        {TABS.map((tb) => {
+          const active = tab === tb.key
           return (
-            <Pressable key={t.key} onPress={() => setTab(t.key)} style={[styles.tab, active && styles.tabActive]} accessibilityRole="tab" accessibilityState={{ selected: active }}>
-              <Text style={[styles.tabText, active && styles.tabTextActive]}>{t.label} ({counts[t.key]})</Text>
+            <Pressable key={tb.key} onPress={() => setTab(tb.key)} style={[styles.tab, active && styles.tabActive]} accessibilityRole="tab" accessibilityState={{ selected: active }}>
+              <Text style={[styles.tabText, active && styles.tabTextActive]}>{t(tb.label)} ({counts[tb.key]})</Text>
             </Pressable>
           )
         })}
       </View>
       <View>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.cats}>
-          <Pressable onPress={() => setCategory(null)} style={[styles.cat, !category && styles.catActive]}>
-            <Text style={[styles.catText, !category && styles.catTextActive]}>All</Text>
+          <Pressable
+            onPress={() => setCategory(null)}
+            style={[styles.cat, !category && styles.catActive]}
+            hitSlop={{ top: 6, bottom: 6 }}
+            accessibilityRole="button"
+            accessibilityState={{ selected: !category }}
+          >
+            <Text style={[styles.catText, !category && styles.catTextActive]}>{t('all')}</Text>
           </Pressable>
           {CATEGORIES.map((c) => (
-            <Pressable key={c.key} onPress={() => setCategory(category === c.key ? null : c.key)} style={[styles.cat, category === c.key && styles.catActive]}>
+            <Pressable
+              key={c.key}
+              onPress={() => setCategory(category === c.key ? null : c.key)}
+              style={[styles.cat, category === c.key && styles.catActive]}
+              hitSlop={{ top: 6, bottom: 6 }}
+              accessibilityRole="button"
+              accessibilityState={{ selected: category === c.key }}
+            >
               <Ionicons name={c.icon} size={13} color={category === c.key ? colors.ink : colors.text} />
-              <Text style={[styles.catText, category === c.key && styles.catTextActive]}>{c.label}</Text>
+              <Text style={[styles.catText, category === c.key && styles.catTextActive]}>{categoryLabel(c)}</Text>
             </Pressable>
           ))}
         </ScrollView>
@@ -169,10 +242,10 @@ export default function EventsScreen({ navigation }) {
             <View style={styles.empty}>
               <Ionicons name={error ? 'cloud-offline-outline' : 'calendar-outline'} size={40} color={colors.textMuted} />
               <Text style={styles.emptyText}>
-                {error || (tab === 'upcoming' ? 'No upcoming events yet.' : tab === 'mine' ? 'Events you host or RSVP to show up here.' : 'No past events.')}
+                {error ? t('loadFailed') : (tab === 'upcoming' ? t('emptyUpcoming') : tab === 'mine' ? t('emptyMine') : t('emptyPast'))}
               </Text>
               <GlassButton size="sm" variant={error ? 'glass' : 'primary'} onPress={error ? load : () => navigation.navigate('CreateEvent')}>
-                {error ? 'Retry' : 'Host an event'}
+                {error ? t('retry') : t('hostEvent')}
               </GlassButton>
             </View>
           )

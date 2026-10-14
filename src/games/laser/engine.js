@@ -4,6 +4,10 @@
 import { distanceMeters, shuffled } from '../../lib/multiplayer'
 import { getWeapon } from '../../lib/guns'
 import { zoneDamage } from './vision'
+import { angleDelta, bearingTo, destination, round6 } from './geo'
+import {
+  COMPASS_MAX_RANGE_M, HOST_AIM_SLACK_DEG, HOST_VISION_MIN_DEG, compassTolerance, gpsErr, hitChance, hostGapSlackMs, minShotGapMs, visionTolerance,
+} from './aimRules'
 
 export const MAX_HP = 100
 export const RESPAWN_MS = 8000
@@ -38,12 +42,20 @@ export const GRENADE_RADIUS_M = 7
 export const GRENADE_MAX_DAMAGE = 90
 export const GRENADE_MIN_DAMAGE = 35
 export const GRENADE_COOLDOWN_MS = 2500
-// Sticky bombs: placed at the player's current position, detonated remotely by pressing again.
-// Damage falls off from the centre like a grenade but the blast radius is bigger.
+// Sticky bombs: place as many as you carry ('sticky_place': the HOST records where you stood,
+// never a client lat/lng), then one 'sticky_detonate' blows all of yours at once. Damage falls
+// off from each bomb's centre like a grenade; a target caught by several bombs takes the sum,
+// capped at STICKY_STACK_CAP per detonation (one kill credit).
 export const STICKY_BOMB_RADIUS_M = 10
 export const STICKY_BOMB_MAX_DAMAGE = 100
 export const STICKY_BOMB_MIN_DAMAGE = 30
-export const STICKY_BOMB_COOLDOWN_MS = 3000
+export const STICKY_BOMB_COOLDOWN_MS = 3000 // legacy 'sticky_bomb' (old clients) only
+export const STICKY_MAX_PER_PLAYER = 20 // sanity cap on the host; the real limit is your inventory
+export const STICKY_PLACE_GAP_MS = 500
+export const STICKY_DETONATE_GAP_MS = 800 // double-tap guard, not a per-bomb throttle
+export const STICKY_STACK_CAP = 100
+export const STICKY_LEGACY_MAX_M = 100 // an old client's sticky_bomb lat/lng must be this close to them
+export const STICKY_RESTORE_MAX_M = 250 // host migration: re-sent placements must be this close
 // Land mines: placed at the player's current position, triggered automatically when an enemy
 // walks within LAND_MINE_TRIGGER_M. Blast radius is smaller but damage is high.
 export const LAND_MINE_TRIGGER_M = 3
@@ -51,10 +63,22 @@ export const LAND_MINE_RADIUS_M = 5
 export const LAND_MINE_MAX_DAMAGE = 110
 export const LAND_MINE_MIN_DAMAGE = 40
 export const LAND_MINE_COOLDOWN_MS = 2000
-// Rocket launcher: splash damage in a radius around the target on a direct hit.
-export const ROCKET_RADIUS_M = 25
+export const LAND_MINE_MAX_PER_PLAYER = 20
+// Rocket launcher: EVERY rocket explodes. A direct hit damages the target and splashes everyone
+// near them; a miss ('rocket' action, or a 'hit' the host rejects) explodes at the impact point
+// = shooter's host-side position + heading × distance, and splashes everyone near that.
+// There is no depth sensor: the client sends its honest guess (locked target's distance /
+// ground intersection when pitched down / ROCKET_WALL_M) and the host clamps it.
+export const ROCKET_RADIUS_M = 9
 export const ROCKET_SPLASH_MAX = 70
 export const ROCKET_SPLASH_MIN = 20
+export const ROCKET_WALL_M = 25
+export const ROCKET_MIN_M = 3
+export const ROCKET_MAX_M = 80
+export const ROCKET_GAP_MS = 3000 // 1 rocket per 3 s (fireRate 1/3), enforced on the host
+// Hits from old clients carry no heading, so the host can't re-check aim or roll them; they
+// are still accepted (fire-rate + range limits apply). Flip once old builds are gone.
+export const LEGACY_AIM_OK = true
 
 // Extra room for GPS error when checking "inside a radius".
 export const gpsSlack = (acc) => Math.min(8, Math.max(2, (acc ?? 10) / 2))
@@ -191,6 +215,7 @@ function tickDeathmatch(state, now, presentIds, posOf) {
     }
   }
   let next = players === state.players ? state : { ...state, players }
+  next = dropOrphanStickies(next)
   // Trigger land mines
   if (next.landMines?.length && posOf) next = tickLandMines(next, now, posOf)
   // Forget blasts older than BLAST_KEEP_MS (clients only react to ids they haven't seen).
@@ -290,7 +315,7 @@ function withMvp(state) {
 }
 
 function tickSnd(state, now, presentIds, posOf) {
-  let next = state
+  let next = dropOrphanStickies(state)
   if (next.landMines?.length && posOf) next = tickLandMines(next, now, posOf)
   if (next.blasts?.length && next.blasts.some((b) => now - b.at > BLAST_KEEP_MS)) {
     next = { ...next, blasts: next.blasts.filter((b) => now - b.at <= BLAST_KEEP_MS) }
@@ -412,6 +437,7 @@ function nextSndRound(state, now, presentIds) {
     endsAt: startsAt + snd.roundMs,
     players,
     landMines: [],
+    stickies: [],
     blasts: [],
     snd: { ...snd, roundNo: snd.roundNo + 1, sides, act: null, swapped: swap },
     feed: swap ? pushFeed(state, '🔄 Half time — sides swapped', now) : state.feed,
@@ -421,16 +447,26 @@ function nextSndRound(state, now, presentIds) {
 
 // ---- actions -------------------------------------------------------------------
 
-// Returns { state, reply? } where reply = { to, type, data } feedback for the sender.
-export function applyAction(state, action, from, { now, posOf }) {
+// Returns { state, reply?, notify? }: reply = { type, data } feedback for the sender; notify =
+// [{ to, data }] 'got_hit' messages for the players an action damaged.
+// rand: the host's dice (tests pass a seeded one).
+export function applyAction(state, action, from, { now, posOf, rand = Math.random }) {
   if (state.phase !== 'playing' || !action) return { state }
   const me = state.players[from]
   if (!me) return { state }
+  const ctx = { now, posOf, rand }
   switch (action.type) {
-    case 'hit': return applyHit(state, action, from, now, posOf)
+    case 'hit': return applyHit(state, action, from, ctx, false)
+    // A compass pull the shooter's own dice called a miss (sent so the host rolls; old hosts
+    // ignore the type, so they never see it as a hit).
+    case 'shot': return applyHit(state, action, from, ctx, true)
+    case 'rocket': return applyRocket(state, action, from, ctx)
     case 'bystander': return applyBystander(state, action, from, now)
     case 'grenade': return applyGrenade(state, action, from, now, posOf)
-    case 'sticky_bomb': return applyStickyBomb(state, action, from, now, posOf)
+    case 'sticky_bomb': return applyStickyBomb(state, action, from, ctx)
+    case 'sticky_place': return applyStickyPlace(state, action, from, ctx)
+    case 'sticky_detonate': return applyStickyDetonate(state, from, ctx)
+    case 'sticky_restore': return applyStickyRestore(state, action, from, ctx)
     case 'land_mine': return applyLandMine(state, action, from, now, posOf)
     // A new press by the same player restarts their hold (a lost act_cancel must not let
     // the next press finish early).
@@ -501,7 +537,10 @@ export function rebaseClock(state, deltaMs) {
   if (!state || !Number.isFinite(deltaMs) || !deltaMs) return state
   const sh = (t) => (Number.isFinite(t) && t > 0 ? t + deltaMs : t)
   const players = {}
-  for (const [id, p] of Object.entries(state.players || {})) players[id] = { ...p, respawnAt: sh(p.respawnAt), protectedUntil: sh(p.protectedUntil) }
+  for (const [id, p] of Object.entries(state.players || {})) {
+    players[id] = { ...p, respawnAt: sh(p.respawnAt), protectedUntil: sh(p.protectedUntil) }
+    if (p.shotAt) players[id].shotAt = Object.fromEntries(Object.entries(p.shotAt).map(([k, v]) => [k, { ...v, h: sh(v?.h) }]))
+  }
   const next = {
     ...state,
     startedAt: sh(state.startedAt),
@@ -511,6 +550,7 @@ export function rebaseClock(state, deltaMs) {
     players,
   }
   if (state.blasts) next.blasts = state.blasts.map((b) => ({ ...b, at: sh(b.at) }))
+  if (state.stickies) next.stickies = state.stickies.map((b) => ({ ...b, placedAt: sh(b.placedAt) }))
   if (state.snd) {
     const { bomb, act } = state.snd
     next.snd = {
@@ -587,44 +627,72 @@ function applyGrenade(state, action, from, now, posOf) {
     }
   }
   const next = { ...state, players, feed, teamScore, ...(snd ? { snd: sndState } : {}) }
-  return { state: next, reply: { type: 'grenade_ok', data: { hits, by: thrower.name } } }
+  return { state: next, reply: { type: 'grenade_ok', data: { hits, by: thrower.name } }, notify: notifyFor(hits, thrower.name, from, 'grenade') }
 }
 
-// Sticky bomb: detonated at a previously placed location. The placer sends the lat/lng where
-// they placed it and the host checks everyone nearby.
-function applyStickyBomb(state, action, from, now, posOf) {
-  const placer = state.players[from]
-  if (!placer?.alive) return { state }
-  if (now - (placer.lastStickyBombAt || 0) < STICKY_BOMB_COOLDOWN_MS) return { state }
-  const land = { lat: Number(action.lat), lng: Number(action.lng) }
-  if (!Number.isFinite(land.lat) || !Number.isFinite(land.lng)) return { state }
-  const players = { ...state.players, [from]: { ...placer, lastStickyBombAt: now } }
+// ---- shared blast + fire-rate helpers -------------------------------------------------------
+
+/** got_hit messages for everyone in `hits`. */
+function notifyFor(hits, byName, byId, zone, weapon) {
+  return (hits || []).map((h) => ({ to: h.id, data: { by: byName || 'Someone', byId, zone, damage: h.damage, killed: h.killed, ...(weapon ? { weapon } : {}) } }))
+}
+
+const withPlayer = (state, id, patch) => ({ ...state, players: { ...state.players, [id]: { ...state.players[id], ...patch } } })
+
+/**
+ * Per-weapon fire-rate gate. A pull counts only when it is at least gapMs after the previous
+ * one on the SENDER's trigger clock (firedAt, monotonic per phone) AND on the host's clock
+ * (minus a little slack for bursty arrival), so a faked firedAt can't beat it.
+ * Returns { ok, shotAt? } (shotAt: the player's updated record, when there is a gap rule).
+ */
+export function fireGate(player, key, gapMs, now, firedAt) {
+  if (!(gapMs > 0)) return { ok: true }
+  const sent = Number.isFinite(firedAt) ? firedAt : now
+  const prev = player?.shotAt?.[key]
+  if (prev && (sent - prev.s < gapMs || now - prev.h < gapMs - hostGapSlackMs(gapMs))) return { ok: false }
+  return { ok: true, shotAt: { ...(player?.shotAt || {}), [key]: { s: sent, h: now } } }
+}
+
+/**
+ * Area damage from one or more blast centres. Every enemy (not the owner, not `exclude`, not
+ * spawn-protected) within radius + GPS slack of a centre takes max→min falloff damage per
+ * centre, summed and capped at `cap`. Scores, kills, team score, the kill feed and S&D side
+ * effects (act interrupted, carrier drops the bomb) are applied.
+ */
+function blast(state, from, centers, opts, { now, posOf }) {
+  const { radius, max, min, slackCap = 4, cap = Infinity, exclude = null, symbol = '💥', tag = null } = opts
+  const owner = state.players[from]
   const snd = state.mode === 'snd'
-  const hits = []
+  const players = { ...state.players }
   let feed = state.feed
   let teamScore = state.teamScore
   let sndState = state.snd
+  const hits = []
   for (const [id, target] of Object.entries(state.players)) {
-    if (id === from || !target.alive) continue
-    if (state.mode !== 'ffa' && target.team === placer.team) continue
+    if (id === from || id === exclude || !target.alive) continue
+    if (state.mode !== 'ffa' && target.team === owner?.team) continue
     if ((target.protectedUntil || 0) > now) continue
     const pos = posOf(id)
     if (!pos) continue
-    const d = distanceMeters(pos, land)
-    const reach = STICKY_BOMB_RADIUS_M + Math.min(4, gpsSlack(pos.acc))
-    if (d > reach) continue
-    const damage = Math.round(STICKY_BOMB_MAX_DAMAGE - (STICKY_BOMB_MAX_DAMAGE - STICKY_BOMB_MIN_DAMAGE) * Math.min(1, d / reach))
+    const reach = radius + Math.min(slackCap, gpsSlack(pos.acc))
+    let damage = 0
+    for (const c of centers) {
+      const d = distanceMeters(pos, c)
+      if (d <= reach) damage += Math.round(max - (max - min) * Math.min(1, d / reach))
+    }
+    if (!(damage > 0)) continue
+    damage = Math.min(cap, damage)
     const hp = Math.max(0, target.hp - damage)
     const killed = hp <= 0
     players[id] = { ...target, hp, alive: !killed, deaths: target.deaths + (killed ? 1 : 0), respawnAt: killed && !snd ? now + RESPAWN_MS : null }
     const me = players[from]
-    players[from] = { ...me, hits: me.hits + 1, score: me.score + 10 + (killed ? 100 : 0), kills: me.kills + (killed ? 1 : 0) }
+    players[from] = { ...me, hits: (me.hits || 0) + 1, score: (me.score || 0) + 10 + (killed ? 100 : 0), kills: (me.kills || 0) + (killed ? 1 : 0) }
     hits.push({ id, name: target.name, damage: Math.min(damage, target.hp), killed })
     if (killed) {
-      feed = pushFeed({ feed }, `${placer.name} 💥 ${target.name} (sticky bomb)`, now)
-      if (state.mode === 'tdm') teamScore = { ...teamScore, [placer.team]: teamScore[placer.team] + 1 }
+      feed = pushFeed({ feed }, `${owner?.name || 'Someone'} ${symbol} ${target.name}${tag ? ` (${tag})` : ''}`, now)
+      if (state.mode === 'tdm' && owner?.team) teamScore = { ...teamScore, [owner.team]: (teamScore?.[owner.team] || 0) + 1 }
     }
-    if (snd) {
+    if (snd && sndState) {
       if (sndState.act?.by === id) sndState = { ...sndState, act: null }
       if (killed && sndState.bomb?.state === 'carried' && sndState.bomb.carrier === id) {
         sndState = { ...sndState, bomb: dropBomb(sndState.bomb, pos) }
@@ -632,16 +700,140 @@ function applyStickyBomb(state, action, from, now, posOf) {
       }
     }
   }
-  const next = { ...state, players, feed, teamScore, ...(snd ? { snd: sndState } : {}) }
-  return { state: next, reply: { type: 'sticky_bomb_ok', data: { hits, by: placer.name } } }
+  if (!hits.length) return { state, hits }
+  return { state: { ...state, players, feed, teamScore, ...(snd ? { snd: sndState } : {}) }, hits }
 }
 
-// Land mine: placed at the player's location. The host stores it and checks every tick whether
-// an enemy has wandered within LAND_MINE_TRIGGER_M; when one does, it detonates.
+const ROCKET_BLAST = { radius: ROCKET_RADIUS_M, max: ROCKET_SPLASH_MAX, min: ROCKET_SPLASH_MIN, slackCap: 3, symbol: '🚀💥' }
+const STICKY_BLAST = { radius: STICKY_BOMB_RADIUS_M, max: STICKY_BOMB_MAX_DAMAGE, min: STICKY_BOMB_MIN_DAMAGE, slackCap: 4, cap: STICKY_STACK_CAP, tag: 'sticky bomb' }
+
+/** Where a rocket fired from `a` along `heading` lands, `distClaim` metres out (clamped). */
+export function rocketImpactPoint(a, heading, distClaim, gun) {
+  const maxM = Math.min(ROCKET_MAX_M, gun?.range || ROCKET_MAX_M)
+  const raw = Number(distClaim)
+  const dist = Math.max(ROCKET_MIN_M, Math.min(maxM, Number.isFinite(raw) && raw > 0 ? raw : ROCKET_WALL_M))
+  return { ...destination(a, heading, dist), dist }
+}
+
+// The rocket explodes at its impact point: splash everyone (enemy) near it.
+function rocketImpact(state, from, a, heading, distClaim, gun, ctx, extra = {}) {
+  const p = rocketImpactPoint(a, heading, distClaim, gun)
+  const r = blast(state, from, [p], ROCKET_BLAST, ctx)
+  const name = state.players[from]?.name
+  return {
+    state: r.state,
+    reply: { type: 'rocket_ok', data: { hits: r.hits, lat: round6(p.lat), lng: round6(p.lng), dist: Math.round(p.dist * 10) / 10, ...extra } },
+    notify: notifyFor(r.hits, name, from, 'rocket', 'rocket'),
+  }
+}
+
+// A rocket that hit nothing (no target in the sights): it still explodes where it lands.
+function applyRocket(state, action, from, ctx) {
+  const shooter = state.players[from]
+  if (!shooter?.alive) return { state }
+  const heading = Number(action.heading)
+  if (!Number.isFinite(heading)) return { state }
+  const gun = getWeapon('rocket')
+  const gate = fireGate(shooter, 'rocket', minShotGapMs(gun) || ROCKET_GAP_MS, ctx.now, action.firedAt)
+  if (!gate.ok) return { state, reply: notice('Rocket reloading…') }
+  const base = withPlayer(state, from, { shotAt: gate.shotAt })
+  const a = ctx.posOf(from)
+  if (!a) return { state: base, reply: notice('Rocket lost — waiting for your GPS.') }
+  return rocketImpact(base, from, a, heading, action.dist, gun, ctx)
+}
+
+// ---- sticky bombs -----------------------------------------------------------------------------
+
+const myStickies = (state, from) => (state.stickies || []).filter((b) => b.by === from)
+
+/** Remove sticky bombs whose owner has left the match. */
+function dropOrphanStickies(state) {
+  if (!state.stickies?.length || state.stickies.every((b) => state.players[b.by])) return state
+  return { ...state, stickies: state.stickies.filter((b) => state.players[b.by]) }
+}
+
+const cleanId = (v, fallback) => (typeof v === 'string' && v ? v.slice(0, 40) : fallback)
+
+// Place one: the host stamps the position IT sees for the placer (never a client lat/lng).
+function applyStickyPlace(state, action, from, { now, posOf }) {
+  const placer = state.players[from]
+  if (!placer?.alive) return { state }
+  const id = cleanId(action.id, `${now}`)
+  const mine = myStickies(state, from)
+  if (mine.some((b) => b.id === id)) return { state } // a resend
+  if (now - (placer.lastStickyPlaceAt || 0) < STICKY_PLACE_GAP_MS) return { state, reply: notice('Slow down — one sticky bomb at a time.') }
+  if (mine.length >= STICKY_MAX_PER_PLAYER) return { state, reply: notice(`That’s ${STICKY_MAX_PER_PLAYER} sticky bombs — detonate some first.`) }
+  const pos = posOf(from)
+  if (!pos) return { state, reply: notice('Waiting for your GPS to place the sticky bomb.') }
+  const bomb = { id, by: from, lat: round6(pos.lat), lng: round6(pos.lng), placedAt: now }
+  const next = { ...withPlayer(state, from, { lastStickyPlaceAt: now }), stickies: [...(state.stickies || []), bomb] }
+  return { state: next, reply: { type: 'sticky_place_ok', data: { id, lat: bomb.lat, lng: bomb.lng, count: mine.length + 1 } } }
+}
+
+// Detonate ALL of the sender's sticky bombs in one host pass.
+function applyStickyDetonate(state, from, ctx) {
+  const placer = state.players[from]
+  if (!placer?.alive) return { state }
+  const mine = myStickies(state, from)
+  if (!mine.length) return { state, reply: notice('No sticky bombs placed.') }
+  if (ctx.now - (placer.lastStickyBombAt || 0) < STICKY_DETONATE_GAP_MS) return { state }
+  const base = { ...withPlayer(state, from, { lastStickyBombAt: ctx.now }), stickies: (state.stickies || []).filter((b) => b.by !== from) }
+  const r = blast(base, from, mine, STICKY_BLAST, ctx)
+  return {
+    state: r.state,
+    reply: { type: 'sticky_bomb_ok', data: { hits: r.hits, by: placer.name, count: mine.length, bombs: mine.map((b) => ({ id: b.id, lat: b.lat, lng: b.lng })) } },
+    notify: notifyFor(r.hits, placer.name, from, 'sticky_bomb'),
+  }
+}
+
+// Host migration: the new host's copy of the state may predate a placement, so the owner
+// re-sends theirs. Only positions near where the host sees the owner now are taken (the game
+// gates this to just after a host change).
+function applyStickyRestore(state, action, from, { now, posOf }) {
+  const placer = state.players[from]
+  const pos = posOf(from)
+  if (!placer || !pos || !Array.isArray(action.items)) return { state }
+  const have = new Set(myStickies(state, from).map((b) => b.id))
+  const add = []
+  for (const it of action.items.slice(0, STICKY_MAX_PER_PLAYER)) {
+    const id = cleanId(it?.id, null)
+    const lat = Number(it?.lat)
+    const lng = Number(it?.lng)
+    if (!id || have.has(id) || !Number.isFinite(lat) || !Number.isFinite(lng)) continue
+    if (distanceMeters(pos, { lat, lng }) > STICKY_RESTORE_MAX_M) continue
+    if (have.size + add.length >= STICKY_MAX_PER_PLAYER) break
+    have.add(id)
+    add.push({ id, by: from, lat: round6(lat), lng: round6(lng), placedAt: now })
+  }
+  if (!add.length) return { state }
+  return { state: { ...state, stickies: [...(state.stickies || []), ...add] } }
+}
+
+// Old clients: 'sticky_bomb' detonates one bomb at a client-sent lat/lng. If the host has
+// placements for this player it detonates those instead (the lat/lng is ignored); otherwise
+// the position must be near the player and the old 3 s cooldown applies.
+function applyStickyBomb(state, action, from, ctx) {
+  const placer = state.players[from]
+  if (!placer?.alive) return { state }
+  if (myStickies(state, from).length) return applyStickyDetonate(state, from, ctx)
+  if (ctx.now - (placer.lastStickyBombAt || 0) < STICKY_BOMB_COOLDOWN_MS) return { state }
+  const land = { lat: Number(action.lat), lng: Number(action.lng) }
+  if (!Number.isFinite(land.lat) || !Number.isFinite(land.lng)) return { state }
+  const me = ctx.posOf(from)
+  if (!me) return { state, reply: notice('Sticky bomb lost — waiting for your GPS.') }
+  if (distanceMeters(me, land) > STICKY_LEGACY_MAX_M + gpsSlack(me.acc)) return { state, reply: notice('That sticky bomb is too far away to detonate.') }
+  const base = withPlayer(state, from, { lastStickyBombAt: ctx.now })
+  const r = blast(base, from, [land], STICKY_BLAST, ctx)
+  return { state: r.state, reply: { type: 'sticky_bomb_ok', data: { hits: r.hits, by: placer.name } }, notify: notifyFor(r.hits, placer.name, from, 'sticky_bomb') }
+}
+
+// Land mine: placed at the player's location (host-side position). The host stores it and checks
+// every tick whether an enemy has wandered within LAND_MINE_TRIGGER_M; when one does, it detonates.
 function applyLandMine(state, action, from, now, posOf) {
   const placer = state.players[from]
   if (!placer?.alive) return { state }
   if (now - (placer.lastLandMineAt || 0) < LAND_MINE_COOLDOWN_MS) return { state }
+  if ((state.landMines || []).filter((m) => m.by === from).length >= LAND_MINE_MAX_PER_PLAYER) return { state, reply: notice(`You already have ${LAND_MINE_MAX_PER_PLAYER} mines out.`) }
   const pos = posOf(from)
   if (!pos) return { state, reply: notice('Waiting for GPS to place mine.') }
   const mine = { lat: pos.lat, lng: pos.lng, by: from, placedAt: now }
@@ -650,41 +842,91 @@ function applyLandMine(state, action, from, now, posOf) {
   return { state: { ...state, players, landMines: mines }, reply: { type: 'land_mine_ok', data: { placed: true } } }
 }
 
-function applyHit(state, action, from, now, posOf) {
+// ---- hits ---------------------------------------------------------------------------------------
+
+const clampHits = (v, cap) => Math.max(1, Math.min(cap, Math.floor(Number(v) || 1)))
+
+// A trigger pull at a player. New clients send `heading` (+ headingAcc, shots, snap) so the
+// host re-checks the bearing and, for compass aim, rolls the hit itself; camera ('vision')
+// hits are bearing-checked with a wide window. Old clients (no heading) are taken as sent.
+// Rockets never just vanish: anything that isn't a direct hit explodes at the impact point.
+function applyHit(state, action, from, ctx, typeShot) {
+  const { now, posOf, rand } = ctx
   const shooter = state.players[from]
   const target = state.players[action.target]
-  if (!shooter || !target || action.target === from) return { state, reply: notice('That player isn’t in this match.') }
+  if (!shooter) return { state }
+  const gun = getWeapon(action.weapon) || getWeapon('pistol')
+  const rocket = gun.id === 'rocket'
+  const heading = Number(action.heading)
+  const aimV = Number.isFinite(heading)
+  if (!target || action.target === from) {
+    if (rocket && aimV && shooter.alive) return applyRocket(state, { ...action, type: 'rocket' }, from, ctx)
+    return { state, reply: notice('That player isn’t in this match.') }
+  }
   if (!shooter.alive) return { state }
-  if (!target.alive) return { state, reply: notice(`${target.name} is already tagged out.`) }
-  if (state.mode !== 'ffa' && shooter.team === target.team) return { state, reply: notice('Friendly fire is off.') }
-  if ((target.protectedUntil || 0) > now) return { state, reply: notice(`${target.name} just respawned — protected for a moment.`) }
+  const gate = fireGate(shooter, gun.id, rocket ? Math.max(ROCKET_GAP_MS, minShotGapMs(gun)) : minShotGapMs(gun), now, action.firedAt)
+  if (!gate.ok) return { state, reply: rocket ? notice('Rocket reloading…') : undefined }
+  const base = gate.shotAt ? withPlayer(state, from, { shotAt: gate.shotAt }) : state
   const a = posOf(from)
   const b = posOf(action.target)
-  if (!a || !b) return { state, reply: notice(!a ? 'Shot not counted — waiting for your GPS.' : `Shot not counted — ${target.name} has no GPS fix.`) }
+  // A rocket that doesn't hit its target still flies on and explodes.
+  const miss = (text, distClaim) => {
+    if (rocket && aimV && a) return rocketImpact(base, from, a, heading, distClaim ?? action.dist, gun, ctx, { miss: text })
+    return { state: base, reply: text ? notice(text) : undefined }
+  }
+  if (!target.alive) return miss(`${target.name} is already tagged out.`)
+  if (state.mode !== 'ffa' && shooter.team === target.team) return miss('Friendly fire is off.')
+  if ((target.protectedUntil || 0) > now) return miss(`${target.name} just respawned — protected for a moment.`)
+  if (!a || !b) return miss(!a ? 'Shot not counted — waiting for your GPS.' : `Shot not counted — ${target.name} has no GPS fix.`)
   const dist = distanceMeters(a, b)
-  const gpsErr = (a.acc ?? 10) + (b.acc ?? 10)
+  const legacyErr = (a.acc ?? 10) + (b.acc ?? 10)
   const maxRange = action.method === 'vision' ? VISION_MAX_M : MAX_RANGE_M + 30
-  if (dist > maxRange && dist > gpsErr) return { state, reply: notice('Out of range.') }
+  if (dist > maxRange && dist > legacyErr) return miss('Out of range.')
   const zone = action.zone === 'head' || action.zone === 'limb' ? action.zone : 'body'
-  // Damage is the host's call: weapon + zone + distance (never the client's number).
-  const gun = getWeapon(action.weapon) || getWeapon('pistol')
   // Automatics batch a few rounds per action (client HIT_BATCH_MS); others send one pull.
   const cap = gun.fireMode === 'automatic' ? 5 : Math.max(1, Math.min(5, gun.shotsPerClick || 1))
-  const hits = Math.max(1, Math.min(cap, Math.floor(Number(action.hits) || 1)))
+  let hits
+  if (aimV) {
+    const err = gpsErr(a.acc, b.acc)
+    const headingAcc = Number(action.headingAcc)
+    const off = Math.abs(angleDelta(bearingTo(a, b), heading))
+    if (action.method === 'vision') {
+      // The camera saw a person; GPS + compass said who. Reject only shots fired well away from them.
+      const tol = Math.max(HOST_VISION_MIN_DEG, visionTolerance(dist, a.acc, b.acc, headingAcc) + HOST_AIM_SLACK_DEG)
+      if (off > tol && dist > err) return miss('Shot not counted — you weren’t facing them.', dist)
+      hits = clampHits(action.hits, cap)
+    } else {
+      // Compass: the host checks the cone and rolls the dice (the client's own roll is ignored).
+      const reach = Math.min(gun.range || 60, COMPASS_MAX_RANGE_M)
+      if (dist > reach + Math.min(15, err)) return miss('Out of range.', dist)
+      const tol = compassTolerance(dist, a.acc, b.acc, headingAcc)
+      if (off > tol + HOST_AIM_SLACK_DEG) return miss('Miss', dist)
+      const shots = clampHits(action.shots ?? action.hits, cap)
+      const chance = hitChance(dist, gun.accuracy || 0, Math.min(1, off / tol), err) * (action.snap ? 0.6 : 1)
+      hits = 0
+      for (let i = 0; i < shots; i++) if (rand() < chance) hits += 1
+      if (!hits) return miss('Miss', dist)
+    }
+  } else {
+    if (typeShot || !LEGACY_AIM_OK) return { state: base }
+    hits = clampHits(action.hits, cap)
+  }
+  // Damage is the host's call: weapon + zone + distance (never the client's number).
   const per = zoneDamage(zone, { damageMultiplier: Math.max(0.3, Math.min(3, gun.damageMultiplier || 1)) }, dist)
   const damage = Math.max(1, Math.min(MAX_HP, per * hits))
   const hp = Math.max(0, target.hp - damage)
   const killed = hp <= 0
   const snd = state.mode === 'snd'
   const head = zone === 'head'
+  const sh = base.players[from]
   const players = {
-    ...state.players,
+    ...base.players,
     [from]: {
-      ...shooter,
-      hits: shooter.hits + hits,
-      headshots: (shooter.headshots || 0) + (head ? 1 : 0),
-      score: shooter.score + hits * 10 + (head ? 10 : 0) + (killed ? 100 : 0),
-      kills: shooter.kills + (killed ? 1 : 0),
+      ...sh,
+      hits: sh.hits + hits,
+      headshots: (sh.headshots || 0) + (head ? 1 : 0),
+      score: sh.score + hits * 10 + (head ? 10 : 0) + (killed ? 100 : 0),
+      kills: sh.kills + (killed ? 1 : 0),
     },
     [action.target]: {
       ...target,
@@ -694,9 +936,9 @@ function applyHit(state, action, from, now, posOf) {
       respawnAt: killed && !snd ? now + RESPAWN_MS : null,
     },
   }
-  let next = { ...state, players }
+  let next = { ...base, players }
   if (killed) {
-    next.feed = pushFeed(state, `${shooter.name} ${head ? '🎯' : '⟶'} ${target.name}${head ? ' (headshot)' : ''}`, now)
+    next.feed = pushFeed(state, `${shooter.name} ${rocket ? '🚀💥' : head ? '🎯' : '⟶'} ${target.name}${head && !rocket ? ' (headshot)' : ''}`, now)
     if (state.mode === 'tdm') next.teamScore = { ...state.teamScore, [shooter.team]: state.teamScore[shooter.team] + 1 }
   }
   if (snd) {
@@ -708,47 +950,18 @@ function applyHit(state, action, from, now, posOf) {
     }
     next.snd = sndState
   }
-
-  // Rocket launcher splash damage: hit everyone near the target within ROCKET_RADIUS_M.
-  const splashHits = []
-  if (gun.id === 'rocket') {
-    const updPlayers = { ...next.players }
-    const me = updPlayers[from]
-    let splashKills = 0
-    let splashHitCount = 0
-    for (const [id, other] of Object.entries(updPlayers)) {
-      if (id === from || id === action.target || !other.alive) continue
-      if (state.mode !== 'ffa' && other.team === shooter.team) continue
-      if ((other.protectedUntil || 0) > now) continue
-      const pos = posOf(id)
-      if (!pos) continue
-      const d = distanceMeters(pos, b)
-      const reach = ROCKET_RADIUS_M + Math.min(4, gpsSlack(pos.acc))
-      if (d > reach) continue
-      const splashDmg = Math.round(ROCKET_SPLASH_MAX - (ROCKET_SPLASH_MAX - ROCKET_SPLASH_MIN) * Math.min(1, d / reach))
-      const oHp = Math.max(0, other.hp - splashDmg)
-      const oKilled = oHp <= 0
-      updPlayers[id] = { ...other, hp: oHp, alive: !oKilled, deaths: other.deaths + (oKilled ? 1 : 0), respawnAt: oKilled && !snd ? now + RESPAWN_MS : null }
-      splashHitCount += 1
-      if (oKilled) splashKills += 1
-      splashHits.push({ id, name: other.name, damage: Math.min(splashDmg, other.hp), killed: oKilled })
-      if (oKilled) {
-        next.feed = pushFeed(next, `${shooter.name} 🚀💥 ${other.name}`, now)
-        if (state.mode === 'tdm') next.teamScore = { ...(next.teamScore || state.teamScore), [shooter.team]: (next.teamScore || state.teamScore)[shooter.team] + 1 }
-      }
-      if (snd) {
-        let ss = next.snd || state.snd
-        if (ss.act?.by === id) ss = { ...ss, act: null }
-        if (oKilled && ss.bomb?.state === 'carried' && ss.bomb.carrier === id) {
-          ss = { ...ss, bomb: dropBomb(ss.bomb, pos) }
-          next.feed = pushFeed(next, `${other.name} dropped the bomb`, now)
-        }
-        next.snd = ss
-      }
-    }
-    updPlayers[from] = { ...me, hits: me.hits + splashHitCount, score: me.score + splashHitCount * 10 + splashKills * 100, kills: me.kills + splashKills }
-    next.players = updPlayers
+  const dealt = Math.min(damage, target.hp)
+  const weapon = typeof action.weapon === 'string' ? action.weapon.slice(0, 24) : undefined
+  const notify = [{ to: action.target, data: { by: shooter.name || 'Someone', byId: from, zone: rocket ? 'rocket' : zone, damage: dealt, killed, ...(weapon ? { weapon } : {}) } }]
+  // Rocket: the blast at the target splashes everyone near them.
+  let splashHits = []
+  if (rocket) {
+    const r = blast(next, from, [b], { ...ROCKET_BLAST, exclude: action.target }, ctx)
+    next = r.state
+    splashHits = r.hits
+    notify.push(...notifyFor(splashHits, shooter.name, from, 'rocket', 'rocket'))
   }
-
-  return { state: next, reply: { type: 'hit_ok', data: { name: target.name, killed, zone, hits, damage: Math.min(damage, target.hp), splash: splashHits.length ? splashHits : undefined } } }
+  const data = { name: target.name, killed, zone, hits, damage: dealt, splash: splashHits.length ? splashHits : undefined }
+  if (rocket) Object.assign(data, { rocket: true, lat: round6(b.lat), lng: round6(b.lng), dist: Math.round(dist * 10) / 10 })
+  return { state: next, reply: { type: 'hit_ok', data }, notify }
 }

@@ -3,7 +3,7 @@ import { clearSafeZone, formatRadius, loadSafeZone, releaseSafeZoneHide, saveSaf
 import { useEffect, useState } from 'react'
 import { loadFlipPref, saveFlipPref } from '../lib/flipToCamera'
 import { loadTrimHandsFreePref, saveTrimHandsFreePref } from '../lib/handsFreePref'
-import { View, Text, Switch, Pressable, StyleSheet, ScrollView, Alert } from 'react-native'
+import { View, Text, Switch, Pressable, StyleSheet, ScrollView, Alert, Linking, Platform } from 'react-native'
 import BrandHeader from '../components/BrandHeader'
 import GlassPanel from '../components/GlassPanel'
 import GlowBackdrop from '../components/GlowBackdrop'
@@ -18,6 +18,15 @@ import { LaserTaggableSetting } from '../games/laser/Bystander'
 import { languageName, useLanguage, useT } from '../i18n'
 import strings from '../i18n/strings/settings'
 import { signOutAndReset } from '../lib/reviewAccount'
+import useIsPro from '../lib/useIsPro'
+import BusinessToolsCard from '../components/business/BusinessToolsCard'
+
+// Where people cancel a store subscription (deleting the account doesn't cancel billing).
+const MANAGE_SUBSCRIPTIONS_URL = Platform.select({
+  ios: 'https://apps.apple.com/account/subscriptions',
+  android: 'https://play.google.com/store/account/subscriptions?package=com.iyiyi.app',
+  default: 'https://apps.apple.com/account/subscriptions',
+})
 
 const PRIVACY_URL = 'https://iyiyi.xyz/privacy'
 const TERMS_URL = 'https://iyiyi.xyz/terms'
@@ -87,9 +96,25 @@ export default function SettingsScreen({ navigation }) {
     saveThemePref(pref)
   }
 
+  const isPro = useIsPro()
   const [deleting, setDeleting] = useState(false)
+  // Step 1 (anyone who may be subscribed, i.e. unless we know they're on the free plan):
+  // Apple's account-deletion guidance asks apps to say that billing continues through the store,
+  // and to point to where it's cancelled.
   const deleteAccount = () => {
     if (deleting) return
+    if (isPro === false) { confirmDelete(); return }
+    Alert.alert(
+      t('delete_sub_title'),
+      t('delete_sub_msg', { store: Platform.OS === 'android' ? 'Google Play Store' : 'App Store' }),
+      [
+        { text: t('cancel'), style: 'cancel' },
+        { text: t('manage_subs'), onPress: () => Linking.openURL(MANAGE_SUBSCRIPTIONS_URL).catch(() => openLink(MANAGE_SUBSCRIPTIONS_URL)) },
+        { text: t('delete_continue'), style: 'destructive', onPress: confirmDelete },
+      ],
+    )
+  }
+  const confirmDelete = () => {
     Alert.alert(
       t('delete_title'),
       t('delete_msg'),
@@ -207,11 +232,14 @@ export default function SettingsScreen({ navigation }) {
         <GlassPanel radius={radii.lg} style={styles.card}>
           <Row label={t('language')} value={languageName(lang)} onPress={() => navigation.navigate('Language')} />
           <Row label="⭐ iYiYi Pro" onPress={() => navigation.navigate('Subscription')} />
+          <Row label={t('manage_subs')} onPress={() => Linking.openURL(MANAGE_SUBSCRIPTIONS_URL).catch(() => openLink(MANAGE_SUBSCRIPTIONS_URL))} />
           <Row label={t('arcade')} onPress={() => navigation.popTo('Tabs', { screen: 'Games' })} />
           <Row label={t('viewers')} onPress={() => navigation.navigate('Viewers')} />
           <Row label={t('saved')} onPress={() => navigation.navigate('SavedContent')} />
           <Row label={t('blocked')} onPress={() => navigation.navigate('BlockedUsers')} />
         </GlassPanel>
+
+        <BusinessToolsCard navigation={navigation} variant="row" style={styles.card} />
 
         <GlassPanel radius={radii.lg} style={styles.card}>
           <Text style={styles.cardTitle}>{t('follow_title')}</Text>

@@ -2,16 +2,20 @@ import { View, TextInput, Pressable, StyleSheet } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { colors, font, radii } from '../theme'
 import GlassPanel from './GlassPanel'
+import { useT } from '../i18n'
+import strings from '../i18n/strings/social'
 
 // Glass search pill with a magnifier and a clear button.
-export default function SearchField({ value, onChangeText, placeholder = 'Search', onSubmitEditing, style, returnKeyType = 'search', autoCapitalize = 'none' }) {
+export default function SearchField({ value, onChangeText, placeholder, onSubmitEditing, style, returnKeyType = 'search', autoCapitalize = 'none' }) {
+  const t = useT(strings)
   return (
     <GlassPanel radius={radii.pill} animateIn={false} style={style}>
       <View style={styles.row}>
         <Ionicons name="search" size={17} color={colors.textFaint} />
         <TextInput
           style={styles.input}
-          placeholder={placeholder}
+          placeholder={placeholder ?? t('search')}
+          accessibilityLabel={placeholder ?? t('search')}
           placeholderTextColor={colors.textFaint}
           autoCapitalize={autoCapitalize}
           autoCorrect={false}
@@ -22,7 +26,7 @@ export default function SearchField({ value, onChangeText, placeholder = 'Search
           onSubmitEditing={onSubmitEditing}
         />
         {value ? (
-          <Pressable onPress={() => onChangeText?.('')} hitSlop={10} accessibilityRole="button" accessibilityLabel="Clear search">
+          <Pressable onPress={() => onChangeText?.('')} hitSlop={10} accessibilityRole="button" accessibilityLabel={t('clearSearch')}>
             <Ionicons name="close-circle" size={18} color={colors.textFaint} />
           </Pressable>
         ) : null}

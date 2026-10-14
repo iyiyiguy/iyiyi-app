@@ -12,17 +12,27 @@ import { FONT, ST, stShadow, stType } from '../studio'
 const rad = (d) => (d * Math.PI) / 180
 
 /**
- * size: px. heading: degrees. rangeM: outer ring. coneDeg: half-angle of the firing cone.
- * enemies / mates / objectives: [{ id, d, bearing, name?, label? }]. lockedId: in your sights.
+ * Where something `d` m away at `bearing` sits on a radar of `size` px (heading-up, you at
+ * the centre), relative to the radar's top-left corner. The game uses the same maths to fly
+ * hip-fire bolts and rockets from the centre to the locked diamond.
  */
-export const HipFireRadar = memo(function HipFireRadar({ size = 300, heading, rangeM = 40, coneDeg = 20, enemies = [], mates = [], objectives = [], lockedId = null }) {
+export function radarPoint({ size, heading, rangeM, d, bearing }) {
   const c = size / 2
   const r = c - 2
-  const place = (o) => {
-    const rel = rad(angleDiff(o.bearing, heading || 0))
-    const f = Math.min(1, (o.d || 0) / Math.max(1, rangeM))
-    return { x: c + Math.sin(rel) * f * (r - 8), y: c - Math.cos(rel) * f * (r - 8), out: (o.d || 0) > rangeM, inCone: Math.abs(angleDiff(o.bearing, heading || 0)) <= coneDeg }
-  }
+  const rel = rad(angleDiff(bearing, heading || 0))
+  const f = Math.min(1, (d || 0) / Math.max(1, rangeM))
+  return { x: c + Math.sin(rel) * f * (r - 8), y: c - Math.cos(rel) * f * (r - 8), out: (d || 0) > rangeM }
+}
+
+/**
+ * size: px. heading: degrees. rangeM: outer ring. coneDeg: half-angle of the firing cone.
+ * enemies / mates / objectives: [{ id, d, bearing, name?, label? }]. lockedId: in your sights.
+ * explosives: [{ id, d, bearing, kind: 'c4'|'mine', color? }] placed ones you can see.
+ */
+export const HipFireRadar = memo(function HipFireRadar({ size = 300, heading, rangeM = 40, coneDeg = 20, enemies = [], mates = [], objectives = [], explosives = [], lockedId = null }) {
+  const c = size / 2
+  const r = c - 2
+  const place = (o) => ({ ...radarPoint({ size, heading, rangeM, d: o.d, bearing: o.bearing }), inCone: Math.abs(angleDiff(o.bearing, heading || 0)) <= coneDeg })
   const cone = Math.max(4, Math.min(60, coneDeg))
   const lx = c + Math.sin(rad(-cone)) * r
   const ly = c - Math.cos(rad(-cone)) * r
@@ -32,7 +42,7 @@ export const HipFireRadar = memo(function HipFireRadar({ size = 300, heading, ra
   return (
     <View style={{ width: size, height: size }} pointerEvents="none">
       <Svg width={size} height={size}>
-        <Circle cx={c} cy={c} r={r} stroke="rgba(255,255,255,0.22)" strokeWidth={1} fill="rgba(8,10,14,0.35)" />
+        <Circle cx={c} cy={c} r={r} stroke="rgba(255,255,255,0.22)" strokeWidth={1} fill="rgba(8,10,14,0.4)" />
         <Circle cx={c} cy={c} r={r * 0.66} stroke="rgba(255,255,255,0.14)" strokeWidth={1} fill="none" />
         <Circle cx={c} cy={c} r={r * 0.33} stroke="rgba(255,255,255,0.1)" strokeWidth={1} fill="none" />
         <Path d={wedge} fill="rgba(57,213,255,0.14)" />
@@ -46,6 +56,10 @@ export const HipFireRadar = memo(function HipFireRadar({ size = 300, heading, ra
             <Text style={st.objText}>{o.label}</Text>
           </View>
         )
+      })}
+      {explosives.map((x) => {
+        const p = place(x)
+        return <View key={x.id} style={[x.kind === 'mine' ? st.xMine : st.xC4, { left: p.x - 5, top: p.y - 5, borderColor: x.color || ST.objective, opacity: p.out ? 0.5 : 1 }]} />
       })}
       {mates.map((m) => {
         const p = place(m)
@@ -108,6 +122,8 @@ export function HipFireZone({ auto, height = 96 }) {
 const st = StyleSheet.create({
   me: { position: 'absolute', width: 0, height: 0, borderLeftWidth: 8, borderRightWidth: 8, borderBottomWidth: 20, borderLeftColor: 'transparent', borderRightColor: 'transparent', borderBottomColor: ST.friendly },
   mate: { position: 'absolute', width: 9, height: 9, borderRadius: 5, backgroundColor: ST.friendly },
+  xC4: { position: 'absolute', width: 10, height: 10, borderRadius: 1, borderWidth: 2, backgroundColor: 'rgba(8,10,14,0.6)' },
+  xMine: { position: 'absolute', width: 10, height: 10, borderRadius: 5, borderWidth: 2, backgroundColor: 'rgba(8,10,14,0.6)' },
   enemy: { backgroundColor: ST.enemy, transform: [{ rotate: '45deg' }] },
   enemyLocked: { boxShadow: '0 0 12px rgba(255,61,82,0.9)' },
   enemyName: { marginTop: 6, paddingHorizontal: 6, paddingVertical: 1, backgroundColor: ST.panel, borderRadius: 2, fontFamily: FONT.ui, fontSize: 11, color: '#ffffff', overflow: 'hidden' },

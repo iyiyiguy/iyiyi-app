@@ -253,11 +253,13 @@ export async function fetchRecap(days = 7) {
   const mode = ['creator', 'premium', 'pro'].includes(accountType) || (newFollowers ?? 0) > 0 ? 'grower' : 'explorer'
 
   const personality =
-    posts >= 5 ? { title: 'The Creator', blurb: `${posts} posts ${days === 7 ? 'this week' : 'this month'} - you keep the feed alive.` }
-      : discovered >= 15 ? { title: 'The Explorer', blurb: `You crossed paths with ${discovered} new people.` }
-        : (profileViews ?? 0) >= 20 ? { title: 'The Magnet', blurb: 'People keep checking out your profile.' }
-          : (newFollowers ?? 0) >= 3 ? { title: 'The Rising Star', blurb: 'Your following is growing.' }
-            : { title: 'The Original', blurb: 'Keep posting and exploring to level up your vibe.' }
+    // key / n let the Recap screen show the personality in the app language (title / blurb
+    // stay as the English fallback).
+    posts >= 5 ? { key: 'creator', n: posts, title: 'The Creator', blurb: `${posts} posts ${days === 7 ? 'this week' : 'this month'} - you keep the feed alive.` }
+      : discovered >= 15 ? { key: 'explorer', n: discovered, title: 'The Explorer', blurb: `You crossed paths with ${discovered} new people.` }
+        : (profileViews ?? 0) >= 20 ? { key: 'magnet', title: 'The Magnet', blurb: 'People keep checking out your profile.' }
+          : (newFollowers ?? 0) >= 3 ? { key: 'rising', title: 'The Rising Star', blurb: 'Your following is growing.' }
+            : { key: 'original', title: 'The Original', blurb: 'Keep posting and exploring to level up your vibe.' }
 
   return {
     username: profile?.username ?? null,

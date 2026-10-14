@@ -8,19 +8,19 @@ import { LinearGradient } from 'expo-linear-gradient'
 import { MaterialCommunityIcons } from '@expo/vector-icons'
 import { AC } from './arcadeUI'
 import { buzz } from '../lib/gamePrefs'
-import { UAV_DURATION_MS, useUavStore } from '../lib/uav'
-import { font } from '../theme'
+import { UAV_DURATION_MS, UAV_RULES_TEXT, useUavStore } from '../lib/uav'
+import { FONT, ST, stType, withAlpha } from './studio'
 
 export const FINE_PRINT = Platform.OS === 'android'
   ? 'Payment charged to your Google Play account. Consumable — not restorable.'
   : 'Payment charged to your Apple ID. Consumable — not restorable.'
 
-// Per-tier palette: [card top, card bottom], glow, accent.
+// Per-tier studio role colour (accent) + a soft glow for the satellite art.
 const TIERS = {
-  uav5: { grad: ['#1b2447', '#11152c'], glow: 'rgba(124,140,255,0.45)', accent: '#8f9bff' },
-  uav20: { grad: ['#3b1030', '#1a0b22'], glow: 'rgba(255,46,99,0.55)', accent: '#ff5d8a' },
-  uav50: { grad: ['#3a2a06', '#1d1405'], glow: 'rgba(255,201,77,0.55)', accent: '#ffc94d' },
-  uav120: { grad: ['#06303a', '#071a22'], glow: 'rgba(47,220,200,0.5)', accent: '#3fe0d0' },
+  uav5: { glow: withAlpha(ST.friendly, 0.28), accent: ST.friendly },
+  uav20: { glow: withAlpha(ST.enemy, 0.3), accent: ST.enemy },
+  uav50: { glow: withAlpha(ST.objective, 0.3), accent: ST.objective },
+  uav120: { glow: withAlpha(ST.health, 0.28), accent: ST.health },
 }
 const tierOf = (id) => TIERS[id] || TIERS.uav5
 
@@ -113,17 +113,17 @@ export function UavPackCard({ pack, busy, disabled, onBuy, compact, index = 0, s
       onPress={() => ready && !busy && !disabled && onBuy?.(pack)}
       disabled={!ready || busy || disabled}
       onLayout={(e) => setW(e.nativeEvent.layout.width)}
-      style={({ pressed }) => [st.cardOuter, { shadowColor: tier.accent }, highlight && st.cardOuterHi, pressed && { transform: [{ scale: 0.97 }] }, style]}
+      style={({ pressed }) => [st.cardOuter, pressed && { opacity: 0.9, transform: [{ scale: 0.98 }] }, style]}
       accessibilityRole="button"
       accessibilityLabel={`${pack.count} UAVs, ${ready ? pack.displayPrice : 'coming soon'}${pack.ribbon ? `, ${pack.ribbon}` : ''}`}
       accessibilityState={{ disabled: !ready || !!disabled, busy: !!busy }}
     >
-      <LinearGradient colors={tier.grad} start={{ x: 0, y: 0 }} end={{ x: 0.4, y: 1 }} style={[st.card, { borderColor: highlight ? tier.accent : 'rgba(255,255,255,0.12)' }, compact && st.cardCompact]}>
+      <View style={[st.card, { borderColor: highlight ? tier.accent : ST.line, borderTopColor: tier.accent }, compact && st.cardCompact]}>
         <Shine width={w} delay={index * 450} />
         {!!pack.ribbon && (
-          <LinearGradient colors={pack.id === 'uav50' ? ['#ffd76a', '#ff9a3c'] : ['#ff5d8a', '#c2185b']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={st.ribbon}>
-            <Text style={[st.ribbonText, pack.id === 'uav50' && { color: '#3a2200' }]}>{pack.ribbon.toUpperCase()}</Text>
-          </LinearGradient>
+          <View style={[st.ribbon, { backgroundColor: tier.accent }]}>
+            <Text style={[st.ribbonText, { color: tier.accent === ST.enemy ? '#ffffff' : ST.ink }]} numberOfLines={1}>{pack.ribbon.toUpperCase()}</Text>
+          </View>
         )}
         <View style={st.artWrap}>
           <SatelliteArt size={compact ? 64 : 84} accent={tier.accent} glow={tier.glow} />
@@ -135,9 +135,9 @@ export function UavPackCard({ pack, busy, disabled, onBuy, compact, index = 0, s
         </View>
         <Text style={st.per} numberOfLines={1}>{pack.perUav ? `${pack.perUav} per UAV` : ' '}</Text>
         <View style={[st.priceBtn, ready ? { backgroundColor: tier.accent } : st.priceBtnOff]}>
-          {busy ? <ActivityIndicator size="small" color="#10121f" /> : <Text style={[st.priceText, !ready && { color: AC.muted }]} numberOfLines={1}>{priceText}</Text>}
+          {busy ? <ActivityIndicator size="small" color={ST.ink} /> : <Text style={[st.priceText, { color: tier.accent === ST.enemy ? '#ffffff' : ST.ink }, !ready && { color: AC.muted }]} numberOfLines={1}>{priceText}</Text>}
         </View>
-      </LinearGradient>
+      </View>
     </Pressable>
   )
 }
@@ -172,14 +172,14 @@ export function useUavBuyFlow() {
 /** Balance header used on the store page and the sheet. */
 export function UavBalanceHeader({ balance, owner, freeLeft, compact }) {
   return (
-    <LinearGradient colors={['rgba(124,140,255,0.22)', 'rgba(255,46,99,0.14)']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[st.balance, compact && { paddingVertical: 10 }]}>
-      <View style={st.balanceIcon}><MaterialCommunityIcons name="satellite-variant" size={compact ? 20 : 24} color="#fff" /></View>
+    <View style={[st.balance, compact && { paddingVertical: 10 }]}>
+      <View style={st.balanceIcon}><MaterialCommunityIcons name="satellite-variant" size={compact ? 20 : 24} color={ST.enemy} /></View>
       <View style={{ flex: 1 }}>
         <Text style={st.balanceLabel}>YOUR UAVS</Text>
-        <Text style={[st.balanceValue, compact && { fontSize: 22 }]}>{owner ? '∞ Unlimited' : Number(balance || 0).toLocaleString()}</Text>
+        <Text style={[st.balanceValue, compact && { fontSize: 22 }]}>{owner ? 'Unlimited' : Number(balance || 0).toLocaleString()}</Text>
       </View>
       {!owner && freeLeft > 0 && <View style={st.freeTag}><Text style={st.freeText}>+{freeLeft} free this match</Text></View>}
-    </LinearGradient>
+    </View>
   )
 }
 
@@ -194,11 +194,12 @@ export function UavStorePanel({ variant = 'screen', balance, owner, freeLeft = 0
       <UavBalanceHeader balance={balance} owner={owner} freeLeft={freeLeft} compact={compact} />
       {!compact && (
         <Text style={st.blurb}>
-          Call in a UAV in any Laser Tag mode or Battle Royale to reveal enemies on your map for {Math.round(UAV_DURATION_MS / 1000)} seconds. Everyone gets 1 free UAV every match.
+          Call in a UAV in any Laser Tag mode or Battle Royale to reveal enemies on your map for {Math.round(UAV_DURATION_MS / 1000)} seconds. {UAV_RULES_TEXT} Packs top up your balance for future matches; they don’t lift the per-match limit.
         </Text>
       )}
+      {compact && <Text style={st.fine}>{UAV_RULES_TEXT}</Text>}
       {owner ? (
-        <Text style={st.ownerNote}>Owner account — UAVs are unlimited and never charged.</Text>
+        <Text style={st.ownerNote}>Owner account — UAVs are unlimited and never charged (the per-match limits still apply).</Text>
       ) : (
         <View style={st.grid}>
           {flow.packs.map((p, i) => (
@@ -216,59 +217,59 @@ export function UavStorePanel({ variant = 'screen', balance, owner, freeLeft = 0
         </View>
       )}
       {!!flow.note && <Text style={[st.note, flow.note.good && { color: AC.live }]}>{flow.note.text}</Text>}
-      {!owner && flow.packs.every((p) => p.status === 'unavailable') && <Text style={st.note}>UAV packs are coming soon to the store.</Text>}
+      {!owner && flow.packs.every((p) => p.status === 'unavailable') && <Text style={st.note}>Coming soon: UAV packs aren’t available in the store yet.</Text>}
       {!owner && <Text style={st.fine}>{FINE_PRINT}</Text>}
     </View>
   )
 }
 
-/** Compact "🛰 12" pill for top bars (Arcade hub, Laser Tag lobby). */
+/** Compact satellite + count pill for top bars (Arcade hub, Laser Tag lobby). */
 export const UavBalancePill = memo(function UavBalancePill({ balance, owner, onPress }) {
   return (
     <Pressable onPress={onPress} hitSlop={6} style={({ pressed }) => [st.pill, pressed && { opacity: 0.8 }]} accessibilityRole="button" accessibilityLabel={`UAVs: ${owner ? 'unlimited' : balance}. Open the store`}>
-      <MaterialCommunityIcons name="satellite-variant" size={15} color="#fff" />
-      <Text style={st.pillText}>{owner ? '∞' : Number(balance || 0).toLocaleString()}</Text>
-      <View style={st.pillPlus}><Text style={st.pillPlusText}>+</Text></View>
+      <MaterialCommunityIcons name="satellite-variant" size={15} color={ST.enemy} />
+      {owner ? <MaterialCommunityIcons name="infinity" size={16} color={ST.text} /> : <Text style={st.pillText}>{Number(balance || 0).toLocaleString()}</Text>}
+      <View style={st.pillPlus}><MaterialCommunityIcons name="plus" size={14} color="#ffffff" /></View>
     </Pressable>
   )
 })
 
+const LABEL = { fontFamily: FONT.ui, fontSize: 10, letterSpacing: 1.8, textTransform: 'uppercase' }
+
 const st = StyleSheet.create({
   glow: { position: 'absolute', opacity: 0.55 },
   signal: { position: 'absolute', borderWidth: 2 },
-  cardOuter: { borderRadius: 24, shadowOpacity: 0.35, shadowRadius: 14, shadowOffset: { width: 0, height: 6 } },
-  cardOuterHi: { shadowOpacity: 0.6, shadowRadius: 20 },
-  card: { borderRadius: 24, borderWidth: 1.5, paddingHorizontal: 12, paddingTop: 16, paddingBottom: 12, alignItems: 'center', overflow: 'hidden' },
-  cardCompact: { paddingTop: 12, paddingBottom: 10, borderRadius: 20 },
-  ribbon: { position: 'absolute', top: 12, right: -30, width: 120, paddingVertical: 3, alignItems: 'center', transform: [{ rotate: '35deg' }] },
-  ribbonText: { fontSize: 8.5, ...font.heavy, color: '#fff', letterSpacing: 0.8 },
+  cardOuter: { borderRadius: ST.radius },
+  card: { borderRadius: ST.radius, borderWidth: 1, borderTopWidth: 2, backgroundColor: ST.panelStrong, paddingHorizontal: 12, paddingTop: 20, paddingBottom: 12, alignItems: 'center', overflow: 'hidden' },
+  cardCompact: { paddingTop: 16, paddingBottom: 10 },
+  ribbon: { position: 'absolute', top: 0, left: 0, paddingHorizontal: 6, height: 16, justifyContent: 'center', borderBottomRightRadius: 2 },
+  ribbonText: { ...LABEL, fontSize: 8.5, letterSpacing: 1.2 },
   artWrap: { marginBottom: 2 },
-  count: { fontSize: 30, ...font.heavy, color: '#fff', letterSpacing: -0.5, marginTop: 2 },
-  unit: { fontSize: 11, ...font.heavy, letterSpacing: 2, marginTop: -2 },
+  count: { fontFamily: FONT.display, fontSize: 30, color: ST.text, marginTop: 2, fontVariant: ['tabular-nums'], includeFontPadding: false },
+  unit: { ...LABEL, fontSize: 11, letterSpacing: 2.4, marginTop: 2 },
   metaRow: { height: 22, justifyContent: 'center', marginTop: 6 },
-  save: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 999, borderWidth: 1 },
-  saveText: { fontSize: 10, ...font.heavy, letterSpacing: 0.5 },
+  save: { paddingHorizontal: 6, height: 18, justifyContent: 'center', borderRadius: 2, borderWidth: 1 },
+  saveText: { ...LABEL, fontSize: 10, letterSpacing: 1.2 },
   savePlaceholder: { height: 18 },
-  per: { fontSize: 11, color: AC.muted, marginTop: 2 },
-  priceBtn: { marginTop: 10, alignSelf: 'stretch', height: 38, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
-  priceBtnOff: { backgroundColor: 'rgba(255,255,255,0.08)' },
-  priceText: { fontSize: 15, ...font.heavy, color: '#10121f' },
-  grid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', rowGap: 12 },
-  gridItem: { width: '48%' },
-  balance: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, borderRadius: 20, borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)' },
-  balanceIcon: { width: 44, height: 44, borderRadius: 22, backgroundColor: 'rgba(255,46,99,0.35)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.3)', alignItems: 'center', justifyContent: 'center' },
-  balanceLabel: { fontSize: 10, ...font.heavy, color: AC.muted, letterSpacing: 1.5 },
-  balanceValue: { fontSize: 26, ...font.heavy, color: '#fff' },
-  freeTag: { paddingHorizontal: 9, paddingVertical: 4, borderRadius: 999, backgroundColor: 'rgba(47,220,143,0.18)' },
-  freeText: { fontSize: 11, ...font.bold, color: AC.live },
-  blurb: { fontSize: 13, color: AC.muted, lineHeight: 19 },
-  ownerNote: { fontSize: 14, ...font.bold, color: AC.gold, textAlign: 'center', paddingVertical: 8 },
-  note: { fontSize: 12, color: AC.muted, textAlign: 'center' },
-  fine: { fontSize: 10.5, color: AC.faint, textAlign: 'center', marginTop: 2 },
-  pill: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingLeft: 10, paddingRight: 4, height: 32, borderRadius: 16, backgroundColor: 'rgba(255,46,99,0.18)', borderWidth: 1, borderColor: 'rgba(255,93,138,0.55)' },
-  pillText: { fontSize: 14, ...font.heavy, color: '#fff' },
-  pillPlus: { width: 22, height: 22, borderRadius: 11, backgroundColor: AC.hot, alignItems: 'center', justifyContent: 'center' },
-  pillPlusText: { fontSize: 15, ...font.heavy, color: '#fff', marginTop: -1 },
+  per: { fontFamily: FONT.uiMedium, fontSize: 11, color: ST.muted, marginTop: 2 },
+  priceBtn: { marginTop: 10, alignSelf: 'stretch', height: 38, borderRadius: ST.radius, alignItems: 'center', justifyContent: 'center' },
+  priceBtnOff: { backgroundColor: ST.cell, borderWidth: 1, borderColor: ST.line },
+  priceText: { fontFamily: FONT.display, fontSize: 15, letterSpacing: 0.6, color: ST.ink, fontVariant: ['tabular-nums'], includeFontPadding: false },
+  grid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', rowGap: 10 },
+  gridItem: { width: '48.5%' },
+  balance: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, borderRadius: ST.radius, backgroundColor: ST.panelStrong, borderWidth: 1, borderColor: ST.line, borderLeftWidth: 3, borderLeftColor: ST.enemy },
+  balanceIcon: { width: 44, height: 44, borderRadius: ST.radius, backgroundColor: ST.cell, borderWidth: 1, borderColor: withAlpha(ST.enemy, 0.5), alignItems: 'center', justifyContent: 'center' },
+  balanceLabel: { ...stType.label },
+  balanceValue: { fontFamily: FONT.display, fontSize: 26, color: ST.text, fontVariant: ['tabular-nums'], includeFontPadding: false },
+  freeTag: { paddingHorizontal: 6, height: 22, justifyContent: 'center', borderRadius: 2, borderWidth: 1, borderColor: withAlpha(ST.health, 0.5) },
+  freeText: { ...LABEL, color: ST.health },
+  blurb: { ...stType.small, fontSize: 13, lineHeight: 19 },
+  ownerNote: { fontFamily: FONT.ui, fontSize: 13, letterSpacing: 1, textTransform: 'uppercase', color: ST.objective, textAlign: 'center', paddingVertical: 8 },
+  note: { fontFamily: FONT.uiSemi, fontSize: 12, color: ST.muted, textAlign: 'center' },
+  fine: { fontFamily: FONT.uiMedium, fontSize: 10.5, color: ST.faint, textAlign: 'center', marginTop: 2 },
+  pill: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingLeft: 8, paddingRight: 4, height: 34, borderRadius: ST.radius, backgroundColor: ST.panelStrong, borderWidth: 1, borderColor: withAlpha(ST.enemy, 0.55) },
+  pillText: { fontFamily: FONT.display, fontSize: 14, color: ST.text, fontVariant: ['tabular-nums'], includeFontPadding: false },
+  pillPlus: { width: 22, height: 22, borderRadius: 2, backgroundColor: ST.enemy, alignItems: 'center', justifyContent: 'center' },
 })
 
 /**

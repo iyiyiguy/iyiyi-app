@@ -1,7 +1,8 @@
 // Real, local arcade stats for the signed-in player, persisted with AsyncStorage.
 //
 // Everything here is earned by actually playing: wins/losses/draws and best scores
-// per game, an Elo-style chess rating from games against the built-in AI, and
+// per game, two chess ratings (Elo vs the built-in AI, and a separate online rating kept on
+// this device, see ./chessRating.js), and
 // "arcade points" that are awarded for playing and can be spent to unlock Laser Tag
 // guns (see src/lib/guns.js). Coins never involve money; the only purchased item kept
 // here is the Laser Tag UAV balance (a consumable In-App Purchase, see src/lib/uav.js).
@@ -11,6 +12,7 @@
 // results recorded back-to-back can't overwrite each other.
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { supabase } from './supabase'
+import { ONLINE_START_RATING, RATING_FLOOR } from './chessRating'
 
 const KEY_PREFIX = 'arcade_stats_v1'
 
@@ -55,6 +57,8 @@ const defaultState = () => ({
     ratedGames: 0,
     vsAI: { easy: { w: 0, l: 0, d: 0 }, medium: { w: 0, l: 0, d: 0 }, hard: { w: 0, l: 0, d: 0 } },
     localGames: 0,
+    // Online rating (this device only; there is no server-side rating yet).
+    online: { rating: ONLINE_START_RATING, peakRating: ONLINE_START_RATING, games: 0, w: 0, l: 0, d: 0, lastGameKey: null },
   },
   wordRace: { bestWords: 0, totalWords: 0, bestStreak: 0 },
   unlockedGuns: [...FREE_GUN_IDS],
@@ -83,6 +87,7 @@ function normalize(raw) {
       ...base.chess,
       ...(raw.chess || {}),
       vsAI: { ...base.chess.vsAI, ...((raw.chess && raw.chess.vsAI) || {}) },
+      online: { ...base.chess.online, ...((raw.chess && raw.chess.online) || {}) },
     },
     wordRace: { ...base.wordRace, ...(raw.wordRace || {}) },
     unlockedGuns: withFree(Array.isArray(raw.unlockedGuns) ? raw.unlockedGuns : []),
@@ -242,6 +247,37 @@ export function recordChessGame({ mode, difficulty = 'medium', result, plies = 0
     const pointsEarned = plies >= 10 ? addPoints(s, CHESS_LOCAL_POINTS) : 0
     pushRecent(s, { gameId: 'chess', result: 'local', label: 'Pass & play', points: pointsEarned })
     return { result: { pointsEarned } }
+  })
+}
+
+/**
+ * Record a finished, rated online chess game (aborted games are never recorded).
+ * `delta` comes from chessRating.onlineGameUpdates() on the host's final state, so both
+ * players' phones agree on it; it is applied to this device's stored online rating.
+ * `gameKey` (room code + round + game number) makes a second call for the same game a no-op.
+ * @param {{ result: 'win'|'loss'|'draw', delta: number, gameKey?: string }} p
+ * @returns {Promise<{ pointsEarned: number, ratingBefore: number, ratingAfter: number, ratingDelta: number, duplicate?: boolean }>}
+ */
+export function recordOnlineChessGame({ result, delta, gameKey }) {
+  return mutate((s) => {
+    const o = s.chess.online
+    if (gameKey && o.lastGameKey === gameKey) {
+      return { result: { pointsEarned: 0, ratingBefore: o.rating, ratingAfter: o.rating, ratingDelta: 0, duplicate: true } }
+    }
+    applyResult(s, 'chess', result)
+    const before = Number.isFinite(o.rating) ? o.rating : ONLINE_START_RATING
+    const d = Number.isFinite(delta) ? Math.round(delta) : 0
+    const after = Math.max(RATING_FLOOR, before + d)
+    o.rating = after
+    o.peakRating = Math.max(o.peakRating || after, after)
+    o.games = (o.games || 0) + 1
+    if (result === 'win') o.w = (o.w || 0) + 1
+    else if (result === 'loss') o.l = (o.l || 0) + 1
+    else o.d = (o.d || 0) + 1
+    o.lastGameKey = gameKey || null
+    const pointsEarned = addPoints(s, MULTIPLAYER_POINTS[result] ?? 5)
+    pushRecent(s, { gameId: 'chess', result, label: 'Online', points: pointsEarned })
+    return { result: { pointsEarned, ratingBefore: before, ratingAfter: after, ratingDelta: after - before } }
   })
 }
 

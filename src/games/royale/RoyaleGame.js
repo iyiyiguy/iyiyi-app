@@ -5,6 +5,8 @@
 // schedule, applies gas damage, validates hits/pickups and decides eliminations. Every
 // phone shares its position (≤1/s), aims with the camera like Laser Tag (CombatView) and
 // reports its own transit state; the host cross-checks transit from shared positions.
+// Everyone starts with fists (melee); weapons are scattered over the zone, dropped into each
+// new zone and in supply drops (engine.js), and picked up into 2 weapon slots.
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Animated, Pressable, StyleSheet, View } from 'react-native'
 import { useArcadeInsets } from '../arcadeUI'
@@ -17,8 +19,8 @@ import { ErrorBoundary } from '../../components/ErrorBoundary'
 import { LocationGate, Spectating } from '../MultiplayerUI'
 import { recordRoundResult, useHostLoop, useRoomClock, useRoomSnapshot } from '../../lib/multiplayer'
 import { buzz, useGamePrefs } from '../../lib/gamePrefs'
-import { ABSENT_ELIMINATE_MS, PICKUP_RANGE_M, ROYALE_AREAS, ROYALE_COLORS } from './constants'
-import { applyAction, gpsSlack, initialState, newHostMem, pickCenter, tick } from './engine'
+import { ABSENT_ELIMINATE_MS, MELEE_ID, PICKUP_RANGE_M, ROYALE_COLORS, TRANSIT_GAS_GRACE_MS, areaLabelFor } from './constants'
+import { applyAction, gpsSlack, initialState, newHostMem, pickCenter, pickSlots, tick } from './engine'
 import { zoneAt, outsideBy } from './zone'
 import { dirWord, directionToCircle, dist, formatDistance, formatMiles, bearingDeg, validPos } from './geo'
 import { useAnnouncer, usePlayersRemainingCallout } from './announcer'
@@ -31,7 +33,7 @@ import {
   Banner, CountdownOverlay, Feed, Flash, MapPanel, PickupButton, ResultsView, SpectateView, StatusCard, TransitOverlay, WeaponSlots, ZonePill, fmtDuration, royaleScore,
 } from './RoyaleHud'
 import { RARITY_COLORS, START_WEAPON_IDS, getWeapon, playSfx, preloadSounds, releaseSounds } from './weaponsAdapter'
-import { useUavControl } from '../laser/useUavControl'
+import { useUavControl } from '../../lib/uav'
 import { EnemyUavPill, RadarSweep, UavButton, UavSheet } from '../laser/Uav'
 
 // UAV in Battle Royale: reveals the nearest enemies inside the current safe zone.
@@ -85,7 +87,7 @@ function RoyaleMatch({ room, snap, onExit }) {
   const flashTimer = useRef(null)
   const weaponRef = useRef(null) // current weapon, for the elimination banner
   const [mapOpen, setMapOpen] = useState(false)
-  const [weaponId, setWeaponId] = useState(START_WEAPON_IDS[0] || 'pistol')
+  const [weaponId, setWeaponId] = useState(START_WEAPON_IDS[0] || MELEE_ID)
   const [followId, setFollowId] = useState(null)
   const vignette = useRef(new Animated.Value(0)).current
 
@@ -184,7 +186,8 @@ function RoyaleMatch({ room, snap, onExit }) {
           const w = getWeapon(d.w)
           playSfx('tap')
           buzz('success')
-          showFlash(`Picked up ${w.name}`, true)
+          const dropped = typeof d?.dropped === 'string' ? getWeapon(d.dropped).short : null
+          showFlash(`Picked up ${w.name}${dropped ? ` · dropped ${dropped}` : ''}`, true)
         }
       }),
     ]
@@ -205,11 +208,12 @@ function RoyaleMatch({ room, snap, onExit }) {
   }, [transit.inTransit, !!me, roundNo]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ---- inventory ----
+  // Fists (always) + up to 2 picked-up weapons.
   const inventory = useMemo(() => {
     const ids = [...START_WEAPON_IDS]
-    if (me?.pri && !ids.includes(me.pri)) ids.push(me.pri)
+    for (const w of [me?.pri, me?.sec]) if (w && !ids.includes(w)) ids.push(w)
     return ids
-  }, [me?.pri])
+  }, [me?.pri, me?.sec])
   useEffect(() => {
     if (!inventory.includes(weaponId)) setWeaponId(me?.pri || inventory[0])
   }, [inventory, weaponId, me?.pri])
@@ -240,7 +244,10 @@ function RoyaleMatch({ room, snap, onExit }) {
   const finalClosed = zone?.stage === 'final'
   const outside = zone && validPos(myPos) ? outsideBy(myPos, zone.current) - gpsSlack(myPos.acc) : -1
   // Once the final circle has closed the gas covers everything (engine.js sudden death).
-  const inGas = playing && alive && (outside > 0 || finalClosed)
+  // In a transit lock the host pauses the gas (up to TRANSIT_GAS_GRACE_MS per match).
+  const graceLeftS = Math.max(0, Math.round(TRANSIT_GAS_GRACE_MS / 1000 - (Number(me?.tg) || 0)))
+  const gasPaused = inTransit && graceLeftS > 0
+  const inGas = playing && alive && !gasPaused && (outside > 0 || finalClosed)
   const gasText = !inGas
     ? null
     : finalClosed
@@ -267,7 +274,7 @@ function RoyaleMatch({ room, snap, onExit }) {
       c.stage = zone.stage
       if (zone.isFinal) announce('Final zone', { sub: 'Hold your ground — the zone closes completely soon', tone: 'danger' })
       else announce(nextDir ? `Next zone is ${formatMiles(nextDir.meters)} ${nextDir.dir}` : 'You’re inside the next zone', {
-        sub: first ? `Gas closes in ${fmtDuration(zone.msToShrink)}` : `Phase ${zone.phase} of ${zone.phases}`,
+        sub: first ? `Gas closes in ${fmtDuration(zone.msToShrink)} · weapons are scattered across the zone` : `Phase ${zone.phase} of ${zone.phases} · new weapons dropped in the next zone`,
         tone: 'info',
       })
       return
@@ -288,6 +295,21 @@ function RoyaleMatch({ room, snap, onExit }) {
       announce('You’re in the gas!', { sub: gasText, tone: 'danger', ms: 3500 })
     }
   }, [zone?.phase, zone?.stage, Math.floor((zone?.msToShrink || 0) / 5000), inGas, playing]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Supply drop callout (the host adds state.drop when a crate lands inside the next zone).
+  const dropSeen = useRef(null)
+  const drop = state?.drop
+  useEffect(() => {
+    if (!drop?.id || !playing) return
+    if (dropSeen.current === drop.id) return
+    const first = dropSeen.current == null && now - (drop.at || 0) > 30000 // joined/rejoined long after it landed
+    dropSeen.current = drop.id
+    if (first || !alive) return
+    const where = validPos(myPos) && validPos(drop) ? `${formatMiles(dist(myPos, drop))} ${dirWord(bearingDeg(myPos, drop))}` : 'on the map'
+    playSfx('beep')
+    buzz('medium')
+    announce('Supply drop!', { sub: `Epic & legendary weapons · ${where} · ★ on the map`, tone: 'info', ms: 4000 })
+  }, [drop?.id, playing]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Match start / eliminated / win callouts.
   const prevAlive = useRef(null)
@@ -373,6 +395,9 @@ function RoyaleMatch({ room, snap, onExit }) {
       return { ids }
     },
     classify: (from, d) => (Array.isArray(d?.ids) && d.ids.includes(uavCtx.current.meId) ? 'enemy' : null),
+    // Streak reward: a UAV for every 3 eliminations (one life, so no deaths to reset it).
+    kills: me?.k || 0,
+    deaths: 0,
   })
 
   const mapPlayers = useMemo(() => {
@@ -393,10 +418,12 @@ function RoyaleMatch({ room, snap, onExit }) {
     return out
   }, [state?.p, positions, meId, spectating, followId, uav.uavActive, uavIds]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const mapLoot = useMemo(() => (state?.loot || []).filter((l) => validPos(l)).map((l) => {
+  // Weapons on the ground: map pins (★ = supply drop) and the camera's AR markers.
+  const arLoot = useMemo(() => (state?.loot || []).filter((l) => validPos(l)).map((l) => {
     const w = getWeapon(l.w)
-    return { id: l.id, lat: l.lat, lng: l.lng, label: w.short.toUpperCase(), color: RARITY_COLORS[w.rarity] }
+    return { id: l.id, lat: l.lat, lng: l.lng, label: w.short.toUpperCase(), color: RARITY_COLORS[w.rarity], ...(l.s ? { s: 1 } : null) }
   }), [state?.loot])
+  const mapLoot = useMemo(() => arLoot.map((l) => (l.s ? { ...l, label: `★ ${l.label}` } : l)), [arLoot])
 
   // Zone circles for the map: only change when the rounded radius moves (fewer native updates).
   const mapZone = useMemo(() => {
@@ -411,15 +438,18 @@ function RoyaleMatch({ room, snap, onExit }) {
     // closer used to hide a different weapon right next to it).
     let best = null
     for (const l of state?.loot || []) {
-      if (l.w === me?.pri) continue
+      if (l.w === me?.pri || l.w === me?.sec) continue
       const d = dist(myPos, l)
       if (d <= PICKUP_RANGE_M + gpsSlack(myPos.acc) && (!best || d < best.d)) best = { ...l, d }
     }
     return best
-  }, [state?.loot, myPos, playing, alive, inTransit, me?.pri]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [state?.loot, myPos, playing, alive, inTransit, me?.pri, me?.sec]) // eslint-disable-line react-hooks/exhaustive-deps
+  // h: the weapon in hand — with both slots full it's the one swapped out (engine.pickSlots).
+  const heldRef = useRef(weaponId)
+  heldRef.current = weaponId
   const pick = useCallback((item) => {
     buzz('medium')
-    try { room.sendAction({ type: 'pick', id: item.id }) } catch { /* offline */ }
+    try { room.sendAction({ type: 'pick', id: item.id, h: heldRef.current }) } catch { /* offline */ }
   }, [room])
 
   const myCoarse = useMemo(
@@ -450,7 +480,7 @@ function RoyaleMatch({ room, snap, onExit }) {
 
   const totalAlive = state.alive || 0
   const total = state.total || 0
-  const areaLabel = ROYALE_AREAS[state.area?.id]?.label
+  const areaLabel = areaLabelFor(state.area)
 
   if (spectating) {
     const f = followId ? state.p[followId] : null
@@ -514,6 +544,7 @@ function RoyaleMatch({ room, snap, onExit }) {
         cameraOn={!inTransit}
         onFlash={showFlash}
         onShot={onShot}
+        loot={alive && !inTransit ? arLoot : null}
         centerTop={bandTop}
         centerBottom={hud.landscape ? bandBottom : bandBottom + FIRE_RESERVE}
         fireButtonStyle={hud.landscape ? { [otherSide]: hud.side + 150, bottom: hud.bottom } : { [otherSide]: hud.side, bottom: bandBottom }}
@@ -535,13 +566,13 @@ function RoyaleMatch({ room, snap, onExit }) {
 
       {/* Above the dock: pickup (kept clear of the FIRE button's column). */}
       <View style={[styles.pickDock, { bottom: bandBottom, left: hud.side + (leftHanded && !hud.landscape ? FIRE_W : 0), right: hud.side + (!leftHanded && !hud.landscape ? FIRE_W : 0) }]} pointerEvents="box-none">
-        <PickupButton item={nearLoot} onPick={pick} />
+        <PickupButton item={nearLoot} onPick={pick} swapFor={nearLoot && me ? pickSlots(me, nearLoot.w, weaponId)?.dropped : null} />
       </View>
 
       {/* Bottom dock: UAV above the minimap on one side, weapon slots on the other. */}
       <View style={[styles.dock, { bottom: hud.bottom, left: hud.side, right: hud.side, flexDirection: leftHanded ? 'row-reverse' : 'row' }]} pointerEvents="box-none" onLayout={onDockLayout}>
         <View style={{ gap: DOCK_GAP, alignItems: leftHanded ? 'flex-end' : 'flex-start' }} pointerEvents="box-none">
-          <UavButton count={uav.count} activeMsLeft={uav.myMs} disabled={!(playing && alive) && !uav.empty} onPress={uav.callUav} size={hud.compact ? 48 : 54} />
+          <UavButton count={uav.count} activeMsLeft={uav.myMs} cooldownMsLeft={uav.cooldownMs} disabled={!(playing && alive) && !uav.empty} onPress={uav.callUav} size={hud.compact ? 48 : 54} />
           <Pressable
             onPress={() => { buzz('select'); setMapOpen(true) }}
             style={[styles.mini, { width: hud.mapSize, height: hud.mapSize }]}
@@ -583,7 +614,7 @@ function RoyaleMatch({ room, snap, onExit }) {
         zone={zone}
         hint={zoneHint}
         mapProps={{ ...mapProps, rangeM: Math.max(300, Math.round(((zone?.current?.r || 800) * 1.15) / 100) * 100), sizePx: 360 }}
-        legend={uav.uavActive ? 'UAV online · red: nearest enemies in the zone · tags: weapons by rarity' : 'Amber ring: safe zone · dashed: next zone · enemies hidden (use a UAV) · tags: weapons by rarity'}
+        legend={uav.uavActive ? 'UAV online · red: nearest enemies in the zone · tags: weapons by rarity · ★ supply drop' : 'Amber ring: safe zone · dashed: next zone · enemies hidden (use a UAV) · tags: weapons by rarity · ★ supply drop'}
       />
       <UavSheet
         visible={uav.sheetOpen}

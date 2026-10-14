@@ -7,6 +7,8 @@ import { Ionicons } from '@expo/vector-icons'
 import Glass from './Glass'
 import { GlassButton } from './GlassButton'
 import { colors, radii, type } from '../theme'
+import { useT } from '../i18n'
+import mapStrings from '../i18n/strings/map'
 
 const valid = (c) => c && Number.isFinite(c.latitude) && Number.isFinite(c.longitude) && Math.abs(c.latitude) <= 90 && Math.abs(c.longitude) <= 180
 
@@ -15,6 +17,7 @@ const valid = (c) => c && Number.isFinite(c.latitude) && Number.isFinite(c.longi
 export default function MapPickerModal({ visible, initial, onClose, onPick }) {
   const insets = useSafeAreaInsets()
   const scheme = useColorScheme()
+  const t = useT(mapStrings)
   const [start, setStart] = useState(null)
   const centerRef = useRef(null)
 
@@ -65,13 +68,13 @@ export default function MapPickerModal({ visible, initial, onClose, onPick }) {
           </View>
         ) : null}
         <View style={[styles.top, { paddingTop: insets.top + 10 }]} pointerEvents="box-none">
-          <Pressable onPress={onClose} accessibilityLabel="Close" hitSlop={8}>
+          <Pressable onPress={onClose} accessibilityRole="button" accessibilityLabel={t('close')} hitSlop={8}>
             <Glass radius={21} style={{ width: 42, height: 42 }} shadow={false}>
               <View style={styles.iconCenter}><Ionicons name="close" size={22} color={colors.text} /></View>
             </Glass>
           </Pressable>
           <Glass radius={radii.pill} shadow={false} style={{ flexShrink: 1 }}>
-            <Text style={styles.hint}>Move the map to place the pin</Text>
+            <Text style={styles.hint}>{t('pickerHint')}</Text>
           </Glass>
         </View>
         <View style={[styles.bottom, { paddingBottom: insets.bottom + 16 }]}>
@@ -83,7 +86,7 @@ export default function MapPickerModal({ visible, initial, onClose, onPick }) {
               if (valid(centerRef.current)) onPick?.(centerRef.current)
             }}
           >
-            Use this spot
+            {t('useThisSpot')}
           </GlassButton>
         </View>
       </View>

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { View, Text, StyleSheet, ScrollView, Pressable, TextInput, Alert, ActivityIndicator } from 'react-native'
+import { View, Text, StyleSheet, ScrollView, Pressable, TextInput, Alert, ActivityIndicator, Image } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { LinearGradient } from 'expo-linear-gradient'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -8,25 +8,36 @@ import GlassPanel from '../components/GlassPanel'
 import { colors, radii, type } from '../theme'
 import { FadeIn, Press } from '../lib/motion'
 import { apiJson, post, del } from '../lib/api'
-import { useIsBusinessPro } from '../lib/useIsPro'
+import useBusinessAccess from '../lib/useBusinessAccess'
+import { avatarSource } from '../lib/avatarSource'
+import { BusinessGate, StateCard } from '../components/business/BusinessStates'
+import { TEAM_STAFF_SEATS } from '../components/business/BusinessToolsCard'
+import { useT } from '../i18n'
+import strings from '../i18n/strings/business'
 
-const MAX_MEMBERS = 3
+// Business Pro includes the owner plus up to TEAM_STAFF_SEATS staff accounts (as the paywall says).
+// The owner never takes a staff seat. No demo data: a failed load shows an error with Retry.
+const MAX_MEMBERS = TEAM_STAFF_SEATS
 
-function MemberCard({ member, onRemove, isOwner }) {
+function MemberCard({ member, onRemove }) {
   return (
     <GlassPanel radius={radii.lg} lite animateIn={false}>
       <View style={styles.memberCard}>
         <View style={styles.avatar}>
-          <Text style={{ fontSize: 20 }}>{member.avatar_url ? '👤' : '👤'}</Text>
+          {member.avatar_url ? (
+            <Image source={avatarSource(member.avatar_url)} style={styles.avatarImg} />
+          ) : (
+            <Ionicons name="person" size={20} color={colors.textMuted} />
+          )}
         </View>
         <View style={{ flex: 1 }}>
           <Text style={type.headline} numberOfLines={1}>{member.username || member.email}</Text>
           <Text style={type.caption}>
-            {member.role === 'owner' ? 'Owner' : 'Team member'}
+            {member.role === 'owner' ? 'Owner' : member.status === 'pending' ? 'Invite pending' : 'Team member'}
             {member.joined_at ? ` · joined ${new Date(member.joined_at).toLocaleDateString()}` : ''}
           </Text>
         </View>
-        {!isOwner && member.role !== 'owner' && (
+        {member.role !== 'owner' && (
           <Pressable onPress={() => onRemove(member)} hitSlop={8}>
             <Ionicons name="close-circle" size={24} color={colors.danger} />
           </Pressable>
@@ -42,29 +53,40 @@ function MemberCard({ member, onRemove, isOwner }) {
 }
 
 export default function BusinessTeamScreen({ navigation }) {
+  const t = useT(strings)
+  const access = useBusinessAccess()
+  return (
+    <BusinessGate access={access} title={t('team_title')} lockedText={t('locked_team', { n: MAX_MEMBERS })} navigation={navigation}>
+      <Team navigation={navigation} />
+    </BusinessGate>
+  )
+}
+
+function Team({ navigation }) {
+  const t = useT(strings)
   const insets = useSafeAreaInsets()
-  const isBiz = useIsBusinessPro()
   const [members, setMembers] = useState([])
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState(null)
   const [inviteEmail, setInviteEmail] = useState('')
   const [inviting, setInviting] = useState(false)
 
   const loadMembers = useCallback(async () => {
     setLoading(true)
+    setLoadError(null)
     try {
       const data = await apiJson('/api/business/team')
-      setMembers(data?.members ?? [])
-    } catch {
-      // Demo data
-      setMembers([
-        { id: '1', username: 'cafe.luna', email: 'owner@cafeluna.com', role: 'owner', joined_at: '2026-01-15T00:00:00Z' },
-      ])
+      setMembers(Array.isArray(data?.members) ? data.members : [])
+    } catch (e) {
+      setLoadError(e?.message || t('err_access_msg'))
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { loadMembers() }, [loadMembers])
+
+  const staff = members.filter((m) => m.role !== 'owner')
 
   const invite = async () => {
     const email = inviteEmail.trim().toLowerCase()
@@ -72,14 +94,14 @@ export default function BusinessTeamScreen({ navigation }) {
       Alert.alert('Invalid email', 'Enter a valid email address.')
       return
     }
-    if (members.length >= MAX_MEMBERS) {
-      Alert.alert('Team full', `You can have up to ${MAX_MEMBERS} team members on Business Pro.`)
+    if (staff.length >= MAX_MEMBERS) {
+      Alert.alert('Team full', `Business Pro includes up to ${MAX_MEMBERS} staff accounts besides you.`)
       return
     }
     setInviting(true)
     try {
       await post('/api/business/team/invite', { email })
-      Alert.alert('Invite sent', `An invite has been sent to ${email}.`)
+      Alert.alert('Invite sent', `We sent an invite to ${email}. They show as pending until they accept.`)
       setInviteEmail('')
       loadMembers()
     } catch (e) {
@@ -111,44 +133,28 @@ export default function BusinessTeamScreen({ navigation }) {
     )
   }
 
-  const spotsLeft = MAX_MEMBERS - members.length
-
-  if (isBiz === false) {
-    return (
-      <View style={styles.screen}>
-        <BrandHeader title="Team" onBack={() => navigation.goBack()} />
-        <View style={styles.locked}>
-          <Ionicons name="lock-closed" size={48} color={colors.textFaint} />
-          <Text style={[type.title, { textAlign: 'center', marginTop: 16 }]}>Business Pro Only</Text>
-          <Text style={[type.subhead, { textAlign: 'center', marginTop: 8, maxWidth: 300 }]}>
-            Add up to {MAX_MEMBERS} staff accounts to manage your business profile together.
-          </Text>
-          <Pressable onPress={() => navigation.navigate('Subscription')} style={{ marginTop: 24 }}>
-            <LinearGradient colors={['#10b981', '#059669']} style={styles.upgradeGrad}>
-              <Text style={styles.upgradeText}>Upgrade to Business Pro</Text>
-            </LinearGradient>
-          </Pressable>
-        </View>
-      </View>
-    )
-  }
+  const spotsLeft = Math.max(0, MAX_MEMBERS - staff.length)
 
   return (
     <View style={styles.screen}>
-      <BrandHeader title="Team" subtitle={`${members.length} of ${MAX_MEMBERS} members`} onBack={() => navigation.goBack()} />
+      <BrandHeader title={t('team_title')} subtitle={loadError ? undefined : t('team_subtitle', { n: staff.length, max: MAX_MEMBERS })} onBack={() => navigation.goBack()} />
       <ScrollView
         contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 24 }]}
         showsVerticalScrollIndicator={false}
       >
         {loading ? (
           <ActivityIndicator color={colors.textMuted} style={{ marginTop: 60 }} />
+        ) : loadError ? (
+          <StateCard tone="error" title={t('err_team_title')} message={loadError} actionLabel={t('retry')} onAction={loadMembers} />
         ) : (
           <>
+            <Text style={[type.caption, { marginBottom: 10 }]}>{t('team_owner_note')}</Text>
+            {staff.length === 0 ? <Text style={[type.subhead, { marginBottom: 10 }]}>{t('team_empty')}</Text> : null}
             {/* Member list */}
             <View style={{ gap: 10 }}>
               {members.map((m, i) => (
                 <FadeIn key={m.id} index={i}>
-                  <MemberCard member={m} onRemove={removeMember} isOwner={m.role === 'owner'} />
+                  <MemberCard member={m} onRemove={removeMember} />
                 </FadeIn>
               ))}
             </View>
@@ -160,7 +166,7 @@ export default function BusinessTeamScreen({ navigation }) {
                   <View style={styles.addSection}>
                     <Text style={type.headline}>Add a team member</Text>
                     <Text style={[type.caption, { marginTop: 4, marginBottom: 14 }]}>
-                      {spotsLeft} spot{spotsLeft === 1 ? '' : 's'} remaining. They'll be able to post, manage promotions, and respond on behalf of your business.
+                      {spotsLeft} staff seat{spotsLeft === 1 ? '' : 's'} left. They'll be able to post, manage promotions, and respond on behalf of your business.
                     </Text>
                     <View style={styles.inviteRow}>
                       <TextInput
@@ -218,12 +224,10 @@ export default function BusinessTeamScreen({ navigation }) {
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: 'transparent' },
   scroll: { paddingHorizontal: 16 },
-  locked: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32 },
-  upgradeGrad: { paddingVertical: 14, paddingHorizontal: 28, borderRadius: 999, alignItems: 'center' },
-  upgradeText: { color: '#fff', fontWeight: '700', fontSize: 16 },
   // Member card
   memberCard: { flexDirection: 'row', alignItems: 'center', gap: 14, padding: 16 },
-  avatar: { width: 44, height: 44, borderRadius: 22, backgroundColor: colors.inkSurface, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: colors.hairline },
+  avatar: { width: 44, height: 44, borderRadius: 22, backgroundColor: colors.inkSurface, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: colors.hairline, overflow: 'hidden' },
+  avatarImg: { width: 44, height: 44 },
   ownerBadge: { backgroundColor: '#f59e0b', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
   ownerText: { color: '#fff', fontSize: 10, fontWeight: '900', letterSpacing: 0.5 },
   // Add section

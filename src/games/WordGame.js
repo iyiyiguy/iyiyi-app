@@ -1,6 +1,10 @@
-// What's The Word (Word Race): solo, timed. Crack as many hidden 5-letter words as you can
-// before the clock runs out. Six guesses per word; every guess must be a real word. Solving
-// adds time to the clock, fewer guesses and streaks score more.
+// What's The Word (Word Race), two modes:
+//  - Daily: one shared word per local calendar day (same for everyone, see ./wordDaily), six
+//    guesses, one attempt per day (persisted), a results card with a spoiler-free share grid,
+//    streaks, stats, guess distribution and a countdown to the next word.
+//  - Timed run: crack as many hidden 5-letter words as you can before the clock runs out.
+//    Six guesses per word; every guess must be a real word. Solving adds time to the clock,
+//    fewer guesses and streaks score more.
 //
 // Presentation: the studio HUD look (see ./studio): dark ground, flat square letter tiles
 // (green right spot, amber wrong spot, slate not in word) that pop when typed and flip to
@@ -10,7 +14,7 @@
 // the same on iOS, Android and web.
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
-  Animated, AppState, Easing, Platform, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions,
+  Animated, AppState, Easing, Platform, Pressable, ScrollView, Share, StyleSheet, Text, View, useWindowDimensions,
 } from 'react-native'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { LinearGradient } from 'expo-linear-gradient'
@@ -21,6 +25,10 @@ import { ANSWERS, isValidWord } from '../lib/wordRaceWords'
 import { loadArcadeStats, recordWordRace } from '../lib/arcadeStats'
 import { buzz } from '../lib/gamePrefs'
 import { playSfx } from '../lib/gunAudio'
+import {
+  DAILY_MAX_GUESSES, applyDailyResult, currentStreakFor, dailyAnswer, dateKey, emptyDailyStats, formatCountdown,
+  msUntilNextDay, normalizeDailyStats, puzzleNumber, shareText, winPercent,
+} from './wordDaily'
 
 const WORD_LEN = 5
 const MAX_GUESSES = 6
@@ -28,6 +36,7 @@ export const START_MS = 120 * 1000
 export const SOLVE_BONUS_MS = 15 * 1000
 export const SKIP_PENALTY_MS = 10 * 1000
 const TUTORIAL_KEY = 'word_race_tutorial_seen_v2'
+const DAILY_KEY = 'word_daily_v1' // { stats, board: { key, guesses: [WORD] } }
 
 // Reveal timing: tiles flip one after another.
 const FLIP_MS = 300
@@ -510,8 +519,10 @@ function HowLine({ left, text }) {
 // ---------------------------------------------------------------------------------------
 // Game
 
-export function WordGame({ onExit, onRecorded, bottomInset = 0 }) {
+export function WordGame({ onExit, onRecorded, bottomInset = 0, initialMode }) {
   useStudioFonts()
+  const [dailyOpen, setDailyOpen] = useState(initialMode === 'daily')
+  const daily = useDailySummary(dailyOpen)
   const { width: winW, height: winH } = useWindowDimensions()
   const compact = winH < 700
   const contentW = Math.min(winW, 520)
@@ -857,6 +868,17 @@ export function WordGame({ onExit, onRecorded, bottomInset = 0 }) {
   const streakPop = usePop(streak, 1.35)
   const solvedPop = usePop(solved.length, 1.3)
 
+  // ----- Daily word -----
+  if (dailyOpen) {
+    return (
+      <DailyWord
+        bottomInset={bottomInset}
+        onClose={() => { setDailyOpen(false); daily.reload() }}
+        onTimed={() => { setDailyOpen(false); daily.reload(); start() }}
+      />
+    )
+  }
+
   // ----- Start screen -----
   if (phase === 'ready') {
     const titleSize = Math.min(64, Math.floor((contentW - 80) / 4))
@@ -871,8 +893,11 @@ export function WordGame({ onExit, onRecorded, bottomInset = 0 }) {
                 <TitleTile key={ch} letter={ch} index={i} size={titleSize} skin={['correct', 'present', 'correct', 'filled'][i]} />
               ))}
             </View>
-            <Text style={[stType.body, { marginBottom: 20, textAlign: 'center' }]}>Beat the clock. Crack the word.</Text>
+            <Text style={[stType.body, { marginBottom: 20, textAlign: 'center' }]}>One shared word a day, or race the clock.</Text>
 
+            <DailyPanel summary={daily} onOpen={() => { buzz('medium'); setDailyOpen(true) }} />
+
+            <Text style={[stType.label, { alignSelf: 'stretch', marginTop: 22, marginBottom: 8 }]}>Timed run</Text>
             <StPanel style={styles.howCard}>
               <Text style={stType.label}>How it works</Text>
               <HowLine left={<MiniTile letter="A" skin="correct" />} text="Green: right letter, right spot." />
@@ -890,7 +915,7 @@ export function WordGame({ onExit, onRecorded, bottomInset = 0 }) {
               <StStat label="Best streak" value={wr?.bestStreak ? `×${wr.bestStreak}` : '—'} />
             </View>
 
-            <StButton title="Play" onPress={start} style={styles.playBtn} height={54} />
+            <StButton title="Play timed run" tone="outline" color={SUCCESS} onPress={start} style={styles.playBtn} height={50} />
             <StButton title="How to play" tone="ghost" height={44} onPress={() => setShowTutorial(true)} style={{ marginTop: 10, alignSelf: 'stretch' }} />
           </View>
         </ScrollView>
@@ -1042,6 +1067,438 @@ export function WordGame({ onExit, onRecorded, bottomInset = 0 }) {
       ) : null}
 
       {showTutorial && <GameTutorial steps={TUTORIAL_STEPS} onComplete={closeTutorial} gameTitle="What's The Word" />}
+    </View>
+  )
+}
+
+// ---------------------------------------------------------------------------------------
+// Daily word
+
+async function loadDaily() {
+  try {
+    const raw = await AsyncStorage.getItem(DAILY_KEY)
+    const p = raw ? JSON.parse(raw) : null
+    const b = p?.board
+    const board = b && typeof b.key === 'string' && Array.isArray(b.guesses)
+      ? { key: b.key, guesses: b.guesses.filter((w) => typeof w === 'string' && w.length === WORD_LEN).map((w) => w.toUpperCase()).slice(0, DAILY_MAX_GUESSES) }
+      : null
+    return { stats: normalizeDailyStats(p?.stats), board }
+  } catch {
+    return { stats: emptyDailyStats(), board: null }
+  }
+}
+
+function saveDaily(data) {
+  AsyncStorage.setItem(DAILY_KEY, JSON.stringify(data)).catch(() => {})
+}
+
+/** Where today's board stands: 'new' | 'playing' | 'won' | 'lost'. */
+function boardStatus(board, key, answer) {
+  if (!board || board.key !== key || !board.guesses.length) return 'new'
+  if (board.guesses.includes(answer)) return 'won'
+  return board.guesses.length >= DAILY_MAX_GUESSES ? 'lost' : 'playing'
+}
+
+// Today's daily state for the start screen (reloaded when the daily view closes).
+function useDailySummary(paused) {
+  const [data, setData] = useState(null)
+  const [tick, setTick] = useState(0)
+  const reload = useCallback(() => setTick((t) => t + 1), [])
+  useEffect(() => {
+    if (paused) return undefined
+    let alive = true
+    loadDaily().then((d) => { if (alive) setData(d) })
+    return () => { alive = false }
+  }, [tick, paused])
+  const key = dateKey()
+  const answer = dailyAnswer(key, ANSWERS)
+  return { key, answer, data, status: data ? boardStatus(data.board, key, answer) : null, reload }
+}
+
+// Ticks once a second; calls onRollover when the local day changes.
+function NextWordIn({ onRollover, style }) {
+  const [ms, setMs] = useState(() => msUntilNextDay())
+  const rollRef = useRef(onRollover)
+  rollRef.current = onRollover
+  useEffect(() => {
+    let day = dateKey()
+    const id = setInterval(() => {
+      setMs(msUntilNextDay())
+      const now = dateKey()
+      if (now !== day) { day = now; rollRef.current?.() }
+    }, 1000)
+    return () => clearInterval(id)
+  }, [])
+  return (
+    <View style={[styles.nextWord, style]} accessibilityLabel={`Next word in ${formatCountdown(ms)}`}>
+      <Text style={stType.label}>Next word in</Text>
+      <Text allowFontScaling={false} style={styles.nextWordClock}>{formatCountdown(ms)}</Text>
+    </View>
+  )
+}
+
+function DailyPanel({ summary, onOpen }) {
+  const { key, data, status, reload } = summary
+  const stats = data?.stats
+  const streak = stats ? currentStreakFor(stats, key) : 0
+  const tries = data?.board?.guesses?.length || 0
+  const done = status === 'won' || status === 'lost'
+  const line = !data ? ' '
+    : status === 'won' ? `Solved in ${tries}/${DAILY_MAX_GUESSES}`
+      : status === 'lost' ? 'Missed today’s word'
+        : status === 'playing' ? `In progress · ${tries}/${DAILY_MAX_GUESSES} guesses`
+          : 'Same word for everyone today. One try.'
+  return (
+    <StPanel strong accent={SUCCESS} style={styles.dailyCard}>
+      <View style={styles.dailyTop}>
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <Text style={[stType.kicker, { color: SUCCESS }]}>Daily word · #{puzzleNumber(key)}</Text>
+          <Text style={[stType.body, { marginTop: 4 }]} numberOfLines={2}>{line}</Text>
+        </View>
+        <View style={{ alignItems: 'flex-end' }}>
+          <Text style={stType.label}>Streak</Text>
+          <Text allowFontScaling={false} style={[stType.num, { fontSize: 24, color: streak > 0 ? ST.objective : ST.muted }]}>{streak}</Text>
+        </View>
+      </View>
+      {done ? <NextWordIn onRollover={reload} style={{ marginTop: 10 }} /> : null}
+      <StButton
+        title={done ? 'See results' : status === 'playing' ? 'Continue' : 'Play today’s word'}
+        tone={done ? 'ghost' : 'primary'}
+        color={SUCCESS}
+        height={done ? 44 : 52}
+        onPress={onOpen}
+        style={{ marginTop: 12, alignSelf: 'stretch' }}
+      />
+    </StPanel>
+  )
+}
+
+function DailyWord({ onClose, onTimed, bottomInset = 0 }) {
+  const { width: winW, height: winH } = useWindowDimensions()
+  const compact = winH < 700
+  const contentW = Math.min(winW, 520)
+  const keyGap = contentW < 360 ? 4 : 5
+  const keyW = Math.floor((contentW - 12 - 9 * keyGap) / 10)
+  const keyH = compact ? 44 : 50
+
+  const [dayKey, setDayKey] = useState(() => dateKey())
+  const answer = useMemo(() => dailyAnswer(dayKey, ANSWERS), [dayKey])
+  const [loaded, setLoaded] = useState(false)
+  const [guesses, setGuesses] = useState([]) // [WORD]
+  const [revealed, setRevealed] = useState(0)
+  const [current, setCurrent] = useState('')
+  const [stats, setStats] = useState(emptyDailyStats())
+  const [showResults, setShowResults] = useState(false)
+  const [toast, setToast] = useState(null)
+  const [callout, setCallout] = useState(null)
+  const [winRow, setWinRow] = useState(-1)
+  const [burst, setBurst] = useState(0)
+  const [board, setBoard] = useState(null)
+  const shake = useRef(new Animated.Value(0)).current
+  const dataRef = useRef({ stats: emptyDailyStats(), board: null })
+  const timers = useRef(new Set())
+  const mounted = useRef(true)
+
+  const later = useCallback((fn, ms) => {
+    const id = setTimeout(() => { timers.current.delete(id); if (mounted.current) fn() }, ms)
+    timers.current.add(id)
+  }, [])
+  useEffect(() => {
+    mounted.current = true
+    return () => { mounted.current = false; timers.current.forEach(clearTimeout); timers.current.clear() }
+  }, [])
+
+  // Load (or reload on a new day). An unfinished board from an earlier day is dropped.
+  useEffect(() => {
+    let alive = true
+    setLoaded(false)
+    loadDaily().then((d) => {
+      if (!alive) return
+      const mine = d.board && d.board.key === dayKey ? d.board.guesses : []
+      dataRef.current = { stats: d.stats, board: d.board && d.board.key === dayKey ? d.board : null }
+      setStats(d.stats)
+      setGuesses(mine)
+      setRevealed(mine.length)
+      setCurrent('')
+      setWinRow(mine.includes(answer) ? mine.indexOf(answer) : -1)
+      setShowResults(mine.includes(answer) || mine.length >= DAILY_MAX_GUESSES)
+      setLoaded(true)
+    })
+    return () => { alive = false }
+  }, [dayKey, answer])
+
+  const scored = useMemo(() => guesses.map((w) => ({ word: w, score: scoreGuess(w, answer) })), [guesses, answer])
+  const won = guesses.includes(answer)
+  const done = won || guesses.length >= DAILY_MAX_GUESSES
+  const keyStates = useMemo(() => keyStatesFor(scored.slice(0, revealed)), [scored, revealed])
+
+  const showToast = (text) => {
+    setToast({ text, id: Date.now() })
+    later(() => setToast(null), 1300)
+  }
+  const invalid = (msg) => {
+    shake.setValue(0)
+    Animated.sequence([1, -1, 0.7, -0.7, 0].map((v) => Animated.timing(shake, { toValue: v, duration: 45, useNativeDriver: ND }))).start()
+    buzz('error')
+    playSfx('wordWrong', { volume: 0.7 })
+    showToast(msg)
+  }
+
+  const submit = () => {
+    if (current.length < WORD_LEN) return invalid('Not enough letters')
+    if (!isValidWord(current)) return invalid('Not in word list')
+    if (guesses.includes(current)) return invalid('Already guessed')
+    const next = [...guesses, current]
+    const solvedNow = current === answer
+    const finished = solvedNow || next.length >= DAILY_MAX_GUESSES
+    // Save every guess straight away: leaving mid-puzzle keeps the board (one attempt a day).
+    const nextStats = finished ? applyDailyResult(dataRef.current.stats, dayKey, solvedNow, next.length) : dataRef.current.stats
+    dataRef.current = { stats: nextStats, board: { key: dayKey, guesses: next } }
+    saveDaily(dataRef.current)
+    setGuesses(next)
+    setCurrent('')
+    buzz('medium')
+    later(() => setRevealed((r) => Math.max(r, next.length)), REVEAL_MS)
+    if (!finished) return undefined
+    setStats(nextStats)
+    if (solvedNow) {
+      later(() => {
+        setWinRow(next.length - 1)
+        setBurst((b) => b + 1)
+        setCallout({ id: Date.now(), title: PRAISE[next.length] || 'NICE', tone: next.length <= 2 ? 'gold' : 'good' })
+        buzz('success')
+        playSfx('wordCorrect')
+      }, REVEAL_MS + 60)
+      later(() => setShowResults(true), REVEAL_MS + 1500)
+    } else {
+      later(() => {
+        setCallout({ id: Date.now(), title: 'THE WORD WAS', word: answer, tone: 'bad' })
+        buzz('warning')
+        playSfx('wordFail', { volume: 0.8 })
+      }, REVEAL_MS + 60)
+      later(() => setShowResults(true), REVEAL_MS + 2000)
+    }
+    return undefined
+  }
+
+  const onKey = (k) => {
+    if (!loaded || done) return
+    if (k === 'ENTER') { submit(); return }
+    if (k === 'DEL') {
+      if (current.length) { buzz('select'); playSfx('wordKey', { volume: 0.5 }) }
+      setCurrent((c) => c.slice(0, -1))
+      return
+    }
+    if (current.length >= WORD_LEN) return
+    buzz('select')
+    playSfx('wordKey', { volume: 0.6 })
+    setCurrent((c) => (c.length < WORD_LEN ? c + k : c))
+  }
+  const onKeyRef = useRef(onKey)
+  onKeyRef.current = onKey
+  const handleKey = useCallback((k) => onKeyRef.current(k), [])
+
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof window === 'undefined') return undefined
+    const onDown = (e) => {
+      if (e.metaKey || e.ctrlKey || e.altKey) return
+      const key = e.key
+      if (key === 'Enter') handleKey('ENTER')
+      else if (key === 'Backspace') handleKey('DEL')
+      else if (/^[a-zA-Z]$/.test(key)) handleKey(key.toUpperCase())
+      else return
+      e.preventDefault?.()
+    }
+    window.addEventListener('keydown', onDown)
+    return () => window.removeEventListener('keydown', onDown)
+  }, [handleKey])
+
+  const share = async () => {
+    buzz('select')
+    try {
+      await Share.share({ message: shareText({ key: dayKey, scores: scored.map((g) => g.score), won, streak: currentStreakFor(stats, dayKey) }) })
+    } catch { /* dismissed */ }
+  }
+
+  const gap = 6
+  const tileSize = board
+    ? Math.max(28, Math.floor(Math.min((board.w - 4 * gap) / WORD_LEN, (board.h - 5 * gap - 8) / DAILY_MAX_GUESSES, 60)))
+    : 0
+
+  return (
+    <View style={styles.container}>
+      <View style={[styles.playInner, { maxWidth: 520, paddingBottom: bottomInset + (compact ? 6 : 10) }]}>
+        <View style={styles.hud}>
+          <View style={styles.hudStat}>
+            <Text allowFontScaling={false} style={[stType.label, { color: SUCCESS }]}>Daily word</Text>
+            <Text allowFontScaling={false} style={styles.hudValue}>#{puzzleNumber(dayKey)}</Text>
+          </View>
+          <HudStat label="Streak" value={currentStreakFor(stats, dayKey)} color={currentStreakFor(stats, dayKey) > 0 ? ST.objective : ST.muted} align="center" />
+          <HudStat label="Guess" value={`${Math.min(DAILY_MAX_GUESSES, guesses.length + (done ? 0 : 1))}/${DAILY_MAX_GUESSES}`} align="flex-end" />
+        </View>
+
+        <View style={styles.boardArea} onLayout={(e) => {
+          const { width: w, height: h } = e.nativeEvent.layout
+          if (!board || Math.abs(board.w - w) > 1 || Math.abs(board.h - h) > 1) setBoard({ w, h })
+        }}
+        >
+          {board && loaded ? (
+            <View style={[styles.grid, { gap }]}>
+              {Array.from({ length: DAILY_MAX_GUESSES }).map((_, r) => {
+                const g = scored[r]
+                const isCurrent = !g && r === guesses.length && !done
+                return (
+                  <BoardRow
+                    key={r}
+                    letters={g ? g.word : isCurrent ? current : ''}
+                    states={g ? g.score : null}
+                    size={tileSize}
+                    gap={gap}
+                    shake={isCurrent ? shake : null}
+                    win={winRow === r}
+                  />
+                )
+              })}
+            </View>
+          ) : null}
+          {toast ? (
+            <View key={toast.id} style={styles.toast} pointerEvents="none" accessibilityLiveRegion="polite">
+              <Ionicons name="alert-circle" size={15} color={ST.enemy} />
+              <Text style={styles.toastText}>{toast.text}</Text>
+            </View>
+          ) : null}
+          {callout ? <Callout key={callout.id} title={callout.title} sub={callout.sub} tone={callout.tone} word={callout.word} /> : null}
+          {burst > 0 && !showResults ? <Burst key={burst} /> : null}
+        </View>
+
+        <View style={styles.actions}>
+          <Pressable onPress={onClose} accessibilityRole="button" accessibilityLabel="Back to menu" style={({ pressed }) => [styles.actionBtn, { opacity: pressed ? 0.7 : 1 }]}>
+            <Ionicons name="chevron-back" size={13} color={ST.text} />
+            <Text style={styles.actionText}>Menu</Text>
+          </Pressable>
+          {done ? (
+            <Pressable onPress={() => setShowResults(true)} accessibilityRole="button" style={({ pressed }) => [styles.actionBtn, { opacity: pressed ? 0.7 : 1 }]}>
+              <Ionicons name="podium-outline" size={13} color={ST.text} />
+              <Text style={styles.actionText}>Results</Text>
+            </Pressable>
+          ) : (
+            <View style={styles.actionBtn}>
+              <Text style={[styles.actionText, { color: ST.muted }]}>No timer · one try today</Text>
+            </View>
+          )}
+        </View>
+
+        <View style={[styles.keyboard, { gap: compact ? 6 : 7, opacity: done ? 0.5 : 1 }]}>
+          {KEY_ROWS.map((r, ri) => (
+            <View key={r} style={[styles.keyRow, { gap: keyGap }]}>
+              {ri === 2 && <Key k="ENTER" label="ENTER" accent onKey={handleKey} width={Math.floor(keyW * 1.5 + keyGap / 2)} height={keyH} />}
+              {r.split('').map((k) => (
+                <Key key={k} k={k} state={keyStates[k]} onKey={handleKey} width={keyW} height={keyH} />
+              ))}
+              {ri === 2 && <Key k="DEL" icon="backspace-outline" onKey={handleKey} width={Math.floor(keyW * 1.5 + keyGap / 2)} height={keyH} />}
+            </View>
+          ))}
+        </View>
+      </View>
+
+      {showResults && done ? (
+        <DailyResults
+          dayKey={dayKey}
+          answer={answer}
+          scored={scored}
+          won={won}
+          stats={stats}
+          burst={burst}
+          bottomInset={bottomInset}
+          onShare={share}
+          onClose={() => setShowResults(false)}
+          onMenu={onClose}
+          onTimed={onTimed}
+          onRollover={() => setDayKey(dateKey())}
+        />
+      ) : null}
+    </View>
+  )
+}
+
+function DailyResults({ dayKey, answer, scored, won, stats, burst, bottomInset, onShare, onClose, onMenu, onTimed, onRollover }) {
+  const enter = useRef(new Animated.Value(0)).current
+  useEffect(() => {
+    Animated.spring(enter, { toValue: 1, friction: 7, tension: 70, useNativeDriver: ND }).start()
+  }, [enter])
+  const tries = scored.length
+  const wash = won ? SUCCESS : ST.enemy
+  const dist = stats?.dist || [0, 0, 0, 0, 0, 0]
+  const maxDist = Math.max(1, ...dist)
+  const streak = currentStreakFor(stats, dayKey)
+  return (
+    <View style={styles.resultsOverlay}>
+      <Animated.View style={[StyleSheet.absoluteFill, styles.resultsDim, { opacity: enter }]} />
+      <Animated.View pointerEvents="none" style={[styles.resultsWash, { opacity: enter }]}>
+        <LinearGradient colors={[withAlpha(wash, 0.2), withAlpha(wash, 0)]} style={StyleSheet.absoluteFill} />
+      </Animated.View>
+      {won ? <View style={styles.resultsBurst} pointerEvents="none"><Burst key={burst} count={36} spread={1.4} /></View> : null}
+      <ScrollView contentContainerStyle={[styles.resultsScroll, { paddingBottom: bottomInset + 24 }]} showsVerticalScrollIndicator={false}>
+        <Animated.View style={[styles.resultsInner, { opacity: enter, transform: [{ translateY: enter.interpolate({ inputRange: [0, 1], outputRange: [40, 0] }) }] }]}>
+          <View style={{ alignItems: 'center', gap: 4 }}>
+            <Text style={[stType.label, { color: wash }]}>Daily word · #{puzzleNumber(dayKey)}</Text>
+            <Text allowFontScaling={false} style={[stType.display, { fontSize: 44, lineHeight: 50 }]} numberOfLines={1} adjustsFontSizeToFit>
+              {won ? PRAISE[tries] || 'Solved' : 'Not today'}
+            </Text>
+            <Text style={[stType.body, { fontSize: 13 }]}>{won ? `Solved in ${tries}/${DAILY_MAX_GUESSES}` : 'The word was'}</Text>
+            {!won ? (
+              <View style={[styles.calloutWord, { marginTop: 6 }]}>
+                {answer.split('').map((ch, i) => (
+                  <View key={i} style={{ width: 34, height: 34 }}><TileFace skin="correct" size={34} letter={ch} /></View>
+                ))}
+              </View>
+            ) : null}
+          </View>
+
+          {/* Spoiler-free grid: what the share sheet sends, drawn as tiles. */}
+          <View style={styles.shareGrid} accessibilityLabel={`Your grid, ${tries} rows`}>
+            {scored.map((g, r) => (
+              <View key={r} style={styles.shareRow}>
+                {g.score.map((st, i) => <View key={i} style={[styles.shareSq, { backgroundColor: WORD_COLORS[st] }, st === 'absent' && styles.shareSqAbsent]} />)}
+              </View>
+            ))}
+          </View>
+
+          <StButton title="Share result" color={SUCCESS} onPress={onShare} style={{ marginTop: 16 }} left={<Ionicons name="share-outline" size={18} color={ST.ink} />} />
+
+          <View style={styles.resultStats}>
+            <ResultStat label="Played" value={String(stats?.played || 0)} />
+            <ResultStat label="Win %" value={String(winPercent(stats))} />
+            <ResultStat label="Streak" value={String(streak)} color={streak > 0 ? ST.objective : undefined} />
+            <ResultStat label="Max" value={String(stats?.maxStreak || 0)} />
+          </View>
+
+          <Text style={[stType.label, { marginTop: 18, marginBottom: 8 }]}>Guess distribution</Text>
+          <View style={{ gap: 4 }}>
+            {dist.map((n, i) => {
+              const today = won && tries === i + 1
+              return (
+                <View key={i} style={styles.distRow} accessibilityLabel={`${i + 1} guesses: ${n}`}>
+                  <Text allowFontScaling={false} style={styles.distLabel}>{i + 1}</Text>
+                  <View style={{ flex: 1 }}>
+                    <View style={[styles.distBar, { width: `${Math.max(8, (n / maxDist) * 100)}%`, backgroundColor: today ? SUCCESS : WORD_COLORS.key }]}>
+                      <Text allowFontScaling={false} style={[styles.distCount, today && { color: ST.ink }]}>{n}</Text>
+                    </View>
+                  </View>
+                </View>
+              )
+            })}
+          </View>
+
+          <NextWordIn onRollover={onRollover} style={{ marginTop: 18 }} />
+
+          <View style={{ flexDirection: 'row', gap: 8, marginTop: 18 }}>
+            <StButton title="Timed run" tone="ghost" height={44} onPress={onTimed} style={{ flex: 1 }} />
+            <StButton title="Board" tone="ghost" height={44} onPress={onClose} style={{ flex: 1 }} />
+            <StButton title="Menu" tone="ghost" height={44} onPress={onMenu} style={{ flex: 1 }} />
+          </View>
+        </Animated.View>
+      </ScrollView>
     </View>
   )
 }
@@ -1264,4 +1721,18 @@ const styles = StyleSheet.create({
   wordChipText: { fontFamily: FONT.display, fontSize: 13, color: ST.text, letterSpacing: 1.5 },
   wordChipTextMiss: { color: ST.faint, textDecorationLine: 'line-through' },
   wordChipTries: { fontFamily: FONT.ui, fontSize: 11, color: SUCCESS },
+
+  // Daily
+  dailyCard: { alignSelf: 'stretch', padding: 14 },
+  dailyTop: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
+  nextWord: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 8, paddingHorizontal: 12, backgroundColor: ST.cell, borderRadius: ST.radius },
+  nextWordClock: { fontFamily: FONT.display, fontSize: 20, color: ST.text, fontVariant: ['tabular-nums'], includeFontPadding: false },
+  shareGrid: { alignSelf: 'center', gap: 4, marginTop: 18 },
+  shareRow: { flexDirection: 'row', gap: 4 },
+  shareSq: { width: 22, height: 22, borderRadius: 2 },
+  shareSqAbsent: { borderWidth: 1, borderColor: ST.line },
+  distRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  distLabel: { width: 12, fontFamily: FONT.display, fontSize: 13, color: ST.muted, textAlign: 'right' },
+  distBar: { height: 22, minWidth: 26, justifyContent: 'center', alignItems: 'flex-end', paddingHorizontal: 7, borderRadius: 2 },
+  distCount: { fontFamily: FONT.display, fontSize: 12, color: ST.text, fontVariant: ['tabular-nums'], includeFontPadding: false },
 })

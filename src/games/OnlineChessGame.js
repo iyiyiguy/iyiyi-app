@@ -4,6 +4,10 @@
 // abandonment after ~1 minute), clocks (10+0 by default; only the side to move runs, from
 // each side's first move like Lichess; time-out loses unless the opponent can't mate) and
 // rematches (colours swap).
+// Ratings: online games use their own Online rating (lib/chessRating.js), never the vs-AI
+// one. The host freezes both players' pre-game online ratings into the state before the first
+// move (state.ratings), and both phones compute the change from that plus the host's final
+// result, so they always agree. Each phone stores only its own rating (arcadeStats).
 // Around the board: an opponent card (profile, rating, follow), clocks, a move list, an
 // action row (draw / resign / chat / call), a light chat sheet over the board and a
 // picture-in-picture WebRTC video call. Studio look (see ./studio).
@@ -17,7 +21,8 @@ import {
   capturedBy, capturedText, describeResult, formatClock, reasonLabel,
 } from './ChessGame'
 import { useHostLoop, useRoomSnapshot } from '../lib/multiplayer'
-import { loadArcadeStats, recordGameResult } from '../lib/arcadeStats'
+import { loadArcadeStats, recordOnlineChessGame } from '../lib/arcadeStats'
+import { ONLINE_START_RATING, onlineGameUpdates } from '../lib/chessRating'
 import { buzz } from '../lib/gamePrefs'
 import { useOpenProfile } from '../lib/profileNav'
 import GameFollowButton from '../components/GameFollowButton'
@@ -85,6 +90,32 @@ export function timeoutResult(state, flagged) {
   const winner = other(flagged)
   if (!hasMatingMaterial(state.fen, winner)) return { winner: null, reason: 'timeout vs insufficient material' }
   return { winner, reason: 'timeout' }
+}
+
+/**
+ * Host only: freeze the players' pre-game online ratings into the state. `known` maps a
+ * player id to { r, n } (rating, rated games). Only seats still missing a rating are filled,
+ * and only before the first move, so a rating can't change mid-game.
+ */
+export function withFrozenRatings(state, known) {
+  if (!state || state.result || (state.moves?.length || 0) > 0 || !known) return state
+  const cur = state.ratings || {}
+  let next = null
+  for (const c of ['w', 'b']) {
+    if (cur[c]) continue
+    const k = known[state.players?.[c]?.id]
+    if (!k || !Number.isFinite(k.r)) continue
+    next = next || { ...cur }
+    next[c] = { r: Math.round(k.r), n: Number.isFinite(k.n) ? Math.max(0, Math.floor(k.n)) : 0 }
+  }
+  return next ? { ...state, ratings: next } : state
+}
+
+// Ratings for the next game of a rematch (colours swap): last game's post-game ratings.
+function carriedRatings(state) {
+  const u = onlineGameUpdates(state)
+  if (!u || !state.ratings?.w || !state.ratings?.b) return null
+  return { w: { r: u.b.after, n: state.ratings.b.n + 1 }, b: { r: u.w.after, n: state.ratings.w.n + 1 } }
 }
 
 // Freeze the running clock at `now` (used when the game ends mid-turn).
@@ -182,6 +213,7 @@ export function applyAction(state, action, from, now = Date.now()) {
       const tc = state.tc || null
       return {
         ...state,
+        ratings: carriedRatings(state),
         gameNo: (state.gameNo || 1) + 1,
         players: { w: state.players.b, b: state.players.w },
         moves: [],
@@ -200,7 +232,9 @@ export function applyAction(state, action, from, now = Date.now()) {
 
 // ---------------------------------------------------------------------------------------
 
-// Ratings are shared between the two players with a small room message.
+// Online ratings ({ r, n }: rating, rated games) are shared with a small room message.
+// Only 'online' ratings are accepted: an older app version announces its vs-AI rating,
+// which is ignored (that player counts as a new player, 1000).
 function useRatings(room, meId, opponentId) {
   const [mine, setMine] = useState(null)
   const [theirs, setTheirs] = useState({})
@@ -210,8 +244,10 @@ function useRatings(room, meId, opponentId) {
     let alive = true
     loadArcadeStats()
       .then((s) => {
-        const r = Number(s?.chess?.rating)
-        if (alive && Number.isFinite(r)) { mineRef.current = Math.round(r); setMine(Math.round(r)) }
+        const o = s?.chess?.online
+        const r = Number(o?.rating)
+        const v = { r: Number.isFinite(r) ? Math.round(r) : ONLINE_START_RATING, n: Number(o?.games) || 0 }
+        if (alive) { mineRef.current = v; setMine(v) }
       })
       .catch(() => {})
     return () => { alive = false }
@@ -221,22 +257,32 @@ function useRatings(room, meId, opponentId) {
     if (!room) return undefined
     const offMeta = room.onMessage('chess_meta', (data, from) => {
       const r = Number(data?.rating)
-      if (from && Number.isFinite(r)) setTheirs((t) => (t[from] === r ? t : { ...t, [from]: Math.round(r) }))
-      if (data?.ask && mineRef.current != null) {
-        try { room.send('chess_meta', { rating: mineRef.current }, { to: from }) } catch { /* ignore */ }
+      const n = Number(data?.games)
+      if (from && data?.kind === 'online' && Number.isFinite(r)) {
+        const v = { r: Math.round(r), n: Number.isFinite(n) && n >= 0 ? Math.floor(n) : 0 }
+        setTheirs((t) => (t[from]?.r === v.r && t[from]?.n === v.n ? t : { ...t, [from]: v }))
+      }
+      if (data?.ask && mineRef.current) {
+        try { room.send('chess_meta', { kind: 'online', rating: mineRef.current.r, games: mineRef.current.n }, { to: from }) } catch { /* ignore */ }
       }
     })
     return () => { try { offMeta?.() } catch { /* ignore */ } }
   }, [room])
 
-  // Announce ours (and ask for theirs) whenever the opponent (re)appears.
+  // Announce ours to the room (the host may be a spectator) whenever the opponent (re)appears
+  // or our rating changes; ask for theirs.
   useEffect(() => {
-    if (!room || !opponentId || mine == null) return
-    try { room.send('chess_meta', { rating: mine, ask: true }, { to: opponentId }) } catch { /* ignore */ }
+    if (!room || !opponentId || !mine) return
+    try { room.send('chess_meta', { kind: 'online', rating: mine.r, games: mine.n, ask: true }) } catch { /* ignore */ }
   }, [room, opponentId, mine])
 
-  return { mine, of: (id) => (id ? theirs[id] ?? null : null) }
+  const update = useCallback((v) => { mineRef.current = v; setMine(v) }, [])
+  const known = useMemo(() => (meId && mine ? { ...theirs, [meId]: mine } : theirs), [theirs, meId, mine])
+  return { mine, known, setMine: update, of: (id) => (id ? theirs[id] ?? null : null) }
 }
+
+/** "1016" or "1000?" while provisional (fewer than 5 rated online games). */
+export const ratingText = (v) => (v && Number.isFinite(v.r) ? `${v.r}${(v.n || 0) < 5 ? '?' : ''}` : null)
 
 export function OnlineChessGame({ room, onExit }) {
   useStudioFonts()
@@ -267,6 +313,9 @@ export function OnlineChessGame({ room, onExit }) {
   const opponent = fromState || (rosterOther ? { id: rosterOther.id, name: rosterOther.username, avatar: rosterOther.avatar } : null)
   const opponentHere = !!opponent && roster.some((p) => p.id === opponent.id)
   const ratings = useRatings(room, meId, opponentHere ? opponent?.id : null)
+  const knownRef = useRef(ratings.known)
+  knownRef.current = ratings.known
+  const [award, setAward] = useState(null) // { key, after, delta } for this device's player
   const call = useVideoCall(room, opponent, opponentHere)
 
   // Chat: unread badge + a short bubble for messages that arrive while the sheet is closed.
@@ -303,6 +352,8 @@ export function OnlineChessGame({ room, onExit }) {
         return
       }
       if (!s || s.result) return
+      const frozen = withFrozenRatings(s, knownRef.current)
+      if (frozen !== s) { room.publishState(frozen); return }
       const t = Date.now()
       const flagged = checkClock(s, t)
       if (flagged !== s) { room.publishState(flagged); return }
@@ -375,7 +426,22 @@ export function OnlineChessGame({ room, onExit }) {
     if (r.reason === 'aborted') { buzz('warning'); return }
     const outcome = !r.winner ? 'draw' : r.winner === myColor ? 'win' : 'loss'
     buzz(outcome === 'win' ? 'success' : outcome === 'loss' ? 'error' : 'warning')
-    Promise.resolve().then(() => recordGameResult('chess', { result: outcome })).catch(() => {})
+    // Same inputs on both phones: the host-frozen ratings (or what we know, for a seat the
+    // host never froze) and the host's result.
+    const opp = state.players?.[other(myColor)]?.id
+    const upd = onlineGameUpdates(state, { [myColor]: ratings.mine, [other(myColor)]: ratings.of(opp) })
+    if (!upd) return
+    const mineUpd = upd[myColor]
+    const key = resultKey
+    setAward({ key, after: mineUpd.after, delta: mineUpd.delta, opp: upd[other(myColor)] })
+    Promise.resolve()
+      .then(() => recordOnlineChessGame({ result: outcome, delta: mineUpd.delta, gameKey: key }))
+      .then((res) => {
+        if (!res || res.duplicate) return
+        setAward((a) => (a && a.key === key ? { ...a, after: res.ratingAfter, delta: res.ratingDelta } : a))
+        ratings.setMine({ r: res.ratingAfter, n: (ratings.mine?.n || 0) + 1 })
+      })
+      .catch(() => {})
   }, [resultKey]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // New game (rematch): hide the result sheet.
@@ -505,6 +571,16 @@ export function OnlineChessGame({ room, onExit }) {
   else if (myTurn) mySub = { text: inCheck ? 'Check · your move' : 'Your move', color: inCheck ? ST.enemy : ST.friendly }
   else mySub = { text: `${opponent?.name || 'Opponent'} to move`, color: ST.muted }
 
+  // Online ratings shown in the game: the host-frozen pre-game value when there is one.
+  const frozenOf = (c) => (state.ratings?.[c] ? state.ratings[c] : null)
+  const myAward = award && award.key === `${snap?.code}:${state.round}:${state.gameNo}` ? award : null
+  const myRatingLabel = myColor ? ratingText(frozenOf(myColor) || ratings.mine) : null
+  const oppRating = myColor ? frozenOf(opponentColor) || (opponent ? ratings.of(opponent.id) : null) : null
+  const oppRatingLabel = ratingText(oppRating) ? `${ratingText(oppRating)} online` : null
+  const oppResultLine = myAward?.opp
+    ? `Online ${myAward.opp.after} (${myAward.opp.delta >= 0 ? '+' : ''}${myAward.opp.delta})`
+    : oppRatingLabel ? `Rated ${oppRatingLabel}` : null
+
   // Spectators (no seat) see both seats as plain rows.
   const spectatorSeat = (c) => {
     const p = state.players[c]
@@ -535,7 +611,7 @@ export function OnlineChessGame({ room, onExit }) {
           <View style={{ alignSelf: 'stretch', zIndex: 10 }}>
             <OpponentCard
               player={opponent}
-              rating={ratings.of(opponent.id)}
+              rating={oppRatingLabel}
               sideLabel={colorName(opponentColor)}
               captured={capturedText(captured, opponentColor)}
               thinking={!r && turn === opponentColor}
@@ -585,7 +661,7 @@ export function OnlineChessGame({ room, onExit }) {
         {myColor ? (
           <ChessSeat
             name={`You · ${colorName(myColor)}`}
-            sub={`${mySub.text}${ratings.mine != null ? ` · ${ratings.mine}` : ''}`}
+            sub={`${mySub.text}${myRatingLabel ? ` · Online ${myRatingLabel}` : ''}`}
             subColor={mySub.color}
             avatar={snap?.me?.avatar}
             accent={ST.friendly}
@@ -654,7 +730,10 @@ export function OnlineChessGame({ room, onExit }) {
           { label: 'Moves', value: String(Math.ceil(state.moves.length / 2)) },
           ...(myColor ? [{ label: 'Colour', value: colorName(myColor) }] : []),
           ...(hasClock && myColor ? [{ label: 'Your clock', value: formatClock(clockFor(myColor)), color: ST.friendly }] : []),
-          ...(myColor && ratings.mine != null ? [{ label: 'Rating', value: String(ratings.mine) }] : []),
+          ...(myColor && myAward ? [
+            { label: 'Online rating', value: String(myAward.after) },
+            { label: 'Change', value: `${myAward.delta >= 0 ? '+' : ''}${myAward.delta}`, color: myAward.delta >= 0 ? ST.health : ST.enemy },
+          ] : myColor && myRatingLabel ? [{ label: 'Online rating', value: myRatingLabel }] : []),
         ]}
         actions={(
           <>
@@ -690,7 +769,7 @@ export function OnlineChessGame({ room, onExit }) {
               >
                 <Text style={styles.playedName} numberOfLines={1}>{opponent.name}</Text>
                 <Text style={styles.playedLine} numberOfLines={1}>
-                  {ratings.of(opponent.id) != null ? `Rated ${ratings.of(opponent.id)} · ` : ''}{colorName(opponentColor)}{opponentHere ? '' : ' · left'}
+                  {oppResultLine ? `${oppResultLine} · ` : ''}{colorName(opponentColor)}{opponentHere ? '' : ' · left'}
                 </Text>
               </Pressable>
               {opponent?.id ? <GameFollowButton userId={opponent.id} name={opponent.name} /> : null}

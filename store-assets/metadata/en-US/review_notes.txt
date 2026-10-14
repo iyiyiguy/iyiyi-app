@@ -2,6 +2,11 @@ Demo account: appreview@iyiyi.xyz (password in Sign-in information). Sign in wit
 
 Location for testing: use lat 37.3521, long -122.0415. Test user Nancy appears within 150 ft of this account (she is a free user, so only one close user shows next to Mark).
 
+Subscriptions in this version (one subscription group, so moving from Creator Pro to Business Pro is an upgrade):
+- Creator Pro (com.iyiyi.app.pro.all.monthly): $9.99/month, intro $0.99 for the first 2 months.
+- Business Pro (com.iyiyi.app.business.monthly): $29/month, intro $9.99 for the first month.
+Where to find them: Settings > iYiYi Pro, or the "Go Pro" button on My Profile. The plans screen is also shown once, from the second time the app is opened (not right after sign-up), and is skipped for subscribers. Business Pro tools (analytics, QR code poster, promotions, team): My Profile > Business tools, or Settings > Business tools. Without Business Pro these entries open the Business Pro plan. The plans screen lists only features that are live in this build; arcade items are sold separately and say so.
+
 Response to the review of 1.3.0 build 226 (2.1(b) In-App Purchases):
 
 - The in-app purchases are now in the binary and are submitted with this version: the iYiYi Pro subscription (com.iyiyi.app.pro.all.monthly), Laser Tag guns (Non-Consumable, com.iYiYi.gun.*) and UAV packs (Consumable, com.iYiYi.uav*). The old "Premium Account" and "Creator Subscription" products are no longer offered in the app.
@@ -12,7 +17,7 @@ Responses to the review of 1.3.0 build 224:
 
 5.1.1(ii) Purpose strings: the location string now explains how location is used, with an example ("when you open Nearby, you see people within 150 ft of you... Other people only see an approximate distance, never your exact location"). The camera, microphone, photo library and calendar strings were rewritten the same way, each with an example.
 
-3.1.2(c) Subscription: the purchase screen (Settings > iYiYi Pro, also shown once after sign-up) (also opened from the "Go Pro" button on My Profile and in Nearby) now shows the billed amount ($9.99/month) as the largest price on the screen and on the Subscribe button. The introductory offer ($0.99 for the first 2 months) is shown below it in smaller text and states its length and the price charged after it ends.
+3.1.2(c) Subscription: the purchase screen (Settings > iYiYi Pro; also shown once from the second app open) (also opened from the "Go Pro" button on My Profile and in Nearby) now shows the billed amount ($9.99/month) as the largest price on the screen and on the Subscribe button. The introductory offer ($0.99 for the first 2 months) is shown below it in smaller text and states its length and the price charged after it ends.
 
 Responses to the earlier review (1.3.0 build 219):
 

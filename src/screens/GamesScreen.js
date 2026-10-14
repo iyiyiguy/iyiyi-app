@@ -3,18 +3,18 @@ import { View, Text, ScrollView, Pressable, StyleSheet, TextInput, Image, Platfo
 import { useFocusEffect, useIsFocused } from '@react-navigation/native'
 import { LinearGradient } from 'expo-linear-gradient'
 import { Ionicons } from '@expo/vector-icons'
-import Glass from '../components/Glass'
 import { GAMES, ARCADE_CATEGORIES, playersLabel } from '../lib/games'
 import { loadArcadeStats, subscribeArcadeStats, totalsFor, rankFor } from '../lib/arcadeStats'
 import { getMyProfile, useLiveCounts } from '../lib/multiplayer'
+import { formatOnlineRating } from '../lib/chessMatchmaking'
 import { ensureOwnerUnlocks } from '../lib/guns'
 import { buzz } from '../lib/gamePrefs'
 import {
-  AC, ArcadeBackground, Chip, CoinPill, CoverArt, IconCircle, LiveBadge, PlayButton, SectionHeader, arcadeText, useArcadeInsets, useArcadeStatusBar,
+  AC, ArcadeBackground, ArcadePanel as Glass, Chip, CoinPill, CoverArt, IconCircle, LiveBadge, PlayButton, SectionHeader, arcadeText, useArcadeInsets, useArcadeStatusBar,
 } from '../games/arcadeUI'
 import { UavBalancePill, openArcadeStore } from '../games/UavStore'
 import { useUavInventory } from '../lib/uav'
-import { font } from '../theme'
+import { FONT, ST, StBar, stType, withAlpha } from '../games/studio'
 import { avatarSource } from '../lib/avatarSource'
 
 // The Arcade tab: a game hub. No back button — it's a bottom tab.
@@ -60,7 +60,10 @@ export default function GamesScreen({ navigation }) {
   const statsFor = (id) => {
     if (!stats) return null
     const g = stats.games[id]
-    return id === 'chess' ? { ...g, rating: stats.chess.rating } : g
+    if (id !== 'chess') return g
+    // Two chess ratings: vs the computer, and online (Elo between people).
+    const on = stats.chess.online || {}
+    return { ...g, rating: stats.chess.rating, aiRated: stats.chess.ratedGames || 0, onlineRating: on.rating, onlineGames: on.games || 0 }
   }
 
   const q = query.trim().toLowerCase()
@@ -99,19 +102,22 @@ export default function GamesScreen({ navigation }) {
       <ArcadeBackground />
       <ScrollView contentContainerStyle={{ paddingTop: (headerH || insets.top + 72) + 4, paddingBottom: insets.bottom + 140 }} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
         <View style={styles.pad}>
-          <Text style={[arcadeText.display, { marginTop: 8 }]}>Arcade</Text>
-          <Text style={arcadeText.caption}>
+          <Text style={styles.pageKicker}>iYiYi Games</Text>
+          <Text style={[arcadeText.display, { marginTop: 2 }]}>Arcade</Text>
+          <Text style={[arcadeText.caption, { fontVariant: ['tabular-nums'] }]}>
             {totals ? `${totals.played} played · ${totals.winRate != null ? `${totals.winRate}% wins · ` : ''}${rank.xp.toLocaleString()} XP` : 'Play together in the real world'}
           </Text>
 
           {searchOpen && (
-            <Glass scheme="dark" radius={18} shadow={false} style={styles.search}>
+            <Glass style={styles.search}>
               <Ionicons name="search" size={18} color={AC.muted} />
               <TextInput
                 value={query}
                 onChangeText={setQuery}
                 placeholder="Search games"
                 placeholderTextColor={AC.faint}
+                selectionColor={ST.friendly}
+                keyboardAppearance="dark"
                 style={styles.searchInput}
                 autoFocus
                 returnKeyType="search"
@@ -161,9 +167,9 @@ export default function GamesScreen({ navigation }) {
         <View style={styles.pad}>
           {/* Quick tiles */}
           <View style={styles.tiles}>
-            <QuickTile icon="keypad" label="Join code" colors={['#3a4bd9', '#6b3ad9']} onPress={() => navigation.navigate('JoinGame')} />
-            <QuickTile icon="trophy" label="Leaderboard" colors={['#d99a2b', '#d9512b']} onPress={() => navigation.navigate('GameLeaderboard')} />
-            <QuickTile icon="bag-handle" label="Shop" colors={['#1fae84', '#1f7aae']} onPress={() => navigation.navigate('GunShop')} />
+            <QuickTile icon="keypad" label="Join code" colors={[ST.friendly]} onPress={() => navigation.navigate('JoinGame')} />
+            <QuickTile icon="trophy" label="Leaderboard" colors={[ST.objective]} onPress={() => navigation.navigate('GameLeaderboard')} />
+            <QuickTile icon="bag-handle" label="Shop" colors={[ST.health]} onPress={() => navigation.navigate('GunShop')} />
           </View>
 
           {/* Continue */}
@@ -193,16 +199,16 @@ export default function GamesScreen({ navigation }) {
 
       {/* Player bar: pinned below the status bar / Dynamic Island, content scrolls under it. */}
       <View style={[styles.header, { paddingTop: insets.top + 6 }]} onLayout={(e) => { const h = Math.round(e.nativeEvent.layout.height); if (h && h !== headerH) setHeaderH(h) }}>
-        <LinearGradient pointerEvents="none" colors={['rgba(4,5,13,0.97)', 'rgba(4,5,13,0.9)', 'rgba(4,5,13,0)']} locations={[0, 0.78, 1]} style={StyleSheet.absoluteFill} />
+        <LinearGradient pointerEvents="none" colors={[withAlpha(ST.ground, 0.98), withAlpha(ST.ground, 0.92), withAlpha(ST.ground, 0)]} locations={[0, 0.78, 1]} style={StyleSheet.absoluteFill} />
         <View style={styles.topRow}>
           <Pressable onPress={() => navigation.navigate('PlayerProfile')} style={styles.player} accessibilityRole="button" accessibilityLabel="Your arcade profile">
             <View style={[styles.avatarRing, { borderColor: rank.color }]}>
               {me?.avatar ? (
                 <Image source={avatarSource(me?.avatar)} style={styles.avatar} />
               ) : (
-                <LinearGradient colors={AC.play} style={[styles.avatar, styles.center]}>
+                <View style={[styles.avatar, styles.center, { backgroundColor: '#3c434c' }]}>
                   <Text style={styles.avatarLetter}>{(me?.username || 'P').charAt(0).toUpperCase()}</Text>
-                </LinearGradient>
+                </View>
               )}
               <View style={[styles.levelBadge, { backgroundColor: rank.color }]}>
                 <Text style={styles.levelText}>{rank.level}</Text>
@@ -214,15 +220,13 @@ export default function GamesScreen({ navigation }) {
                 <Text style={[styles.rankText, { color: rank.color }]} numberOfLines={1}>{rank.name}</Text>
                 {owner ? <Text style={styles.ownerTag} numberOfLines={1}>OWNER</Text> : null}
               </View>
-              <View style={styles.xpTrack}>
-                <LinearGradient colors={[rank.color, AC.accent]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={[styles.xpFill, { width: `${Math.round(rank.levelProgress * 100)}%` }]} />
-              </View>
+              <StBar value={rank.levelProgress} color={rank.color} height={3} style={styles.xpTrack} />
             </View>
           </Pressable>
           <View style={styles.topActions}>
             <UavBalancePill balance={uavInv.balance} owner={uavInv.owner} onPress={() => openArcadeStore(navigation)} />
             <Pressable onPress={() => navigation.navigate('GunShop')} style={styles.shopPill} accessibilityRole="button" accessibilityLabel="Open the shop">
-              <Ionicons name="bag-handle" size={15} color="#fff" />
+              <Ionicons name="bag-handle" size={15} color={ST.ink} />
               <Text style={styles.shopPillText}>Shop</Text>
             </Pressable>
             <IconCircle icon={searchOpen ? 'close' : 'search'} label="Search games" onPress={() => { setSearchOpen((v) => !v); if (searchOpen) setQuery('') }} />
@@ -241,9 +245,9 @@ function HeroCard({ game, width, height, artH, badge, live, onPress }) {
     <Pressable onPress={onPress} style={({ pressed }) => [{ transform: [{ scale: pressed ? 0.985 : 1 }] }]} accessibilityRole="button" accessibilityLabel={`Play ${game.name}`}>
       <CoverArt game={game} style={[styles.hero, { width, height }]} artStyle={{ height: artH, marginTop: HERO_BADGE_H }} glyphSize={130}>
         {/* Darkens only the strip under the art, never the art itself. */}
-        <LinearGradient pointerEvents="none" colors={['rgba(4,5,13,0)', 'rgba(4,5,13,0.85)', 'rgba(4,5,13,0.97)']} locations={[0, 0.3, 1]} style={[styles.heroShade, { top: HERO_BADGE_H + artH - 8 }]} />
+        <LinearGradient pointerEvents="none" colors={[withAlpha(ST.ground2, 0), withAlpha(ST.ground2, 0.9), ST.ground2]} locations={[0, 0.3, 1]} style={[styles.heroShade, { top: HERO_BADGE_H + artH - 8 }]} />
         <View style={styles.heroTop}>
-          <View style={styles.heroBadge}><Text style={styles.heroBadgeText}>{badge}</Text></View>
+          <View style={[styles.heroBadge, badge === 'TRENDING' && { backgroundColor: ST.enemy, borderColor: ST.enemy }]}><Text style={[styles.heroBadgeText, badge === 'TRENDING' && { color: '#fff' }]}>{badge}</Text></View>
           <LiveBadge count={live} />
         </View>
         <View style={styles.heroBottom}>
@@ -259,7 +263,11 @@ function HeroCard({ game, width, height, artH, badge, live, onPress }) {
 
 function statLine(game, s) {
   if (!s || !s.played) return 'New'
-  if (game.id === 'chess') return `Rating ${s.rating ?? '—'}`
+  if (game.id === 'chess') {
+    // Online is the rating that represents you against people; vs AI until you've played online.
+    if (s.onlineGames > 0) return `Online ${formatOnlineRating(s.onlineRating, s.onlineGames) ?? '—'}`
+    return s.aiRated > 0 ? `vs AI ${s.rating ?? '—'}` : 'Unrated'
+  }
   if (game.id === 'word-race') return `Best ${s.bestScore ?? 0}`
   return `${s.wins}W · ${s.played} played`
 }
@@ -267,13 +275,13 @@ function statLine(game, s) {
 function ContinueCard({ game, stats, onPress }) {
   return (
     <Pressable onPress={onPress} style={({ pressed }) => pressed && { opacity: 0.85 }} accessibilityRole="button" accessibilityLabel={`Continue ${game.name}`}>
-      <Glass scheme="dark" radius={22} shadow={false} style={styles.cont}>
+      <Glass style={styles.cont}>
         <CoverArt game={game} style={styles.contArt} glyphSize={30} />
         <View style={{ flex: 1 }}>
           <Text style={styles.contName} numberOfLines={1}>{game.name}</Text>
           <Text style={styles.contStat} numberOfLines={1}>{statLine(game, stats)}</Text>
         </View>
-        <View style={styles.contPlay}><Ionicons name="play" size={14} color="#fff" /></View>
+        <View style={styles.contPlay}><Ionicons name="play" size={14} color={ST.ink} /></View>
       </Glass>
     </Pressable>
   )
@@ -294,7 +302,7 @@ function GridCard({ game, width, live, stats, onPress }) {
   return (
     <Pressable onPress={onPress} style={({ pressed }) => [{ width, marginBottom: 14, transform: [{ scale: pressed ? 0.97 : 1 }] }]} accessibilityRole="button" accessibilityLabel={`Open ${game.name}`}>
       <CoverArt game={game} style={[styles.gridCard, { height: width + GRID_INFO_H }]} artStyle={{ height: width }} glyphSize={72}>
-        <LinearGradient pointerEvents="none" colors={['rgba(4,5,13,0.7)', 'rgba(4,5,13,0.95)']} style={[styles.gridShade, { top: width }]} />
+        <View pointerEvents="none" style={[styles.gridShade, { top: width }]} />
         {Platform.OS === 'web' && game.mobileOnly ? <MobileOnlyBadge /> : null}
         <View style={styles.gridInfo}>
           <Text style={styles.gridName} numberOfLines={1}>{game.name}</Text>
@@ -317,80 +325,82 @@ const GRID_INFO_H = 58
 function QuickTile({ icon, label, colors, onPress }) {
   return (
     <Pressable onPress={() => { buzz('select'); onPress() }} style={({ pressed }) => [{ flex: 1, transform: [{ scale: pressed ? 0.95 : 1 }] }]} accessibilityRole="button" accessibilityLabel={label}>
-      <Glass scheme="dark" radius={22} shadow={false} style={styles.tile}>
-        <LinearGradient colors={colors} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.tileIcon}>
-          <Ionicons name={icon} size={20} color="#fff" />
-        </LinearGradient>
+      <Glass style={[styles.tile, { borderTopColor: colors[0] }]}>
+        <View style={styles.tileIcon}>
+          <Ionicons name={icon} size={20} color={colors[0]} />
+        </View>
         <Text style={styles.tileLabel} numberOfLines={1}>{label}</Text>
       </Glass>
     </Pressable>
   )
 }
 
+const LABEL = { fontFamily: FONT.ui, fontSize: 10, letterSpacing: 1.8, textTransform: 'uppercase' }
+
 const styles = StyleSheet.create({
   shopPill: {
-    flexDirection: 'row', alignItems: 'center', gap: 5, height: 34, paddingHorizontal: 12, borderRadius: 17,
-    backgroundColor: '#1f9a86', borderWidth: 1, borderColor: 'rgba(255,255,255,0.22)',
+    flexDirection: 'row', alignItems: 'center', gap: 5, height: 34, paddingHorizontal: 10, borderRadius: ST.radius,
+    backgroundColor: ST.health, borderWidth: 1, borderColor: ST.health,
   },
-  shopPillText: { color: '#fff', fontWeight: '800', fontSize: 13 },
-  screen: { flex: 1, backgroundColor: AC.bg[0] },
+  shopPillText: { fontFamily: FONT.display, fontSize: 12, letterSpacing: 1.4, textTransform: 'uppercase', color: ST.ink, includeFontPadding: false },
+  screen: { flex: 1, backgroundColor: ST.ground },
   pad: { paddingHorizontal: 20 },
   center: { alignItems: 'center', justifyContent: 'center' },
+  pageKicker: { ...stType.kicker, fontSize: 10, letterSpacing: 2, marginTop: 8 },
   header: { position: 'absolute', top: 0, left: 0, right: 0, paddingHorizontal: 20, paddingBottom: 12 },
   topRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
   // Name / rank / OWNER column takes the leftover width and truncates; the pills on the right
   // never shrink, so nothing overlaps even with a long username on a small iPhone.
   player: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 10 },
   playerInfo: { flex: 1, minWidth: 0 },
-  avatarRing: { width: 52, height: 52, borderRadius: 26, borderWidth: 2, padding: 2 },
-  avatar: { width: 44, height: 44, borderRadius: 22 },
-  avatarLetter: { fontSize: 20, ...font.heavy, color: '#fff' },
-  levelBadge: { position: 'absolute', right: -6, bottom: -4, minWidth: 22, height: 18, borderRadius: 9, paddingHorizontal: 5, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: AC.bg[0] },
-  levelText: { fontSize: 10, ...font.heavy, color: '#10121f' },
-  playerName: { fontSize: 16, ...font.bold, color: AC.text },
-  rankRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 1 },
-  rankText: { fontSize: 12, ...font.bold, letterSpacing: 0.4, flexShrink: 1 },
-  ownerTag: { fontSize: 9, ...font.heavy, color: '#10121f', backgroundColor: AC.gold, paddingHorizontal: 5, paddingVertical: 1, borderRadius: 4, overflow: 'hidden', letterSpacing: 0.8, flexShrink: 0 },
-  xpTrack: { width: '100%', maxWidth: 110, height: 4, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.12)', marginTop: 5, overflow: 'hidden' },
-  xpFill: { height: 4, borderRadius: 2 },
+  avatarRing: { width: 48, height: 48, borderRadius: ST.radius, borderBottomWidth: 3, overflow: 'visible' },
+  avatar: { width: 48, height: 45, borderTopLeftRadius: ST.radius, borderTopRightRadius: ST.radius },
+  avatarLetter: { fontFamily: FONT.display, fontSize: 20, color: ST.text, includeFontPadding: false },
+  levelBadge: { position: 'absolute', right: -6, bottom: -6, minWidth: 20, height: 16, borderRadius: 2, paddingHorizontal: 4, alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: ST.ground },
+  levelText: { fontFamily: FONT.display, fontSize: 10, color: ST.ink, includeFontPadding: false },
+  playerName: { fontFamily: FONT.display, fontSize: 15, color: ST.text, includeFontPadding: false },
+  rankRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 },
+  rankText: { ...LABEL, flexShrink: 1 },
+  ownerTag: { ...LABEL, fontSize: 9, letterSpacing: 1.2, color: ST.ink, backgroundColor: ST.objective, paddingHorizontal: 4, paddingVertical: 1, borderRadius: 2, overflow: 'hidden', flexShrink: 0 },
+  xpTrack: { width: '100%', maxWidth: 110, marginTop: 5 },
   topActions: { flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 0 },
-  search: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 14, paddingVertical: 4, marginTop: 14 },
-  searchInput: { flex: 1, fontSize: 16, color: AC.text, paddingVertical: 10 },
+  search: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 12, marginTop: 14 },
+  searchInput: { flex: 1, fontFamily: FONT.uiSemi, fontSize: 16, color: ST.text, height: 46, paddingVertical: 0 },
   chips: { paddingHorizontal: 20, gap: 8, paddingTop: 16, paddingBottom: 18 },
-  hero: { borderRadius: 28 },
+  hero: { borderRadius: ST.radius, borderWidth: 1, borderColor: ST.line },
   heroTop: { position: 'absolute', top: 12, left: 14, right: 14, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  heroBadge: { backgroundColor: 'rgba(255,255,255,0.92)', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 999 },
-  heroBadgeText: { fontSize: 11, ...font.heavy, color: '#10121f', letterSpacing: 1 },
+  heroBadge: { backgroundColor: '#ffffff', borderColor: '#ffffff', borderWidth: 1, paddingHorizontal: 8, height: 22, justifyContent: 'center', borderRadius: 2 },
+  heroBadgeText: { ...LABEL, fontSize: 10, color: ST.ink },
   heroShade: { position: 'absolute', left: 0, right: 0, bottom: 0 },
-  heroBottom: { position: 'absolute', left: 18, right: 18, bottom: 16 },
-  heroCat: { fontSize: 11, ...font.bold, color: 'rgba(255,255,255,0.7)', letterSpacing: 1.2 },
-  heroTitle: { fontSize: 28, ...font.heavy, color: '#fff', letterSpacing: -0.6, marginTop: 2 },
-  heroTag: { fontSize: 14, lineHeight: 19, color: 'rgba(255,255,255,0.82)', marginTop: 2, minHeight: 38 },
-  dots: { flexDirection: 'row', justifyContent: 'center', gap: 6, marginTop: 12 },
-  dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: 'rgba(255,255,255,0.22)' },
-  dotOn: { width: 20, backgroundColor: AC.text },
-  tiles: { flexDirection: 'row', gap: 10, marginTop: 22 },
-  tile: { alignItems: 'center', paddingVertical: 14, gap: 8 },
-  tileIcon: { width: 40, height: 40, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
-  tileLabel: { fontSize: 13, ...font.semibold, color: AC.text },
-  cont: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 10, paddingRight: 14, width: 250 },
-  contArt: { width: 56, height: 56, borderRadius: 16 },
-  contName: { fontSize: 15, ...font.bold, color: AC.text },
-  contStat: { fontSize: 12, color: AC.muted, marginTop: 2 },
-  contPlay: { width: 30, height: 30, borderRadius: 15, backgroundColor: AC.play[1], alignItems: 'center', justifyContent: 'center' },
+  heroBottom: { position: 'absolute', left: 16, right: 16, bottom: 16 },
+  heroCat: { ...stType.kicker, fontSize: 10, letterSpacing: 1.8 },
+  heroTitle: { fontFamily: FONT.display, fontSize: 26, letterSpacing: 1.2, color: ST.text, textTransform: 'uppercase', marginTop: 4, includeFontPadding: false },
+  heroTag: { fontFamily: FONT.uiSemi, fontSize: 14, lineHeight: 19, color: 'rgba(242,244,247,0.8)', marginTop: 4, minHeight: 38 },
+  dots: { flexDirection: 'row', justifyContent: 'center', gap: 4, marginTop: 12 },
+  dot: { width: 14, height: 3, backgroundColor: 'rgba(255,255,255,0.2)' },
+  dotOn: { width: 24, backgroundColor: ST.friendly },
+  tiles: { flexDirection: 'row', gap: 8, marginTop: 22 },
+  tile: { alignItems: 'center', paddingVertical: 12, gap: 6, borderTopWidth: 2 },
+  tileIcon: { width: 38, height: 38, borderRadius: ST.radius, backgroundColor: ST.cell, alignItems: 'center', justifyContent: 'center' },
+  tileLabel: { ...LABEL, fontSize: 11, letterSpacing: 1.4, color: ST.text },
+  cont: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 8, paddingRight: 12, width: 250 },
+  contArt: { width: 56, height: 56, borderRadius: 2 },
+  contName: { fontFamily: FONT.display, fontSize: 14, letterSpacing: 0.4, color: ST.text, textTransform: 'uppercase', includeFontPadding: false },
+  contStat: { ...LABEL, color: ST.muted, marginTop: 4 },
+  contPlay: { width: 30, height: 30, borderRadius: ST.radius, backgroundColor: ST.friendly, alignItems: 'center', justifyContent: 'center' },
   grid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' },
-  gridCard: { borderRadius: 24 },
-  gridShade: { position: 'absolute', left: 0, right: 0, bottom: 0 },
-  gridInfo: { paddingHorizontal: 12, paddingTop: 9 },
-  gridLive: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 3 },
-  gridLiveDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: AC.live },
-  gridName: { fontSize: 16, ...font.heavy, color: '#fff', letterSpacing: -0.3 },
-  gridMeta: { fontSize: 12, color: 'rgba(255,255,255,0.72)', marginTop: 3 },
-  footer: { fontSize: 12, color: AC.faint, textAlign: 'center', marginTop: 10 },
+  gridCard: { borderRadius: ST.radius, borderWidth: 1, borderColor: ST.line },
+  gridShade: { position: 'absolute', left: 0, right: 0, bottom: 0, backgroundColor: ST.panelStrong },
+  gridInfo: { paddingHorizontal: 10, paddingTop: 9 },
+  gridLive: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 4 },
+  gridLiveDot: { width: 6, height: 6, backgroundColor: ST.health },
+  gridName: { fontFamily: FONT.display, fontSize: 14, letterSpacing: 0.4, color: ST.text, textTransform: 'uppercase', includeFontPadding: false },
+  gridMeta: { ...LABEL, color: ST.muted, marginTop: 4 },
+  footer: { fontFamily: FONT.uiMedium, fontSize: 12, color: ST.faint, textAlign: 'center', marginTop: 10 },
   mobileOnly: {
     position: 'absolute', top: 8, left: 8, flexDirection: 'row', alignItems: 'center', gap: 4,
-    paddingHorizontal: 8, paddingVertical: 4, borderRadius: 999,
-    backgroundColor: 'rgba(10,10,20,0.6)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.25)',
+    paddingHorizontal: 6, height: 20, borderRadius: 2,
+    backgroundColor: ST.panelStrong, borderWidth: 1, borderColor: ST.line,
   },
-  mobileOnlyText: { color: '#fff', fontSize: 10, fontWeight: '700', letterSpacing: 0.3 },
+  mobileOnlyText: { ...LABEL, fontSize: 9, letterSpacing: 1.2, color: ST.text },
 })

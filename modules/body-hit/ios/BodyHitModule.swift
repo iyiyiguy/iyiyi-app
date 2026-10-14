@@ -25,11 +25,30 @@ public class BodyHitModule: Module {
   private lazy var liveFaces = LiveFaceTracker { [weak self] payload in
     self?.sendEvent("onLiveFaces", payload)
   }
+  private lazy var liveBodies = LiveBodyTracker { [weak self] payload in
+    self?.sendEvent("onLiveBodies", payload)
+  }
 
   public func definition() -> ModuleDefinition {
     Name("BodyHit")
 
-    Events("onLiveFaces")
+    Events("onLiveFaces", "onLiveBodies")
+
+    // Real-time people tracking for Laser Tag (target brackets + aim assist). Same preview
+    // attach as startLiveFaces; see LiveBodyTracker.swift for the "onLiveBodies" payload.
+    // Resolves false when there is no preview or this camera has no person detector.
+    AsyncFunction("startLiveBodies") { (promise: Promise) in
+      DispatchQueue.main.async {
+        self.liveBodies.start { ok in promise.resolve(ok) }
+      }
+    }
+
+    AsyncFunction("stopLiveBodies") { (promise: Promise) in
+      DispatchQueue.main.async {
+        self.liveBodies.stop()
+        promise.resolve(nil)
+      }
+    }
 
     // Real-time face tracking for the camera filters (every camera frame, ~30/s). It attaches an
     // AVCaptureMetadataOutput (faces) to the session behind the on-screen camera preview, so it
@@ -63,7 +82,10 @@ public class BodyHitModule: Module {
     }
 
     OnDestroy {
-      DispatchQueue.main.async { self.liveFaces.stop() }
+      DispatchQueue.main.async {
+        self.liveFaces.stop()
+        self.liveBodies.stop()
+      }
     }
 
     AsyncFunction("detectBodies") { (uri: String, deleteAfter: Bool, promise: Promise) in

@@ -1,18 +1,18 @@
 import { useCallback, useEffect, useState } from 'react'
 import { View, Text, Pressable, StyleSheet, ScrollView, Image } from 'react-native'
 import { useFocusEffect } from '@react-navigation/native'
-import { LinearGradient } from 'expo-linear-gradient'
 import { Ionicons } from '@expo/vector-icons'
 import { supabase } from '../lib/supabase'
 import { GAMES } from '../lib/games'
 import { GUNS, getGunById } from '../lib/guns'
 import { loadArcadeStats, subscribeArcadeStats, totalsFor, winRateFor, rankFor } from '../lib/arcadeStats'
 import { useUavInventory } from '../lib/uav'
+import { formatOnlineRating } from '../lib/chessMatchmaking'
 import {
-  AC, ArcadeBackground, ArcadeCard, ArcadeHeader, CoinPill, SectionHeader, StatTile, StatusBarScrim, arcadeText, useArcadeInsets, useArcadeStatusBar,
+  AC, ArcadeBackground, ArcadeCard, ArcadeHeader, CoinPill, SectionHeader, StatTile, StatusBarScrim, arcadeText, gameIcon, useArcadeInsets, useArcadeStatusBar,
 } from '../games/arcadeUI'
 import { UavBalancePill, openArcadeStore } from '../games/UavStore'
-import { font } from '../theme'
+import { FONT, ST, StBar } from '../games/studio'
 import { avatarSource } from '../lib/avatarSource'
 import { gunArt } from '../lib/gunArt'
 
@@ -64,27 +64,18 @@ export default function PlayerProfileScreen({ navigation }) {
         />
 
         {/* Hero */}
-        <LinearGradient colors={['#2a1a5e', '#141838', '#0b0d1f']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.hero}>
-          <View style={[styles.heroGlow, { backgroundColor: rank.color }]} />
-          <View style={[styles.avatarRing, { borderColor: rank.color }]}>
-            {true ? (
-              <Image source={avatarSource(profile?.avatar_url)} style={styles.avatar} />
-            ) : (
-              <LinearGradient colors={AC.play} style={[styles.avatar, styles.center]}>
-                <Text style={styles.avatarLetter}>{name.charAt(0).toUpperCase()}</Text>
-              </LinearGradient>
-            )}
+        <View style={[styles.hero, { borderTopColor: rank.color }]}>
+          <View style={[styles.avatarRing, { borderBottomColor: rank.color }]}>
+            <Image source={avatarSource(profile?.avatar_url)} style={styles.avatar} />
             <View style={[styles.levelBadge, { backgroundColor: rank.color }]}><Text style={styles.levelText}>{rank.level}</Text></View>
           </View>
           <View style={{ flex: 1, minWidth: 0 }}>
             <Text style={styles.name} numberOfLines={1}>{name}</Text>
             <Text style={[styles.rankName, { color: rank.color }]}>{rank.name} · Level {rank.level}</Text>
-            <View style={styles.xpTrack}>
-              <LinearGradient colors={[rank.color, AC.accent]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={[styles.xpFill, { width: `${Math.round(rank.levelProgress * 100)}%` }]} />
-            </View>
-            <Text style={arcadeText.caption}>{stats ? `${rank.xpToNextLevel.toLocaleString()} XP to level ${rank.level + 1}` : 'Loading…'}</Text>
+            <StBar value={rank.levelProgress} color={rank.color} height={4} style={styles.xpTrack} />
+            <Text style={[arcadeText.caption, { fontVariant: ['tabular-nums'] }]}>{stats ? `${rank.xpToNextLevel.toLocaleString()} XP to level ${rank.level + 1}` : 'Loading…'}</Text>
           </View>
-        </LinearGradient>
+        </View>
 
         {stats && (
           <>
@@ -92,13 +83,16 @@ export default function PlayerProfileScreen({ navigation }) {
               <StatTile label="Played" value={totals.played} />
               <StatTile label="Wins" value={totals.wins} accent={AC.live} />
               <StatTile label="Win rate" value={totals.winRate != null ? `${totals.winRate}%` : '—'} accent={AC.gold} />
-              <StatTile label="Chess" value={stats.chess.rating} accent={AC.accent} />
+              {/* Online rating once you've played people (that's what others see); else vs AI. */}
+              {stats.chess.online?.games > 0
+                ? <StatTile label="Chess online" value={formatOnlineRating(stats.chess.online.rating, stats.chess.online.games) ?? '—'} accent={AC.accent} />
+                : <StatTile label="Chess vs AI" value={stats.chess.ratedGames > 0 ? stats.chess.rating : '—'} accent={AC.accent} />}
             </View>
 
             <SectionHeader title="Loadout" />
             <ArcadeCard glow={AC.glowHot}>
               <View style={styles.row}>
-                <LinearGradient colors={['#ff5d6c', '#7a1430']} style={styles.gunIcon}><Image source={gunArt(gun)} style={{ width: '92%', height: '60%' }} resizeMode="contain" /></LinearGradient>
+                <View style={styles.gunIcon}><Image source={gunArt(gun)} style={{ width: '92%', height: '60%' }} resizeMode="contain" /></View>
                 <View style={{ flex: 1, minWidth: 0 }}>
                   <Text style={arcadeText.label}>Equipped for Laser Tag</Text>
                   <Text style={styles.cardTitle} numberOfLines={1}>{gun.name}</Text>
@@ -118,7 +112,7 @@ export default function PlayerProfileScreen({ navigation }) {
               return (
                 <ArcadeCard key={g.id} style={{ marginBottom: 12 }}>
                   <View style={[styles.row, { marginBottom: 12 }]}>
-                    <Text style={{ fontSize: 22 }}>{g.icon}</Text>
+                    <View style={styles.gameIcon}><Ionicons name={gameIcon(g.id)} size={18} color={ST.friendly} /></View>
                     <Text style={styles.cardTitle} numberOfLines={1}>{g.name}</Text>
                   </View>
                   <View style={[styles.tiles, { marginTop: 0 }]}>
@@ -127,8 +121,11 @@ export default function PlayerProfileScreen({ navigation }) {
                       ? <StatTile label="Words" value={stats.wordRace.totalWords} accent={AC.live} />
                       : <StatTile label="Win rate" value={wr != null ? `${wr}%` : '—'} accent={AC.live} />}
                     {g.id === 'chess'
-                      ? <StatTile label="Rating" value={stats.chess.rating} accent={AC.gold} />
+                      ? <StatTile label="vs AI" value={stats.chess.ratedGames > 0 ? stats.chess.rating : '—'} accent={AC.gold} />
                       : <StatTile label="Best" value={s.bestScore ?? '—'} accent={AC.gold} />}
+                    {g.id === 'chess' && (
+                      <StatTile label="Online" value={stats.chess.online?.games > 0 ? formatOnlineRating(stats.chess.online.rating, stats.chess.online.games) ?? '—' : '—'} accent={AC.accent} />
+                    )}
                   </View>
                 </ArcadeCard>
               )
@@ -158,24 +155,22 @@ function LinkTile({ icon, label, onPress }) {
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: AC.bg[0] },
+  screen: { flex: 1, backgroundColor: ST.ground },
   center: { alignItems: 'center', justifyContent: 'center' },
-  hero: { flexDirection: 'row', alignItems: 'center', gap: 16, padding: 18, borderRadius: 26, marginTop: 18, borderWidth: 1, borderColor: AC.border, overflow: 'hidden' },
-  heroGlow: { position: 'absolute', width: 220, height: 220, borderRadius: 110, left: -70, top: -80, opacity: 0.18 },
-  avatarRing: { width: 80, height: 80, borderRadius: 40, borderWidth: 3, alignItems: 'center', justifyContent: 'center' },
-  avatar: { width: 70, height: 70, borderRadius: 35 },
-  avatarLetter: { fontSize: 30, ...font.heavy, color: '#fff' },
-  levelBadge: { position: 'absolute', bottom: -6, alignSelf: 'center', minWidth: 26, paddingHorizontal: 6, height: 20, borderRadius: 10, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: AC.bg[0] },
-  levelText: { fontSize: 11, ...font.heavy, color: '#10121f' },
-  name: { fontSize: 24, ...font.heavy, color: AC.text, letterSpacing: -0.5 },
-  rankName: { fontSize: 13, ...font.heavy, marginTop: 2 },
-  xpTrack: { height: 6, borderRadius: 3, backgroundColor: 'rgba(255,255,255,0.1)', overflow: 'hidden', marginVertical: 8 },
-  xpFill: { height: 6, borderRadius: 3 },
-  tiles: { flexDirection: 'row', gap: 8, marginTop: 14 },
+  hero: { flexDirection: 'row', alignItems: 'center', gap: 16, padding: 16, borderRadius: ST.radius, marginTop: 18, backgroundColor: ST.panelStrong, borderWidth: 1, borderColor: ST.line, borderTopWidth: 2, overflow: 'hidden' },
+  avatarRing: { width: 72, height: 72, borderRadius: ST.radius, borderBottomWidth: 3, backgroundColor: '#3c434c' },
+  avatar: { width: 72, height: 69, borderTopLeftRadius: ST.radius, borderTopRightRadius: ST.radius },
+  levelBadge: { position: 'absolute', bottom: -9, alignSelf: 'center', minWidth: 24, paddingHorizontal: 5, height: 18, borderRadius: 2, alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: ST.ground },
+  levelText: { fontFamily: FONT.display, fontSize: 11, color: ST.ink, includeFontPadding: false },
+  name: { fontFamily: FONT.display, fontSize: 22, letterSpacing: 0.6, color: ST.text, includeFontPadding: false },
+  rankName: { fontFamily: FONT.ui, fontSize: 11, letterSpacing: 1.8, textTransform: 'uppercase', marginTop: 3 },
+  xpTrack: { marginVertical: 8 },
+  tiles: { flexDirection: 'row', gap: 6, marginTop: 14 },
   row: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  gunIcon: { width: 58, height: 58, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
-  cardTitle: { fontSize: 17, ...font.heavy, color: AC.text, flexShrink: 1 },
-  links: { flexDirection: 'row', gap: 10, marginTop: 20 },
-  link: { flex: 1, paddingVertical: 14, borderRadius: 18, alignItems: 'center', gap: 6, backgroundColor: AC.card, borderWidth: 1, borderColor: AC.border },
-  linkText: { fontSize: 13, ...font.bold, color: AC.text },
+  gunIcon: { width: 58, height: 58, borderRadius: ST.radius, alignItems: 'center', justifyContent: 'center', backgroundColor: ST.cell, borderWidth: 1, borderColor: ST.line, borderBottomWidth: 2, borderBottomColor: ST.enemy },
+  gameIcon: { width: 34, height: 34, borderRadius: ST.radius, backgroundColor: ST.cell, alignItems: 'center', justifyContent: 'center' },
+  cardTitle: { fontFamily: FONT.display, fontSize: 16, letterSpacing: 0.6, color: ST.text, textTransform: 'uppercase', flexShrink: 1, includeFontPadding: false },
+  links: { flexDirection: 'row', gap: 8, marginTop: 20 },
+  link: { flex: 1, paddingVertical: 14, borderRadius: ST.radius, alignItems: 'center', gap: 6, backgroundColor: ST.panelStrong, borderWidth: 1, borderColor: ST.line },
+  linkText: { fontFamily: FONT.ui, fontSize: 11, letterSpacing: 1.2, textTransform: 'uppercase', color: ST.text, textAlign: 'center' },
 })

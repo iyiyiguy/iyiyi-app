@@ -9,9 +9,13 @@
 // red ping for ~3s; a UAV (laser/Uav.js, lib/uav.js) reveals every enemy for 15s.
 // Bystanders: opted-in iYiYi users who aren't in the match get a teal "iYiYi user" emblem
 // on camera and can be tagged for fewer points (lib/bystanderTags.js, laser/Bystander.js).
-// Weapons (guns.js): unlimited ammo; semi-auto fires once per tap with no rate cap,
-// automatic fires continuously while held (useTrigger). Your phone decides who is in
-// your sights; the host validates hits and runs the rules (laser/engine.js).
+// Weapons (guns.js): unlimited ammo; semi-auto fires once per tap, automatic fires
+// continuously while held (useTrigger); slow weapons keep their cycle (rocket 1 per 3 s,
+// laser/aimRules.minShotGapMs), on this phone and on the host. Your phone picks who is in
+// your sights; the host re-checks the bearing, rolls compass hits, rate-limits and runs the
+// rules (laser/engine.js). Rockets are a visible projectile that always explodes where it
+// lands. Placed explosives show on the ground in the camera (laser/GroundExplosives.js) in
+// AIM and HIP FIRE. Safety: firing / placing is off above ~15 km/h (laser/useSpeedLock.js).
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Animated, BackHandler, Easing, Platform, Pressable, StyleSheet, Text, View } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
@@ -23,16 +27,18 @@ import { LocationGate, PlayerTap, Spectating, formatClock } from './MultiplayerU
 import GameFollowButton from '../components/GameFollowButton'
 import { CountdownOverlay, MatchSummary, RoundBreak } from './laser/Hud'
 import {
-  AlertBanner, BombCountdown, EnemyMarkers, HoldActionButton, ScoreboardOverlay, TargetBrackets, WeaponWheel,
+  AlertBanner, BombCountdown, EnemyMarkers, HoldActionButton, LiveTargetBrackets, ScoreboardOverlay, TargetBrackets, WeaponWheel,
 } from './laser/HudExtras'
 import { CompassTape, FireButton, HUD, HudButton, HudCta, KillFeed, MatchClock, Nameplates, ScorePanel, ScorePops, StatusPanel, WeaponCard, stripSymbols } from './laser/HudPro'
-import { HipFireRadar, HipFireStatus, HipFireZone } from './laser/HipFire'
+import { HipFireRadar, HipFireStatus, HipFireZone, radarPoint } from './laser/HipFire'
 import { FONT, ST, stShadow, stType, useStudioFonts } from './studio'
 import { mapsAvailable } from '../components/SafeMapView'
 import { DEFAULT_MAP_RANGE, MapMinimap, MapOverlay, allowedRanges, rangeById } from './laser/MapMinimap'
 import { AIM_MODE_TIPS, useAim } from './laser/useAim'
 import * as engine from './laser/engine'
-import { classifyHit, photoRectToScreen, pickVisionTarget, useVisionCapture, visionAvailable, VISION_RANGE_M } from './laser/vision'
+import { angularBody, photoRectToScreen, pickVisionTarget, useVisionCapture, viewBodiesFromLive, viewBodiesFromStill, visionAvailable, VISION_RANGE_M } from './laser/vision'
+import { pickAimTarget, pickTapTarget, zoneAtRelative } from './laser/aimAssist'
+import { useLiveBodies } from './laser/liveBodies'
 import {
   angleDiff, bearingDeg, compassLabel, distanceMeters, formatDistance, recordRoundResult,
   useHostLoop, useRoomClock, useRoomPositions, useRoomSnapshot, useSharedLocation,
@@ -56,7 +62,11 @@ import { GroundExplosives, groundMarkers } from './laser/GroundExplosives'
 import { DualCameraView, isDualCameraSupported, isRecordingSupported, startRecording, stopRecording } from '../../modules/dual-camera'
 import * as MediaLibrary from 'expo-media-library/legacy'
 import { GRENADE_FUSE_MS, GrenadeBlast, GrenadeButton, destinationPoint } from './laser/Grenade'
-import { StickyBombButton, LandMineButton } from './laser/Consumables'
+import { DetonateAllButton, StickyBombButton, LandMineButton } from './laser/Consumables'
+import { COMPASS_MAX_RANGE_M, compassTolerance, gpsErr, hitChance, minShotGapMs, visionTolerance } from './laser/aimRules'
+import { rocketImpactDistance } from './laser/arGround'
+import { round6 } from './laser/geo'
+import { SPEED_LOCK_TEXT, useSpeedLock } from './laser/useSpeedLock'
 import { useBattleEffects, directionToAngle } from './laser/BattleEffects'
 import Svg, { Path, Rect } from 'react-native-svg'
 import GunViewModel, { muzzlePoint } from './laser/GunViewModel'
@@ -64,6 +74,7 @@ import FpsCrosshair from './laser/FpsCrosshair'
 import { spendGrenade, useGrenadeInventory } from '../lib/grenades'
 import { spendStickyBomb, useStickyBombInventory } from '../lib/stickyBombs'
 import { spendLandMine, useLandMineInventory } from '../lib/landMines'
+import { matchCheck } from '../lib/matchLimits'
 
 // Tagged-out screen (studio "Down" board): red dim, who got you (with Follow), the respawn
 // countdown, and a shortcut to the weapon wheel while you wait.
@@ -167,30 +178,12 @@ function normalizeGun(g) {
     damage: Math.max(5, Math.min(100, gun.damage || 33)),
     damageMultiplier: Math.max(0.3, Math.min(3, gun.damageMultiplier || 1)),
     range: gun.range || 60,
+    blastRadius: gun.blastRadius || 0,
   }
 }
 
-// Compass aim can't see walls or cover, so it only reaches this far (camera aim uses the gun's range).
-const COMPASS_MAX_RANGE_M = 40
-
-// Compass calibration level (0-3) → extra degrees of slack.
-const COMPASS_SLACK = { 3: 4, 2: 8, 1: 12, 0: 15 }
-
-// Half-angle (degrees) within which a player counts as "in your sights". GPS
-// error matters more up close, so the window widens as distance shrinks.
-// Combined GPS error of two phones (m). Closer than this, the bearing between them is noise.
-const gpsErr = (myAcc, theirAcc) => Math.min(30, Math.max(3, Math.hypot(myAcc ?? 10, theirAcc ?? 10)))
-
-function aimTolerance(d, myAcc, theirAcc, headingAcc) {
-  const err = gpsErr(myAcc, theirAcc)
-  // Point blank (inside the GPS error): any heading counts — the two of you are in the same spot.
-  if (d <= err) return 180
-  // Just outside it the bearing is still rough: widen smoothly from 90° down to the normal window.
-  const deg = (Math.atan2(err * 0.6 + 0.5, Math.max(d, 1)) * 180) / Math.PI
-  const normal = Math.min(35, Math.max(3, deg) + (COMPASS_SLACK[headingAcc] ?? 10))
-  if (d <= err * 2) return Math.max(normal, 90 - (45 * (d - err)) / err)
-  return normal
-}
+// Aim rules (compass cone capped at 35°, chance lower inside GPS error, camera matching keeps
+// the wide point-blank window) live in laser/aimRules.js, shared with the host.
 
 // Can this enemy be shot at all right now? Within the gun's reach, or so close that GPS can't
 // tell you apart (same room).
@@ -198,14 +191,10 @@ function withinReach(o, myPos, maxRange) {
   return o.d <= maxRange || o.d <= gpsErr(myPos?.acc, o.pos?.acc)
 }
 
-function hitChance(d, gun, offCenter) {
-  const base = d <= 10 ? 0.9 : d <= 25 ? 0.75 : d <= 45 ? 0.6 : d <= 70 ? 0.45 : 0.3
-  const p = (base + gun.accuracy / 100) * (1 - 0.35 * Math.min(1, offCenter))
-  return Math.max(0.05, Math.min(0.95, p))
-}
-
 const FREE_LOADOUT = FREE_GUN_IDS.map((id) => getWeapon(id))
 const HOST_HIT_MIN_MS = 55 // per-player spam guard on the host, by the SENDER's clock (autos fire up to 12/s)
+const STICKY_RESTORE_WINDOW_MS = 30000 // a new host accepts re-sent sticky placements this long
+const ROCKET_GAP_MS = engine.ROCKET_GAP_MS
 const PLATE_RANGE_M = 45 // GPS nameplates show for enemies this close (or anyone the map reveals)
 const HIT_BATCH_MS = 140 // automatic fire: rounds on one target inside this window travel as one action
 const ENDLESS_PRESENCE_GRACE_MS = 120000 // arena: keep a player's score through a 2-minute drop (lock screen, call)
@@ -272,8 +261,14 @@ export function LaserTagGame({ room, onExit }) {
   const shotsRef = useRef(0)
   const cameraRef = useRef(null)
   const vision = useVisionCapture(cameraRef)
-  const [bodies, setBodies] = useState(null) // latest target-lock detections
+  const [bodies, setBodies] = useState(null) // latest detections, preview space (aimAssist.js)
+  const bodiesRef = useRef(null)
+  bodiesRef.current = bodies
   const [view, setView] = useState({ width: 0, height: 0 })
+  const viewRef = useRef(view)
+  viewRef.current = view
+  const tapAimRef = useRef(null) // { id, rx, ry, x, y } while a tap on a target holds the trigger
+  const tapHeldRef = useRef(false)
   // Scope zoom (pinch or the zoom button). Precision guns (sniper, DMR, railgun) go to 4×.
   // Binoculars: look up to 8× with GPS name tags on every enemy; shooting is off while they're up.
   const [bino, setBino] = useState(false)
@@ -332,6 +327,8 @@ export function LaserTagGame({ room, onExit }) {
   }
   // Runs after the zoom limit has switched (8× for binoculars, the gun's own limit after).
   useEffect(() => { scope.setZoom(bino ? 4 : 1) }, [bino]) // eslint-disable-line react-hooks/exhaustive-deps
+  const zoomRef = useRef(1)
+  zoomRef.current = scope.zoom || 1
   const vignette = useRef(new Animated.Value(0)).current
 
   const meId = snap?.me?.id
@@ -345,7 +342,23 @@ export function LaserTagGame({ room, onExit }) {
   // Camera (body-hit) aiming works in both upright modes: classic crosshair + FIRE, and trigger.
   const visionAim = visionAvailable && !!camPerm?.granted && (aim.mode === 'camera' || aim.mode === 'trigger')
   const isProtected = (myState?.protectedUntil || 0) > now
+  // Safety: no firing / placing at vehicle (or bike) speed.
+  const speedLock = useSpeedLock(loc.coords, { enabled: loc.status === 'granted' && !!state && state.phase !== 'ended' })
+  const tooFast = speedLock.locked
+  const tooFastRef = useRef(false)
+  tooFastRef.current = tooFast
   const snd = state?.mode === 'snd' ? state.snd : null
+
+  // Real-time people tracking (target brackets that follow people, aim assist, tap-to-shoot).
+  // Older binaries / no native tracker: liveRunning stays false and the still-frame path below
+  // does the job as before.
+  const liveOn = visionAim && playing && !dead && !bino
+  const live = useLiveBodies({ enabled: liveOn, restartKey: dualOk && selfieOn ? 'dual' : 'single' })
+  const [liveRunning, setLiveRunning] = useState(false)
+  useEffect(() => live.subscribe(() => setLiveRunning(live.running())), [live])
+  const [liveLocked, setLiveLocked] = useState(false)
+  const onLiveLock = useCallback((id) => setLiveLocked(id != null), [])
+  useEffect(() => { if (!liveRunning) setLiveLocked(false) }, [liveRunning])
 
   useEffect(() => {
     setAudioModeAsync({ playsInSilentMode: true, interruptionMode: 'mixWithOthers' }).catch(() => {})
@@ -356,8 +369,58 @@ export function LaserTagGame({ room, onExit }) {
   const grenadeInv = useGrenadeInventory()
   const stickyBombInv = useStickyBombInventory()
   const landMineInv = useLandMineInventory()
-  const stickyBombPos = useRef(null) // lat/lng of the placed sticky bomb
-  const [stickyMarker, setStickyMarker] = useState(null) // same, for the map
+  // Sticky bombs: the HOST records each placement (state.stickies); `pendingStickies` are ones
+  // sent but not yet in the state. stickyKnown: every placement of mine still live (re-sent
+  // to a new host after host migration). stickyAck: the host understands sticky_place.
+  const [pendingStickies, setPendingStickies] = useState([])
+  const stickyKnown = useRef(new Map())
+  const stickyAck = useRef(false)
+  const [goneStickies, setGoneStickies] = useState(() => new Set()) // detonated, until the host's state drops them
+  const myStickies = useMemo(() => {
+    const fromState = (state?.stickies || []).filter((b) => b?.by === meId && b.lat != null && !goneStickies.has(b.id))
+    const ids = new Set(fromState.map((b) => b.id))
+    return [...fromState, ...pendingStickies.filter((p) => !ids.has(p.id))]
+  }, [state?.stickies, pendingStickies, meId, goneStickies])
+  const myStickiesRef = useRef([])
+  myStickiesRef.current = myStickies
+  // Placements the host has stored are confirmed; remember them for host migration.
+  useEffect(() => {
+    const mine = (state?.stickies || []).filter((b) => b?.by === meId && !goneStickies.has(b.id))
+    if (!mine.length) return
+    stickyAck.current = true
+    for (const b of mine) stickyKnown.current.set(b.id, { id: b.id, lat: b.lat, lng: b.lng })
+    const ids = new Set(mine.map((b) => b.id))
+    setPendingStickies((a) => (a.some((p) => ids.has(p.id)) ? a.filter((p) => !ids.has(p.id)) : a))
+  }, [state?.stickies, meId]) // eslint-disable-line react-hooks/exhaustive-deps
+  // A placement the host refused (it said why) drops off after a few seconds. With an older
+  // host that never confirms anything, the local ones stay (detonate falls back to sticky_bomb).
+  useEffect(() => {
+    if (!pendingStickies.length) return undefined
+    const t = setInterval(() => {
+      if (!stickyAck.current) return
+      setPendingStickies((a) => {
+        const keep = a.filter((p) => Date.now() - p.at < 8000)
+        return keep.length === a.length ? a : keep
+      })
+    }, 2000)
+    return () => clearInterval(t)
+  }, [pendingStickies.length])
+  // Host migration: the new host's state may predate my last placements, so re-send them.
+  useEffect(() => {
+    if (!room) return undefined
+    let timer = null
+    const off = room.emitter.on('host', () => {
+      clearTimeout(timer)
+      timer = setTimeout(() => {
+        try {
+          const have = new Set((room.getState()?.stickies || []).map((b) => b.id))
+          const items = [...stickyKnown.current.values()].filter((b) => !have.has(b.id))
+          if (items.length) room.sendAction({ type: 'sticky_restore', items })
+        } catch {}
+      }, 2500)
+    })
+    return () => { off(); clearTimeout(timer) }
+  }, [room])
   const battle = useBattleEffects()
   const myPosRef = useRef(null)
   const headingRef = useRef(null)
@@ -408,6 +471,8 @@ export function LaserTagGame({ room, onExit }) {
     room,
     matchKey: `${snap?.code}:${snap?.info?.round}`,
     canUse: playing,
+    kills: state?.players?.[meId]?.kills,
+    deaths: state?.players?.[meId]?.deaths,
     alert: showAlert,
     onBeforeCall: () => triggerRef.current?.stop(),
     payload: () => ({ name: uavStateRef.current.state?.players?.[uavStateRef.current.meId]?.name || null }),
@@ -464,6 +529,9 @@ export function LaserTagGame({ room, onExit }) {
       setStreak(0)
     }
     setHolding(null)
+    // A new S&D round (or match) clears every placed sticky bomb on the host.
+    stickyKnown.current.clear()
+    setPendingStickies([])
   }, [roundKey]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
@@ -498,11 +566,38 @@ export function LaserTagGame({ room, onExit }) {
         if (kills.length) flash(`Grenade tagged out ${kills.map((k) => k.name).join(', ')}!`, true)
         else flash(`Grenade hit ${hits.map((h) => `${h.name} −${h.damage}`).join(', ')}`, true)
       }),
+      room.onMessage('rocket_ok', (d) => {
+        // The explosion itself was drawn when the rocket landed on this phone; this is the score.
+        const hits = Array.isArray(d?.hits) ? d.hits : []
+        if (!hits.length) return
+        const kills = hits.filter((h) => h.killed)
+        setHitTick(Date.now())
+        if (kills.length) setKillTick(Date.now())
+        playSfx('hit')
+        buzz('success')
+        hits.forEach((h) => addPop(10 + (h.killed ? 100 : 0), h.killed ? 'TAGGED OUT' : 'SPLASH', h.killed ? HUD.red : '#fff'))
+        kills.forEach((k) => battle.addKill({ victim: k.name, weapon: `${gunNameRef.current} · Splash`, points: 100 }))
+        if (kills.length) onTagOuts(kills.map((k) => k.name))
+        else flash(`Rocket hit ${hits.map((h) => `${h.name} −${h.damage}`).join(', ')}`, true)
+      }),
+      room.onMessage('sticky_place_ok', (d) => {
+        try {
+          stickyAck.current = true
+          const id = typeof d?.id === 'string' ? d.id : null
+          if (!id) return
+          const lat = Number(d.lat)
+          const lng = Number(d.lng)
+          if (Number.isFinite(lat) && Number.isFinite(lng)) stickyKnown.current.set(id, { id, lat, lng })
+          setPendingStickies((a) => a.filter((x) => x.id !== id))
+        } catch {}
+      }),
       room.onMessage('sticky_bomb_ok', (d) => {
         const hits = Array.isArray(d?.hits) ? d.hits : []
         const kills = hits.filter((h) => h.killed)
+        for (const b of Array.isArray(d?.bombs) ? d.bombs : []) if (b?.id) stickyKnown.current.delete(b.id)
         battle.addExplosion('Sticky bomb')
-        if (!hits.length) { flash('Sticky bomb missed', false); return }
+        battle.shake(14)
+        if (!hits.length) { flash(d?.count > 1 ? `${d.count} sticky bombs went off — no one hit` : 'Sticky bomb missed', false); return }
         playSfx('explosion')
         buzz('success')
         setBlastKey(Date.now())
@@ -521,6 +616,7 @@ export function LaserTagGame({ room, onExit }) {
         const isExplosive = d?.zone === 'grenade' || d?.zone === 'sticky_bomb' || d?.zone === 'land_mine' || d?.zone === 'rocket'
         if (isExplosive) {
           playSfx('explosion'); buzz('heavy'); setBlastKey(Date.now())
+          battle.shake(d?.zone === 'land_mine' ? 18 : 14)
           // Land mines show as an arena-wide mega explosion (see the blasts effect below).
           if (d?.zone !== 'land_mine') battle.addExplosion(d?.zone === 'rocket' ? 'Rocket' : d?.zone === 'grenade' ? 'Grenade' : 'Sticky bomb')
         }
@@ -720,6 +816,12 @@ export function LaserTagGame({ room, onExit }) {
 
   // ---- host ----
   const posOf = (id) => room.freshPosition(id)
+  const hostSinceRef = useRef(0)
+  useEffect(() => {
+    if (!room) return undefined
+    if (room.isHost?.()) hostSinceRef.current = Date.now()
+    return room.emitter.on('host', () => { try { if (room.isHost()) hostSinceRef.current = room.now() } catch {} })
+  }, [room])
   useHostLoop(room, isHost, {
     onTick: () => {
       let s = room.getState()
@@ -759,40 +861,24 @@ export function LaserTagGame({ room, onExit }) {
       const s = room.getState()
       if (!s || s.game !== 'lasertag') return
       const t = room.now()
-      if (action?.type === 'hit') {
-        // Rate-limit by the sender's own trigger time (monotonic per phone); arrival times are bursty.
+      if (action?.type === 'hit' || action?.type === 'shot' || action?.type === 'rocket') {
+        // Generic spam guard by the sender's own trigger time (monotonic per phone; arrival
+        // times are bursty). Per-weapon cycles (rocket 3 s, sniper 1 s) are the engine's.
         const key = Number.isFinite(action.firedAt) ? action.firedAt : Number.isFinite(sentAt) ? sentAt : t
         if (key - (lastShotByPlayer.current[from] || 0) < HOST_HIT_MIN_MS) return
         lastShotByPlayer.current[from] = key
       }
-      const { state: next, reply } = engine.applyAction(s, action, from, { now: t, posOf })
+      // Re-sent sticky placements are only taken just after this phone became the host.
+      if (action?.type === 'sticky_restore' && t - (hostSinceRef.current || 0) > STICKY_RESTORE_WINDOW_MS) return
+      const { state: next, reply, notify } = engine.applyAction(s, action, from, { now: t, posOf })
       if (next !== s) room.publishState(next)
       if (__DEV__ && action?.type === 'hit' && next === s && !reply) console.warn('[lasertag] hit dropped', from, action.target, s.phase)
-      // Tell the person who got hit who shot them (their phone already rumbles from the HP drop).
-      if (action?.type === 'grenade' && reply?.type === 'grenade_ok') {
-        for (const h of reply.data?.hits || []) {
-          const victimMsg = { by: s.players?.[from]?.name || 'Someone', byId: from, zone: 'grenade', damage: h.damage, killed: h.killed }
-          if (h.id === meId) room.emitter.emit('msg:got_hit', victimMsg, from)
-          else room.queue('got_hit', victimMsg, { to: h.id })
-        }
-      }
-      if (action?.type === 'sticky_bomb' && reply?.type === 'sticky_bomb_ok') {
-        for (const h of reply.data?.hits || []) {
-          const victimMsg = { by: s.players?.[from]?.name || 'Someone', byId: from, zone: 'sticky_bomb', damage: h.damage, killed: h.killed }
-          if (h.id === meId) room.emitter.emit('msg:got_hit', victimMsg, from)
-          else room.queue('got_hit', victimMsg, { to: h.id })
-        }
-      }
-      if (action?.type === 'hit' && reply?.type === 'hit_ok' && action.target) {
-        const victimMsg = { by: s.players?.[from]?.name || 'Someone', byId: from, zone: reply.data.zone, damage: reply.data.damage, killed: reply.data.killed, weapon: typeof action.weapon === 'string' ? action.weapon.slice(0, 24) : undefined }
-        if (action.target === meId) room.emitter.emit('msg:got_hit', victimMsg, from)
-        else room.queue('got_hit', victimMsg, { to: action.target })
-        // Rocket splash: notify everyone caught in the blast
-        for (const sh of reply.data?.splash || []) {
-          const splashMsg = { by: s.players?.[from]?.name || 'Someone', byId: from, zone: 'rocket', damage: sh.damage, killed: sh.killed, weapon: typeof action.weapon === 'string' ? action.weapon.slice(0, 24) : undefined }
-          if (sh.id === meId) room.emitter.emit('msg:got_hit', splashMsg, from)
-          else room.queue('got_hit', splashMsg, { to: sh.id })
-        }
+      // Tell everyone who got hit who did it (their phone already rumbles from the HP drop);
+      // zone 'rocket' / 'grenade' / 'sticky_bomb' makes their phone show the explosion.
+      for (const n of Array.isArray(notify) ? notify : []) {
+        if (!n?.to || !n.data) continue
+        if (n.to === meId) room.emitter.emit('msg:got_hit', n.data, from)
+        else room.queue('got_hit', n.data, { to: n.to })
       }
       if (reply) {
         if (from === meId) room.emitter.emit(`msg:${reply.type}`, reply.data, meId)
@@ -825,11 +911,11 @@ export function LaserTagGame({ room, onExit }) {
     let best = null
     for (const o of enemies) {
       if (!o.alive || !withinReach(o, myPos, visionAim ? gun.range : Math.min(gun.range, COMPASS_MAX_RANGE_M))) continue
-      const tol = aimTolerance(o.d, myPos.acc, o.pos.acc, heading.accuracy)
+      const tol = compassTolerance(o.d, myPos.acc, o.pos.acc, heading.accuracy)
       const off = Math.abs(angleDiff(o.bearing, heading.deg))
       if (off > tol) continue
       const ratio = off / tol
-      if (!best || ratio < best.ratio) best = { ...o, ratio, chance: hitChance(o.d, gun, ratio) }
+      if (!best || ratio < best.ratio) best = { ...o, ratio, chance: hitChance(o.d, gun.accuracy, ratio, gpsErr(myPos.acc, o.pos.acc)) }
     }
     return best
   }, [enemies, heading, myPos, gun, visionAim])
@@ -862,17 +948,34 @@ export function LaserTagGame({ room, onExit }) {
   const inSightsRef = useRef(null)
   inSightsRef.current = inSights
 
-  // Live target lock: detect people in the camera view ~2.5×/s (setting).
-  const lockOn = visionAim && prefs.targetLock && playing && !dead && !holding && !bino
+  // Still-frame target lock (no live tracker): detect people in the camera view ~2.5×/s (setting).
+  const lockOn = visionAim && prefs.targetLock && playing && !dead && !holding && !bino && !liveRunning
   useEffect(() => {
-    if (!lockOn) { setBodies(null); return undefined }
+    if (!lockOn) { if (!liveRunning) setBodies(null); return undefined }
     let cancelled = false
     const t = setInterval(() => {
       if (vision.busy()) return
-      vision.capture().then((r) => { if (!cancelled && r) setBodies(r.bodies) })
+      vision.capture().then((r) => { if (!cancelled && r) setBodies(viewBodiesFromStill(r.bodies, viewRef.current)) })
     }, 400)
     return () => { cancelled = true; clearInterval(t) }
   }, [lockOn]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Live tracker -> `bodies` (enemy markers, lock state) a few times a second; the brackets
+  // themselves follow the tracker at its own rate (LiveTargetBrackets).
+  useEffect(() => {
+    if (!liveRunning || !liveOn) return undefined
+    let lastSig = ''
+    const t = setInterval(() => {
+      try {
+        const vb = viewBodiesFromLive(live.get())
+        const sig = vb.map((b) => `${b.id}:${Math.round(b.box.x * 80)},${Math.round(b.box.y * 80)},${Math.round(b.box.w * 80)},${b.head ? 1 : 0}`).join('|')
+        if (sig === lastSig) return
+        lastSig = sig
+        setBodies(vb.length ? vb : null)
+      } catch {}
+    }, 250)
+    return () => { clearInterval(t); setBodies(null) }
+  }, [liveRunning, liveOn, live])
 
   // Enemy markers: match each detected person to an enemy player; only enemies get one.
   // A person who fits an opted-in bystander better than any player gets the teal emblem.
@@ -886,7 +989,7 @@ export function LaserTagGame({ room, onExit }) {
     const bys = []
     for (const b of bodies) {
       try {
-        const by = pickBystander({ body: b, users: bystandersRef.current, participants: participantsRef.current, myPos: h.pos, headingDeg: h.heading.deg })
+        const by = pickBystander({ body: angularBody(b, view), users: bystandersRef.current, participants: participantsRef.current, myPos: h.pos, headingDeg: h.heading.deg })
         if (by) {
           if (seen.has(by.user.id)) continue
           seen.add(by.user.id)
@@ -902,8 +1005,8 @@ export function LaserTagGame({ room, onExit }) {
         myPos: h.pos,
         headingDeg: h.heading.deg,
         headingAcc: h.heading.accuracy,
-        body: b,
-        tolerance: aimTolerance,
+        body: angularBody(b, view),
+        tolerance: visionTolerance,
       })
       const t = picked?.target
       if (!t || seen.has(t.id)) continue
@@ -945,13 +1048,22 @@ export function LaserTagGame({ room, onExit }) {
     q.action = null
   }, [room])
   useEffect(() => () => { try { flushHits() } catch {} }, [flushHits]) // a pending batch still counts when you leave
-  const sendHit = (targetId, hits, zone, method, firedAt = Date.now()) => {
-    const action = { type: 'hit', target: targetId, hits, zone, method, weapon: gun.id, firedAt }
+  // New-style actions carry the heading (+ accuracy) so the host can re-check the bearing and
+  // roll compass hits itself. A compass pull this phone's dice call a miss goes as 'shot' (the
+  // host still rolls it; an older host ignores the type, so it never counts as a hit there).
+  const aimFields = () => {
+    const h = aimRef.current?.heading
+    return Number.isFinite(h?.deg) ? { heading: Math.round(h.deg * 10) / 10, headingAcc: h.accuracy } : {}
+  }
+  const sendHit = (targetId, { hits, shots = hits, zone = 'body', method, firedAt = Date.now(), snap = false }) => {
+    const action = { type: hits > 0 ? 'hit' : 'shot', target: targetId, hits: Math.max(0, hits), shots: Math.max(1, shots), zone, method, weapon: gun.id, firedAt, ...aimFields(), ...(snap ? { snap: true } : {}) }
     if (!gun.automatic) { room.sendAction(action); return }
     const q = hitQueue.current
-    const key = `${targetId}:${zone}:${gun.id}`
+    const key = `${targetId}:${zone}:${gun.id}:${method}`
     if (q.action && q.key === key) {
-      q.action.hits = Math.min(5, q.action.hits + hits)
+      q.action.hits = Math.min(5, q.action.hits + action.hits)
+      q.action.shots = Math.min(5, q.action.shots + action.shots)
+      if (q.action.hits > 0) q.action.type = 'hit'
       return
     }
     if (q.action) flushHits()
@@ -960,7 +1072,8 @@ export function LaserTagGame({ room, onExit }) {
     q.timer = setTimeout(flushHits, HIT_BATCH_MS)
   }
 
-  // Compass / GPS aim: the enemy nearest your heading, hit chance by distance and gun.
+  // Compass / GPS aim: the enemy nearest your heading (cone capped at 35°). The host rolls the
+  // hit; this phone's roll only decides the message type (see sendHit).
   // `snap` = camera mode with no person under the crosshair (lower chance).
   const fireCompass = (shots, snap = false, firedAt = Date.now()) => {
     const target = inSightsRef.current
@@ -968,46 +1081,172 @@ export function LaserTagGame({ room, onExit }) {
     const chance = target.chance * (snap ? 0.6 : 1)
     let hits = 0
     for (let i = 0; i < shots; i++) if (Math.random() < chance) hits += 1
-    if (!hits) { flash('Miss', false); return }
-    sendHit(target.id, hits, 'body', 'compass', firedAt)
+    sendHit(target.id, { hits, shots, zone: 'body', method: 'compass', firedAt, snap })
   }
 
-  // One trigger pull. Unlimited ammo; semi-auto has no rate cap (useTrigger handles holds).
+  // Where the hip-fire radar is on screen (its centre = you, top = the top edge of the phone).
+  const radarGeoRef = useRef(null)
+  const [radarAt, setRadarAt] = useState(null) // the radar's offset inside the hip-fire column
+  const lastPullRef = useRef({}) // gun id -> last trigger pull (client copy of the host's cycle)
+
+  // One trigger pull. Unlimited ammo; slow weapons keep their cycle (rocket 1 per 3 s).
   const fireShot = () => {
     if (dead || !playing) return
+    if (tooFastRef.current) { flash(SPEED_LOCK_TEXT, false); return }
+    const gap = gun.id === 'rocket' ? Math.max(ROCKET_GAP_MS, minShotGapMs(gun)) : minShotGapMs(gun)
+    const t0 = Date.now()
+    if (gap > 0 && t0 - (lastPullRef.current[gun.id] || 0) < gap) {
+      if (gun.id === 'rocket') flash(`Reloading · ${Math.ceil((gap - (t0 - lastPullRef.current[gun.id])) / 1000)} s`, false)
+      return
+    }
+    lastPullRef.current[gun.id] = t0
+    if (gun.id === 'rocket') { fireRocket(t0); return }
     const shots = gun.shotsPerClick
     shotsRef.current += shots
     setShotTick((n) => n + 1)
     try {
-      // The bolt leaves the gun's barrel and flies into the scene toward the enemy you're
-      // aiming at (or straight down the crosshair into the distance).
-      const from = aim.mode === 'camera' ? muzzlePoint({ gun, width: view.width || 0, height: view.height || 0, bottom: dockH || 0, leftHanded }) : null
-      battle.addOutgoing(leftHanded, aimPointRef.current, from, gun.id)
+      if (aim.mode === 'top') {
+        // Hip fire: the radar is a top-down map, so the bolt flies flat from the centre (you)
+        // to the locked enemy's diamond, or straight up to the radar's top edge.
+        const g = radarGeoRef.current
+        if (g) battle.addOutgoing(leftHanded, hipTargetPoint(g, inSightsRef.current), { x: g.cx, y: g.cy }, gun.id, { flat: true })
+      } else {
+        // The bolt leaves the gun's barrel (trigger mode, no gun drawn: bottom centre) and
+        // flies into the scene toward the enemy you're aiming at (or down the crosshair).
+        const from = aim.mode === 'camera'
+          ? muzzlePoint({ gun, width: view.width || 0, height: view.height || 0, bottom: dockH || 0, leftHanded })
+          : { x: (view.width || 0) / 2, y: (view.height || 0) * 0.94 }
+        battle.addOutgoing(leftHanded, aimPointRef.current, from, gun.id)
+      }
     } catch {}
     playShot(gun)
     buzz(gun.automatic ? 'light' : 'medium') // recoil rumble (respects the Vibration setting)
     const h = aimRef.current
     broadcastShot(h.pos)
     if (!h.pos || !h.heading) { flash('No GPS/compass fix yet', false); return }
-    const firedAt = Date.now() // the host rate-limits on this, not on when the camera frame resolved
-    if (visionAim) { fireVision(shots, firedAt).catch(() => fireCompass(shots, true, firedAt)); return }
+    const firedAt = t0 // the host rate-limits on this, not on when the camera frame resolved
+    if (visionAim) { fireVision(shots, firedAt, tapAimRef.current).catch(() => fireCompass(shots, true, firedAt)); return }
     fireCompass(shots, false, firedAt)
   }
 
-  // Camera aim: what's actually under the crosshair decides the hit. Rapid shots share
-  // the in-flight camera frame instead of queueing more captures. When the camera sees no
-  // person under the crosshair the shot falls back to compass aim at a lower chance, so a
-  // player right next to you (inside GPS error) can still be hit.
-  const fireVision = async (shots, firedAt) => {
-    const frame = await vision.capture()
-    if (!frame) { fireCompass(shots, true, firedAt); return }
-    setBodies(frame.bodies)
-    const hit = classifyHit(frame.bodies)
+  // Rocket: a visible projectile that ALWAYS explodes where it lands — at the target on a
+  // hit, otherwise at the impact distance (there's no depth sensor: the locked target's
+  // distance, else where the camera's centre ray meets the ground when pitched down, else a
+  // 25 m "wall"). Every rocket goes to the host so misses splash too.
+  const fireRocket = (firedAt) => {
+    shotsRef.current += 1
+    setShotTick((n) => n + 1)
+    const h = aimRef.current
+    const hipFire = aim.mode === 'top'
+    // Who it's going at: a tracked person under the crosshair (live tracker), else the compass lock.
+    let lock = null
+    let screen = null
+    try {
+      if (!hipFire && visionAim && live.running()) {
+        const hit = pickShot(viewBodiesFromLive(live.get()), tapAimRef.current)
+        if (hit) {
+          const picked = pickVisionTarget({
+            opponents: enemiesRef.current.map((e) => ({ ...e, alive: e.alive && !((e.protectedUntil || 0) > room.now()) })),
+            myPos: h.pos, headingDeg: h.heading?.deg, headingAcc: h.heading?.accuracy, body: angularBody(hit.body, viewRef.current), tolerance: visionTolerance,
+          })
+          if (picked?.target) lock = { id: picked.target.id, d: picked.distance, method: 'vision', zone: hit.zone }
+          const r = scope.zoomRect(photoRectToScreen(hit.body.box, hit.body, viewRef.current), viewRef.current)
+          if (Number.isFinite(r?.left) && Number.isFinite(r?.top)) screen = { x: r.left + r.width / 2, y: r.top + r.height * 0.45 }
+        }
+      }
+    } catch { lock = null }
+    const compass = inSightsRef.current
+    if (!lock && compass) lock = { id: compass.id, d: compass.d, method: 'compass', zone: 'body', chance: compass.chance }
+    const impact = rocketImpactDistance({ targetDist: lock?.d, pitchDeg: aim.pitch, hipFire, range: gun.range })
+    // The projectile.
+    try {
+      const onImpact = () => { playSfx('explosion'); buzz('heavy'); setTimeout(() => buzz('heavy'), 140) }
+      if (hipFire) {
+        const g = radarGeoRef.current
+        if (g) {
+          const to = lock ? hipTargetPoint(g, { ...compass, d: lock.d }) : { x: g.cx, y: g.cy - g.r * Math.min(1, impact.dist / Math.max(1, g.rangeM)) }
+          battle.addRocket({ from: { x: g.cx, y: g.cy }, to, dist: impact.dist, flat: true, onImpact })
+        }
+      } else {
+        const from = aim.mode === 'camera'
+          ? muzzlePoint({ gun, width: view.width || 0, height: view.height || 0, bottom: dockH || 0, leftHanded })
+          : { x: (view.width || 0) / 2, y: (view.height || 0) * 0.94 }
+        const ap = aimPointRef.current
+        const to = screen || (lock && ap ? ap : { x: (view.width || 0) / 2, y: (view.height || 0) / 2 })
+        battle.addRocket({ from, to, dist: impact.dist, onImpact })
+      }
+    } catch {}
+    playShot(gun)
+    buzz('heavy')
+    broadcastShot(h.pos)
+    if (!h.pos || !h.heading) { flash('No GPS/compass fix yet — rocket wasted', false); return }
+    try {
+      if (lock) {
+        let hits = 1
+        if (lock.method === 'compass') hits = Math.random() < (lock.chance ?? 0.5) ? 1 : 0
+        room.sendAction({ type: hits ? 'hit' : 'shot', target: lock.id, hits, shots: 1, zone: lock.zone || 'body', method: lock.method, weapon: 'rocket', dist: Math.round(impact.dist * 10) / 10, firedAt, ...aimFields() })
+      } else {
+        room.sendAction({ type: 'rocket', weapon: 'rocket', dist: Math.round(impact.dist * 10) / 10, firedAt, ...aimFields() })
+      }
+    } catch {}
+  }
+  // Which tracked person a shot goes to: the tapped one (followed by id while the tap holds),
+  // else aim assist around the crosshair (laser/aimAssist.js).
+  const pickShot = (vb, tap) => {
+    const v = viewRef.current || {}
+    const opts = { aspect: v.width > 0 && v.height > 0 ? v.width / v.height : 0.5, zoom: Math.max(1, zoomRef.current || 1) }
+    if (tap) {
+      const same = tap.id != null ? vb.find((b) => b.id === tap.id) : null
+      if (same) return { body: same, zone: zoneAtRelative(same, tap.rx, tap.ry), tap: true }
+      const again = pickTapTarget(vb, tap.x, tap.y, opts)
+      if (again) return { ...again, tap: true }
+    }
+    return pickAimTarget(vb, opts)
+  }
+
+  // A tap on the camera view: the tracked person under it (screen point -> preview space,
+  // undoing the scope zoom around the centre), or null.
+  const tapTargetAt = (e) => {
+    try {
+      const v = viewRef.current
+      if (!(v?.width > 0) || !(v?.height > 0)) return null
+      const lx = Number(e?.nativeEvent?.locationX)
+      const ly = Number(e?.nativeEvent?.locationY)
+      if (!Number.isFinite(lx) || !Number.isFinite(ly)) return null
+      const z = Math.max(1, zoomRef.current || 1)
+      const x = 0.5 + (lx / v.width - 0.5) / z
+      const y = 0.5 + (ly / v.height - 0.5) / z
+      const vb = live.running() ? viewBodiesFromLive(live.get()) : (bodiesRef.current || [])
+      const p = pickTapTarget(vb, x, y, { aspect: v.width / v.height, zoom: z })
+      if (!p) return null
+      return { id: p.body.id ?? null, rx: p.rx, ry: p.ry, x, y }
+    } catch {
+      return null
+    }
+  }
+
+  // Camera aim: the person the shot lands on decides the hit. Live tracking answers at once;
+  // otherwise (or when it sees nobody near the crosshair) one camera frame is checked, and
+  // rapid shots share the in-flight frame instead of queueing more captures. When the camera
+  // sees no person the shot falls back to compass aim at a lower chance, so a player right
+  // next to you (inside GPS error) can still be hit. GPS + compass pick WHICH player it is;
+  // the host validates every hit.
+  const fireVision = async (shots, firedAt, tap = null) => {
+    let hit = null
+    try { if (live.running()) hit = pickShot(viewBodiesFromLive(live.get()), tap) } catch { hit = null }
+    if (!hit) {
+      const frame = await vision.capture()
+      if (!frame) { fireCompass(shots, true, firedAt); return }
+      const vb = viewBodiesFromStill(frame.bodies, viewRef.current)
+      if (!live.running()) setBodies(vb.length ? vb : null)
+      hit = pickShot(vb, tap)
+    }
     if (!hit) { fireCompass(shots, true, firedAt); return }
+    const body = angularBody(hit.body, viewRef.current)
     const h = aimRef.current
     let by = null
     try {
-      by = pickBystander({ body: hit.body, users: bystandersRef.current, participants: participantsRef.current, myPos: h.pos, headingDeg: h.heading?.deg })
+      by = pickBystander({ body, users: bystandersRef.current, participants: participantsRef.current, myPos: h.pos, headingDeg: h.heading?.deg })
     } catch {
       by = null
     }
@@ -1017,27 +1256,31 @@ export function LaserTagGame({ room, onExit }) {
       myPos: h.pos,
       headingDeg: h.heading?.deg,
       headingAcc: h.heading?.accuracy,
-      body: hit.body,
-      tolerance: aimTolerance,
+      body,
+      tolerance: visionTolerance,
     })
     if (!picked) {
       // A person, but nobody in the match matches that direction: if one enemy is in your
       // sights by compass, count it as them; otherwise it was a bystander.
-      if (inSightsRef.current) { sendHit(inSightsRef.current.id, shots, hit.zone, 'vision', firedAt); return }
+      if (inSightsRef.current) { sendHit(inSightsRef.current.id, { hits: shots, shots, zone: hit.zone, method: 'vision', firedAt }); return }
       flash('That’s not a player in this game', false)
       return
     }
-    sendHit(picked.target.id, shots, hit.zone, 'vision', firedAt)
+    sendHit(picked.target.id, { hits: shots, shots, zone: hit.zone, method: 'vision', firedAt })
   }
 
   // Throw along the compass heading; it goes off after the fuse, where it landed.
   const throwGrenade = async (distance, how) => {
     try {
     if (dead || !playing) return
+    if (tooFastRef.current) { flash(SPEED_LOCK_TEXT, false); return }
     const h = aimRef.current
     if (!h.pos || !h.heading) { flash('No GPS/compass fix yet', false); return }
     if (!grenadeInv.owner && !(grenadeInv.balance > 0)) { flash('No grenades left — get more in the Arcade Shop', false); return }
-    const ok = await spendGrenade()
+    const capKey = `${snap?.code}:${snap?.info?.round}`
+    const cap = matchCheck('grenade', capKey)
+    if (!cap.ok) { flash(cap.text, false); return }
+    const ok = await spendGrenade({ matchKey: capKey })
     if (!ok) { flash('No grenades left — get more in the Arcade Shop', false); return }
     const land = destinationPoint(h.pos, h.heading.deg, distance)
     buzz('medium')
@@ -1056,36 +1299,49 @@ export function LaserTagGame({ room, onExit }) {
     } catch { /* IAP/room error during match */ }
   }
 
-  // Place a sticky bomb at the player's current location.
+  // Sticky bombs: every tap places one more where you stand (the host records the spot); one
+  // DETONATE ALL blows every one of yours at once (the host works out the damage per bomb).
   const stickyBusy = useRef(false) // one placement at a time (spending is async)
   const placeStickyBomb = async () => {
-    if (stickyBusy.current || stickyBombPos.current) return
+    if (stickyBusy.current) return
     stickyBusy.current = true
     try {
-    if (dead || !playing) return
-    const h = aimRef.current
-    if (!h.pos) { flash('No GPS fix yet', false); return }
-    if (!stickyBombInv.owner && !(stickyBombInv.balance > 0)) { flash('No sticky bombs left', false); return }
-    const ok = await spendStickyBomb()
-    if (!ok) { flash('No sticky bombs left', false); return }
-    stickyBombPos.current = { lat: h.pos.lat, lng: h.pos.lng }
-    setStickyMarker(stickyBombPos.current)
-    buzz('medium')
-    flash('Sticky bomb placed. Tap again to detonate', true)
-    } catch { /* IAP error */ } finally { stickyBusy.current = false }
+      if (dead || !playing) return
+      if (tooFastRef.current) { flash(SPEED_LOCK_TEXT, false); return }
+      const h = aimRef.current
+      if (!h.pos) { flash('No GPS fix yet', false); return }
+      if (!stickyBombInv.owner && !(stickyBombInv.balance > 0)) { flash('No sticky bombs left', false); return }
+      const capKey = `${snap?.code}:${snap?.info?.round}`
+      const cap = matchCheck('stickyBomb', capKey)
+      if (!cap.ok) { flash(cap.text, false); return }
+      const ok = await spendStickyBomb({ matchKey: capKey })
+      if (!ok) { flash('No sticky bombs left', false); return }
+      const id = `${meId || 'me'}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`
+      const item = { id, lat: round6(h.pos.lat), lng: round6(h.pos.lng), at: Date.now() }
+      setPendingStickies((a) => [...a, item])
+      room.sendAction({ type: 'sticky_place', id })
+      buzz('medium')
+      const n = myStickiesRef.current.length + 1
+      flash(n > 1 ? `${n} sticky bombs placed · DETONATE blows them all` : 'Sticky bomb placed · place more, or DETONATE', true)
+    } catch { /* IAP / room error */ } finally { stickyBusy.current = false }
   }
 
-  // Detonate the placed sticky bomb.
-  const detonateStickyBomb = () => {
-    if (!stickyBombPos.current) return
-    const pos = stickyBombPos.current
-    stickyBombPos.current = null
-    setStickyMarker(null)
-    playSfx('explosion')
-    buzz('heavy')
-    setBlastKey(Date.now())
+  // Detonate every placed sticky bomb.
+  const detonateStickyBombs = () => {
     try {
-      room.sendAction({ type: 'sticky_bomb', lat: Math.round(pos.lat * 1e6) / 1e6, lng: Math.round(pos.lng * 1e6) / 1e6 })
+      if (dead || !playing) return
+      if (tooFastRef.current) { flash(SPEED_LOCK_TEXT, false); return }
+      const mine = myStickiesRef.current
+      if (!mine.length) return
+      const hostKnows = stickyAck.current || (stateRef.current?.stickies || []).some((b) => b.by === meId)
+      if (hostKnows) room.sendAction({ type: 'sticky_detonate' })
+      else room.sendAction({ type: 'sticky_bomb', lat: mine[0].lat, lng: mine[0].lng }) // an older host: one bomb
+      stickyKnown.current.clear()
+      setPendingStickies([])
+      setGoneStickies(new Set(mine.map((b) => b.id)))
+      playSfx('explosion')
+      buzz('heavy')
+      setBlastKey(Date.now())
     } catch {}
   }
 
@@ -1093,10 +1349,14 @@ export function LaserTagGame({ room, onExit }) {
   const dropLandMine = async () => {
     try {
     if (dead || !playing) return
+    if (tooFastRef.current) { flash(SPEED_LOCK_TEXT, false); return }
     const h = aimRef.current
     if (!h.pos) { flash('No GPS fix yet', false); return }
     if (!landMineInv.owner && !(landMineInv.balance > 0)) { flash('No land mines left', false); return }
-    const ok = await spendLandMine()
+    const capKey = `${snap?.code}:${snap?.info?.round}`
+    const cap = matchCheck('landMine', capKey)
+    if (!cap.ok) { flash(cap.text, false); return }
+    const ok = await spendLandMine({ matchKey: capKey })
     if (!ok) { flash('No land mines left', false); return }
     buzz('medium')
     flash('Land mine down. It goes off when an enemy walks near', true)
@@ -1114,7 +1374,7 @@ export function LaserTagGame({ room, onExit }) {
     room.sendAction({ type: 'bystander', userId: user.id, username: user.username })
   }
 
-  const trigger = useTrigger(gun, fireShot, { enabled: playing && !dead && !overlayOpen && !bino })
+  const trigger = useTrigger(gun, fireShot, { enabled: playing && !dead && !overlayOpen && !bino && !tooFast })
   triggerRef.current = trigger
 
   // ---- weapon switching ----
@@ -1178,8 +1438,8 @@ export function LaserTagGame({ room, onExit }) {
       if (m?.by !== meId || m.lat == null) continue
       pts.push({ id: `mine-${m.placedAt || i}`, pos: { lat: m.lat, lng: m.lng }, kind: 'mine' })
     }
-    // Your sticky bomb, waiting to be detonated.
-    if (stickyMarker?.lat != null) pts.push({ id: 'my-sticky', pos: stickyMarker, kind: 'c4' })
+    // Your sticky bombs, waiting to be detonated.
+    for (const b of myStickies) pts.push({ id: `sticky-${b.id}`, pos: { lat: b.lat, lng: b.lng }, kind: 'c4' })
     const areas = sndS ? sndS.sites.map((x) => ({ id: x.id, pos: x, r: x.r, color: ST.objective, label: x.id })) : []
     const b = sndS?.bomb
     // A planted bomb is shown to everyone; a dropped one to attackers.
@@ -1187,7 +1447,7 @@ export function LaserTagGame({ room, onExit }) {
       pts.push({ id: 'bomb', pos: b, color: b.state === 'planted' ? ST.enemy : ST.objective, label: '!' })
     }
     return { mapPoints: pts, mapAreas: areas }
-  }, [state, positions, meId, myTeam, stickyMarker])
+  }, [state, positions, meId, myTeam, myStickies])
   const area = snap?.info?.settings?.area
   const mapBoundary = useMemo(
     () => (area && Number.isFinite(area.lat) && Number.isFinite(area.lng) && area.r > 0 ? { lat: area.lat, lng: area.lng, r: area.r } : null),
@@ -1274,7 +1534,7 @@ export function LaserTagGame({ room, onExit }) {
     for (const m of [...enemyMarkers, ...plateMarkers.filter((r) => r.inView)]) {
       const y = m.y + 40 // tags sit above the head; aim at the body
       const d = Math.hypot(m.x - cx, y - cy)
-      if (d < Math.max(140, (view.width || 0) * 0.42) && (!best || d < best.d)) best = { x: m.x, y, d }
+      if (d < Math.max(140, (view.width || 0) * 0.42) && (!best || d < best.d)) best = { x: m.x, y, d, id: m.id, dist: m.d }
     }
     return best
   }, [enemyMarkers, plateMarkers, view])
@@ -1285,6 +1545,22 @@ export function LaserTagGame({ room, onExit }) {
   const revealedRef = useRef([])
   revealedRef.current = revealedMarkers
   const allMapPoints = useMemo(() => (intelPoints.length ? [...mapPoints, ...intelPoints] : mapPoints), [mapPoints, intelPoints])
+  // Placed explosives to draw on the ground (camera AR + hip-fire radar): all of mine, and my
+  // teammates' in the team colour. Enemy explosives stay hidden.
+  const groundItems = useMemo(() => {
+    const out = []
+    try {
+      const mateOf = (by) => state && state.mode !== 'ffa' && by !== meId && state.players?.[by]?.team && state.players[by].team === myTeam
+      for (const b of myStickies) out.push({ id: `c4-${b.id}`, kind: 'c4', lat: b.lat, lng: b.lng, label: 'YOUR C4' })
+      for (const b of state?.stickies || []) if (mateOf(b?.by)) out.push({ id: `c4-${b.id}`, kind: 'c4', lat: b.lat, lng: b.lng, label: `${String(state.players[b.by].name || 'TEAM').toUpperCase()}’S C4`, color: ST.friendly })
+      for (const [i, m] of (state?.landMines || []).entries()) {
+        if (m?.lat == null) continue
+        if (m.by === meId) out.push({ id: `mine-${m.placedAt || i}-${i}`, kind: 'mine', lat: m.lat, lng: m.lng, label: 'YOUR MINE' })
+        else if (mateOf(m.by)) out.push({ id: `mine-${m.placedAt || i}-${i}`, kind: 'mine', lat: m.lat, lng: m.lng, label: 'TEAM MINE', color: ST.friendly })
+      }
+    } catch {}
+    return out
+  }, [myStickies, state?.stickies, state?.landMines, state?.mode, meId, myTeam]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ---- render ----
   if (!room || !snap) return null
@@ -1350,14 +1626,17 @@ export function LaserTagGame({ room, onExit }) {
   const bannerUp = Date.now() - killTick < 2500
   const bombPlanted = bombState === 'planted' && !!snd?.bomb
   const scorePanelW = tight ? 128 : 138
-  const targetLocked = !!bodies?.some((b) => classifyHit([b]))
+  const viewAspect = view.width > 0 && view.height > 0 ? view.width / view.height : 0.5
+  const stillPick = bodies?.length ? pickAimTarget(bodies, { aspect: viewAspect, zoom: scope.zoom || 1 }) : null
+  const liveBrackets = liveRunning && prefs.targetLock !== false
+  const targetLocked = liveBrackets ? liveLocked : !!stillPick
   const hint = !playing || dead
     ? null
     : topMode
       ? null
       : triggerMode
         ? (gun.automatic ? 'AIM · TAP TO FIRE · HOLD FOR AUTO' : 'AIM · TAP ANYWHERE TO FIRE')
-        : 'AIM · CROSSHAIR ON A PLAYER · PRESS FIRE'
+        : visionAim ? 'AIM · PRESS FIRE OR TAP A TARGET' : 'AIM · CROSSHAIR ON A PLAYER · PRESS FIRE'
   // Hip fire: what the radar shows (the same enemies the camera view would tag).
   const hipRange = Math.min(gun.range, COMPASS_MAX_RANGE_M)
   const hip = topMode ? (() => {
@@ -1370,17 +1649,25 @@ export function LaserTagGame({ room, onExit }) {
         .filter((m) => m.p && Date.now() - m.p.at <= 15000 && myPos)
         .map((m) => ({ id: m.id, d: distanceMeters(myPos, m.p), bearing: bearingDeg(myPos, m.p) }))
       const objectives = snd && myPos ? (snd.sites || []).map((x) => ({ id: `s-${x.id}`, label: x.id, d: distanceMeters(myPos, x), bearing: bearingDeg(myPos, x) })) : []
-      const cone = Math.max(6, Math.min(40, aimTolerance(20, myPos?.acc, 10, heading?.accuracy)))
+      const cone = Math.max(6, Math.min(40, compassTolerance(20, myPos?.acc, 10, heading?.accuracy)))
       const top = land ? hud.top + 46 : topEdge + 4
       const avail = aboveTop - top - 8
       const zone = !land && avail - 44 - 60 - 30 - 92 >= 180
       const size = Math.round(Math.max(110, Math.min(rootW - midLeft - midRight - 8, 320, avail - 44 - 60 - 30 - (zone ? 92 : 0))))
-      return { shown, mates, objectives, cone, size, zone, top, height: Math.max(0, avail) }
+      const explosives = myPos ? groundItems.map((g) => ({ id: g.id, kind: g.kind, color: g.color, d: distanceMeters(myPos, g), bearing: bearingDeg(myPos, g) })) : []
+      return { shown, mates, objectives, explosives, cone, size, zone, top, height: Math.max(0, avail) }
     } catch { return null }
   })() : null
+  // Radar on screen (for hip-fire bolts and rockets): the hip column's corner + the radar's
+  // offset inside it (measured).
+  if (hip && radarAt) {
+    const left = (land ? midLeft : 12) + radarAt.x
+    const top = hip.top + radarAt.y
+    radarGeoRef.current = { left, top, size: hip.size, cx: left + hip.size / 2, cy: top + hip.size / 2, r: hip.size / 2 - 2, heading: heading?.deg, rangeM: hipRange }
+  } else if (!hip) radarGeoRef.current = null
 
   return (
-    <View style={styles.fill} {...scope.panHandlers}>
+    <Animated.View style={[styles.fill, battle.shakeStyle]} {...scope.panHandlers}>
       {camPerm?.granted ? (
         <View style={[StyleSheet.absoluteFill, { overflow: 'hidden' }]} onLayout={(e) => setView(e.nativeEvent.layout)}>
           <Animated.View style={[StyleSheet.absoluteFill, { transform: [{ scale: scope.scaleAnim }] }]}>
@@ -1412,30 +1699,59 @@ export function LaserTagGame({ room, onExit }) {
         </View>
       )}
 
-      {/* Hip fire: the camera sees the ground, so the screen becomes a dark radar. */}
-      {topMode ? <View style={[StyleSheet.absoluteFill, styles.hipScrim]} pointerEvents="none" /> : null}
+      {/* Hip fire: a radar over a light scrim, so the live camera (the ground, your mines)
+          stays visible behind it; without a camera it's the dark radar. */}
+      {topMode ? <View style={[StyleSheet.absoluteFill, camPerm?.granted ? styles.hipScrimCam : styles.hipScrim]} pointerEvents="none" /> : null}
 
       {/* Top-edge and trigger modes: the whole screen is the trigger. */}
       {fullScreenTrigger && !bino && (
         <Pressable
           style={StyleSheet.absoluteFill}
-          onPressIn={trigger.onPressIn}
-          onPressOut={trigger.onPressOut}
-          disabled={dead || !playing}
+          onPressIn={(e) => {
+            // Trigger mode: a tap on a tracked person fires at them; anywhere else fires at
+            // the crosshair (with aim assist).
+            tapAimRef.current = triggerMode && visionAim ? tapTargetAt(e) : null
+            trigger.onPressIn()
+          }}
+          onPressOut={() => { trigger.onPressOut(); tapAimRef.current = null }}
+          disabled={dead || !playing || tooFast}
           accessibilityRole="button"
           accessibilityLabel={gun.automatic ? 'Fire. Hold for continuous fire' : 'Fire. Every tap fires'}
         />
       )}
+      {/* Classic camera aim (FIRE button): tapping a target bracket also fires at that person
+          (same trigger, so the same fire rate / auto-semi rules). A tap elsewhere does nothing. */}
+      {aim.mode === 'camera' && visionAim && !bino && playing && !dead ? (
+        <Pressable
+          style={StyleSheet.absoluteFill}
+          onPressIn={(e) => {
+            const t = tapTargetAt(e)
+            if (!t) return
+            tapAimRef.current = t
+            tapHeldRef.current = true
+            trigger.onPressIn()
+          }}
+          onPressOut={() => {
+            if (!tapHeldRef.current) return
+            tapHeldRef.current = false
+            trigger.onPressOut()
+            tapAimRef.current = null
+          }}
+          accessibilityLabel="Tap a target to fire at it"
+        />
+      ) : null}
 
       {/* Target-lock corner brackets around people the camera sees */}
-      {visionAim && bodies && view.width > 0 && !topMode ? (
+      {visionAim && liveBrackets && view.width > 0 && !topMode && !bino ? (
+        <LiveTargetBrackets store={live} view={view} zoom={scope.zoom || 1} zoomRect={scope.zoomRect} onLock={onLiveLock} />
+      ) : visionAim && bodies && view.width > 0 && !topMode ? (
         <TargetBrackets
           rects={bodies.map((b, i) => {
             try {
               if (!b?.box) return null
               const r = scope.zoomRect(photoRectToScreen(b.box, b, view), view)
               if (!Number.isFinite(r?.left) || !Number.isFinite(r?.top)) return null
-              const locked = !!classifyHit([b])
+              const locked = stillPick?.body === b
               let head = null
               if (locked && b.head) {
                 const h = scope.zoomRect(photoRectToScreen(b.head, b, view), view)
@@ -1463,15 +1779,14 @@ export function LaserTagGame({ room, onExit }) {
         </>
       ) : null}
       <BystanderMarkers markers={bystanderMarkers} />
-      {camPerm?.granted && !topMode ? (
+      {camPerm?.granted && !bino && groundItems.length ? (
         <GroundExplosives
+          view={view}
           markers={(() => { try { return groundMarkers({
-            items: [
-              ...(stickyMarker?.lat != null ? [{ id: 'my-c4', kind: 'c4', lat: stickyMarker.lat, lng: stickyMarker.lng }] : []),
-              ...(state?.landMines || []).filter((m) => m?.by === meId).map((m, i) => ({ id: `my-mine-${m.placedAt || i}`, kind: 'mine', lat: m.lat, lng: m.lng })),
-            ],
+            items: groundItems,
             myPos,
-            headingDeg: heading?.deg,
+            headingDeg: aim.cameraHeading ?? heading?.deg,
+            pitchDeg: aim.pitch ?? (topMode ? -75 : 0),
             zoom: scope.zoom,
             view,
           }) } catch { return [] } })()}
@@ -1578,7 +1893,9 @@ export function LaserTagGame({ room, onExit }) {
             <Svg width={36} height={20} viewBox="0 0 40 22" fill="none"><Path d="M2 20L20 3l18 17" stroke={inSights ? ST.enemy : '#fff'} strokeWidth={2.6} strokeLinejoin="round" /></Svg>
             <Text style={styles.hipCue}>POINT THE TOP EDGE AT A PLAYER</Text>
           </View>
-          <HipFireRadar size={hip.size} heading={heading?.deg} rangeM={hipRange} coneDeg={hip.cone} enemies={hip.shown} mates={hip.mates} objectives={hip.objectives} lockedId={inSights?.id} />
+          <View onLayout={(e) => { const l = e.nativeEvent.layout; setRadarAt((p) => (p && Math.abs(p.x - l.x) < 1 && Math.abs(p.y - l.y) < 1 ? p : { x: l.x, y: l.y })) }}>
+            <HipFireRadar size={hip.size} heading={heading?.deg} rangeM={hipRange} coneDeg={hip.cone} enemies={hip.shown} mates={hip.mates} objectives={hip.objectives} explosives={hip.explosives} lockedId={inSights?.id} />
+          </View>
           <HipFireStatus target={inSights} waiting={!enemies.some((e) => e.alive)} />
           {!!marker ? <Text style={[styles.marker, { marginTop: 0, color: marker.good ? ST.health : '#fff' }]} numberOfLines={1}>{stripSymbols(marker.text)}</Text> : null}
           {hip.zone && playing && !dead ? <HipFireZone auto={gun.automatic} height={84} /> : null}
@@ -1587,6 +1904,12 @@ export function LaserTagGame({ room, onExit }) {
 
       {/* Above the dock: S&D objective, warnings, enemy UAV, the fire hint. */}
       <View style={[styles.aboveDock, { bottom: aboveBottom, left: midLeft, right: midRight }]} pointerEvents="box-none" onLayout={onAboveLayout}>
+        {tooFast ? (
+          <View style={[styles.pillWarn, styles.speedPill]} pointerEvents="none" accessibilityLiveRegion="polite">
+            <Ionicons name="speedometer-outline" size={16} color="#fff" />
+            <Text style={styles.pillWarnText} numberOfLines={2}>{SPEED_LOCK_TEXT.toUpperCase()}{speedLock.kmh ? ` · ${speedLock.kmh} KM/H` : ''}</Text>
+          </View>
+        ) : null}
         {objective && (
           <View style={styles.objective} pointerEvents="box-none">
             <Text style={styles.objectiveText} pointerEvents="none" numberOfLines={2}>{stripSymbols(objective.text)}</Text>
@@ -1651,31 +1974,31 @@ export function LaserTagGame({ room, onExit }) {
               </View>
             </View>
           ) : null}
+          {!dead ? <DetonateAllButton count={myStickies.length} disabled={!playing || tooFast} onDetonate={detonateStickyBombs} /> : null}
           <View style={[styles.equipRow, { gap: tight ? 5 : 6 }]} pointerEvents="box-none">
             <GrenadeButton
               count={grenadeInv.owner ? Infinity : grenadeInv.balance}
-              disabled={!playing || dead || bino}
+              disabled={!playing || dead || bino || tooFast}
               size={tileSize}
               onThrow={throwGrenade}
               onEmpty={() => flash('No grenades — get 10 in the Arcade Shop', false)}
             />
             <StickyBombButton
               count={stickyBombInv.owner ? Infinity : stickyBombInv.balance}
-              disabled={!playing || dead || bino}
+              placedCount={myStickies.length}
+              disabled={!playing || dead || bino || tooFast}
               size={tileSize}
-              placed={stickyMarker?.lat != null}
               onPlace={placeStickyBomb}
-              onDetonate={detonateStickyBomb}
               onEmpty={() => flash('No sticky bombs — get more in the Arcade Shop', false)}
             />
             <LandMineButton
               count={landMineInv.owner ? Infinity : landMineInv.balance}
-              disabled={!playing || dead || bino}
+              disabled={!playing || dead || bino || tooFast}
               size={tileSize}
               onDrop={dropLandMine}
               onEmpty={() => flash('No land mines — get more in the Arcade Shop', false)}
             />
-            <UavButton tile count={uav.count} activeMsLeft={uav.myMs} disabled={!playing && !uav.empty} onPress={uav.callUav} size={tileSize} />
+            <UavButton tile count={uav.count} activeMsLeft={uav.myMs} cooldownMsLeft={uav.cooldownMs} disabled={!playing && !uav.empty} onPress={uav.callUav} size={tileSize} />
           </View>
           <StatusPanel
             hp={myState.hp}
@@ -1707,7 +2030,7 @@ export function LaserTagGame({ room, onExit }) {
             <FireButton
               onPressIn={trigger.onPressIn}
               onPressOut={trigger.onPressOut}
-              disabled={dead || !playing}
+              disabled={dead || !playing || tooFast}
               compact={tight}
               locked={!!inSights || enemyMarkers.length > 0 || targetLocked}
               auto={gun.automatic}
@@ -1753,8 +2076,18 @@ export function LaserTagGame({ room, onExit }) {
         freeLeft={uav.freeLeft}
         insets={insets}
       />
-    </View>
+    </Animated.View>
   )
+}
+
+// Hip fire: the screen point of `target` on the radar (geometry g from the radar's layout), or
+// the radar's top edge (straight ahead) when nothing is locked.
+function hipTargetPoint(g, target) {
+  if (target && Number.isFinite(target.d) && Number.isFinite(target.bearing)) {
+    const p = radarPoint({ size: g.size, heading: g.heading, rangeM: g.rangeM, d: target.d, bearing: target.bearing })
+    return { x: g.left + p.x, y: g.top + p.y }
+  }
+  return { x: g.cx, y: g.cy - g.r }
 }
 
 const roundKeyForTip = (state) => `${state?.round}:${state?.snd?.roundNo ?? 0}`
@@ -1821,6 +2154,7 @@ const styles = StyleSheet.create({
   fill: { flex: 1, backgroundColor: '#000', overflow: 'hidden' },
   noCam: { alignItems: 'center', justifyContent: 'center', padding: 24, backgroundColor: ST.ground2 },
   hipScrim: { backgroundColor: 'rgba(11,13,17,0.86)' },
+  hipScrimCam: { backgroundColor: 'rgba(11,13,17,0.36)' },
   crosshair: { position: 'absolute', width: 64, height: 64 },
   // top
   topCol: { position: 'absolute', gap: 8 },
@@ -1844,6 +2178,7 @@ const styles = StyleSheet.create({
   warn: { fontFamily: FONT.ui, fontSize: 10.5, letterSpacing: 1, color: ST.objective, ...stShadow, maxWidth: 240 },
   hint: { fontFamily: FONT.uiSemi, fontSize: 11, letterSpacing: 1.4, color: 'rgba(242,244,247,0.75)', ...stShadow },
   pillWarn: { flexDirection: 'row', alignItems: 'center', gap: 7, paddingHorizontal: 12, paddingVertical: 6, borderRadius: ST.radius, backgroundColor: 'rgba(8,10,14,0.8)', borderLeftWidth: 3, borderLeftColor: ST.enemy, maxWidth: '100%' },
+  speedPill: { backgroundColor: 'rgba(255,61,82,0.9)', borderLeftColor: '#fff', paddingVertical: 8 },
   pillWarnText: { flexShrink: 1, fontFamily: FONT.ui, fontSize: 11, letterSpacing: 1.3, color: '#fff' },
   // dock
   dock: { position: 'absolute', alignItems: 'flex-end', justifyContent: 'space-between' },

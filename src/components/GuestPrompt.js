@@ -6,17 +6,20 @@ import { useNavigation } from '@react-navigation/native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { colors, font, radii } from '../theme'
 import Glass from './Glass'
+import { useT } from '../i18n'
+import strings from '../i18n/strings/guest'
 
 // Everything a logged-out visitor can't do yet (like, comment, follow, save, camera, arcade,
 // live) funnels into one glass "Sign up to ..." prompt with a Sign up button and a Log in link.
+// title / sub are keys in i18n/strings/guest (read them with useT(guestStrings)).
 export const GUEST_PROMPTS = {
-  like: { icon: 'heart', title: 'Sign up to like posts', sub: 'Create a free account to like, save and comment on posts.' },
-  comment: { icon: 'chatbubble-ellipses', title: 'Join the conversation', sub: 'Create a free account to read and write comments.' },
-  save: { icon: 'bookmark', title: 'Sign up to save posts', sub: 'Keep the posts you love in one place with a free account.' },
-  follow: { icon: 'person-add', title: 'Sign up to follow people', sub: 'Follow anyone on iYiYi and see their posts first.' },
-  live: { icon: 'radio', title: 'Sign up to watch live', sub: 'Live streams from people near you are for members. It only takes a minute.' },
-  camera: { icon: 'camera', title: 'Sign up to use the camera', sub: 'Snap photos and videos, tag the people around you and post them to the feed.' },
-  arcade: { icon: 'game-controller', title: 'Sign up to play', sub: 'Play games against people nearby, challenge friends and climb the leaderboards.' },
+  like: { icon: 'heart', title: 'likeTitle', sub: 'likeSub' },
+  comment: { icon: 'chatbubble-ellipses', title: 'commentTitle', sub: 'commentSub' },
+  save: { icon: 'bookmark', title: 'saveTitle', sub: 'saveSub' },
+  follow: { icon: 'person-add', title: 'followTitle', sub: 'followSub' },
+  live: { icon: 'radio', title: 'liveTitle', sub: 'liveSub' },
+  camera: { icon: 'camera', title: 'cameraTitle', sub: 'cameraSub' },
+  arcade: { icon: 'game-controller', title: 'arcadeTitle', sub: 'arcadeSub' },
 }
 
 // Navigates to the sign-in screen from anywhere in the guest navigator (tab screens bubble up
@@ -29,7 +32,9 @@ export function useGuestAuth() {
 }
 
 // Gradient "Sign up" button used by the prompt and the locked screens.
-export function SignUpButton({ onPress, label = 'Sign up free', style }) {
+export function SignUpButton({ onPress, label: labelProp, style }) {
+  const t = useT(strings)
+  const label = labelProp ?? t('signUpFree')
   return (
     <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={label} style={({ pressed }) => [style, pressed && { opacity: 0.9, transform: [{ scale: 0.98 }] }]}>
       <LinearGradient colors={['#ff4fa3', '#8f5bff']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.signup}>
@@ -42,12 +47,13 @@ export function SignUpButton({ onPress, label = 'Sign up free', style }) {
 
 // Small glass "Log in" pill for guest headers.
 export function GuestLoginButton() {
+  const t = useT(strings)
   const { logIn } = useGuestAuth()
   return (
-    <Pressable onPress={logIn} hitSlop={8} accessibilityRole="button" style={({ pressed }) => [pressed && { transform: [{ scale: 0.96 }] }]}>
+    <Pressable onPress={logIn} hitSlop={8} accessibilityRole="button" accessibilityLabel={t('logIn')} style={({ pressed }) => [pressed && { transform: [{ scale: 0.96 }] }]}>
       <Glass radius={radii.pill} shadow={false} interactive>
         <View style={styles.loginPill}>
-          <Text style={styles.loginText}>Log in</Text>
+          <Text style={styles.loginText}>{t('logIn')}</Text>
         </View>
       </Glass>
     </Pressable>
@@ -57,6 +63,7 @@ export function GuestLoginButton() {
 // Bottom glass sheet. kind: a key of GUEST_PROMPTS (null hides it). onLeave runs before
 // navigating away (e.g. so a full-screen viewer can close itself first).
 export function GuestPromptSheet({ kind, onClose, onLeave }) {
+  const t = useT(strings)
   const insets = useSafeAreaInsets()
   const { signUp, logIn } = useGuestAuth()
   const p = GUEST_PROMPTS[kind] ?? GUEST_PROMPTS.like
@@ -67,20 +74,20 @@ export function GuestPromptSheet({ kind, onClose, onLeave }) {
   }
   return (
     <Modal visible={!!kind} transparent animationType="fade" onRequestClose={onClose} statusBarTranslucent>
-      <Pressable style={styles.backdrop} onPress={onClose} accessibilityLabel="Close" />
+      <Pressable style={styles.backdrop} onPress={onClose} accessibilityRole="button" accessibilityLabel={t('close')} />
       <View style={[styles.sheetWrap, { paddingBottom: insets.bottom + 16 }]} pointerEvents="box-none">
         <Glass radius={30} strong scheme="dark" style={styles.sheet}>
-          <Pressable onPress={onClose} hitSlop={10} style={styles.close} accessibilityRole="button" accessibilityLabel="Close">
+          <Pressable onPress={onClose} hitSlop={10} style={styles.close} accessibilityRole="button" accessibilityLabel={t('close')}>
             <Ionicons name="close" size={20} color="rgba(255,255,255,0.7)" />
           </Pressable>
           <LinearGradient colors={['rgba(255,79,163,0.35)', 'rgba(143,91,255,0.35)']} style={styles.iconRing}>
             <Ionicons name={p.icon} size={28} color="#fff" />
           </LinearGradient>
-          <Text style={styles.title}>{p.title}</Text>
-          <Text style={styles.sub}>{p.sub}</Text>
+          <Text style={styles.title} accessibilityRole="header">{t(p.title)}</Text>
+          <Text style={styles.sub}>{t(p.sub)}</Text>
           <SignUpButton onPress={go(signUp)} style={{ alignSelf: 'stretch', marginTop: 20 }} />
-          <Pressable onPress={go(logIn)} hitSlop={8} accessibilityRole="button" style={{ marginTop: 14 }}>
-            <Text style={styles.login}>Already have an account? <Text style={styles.loginStrong}>Log in</Text></Text>
+          <Pressable onPress={go(logIn)} hitSlop={8} accessibilityRole="button" accessibilityLabel={`${t('haveAccount')} ${t('logIn')}`} style={{ marginTop: 14 }}>
+            <Text style={styles.login}>{t('haveAccount')} <Text style={styles.loginStrong}>{t('logIn')}</Text></Text>
           </Pressable>
         </Glass>
       </View>

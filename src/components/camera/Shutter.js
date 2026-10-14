@@ -5,8 +5,9 @@ const OUTER = 80
 const INNER = 64
 
 // iOS-style shutter: white disc for photos, red disc for video, which shrinks to a rounded
-// red square while recording.
-export default function Shutter({ mode, recording, busy, onPress, disabled }) {
+// red square while recording. ringOnly (photo mode with a lens on): just the ring, so the lens
+// preview in the carousel shows through the middle, Snapchat-style.
+export default function Shutter({ mode, recording, busy, onPress, disabled, ringOnly = false }) {
   const rec = useRef(new Animated.Value(recording ? 1 : 0)).current
   const press = useRef(new Animated.Value(1)).current
 
@@ -30,14 +31,14 @@ export default function Shutter({ mode, recording, busy, onPress, disabled }) {
       accessibilityLabel={recording ? 'Stop recording' : isVideo ? 'Record video' : 'Take photo'}
       hitSlop={8}
     >
-      <Animated.View style={[styles.outer, { transform: [{ scale: press }] }, busy && { opacity: 0.6 }]}>
+      <Animated.View style={[styles.outer, ringOnly && styles.outerRing, { transform: [{ scale: press }] }, busy && { opacity: 0.6 }]}>
         <View style={styles.innerSlot}>
           <Animated.View
             style={{
               width: size,
               height: size,
               borderRadius: radius,
-              backgroundColor: isVideo ? '#ff3b30' : '#fff',
+              backgroundColor: isVideo ? '#ff3b30' : ringOnly ? 'transparent' : '#fff',
             }}
           />
         </View>
@@ -52,5 +53,6 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
     shadowColor: '#000', shadowOpacity: 0.25, shadowRadius: 10, shadowOffset: { width: 0, height: 2 },
   },
+  outerRing: { borderWidth: 5, backgroundColor: 'rgba(255,255,255,0.06)' },
   innerSlot: { width: INNER, height: INNER, alignItems: 'center', justifyContent: 'center' },
 })

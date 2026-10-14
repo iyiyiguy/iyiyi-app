@@ -5,9 +5,10 @@ import { Ionicons } from '@expo/vector-icons'
 import { WordGame } from '../games/WordGame'
 import { AC, ArcadeBackground, IconCircle, useArcadeInsets, useArcadeStatusBar } from '../games/arcadeUI'
 import { loadArcadeStats } from '../lib/arcadeStats'
-import { font } from '../theme'
+import { FONT, ST, stType } from '../games/studio'
 
-export default function WordRaceScreen({ navigation }) {
+// Route params (optional): { mode: 'daily' } opens straight into today's daily word.
+export default function WordRaceScreen({ navigation, route }) {
   useArcadeStatusBar()
   const insets = useArcadeInsets()
   const [best, setBest] = useState(null)
@@ -38,6 +39,7 @@ export default function WordRaceScreen({ navigation }) {
         onExit={() => navigation.goBack()}
         onRecorded={(r) => { if (r.isNewBest && r.score > 0) setBest(r.score) }}
         bottomInset={insets.bottom}
+        initialMode={route?.params?.mode === 'daily' ? 'daily' : undefined}
         withBackground={false}
       />
     </View>
@@ -45,13 +47,13 @@ export default function WordRaceScreen({ navigation }) {
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: '#04050d' },
-  header: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingBottom: 6 },
-  kicker: { fontSize: 10, ...font.heavy, color: '#3ee596', letterSpacing: 1.6 },
-  title: { fontSize: 20, ...font.heavy, color: AC.text, letterSpacing: -0.4 },
+  screen: { flex: 1, backgroundColor: ST.ground },
+  header: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingBottom: 8 },
+  kicker: { ...stType.kicker, fontSize: 10, letterSpacing: 2, color: ST.health },
+  title: { fontFamily: FONT.display, fontSize: 20, letterSpacing: 1, color: ST.text, textTransform: 'uppercase', includeFontPadding: false },
   best: {
-    flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 999,
-    backgroundColor: 'rgba(255,201,77,0.12)', borderWidth: 1, borderColor: 'rgba(255,201,77,0.3)',
+    flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, height: 32, borderRadius: ST.radius,
+    backgroundColor: ST.panelStrong, borderWidth: 1, borderColor: ST.line, borderTopWidth: 2, borderTopColor: ST.objective,
   },
-  bestText: { fontSize: 13, ...font.heavy, color: AC.gold, fontVariant: ['tabular-nums'] },
+  bestText: { fontFamily: FONT.display, fontSize: 14, color: ST.objective, fontVariant: ['tabular-nums'], includeFontPadding: false },
 })

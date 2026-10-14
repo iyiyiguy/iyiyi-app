@@ -18,10 +18,12 @@ import { openProfile } from '../lib/profileNav'
 import { sendEventInvite } from '../lib/invites'
 import {
   fetchEvent, fetchAttendees, fetchProfiles, fetchInvitedIds, recordInvite, setRsvp, getLocalInterested,
-  getCategory, isUnlimited, formatEventWhen, formatDay, formatTime, defaultEnd, eventPlace, eventShareUrl,
+  getCategory, isUnlimited, formatEventWhen, formatDay, formatTime, defaultEnd, eventPlace, eventShareUrl, categoryLabel,
 } from '../lib/events'
 import { addToCalendar } from '../lib/calendar'
 import { avatarSource } from '../lib/avatarSource'
+import { useT } from '../i18n'
+import strings from '../i18n/strings/events'
 
 // A shareable event page: cover, title, date/time, location with mini-map + directions, host,
 // attendee avatars, Going/Interested RSVP, share link, add-to-calendar and (for hosts) invites.
@@ -30,6 +32,7 @@ export default function EventDetailsScreen({ navigation, route }) {
   const eventId = route?.params?.eventId
   const justCreated = !!route?.params?.created
   const scheme = useColorScheme()
+  const t = useT(strings)
   const [event, setEvent] = useState(null)
   const [attendees, setAttendees] = useState([])
   const [profiles, setProfiles] = useState({})
@@ -37,7 +40,7 @@ export default function EventDetailsScreen({ navigation, route }) {
   const [localInterested, setLocalInterested] = useState(false)
   const [invitedIds, setInvitedIds] = useState([])
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(null)
+  const [error, setError] = useState(null) // key in strings/events
   const [busy, setBusy] = useState(null) // 'going' | 'interested' | null
   const [inviteOpen, setInviteOpen] = useState(false)
   const [calState, setCalState] = useState('idle') // 'idle' | 'adding' | 'added'
@@ -57,7 +60,7 @@ export default function EventDetailsScreen({ navigation, route }) {
 
   const load = useCallback(async () => {
     if (!eventId) {
-      setError('Event not found.')
+      setError('notFound')
       setLoading(false)
       return
     }
@@ -70,7 +73,7 @@ export default function EventDetailsScreen({ navigation, route }) {
       const ev = await fetchEvent(eventId)
       if (!ev) {
         setEvent(null)
-        setError('This event no longer exists, or it’s invite only.')
+        setError('gone')
         return
       }
       const att = await fetchAttendees(eventId)
@@ -86,7 +89,7 @@ export default function EventDetailsScreen({ navigation, route }) {
       setInvitedIds(invited)
     } catch (e) {
       console.warn('Failed to load event', e)
-      setError('Couldn’t load this event. Check your connection and try again.')
+      setError('loadOneFailed')
     } finally {
       setLoading(false)
     }
@@ -117,16 +120,16 @@ export default function EventDetailsScreen({ navigation, route }) {
   const host = event ? profiles[event.creator_id] : null
 
   const rsvp = async (status) => {
-    if (!userId) return Alert.alert('Sign in required', 'Sign in to RSVP.')
+    if (!userId) return Alert.alert(t('signInRequired'), t('signInToRsvp'))
     const next = myStatus === status ? null : status
-    if (next === 'going' && isFull && myStatus !== 'going') return Alert.alert('Event is full', 'There are no spots left.')
+    if (next === 'going' && isFull && myStatus !== 'going') return Alert.alert(t('eventFull'), t('noSpots'))
     Haptics.selectionAsync().catch(() => {})
     setBusy(status)
     try {
       await setRsvp(eventId, userId, next)
       await load()
     } catch (e) {
-      Alert.alert('Couldn’t update your RSVP', e?.message || 'Please try again.')
+      Alert.alert(t('rsvpFailed'), e?.message || t('tryAgain'))
     } finally {
       setBusy(null)
     }
@@ -140,7 +143,7 @@ export default function EventDetailsScreen({ navigation, route }) {
     try {
       await Share.share(Platform.OS === 'ios' ? { message: `${event.name}\n${when}\n📍 ${eventPlace(event)}`, url, title: event.name } : { message, title: event.name })
     } catch (e) {
-      Alert.alert('Couldn’t share', e?.message || 'Please try again.')
+      Alert.alert(t('shareFailed'), e?.message || t('tryAgain'))
     }
   }
 
@@ -154,11 +157,11 @@ export default function EventDetailsScreen({ navigation, route }) {
       : Platform.OS === 'ios'
         ? `https://maps.apple.com/?q=${q}`
         : `https://www.google.com/maps/search/?api=1&query=${q}`
-    Linking.openURL(url).catch(() => Alert.alert('Couldn’t open maps'))
+    Linking.openURL(url).catch(() => Alert.alert(t('mapsFailed')))
   }
 
   const onInvite = async (user) => {
-    if (!event || !user?.id) throw new Error('Missing person')
+    if (!event || !user?.id) throw new Error(t('missingPerson'))
     await sendEventInvite(user.id, { eventId: event.id, title: event.name, startsAt: event.event_date })
     newlyInvited.current.add(user.id)
     recordInvite(event.id, user.id, userId)
@@ -173,22 +176,22 @@ export default function EventDetailsScreen({ navigation, route }) {
     }
   }
 
-  const nameOf = (id) => (id === userId ? 'You' : profiles[id]?.username || 'iYiYi user')
+  const nameOf = (id) => (id === userId ? t('you') : profiles[id]?.username || t('iyiyiUser'))
 
   return (
     <View style={styles.screen}>
       <BrandHeader
-        title="Event"
+        title={t('event')}
         onBack={() => navigation.goBack()}
-        right={event ? <HeaderButton icon="share-outline" label="Share event" onPress={share} /> : null}
+        right={event ? <HeaderButton icon="share-outline" label={t('shareEvent')} onPress={share} /> : null}
       />
       {loading && !event ? (
         <ActivityIndicator color={colors.textMuted} style={{ marginTop: 60 }} />
       ) : !event ? (
         <View style={styles.empty}>
           <Ionicons name="calendar-clear-outline" size={40} color={colors.textMuted} />
-          <Text style={styles.emptyText}>{error || 'Event not found.'}</Text>
-          <GlassButton size="sm" onPress={load}>Retry</GlassButton>
+          <Text style={styles.emptyText}>{t(error || 'notFound')}</Text>
+          <GlassButton size="sm" onPress={load}>{t('retry')}</GlassButton>
         </View>
       ) : (
         <ScrollView contentContainerStyle={styles.content}>
@@ -205,13 +208,13 @@ export default function EventDetailsScreen({ navigation, route }) {
                 {category || game ? (
                   <View style={styles.badge}>
                     <Ionicons name={category?.icon || 'game-controller-outline'} size={12} color="#fff" />
-                    <Text style={styles.badgeText}>{category?.label || game?.name}</Text>
+                    <Text style={styles.badgeText}>{category ? categoryLabel(category) : game?.name}</Text>
                   </View>
                 ) : null}
                 {event.visibility === 'invite' ? (
                   <View style={styles.badge}>
                     <Ionicons name="lock-closed" size={11} color="#fff" />
-                    <Text style={styles.badgeText}>Invite only</Text>
+                    <Text style={styles.badgeText}>{t('inviteOnly')}</Text>
                   </View>
                 ) : null}
               </View>
@@ -223,18 +226,18 @@ export default function EventDetailsScreen({ navigation, route }) {
             <View style={styles.heroBody}>
               <Text style={styles.title}>{event.name}</Text>
               <InfoRow icon="calendar-outline" title={formatDay(event.event_date)} sub={`${formatTime(event.event_date)}${endsAt ? ` – ${formatTime(endsAt)}` : ''}`} />
-              <InfoRow icon="location-outline" title={event.location || 'Location'} sub={event.address && event.address !== event.location ? event.address : null} />
+              <InfoRow icon="location-outline" title={event.location || t('location')} sub={event.address && event.address !== event.location ? event.address : null} />
               <InfoRow
                 icon="people-outline"
-                title={unlimited ? `${going.length} going` : `${going.length} / ${event.max_players} going`}
-                sub={interestedList.length || (localInterested && !myRow) ? `${interestedList.length + (localInterested && !myRow ? 1 : 0)} interested` : null}
+                title={unlimited ? t('goingN', { n: going.length }) : t('goingOf', { n: going.length, max: event.max_players })}
+                sub={interestedList.length || (localInterested && !myRow) ? t('interestedN', { n: interestedList.length + (localInterested && !myRow ? 1 : 0) }) : null}
               />
               {isPast ? (
-                <Text style={styles.pastNote}>This event has ended.</Text>
+                <Text style={styles.pastNote}>{t('ended')}</Text>
               ) : (
                 <View style={styles.rsvpRow}>
                   <RsvpButton
-                    label={myStatus === 'going' ? 'Going' : isFull ? 'Full' : 'Going'}
+                    label={myStatus === 'going' ? t('going') : isFull ? t('full') : t('going')}
                     icon={myStatus === 'going' ? 'checkmark-circle' : 'checkmark-circle-outline'}
                     active={myStatus === 'going'}
                     busy={busy === 'going'}
@@ -242,7 +245,7 @@ export default function EventDetailsScreen({ navigation, route }) {
                     onPress={() => rsvp('going')}
                   />
                   <RsvpButton
-                    label="Interested"
+                    label={t('interested')}
                     icon={myStatus === 'interested' ? 'star' : 'star-outline'}
                     active={myStatus === 'interested'}
                     busy={busy === 'interested'}
@@ -256,19 +259,19 @@ export default function EventDetailsScreen({ navigation, route }) {
 
           {/* Actions */}
           <View style={styles.actions}>
-            <ActionTile icon="share-social-outline" label="Share" onPress={share} />
+            <ActionTile icon="share-social-outline" label={t('share')} onPress={share} />
             <ActionTile
               icon={calState === 'added' ? 'checkmark-circle-outline' : 'calendar-number-outline'}
-              label={calState === 'adding' ? 'Adding…' : calState === 'added' ? 'In calendar' : 'Add to calendar'}
+              label={calState === 'adding' ? t('adding') : calState === 'added' ? t('inCalendar') : t('calAdd')}
               onPress={onAddToCalendar}
             />
-            {canInvite ? <ActionTile icon="person-add-outline" label="Invite" onPress={() => setInviteOpen(true)} /> : null}
+            {canInvite ? <ActionTile icon="person-add-outline" label={t('invite')} onPress={() => setInviteOpen(true)} /> : null}
           </View>
 
           {/* About */}
           {event.description ? (
             <>
-              <Text style={styles.section}>About</Text>
+              <Text style={styles.section} accessibilityRole="header">{t('about')}</Text>
               <GlassPanel style={styles.card} radius={radii.md} animateIn={false}>
                 <Text style={styles.description}>{event.description}</Text>
               </GlassPanel>
@@ -276,7 +279,7 @@ export default function EventDetailsScreen({ navigation, route }) {
           ) : null}
 
           {/* Location */}
-          <Text style={styles.section}>Location</Text>
+          <Text style={styles.section} accessibilityRole="header">{t('location')}</Text>
           <GlassPanel radius={radii.md} animateIn={false}>
             {hasCoords && Platform.OS !== 'web' ? (
               <View style={styles.miniMap} pointerEvents="none">
@@ -298,31 +301,31 @@ export default function EventDetailsScreen({ navigation, route }) {
             ) : null}
             <View style={styles.locBody}>
               <View style={{ flex: 1 }}>
-                <Text style={type.headline} numberOfLines={2}>{event.location || 'Location'}</Text>
+                <Text style={type.headline} numberOfLines={2}>{event.location || t('location')}</Text>
                 {event.address && event.address !== event.location ? <Text style={type.caption} numberOfLines={2}>{event.address}</Text> : null}
               </View>
-              <GlassButton size="sm" onPress={openDirections} icon={<Ionicons name="navigate-outline" size={14} color={colors.text} />}>Directions</GlassButton>
+              <GlassButton size="sm" onPress={openDirections} accessibilityLabel={t('directionsA11y', { place: eventPlace(event) })} icon={<Ionicons name="navigate-outline" size={14} color={colors.text} />}>{t('directions')}</GlassButton>
             </View>
           </GlassPanel>
 
           {/* Host */}
-          <Text style={styles.section}>Hosted by</Text>
-          <Pressable onPress={() => openProfile(navigation, event.creator_id)} accessibilityRole="button">
+          <Text style={styles.section} accessibilityRole="header">{t('hostedBy')}</Text>
+          <Pressable onPress={() => openProfile(navigation, event.creator_id)} accessibilityRole="button" accessibilityLabel={t('hostA11y', { name: isHost ? t('you') : host?.username || t('iyiyiUser') })}>
             <GlassPanel style={[styles.card, styles.hostRow]} radius={radii.md} animateIn={false}>
               <Avatar profile={host} size={44} />
               <View style={{ flex: 1 }}>
-                <Text style={type.headline}>{isHost ? 'You' : host?.username || 'iYiYi user'}</Text>
-                <Text style={type.caption}>Host</Text>
+                <Text style={type.headline}>{isHost ? t('you') : host?.username || t('iyiyiUser')}</Text>
+                <Text style={type.caption}>{t('host')}</Text>
               </View>
               <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
             </GlassPanel>
           </Pressable>
 
           {/* Attendees */}
-          <Text style={styles.section}>Going ({going.length})</Text>
+          <Text style={styles.section} accessibilityRole="header">{t('goingCount', { n: going.length })}</Text>
           <GlassPanel style={styles.card} radius={radii.md} animateIn={false}>
             {going.length === 0 ? (
-              <Text style={type.caption}>No one has RSVP’d yet. Be the first!</Text>
+              <Text style={type.caption}>{t('noRsvps')}</Text>
             ) : (
               <>
                 <View style={styles.stack}>
@@ -336,10 +339,10 @@ export default function EventDetailsScreen({ navigation, route }) {
                   ) : null}
                 </View>
                 {going.map((a) => (
-                  <Pressable key={a.user_id} onPress={() => openProfile(navigation, a.user_id)} style={styles.attendeeRow} accessibilityRole="button">
+                  <Pressable key={a.user_id} onPress={() => openProfile(navigation, a.user_id)} style={styles.attendeeRow} accessibilityRole="button" accessibilityLabel={t('openProfileA11y', { name: nameOf(a.user_id) })}>
                     <Avatar profile={profiles[a.user_id]} size={30} />
                     <Text style={[type.body, { flex: 1 }]} numberOfLines={1}>{nameOf(a.user_id)}</Text>
-                    {a.user_id === event.creator_id ? <Text style={styles.hostTag}>HOST</Text> : null}
+                    {a.user_id === event.creator_id ? <Text style={styles.hostTag}>{t('hostTag')}</Text> : null}
                     <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
                   </Pressable>
                 ))}
@@ -349,10 +352,10 @@ export default function EventDetailsScreen({ navigation, route }) {
 
           {interestedList.length ? (
             <>
-              <Text style={styles.section}>Interested ({interestedList.length})</Text>
+              <Text style={styles.section} accessibilityRole="header">{t('interestedCount', { n: interestedList.length })}</Text>
               <GlassPanel style={styles.card} radius={radii.md} animateIn={false}>
                 {interestedList.map((a) => (
-                  <Pressable key={a.user_id} onPress={() => openProfile(navigation, a.user_id)} style={styles.attendeeRow} accessibilityRole="button">
+                  <Pressable key={a.user_id} onPress={() => openProfile(navigation, a.user_id)} style={styles.attendeeRow} accessibilityRole="button" accessibilityLabel={t('openProfileA11y', { name: nameOf(a.user_id) })}>
                     <Avatar profile={profiles[a.user_id]} size={30} />
                     <Text style={[type.body, { flex: 1 }]} numberOfLines={1}>{nameOf(a.user_id)}</Text>
                     <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
@@ -370,8 +373,8 @@ export default function EventDetailsScreen({ navigation, route }) {
         <InvitePeopleSheet
           visible={inviteOpen}
           onClose={closeInvites}
-          title={`Invite to ${event.name}`}
-          subtitle={`They’ll get a notification to open the event · ${formatEventWhen(event.event_date, event.ends_at)}`}
+          title={t('inviteTo', { name: event.name })}
+          subtitle={t('inviteSub', { when: formatEventWhen(event.event_date, event.ends_at) })}
           excludeIds={[...attendees.map((a) => a.user_id), ...invitedIds, ...(userId ? [userId] : [])]}
           onInvite={onInvite}
         />
@@ -413,7 +416,8 @@ function RsvpButton({ label, icon, active, busy, disabled, onPress }) {
       disabled={disabled}
       style={({ pressed }) => [styles.rsvp, active && styles.rsvpActive, disabled && !active && { opacity: 0.5 }, pressed && { transform: [{ scale: 0.97 }] }]}
       accessibilityRole="button"
-      accessibilityState={{ selected: !!active, disabled: !!disabled }}
+      accessibilityLabel={label}
+      accessibilityState={{ selected: !!active, disabled: !!disabled, busy: !!busy }}
     >
       {busy ? <ActivityIndicator size="small" color={active ? colors.ink : colors.text} /> : <Ionicons name={icon} size={18} color={active ? colors.ink : colors.text} />}
       <Text style={[styles.rsvpText, active && { color: colors.ink }]}>{label}</Text>

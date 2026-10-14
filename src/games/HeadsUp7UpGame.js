@@ -1,4 +1,4 @@
-// Heads Up 7 Up — classic classroom game adapted for mobile (8–30 players).
+// Heads Up 7 Up — classic classroom game adapted for mobile (4–30 players; 2 pickers at 4, up to 7 from 14).
 //
 // 7 players are "pickers". Everyone else puts their head down (phone face-down).
 // Each picker secretly taps one person. Tapped players then try to guess who

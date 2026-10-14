@@ -72,6 +72,29 @@ class BodyHitModule : Module() {
     )
   }
 
+  // Live people tracking (Laser Tag): ML Kit pose in STREAM_MODE (the most prominent person,
+  // smoothed across frames) + fast face detection with tracking ids (heads, and more people).
+  private val streamPoseDetector: PoseDetector by lazy {
+    PoseDetection.getClient(
+      PoseDetectorOptions.Builder()
+        .setDetectorMode(PoseDetectorOptions.STREAM_MODE)
+        .build()
+    )
+  }
+
+  private val bodyFaceDetector: FaceDetector by lazy {
+    FaceDetection.getClient(
+      FaceDetectorOptions.Builder()
+        .setPerformanceMode(FaceDetectorOptions.PERFORMANCE_MODE_FAST)
+        .setLandmarkMode(FaceDetectorOptions.LANDMARK_MODE_NONE)
+        .setContourMode(FaceDetectorOptions.CONTOUR_MODE_NONE)
+        .setClassificationMode(FaceDetectorOptions.CLASSIFICATION_MODE_NONE)
+        .setMinFaceSize(0.05f)
+        .enableTracking()
+        .build()
+    )
+  }
+
   private val poseDetector: PoseDetector by lazy {
     PoseDetection.getClient(
       PoseDetectorOptions.Builder()
@@ -97,7 +120,39 @@ class BodyHitModule : Module() {
       }
     }
 
-    Events("onLiveFaces")
+    Events("onLiveFaces", "onLiveBodies")
+
+    // Real-time people tracking for Laser Tag (target brackets + aim assist), from the same
+    // on-screen preview copy as startLiveFaces, ~10 times a second. "onLiveBodies" events:
+    //   { bodies: [{ id, x, y, w, h, head?: { x, y, w, h }, conf, kind }], layerW, layerH }
+    // x/y/w/h normalized 0..1 of the preview view (top-left origin, what is on screen).
+    // kind: "pose" (ML Kit pose: one person, the most prominent) | "face" (a body estimated from
+    // a face). Resolves false when there is no camera preview on screen.
+    AsyncFunction("startLiveBodies") { promise: Promise ->
+      main.post {
+        val view = findPreview()
+        if (view == null) {
+          promise.resolve(false)
+        } else {
+          bodiesPreview = view
+          if (!bodiesRunning) {
+            bodiesRunning = true
+            bodiesLastEmpty = false
+            main.post(bodiesTick)
+          }
+          promise.resolve(true)
+        }
+      }
+    }
+
+    AsyncFunction("stopLiveBodies") { promise: Promise ->
+      main.post {
+        bodiesRunning = false
+        bodiesPreview = null
+        main.removeCallbacks(bodiesTick)
+        promise.resolve(null)
+      }
+    }
 
     AsyncFunction("detectFaces") { uri: String, deleteAfter: Boolean, promise: Promise ->
       worker.execute {
@@ -141,6 +196,8 @@ class BodyHitModule : Module() {
     OnDestroy {
       running = false
       main.removeCallbacks(tick)
+      bodiesRunning = false
+      main.removeCallbacks(bodiesTick)
     }
   }
 
@@ -255,6 +312,207 @@ class BodyHitModule : Module() {
     }
     walk(root)
     return best
+  }
+
+  // --- live bodies (Laser Tag) -------------------------------------------------------------
+
+  private val bodiesBusy = AtomicBoolean(false)
+  @Volatile private var bodiesRunning = false
+  private var bodiesPreview: View? = null
+  @Volatile private var bodiesLastEmpty = false
+
+  private val bodiesTick: Runnable = object : Runnable {
+    override fun run() {
+      if (!bodiesRunning) return
+      try {
+        grabBodies()
+      } catch (_: Throwable) {
+        bodiesBusy.set(false)
+      }
+      main.postDelayed(this, 80)
+    }
+  }
+
+  private data class NRect(val x: Float, val y: Float, val w: Float, val h: Float) {
+    val cx: Float get() = x + w / 2f
+    val cy: Float get() = y + h / 2f
+    fun clipped(): NRect? {
+      val x0 = x.coerceIn(0f, 1f)
+      val y0 = y.coerceIn(0f, 1f)
+      val x1 = (x + w).coerceIn(0f, 1f)
+      val y1 = (y + h).coerceIn(0f, 1f)
+      if (x1 - x0 <= 0.002f || y1 - y0 <= 0.002f) return null
+      return NRect(x0, y0, x1 - x0, y1 - y0)
+    }
+    fun union(o: NRect): NRect {
+      val x0 = minOf(x, o.x)
+      val y0 = minOf(y, o.y)
+      val x1 = maxOf(x + w, o.x + o.w)
+      val y1 = maxOf(y + h, o.y + o.h)
+      return NRect(x0, y0, x1 - x0, y1 - y0)
+    }
+    fun toMap(): Map<String, Double> = mapOf("x" to x.toDouble(), "y" to y.toDouble(), "w" to w.toDouble(), "h" to h.toDouble())
+  }
+
+  private fun rectOf(xs: List<Float>, ys: List<Float>, padX: Float, padY: Float): NRect? {
+    if (xs.isEmpty() || ys.isEmpty()) return null
+    val x0 = xs.minOrNull()!! - padX
+    val y0 = ys.minOrNull()!! - padY
+    val x1 = xs.maxOrNull()!! + padX
+    val y1 = ys.maxOrNull()!! + padY
+    if (x1 - x0 <= 0.001f || y1 - y0 <= 0.001f) return null
+    return NRect(x0, y0, x1 - x0, y1 - y0)
+  }
+
+  private fun grabBodies() {
+    val view = bodiesPreview
+    if (view == null || !view.isAttachedToWindow || view.width <= 0 || view.height <= 0) {
+      bodiesPreview = findPreview()
+      return
+    }
+    if (!bodiesBusy.compareAndSet(false, true)) return
+    val full = previewBitmap(view)
+    if (full == null) {
+      bodiesBusy.set(false)
+      return
+    }
+    val vw = view.width
+    val vh = view.height
+    worker.execute {
+      var small: Bitmap? = null
+      try {
+        // Detect on a small copy: fast, and plenty for people boxes.
+        val target = 480f
+        val scale = if (full.width > target) target / full.width else 1f
+        val img = if (scale < 1f) {
+          Bitmap.createScaledBitmap(full, maxOf(1, (full.width * scale).toInt()), maxOf(1, (full.height * scale).toInt()), true)
+        } else {
+          full
+        }
+        small = img
+        val image = InputImage.fromBitmap(img, 0)
+        val pose: Pose? = try { Tasks.await(streamPoseDetector.process(image)) } catch (_: Throwable) { null }
+        val faces: List<Face> = try { Tasks.await(bodyFaceDetector.process(image)) } catch (_: Throwable) { emptyList() }
+        if (!bodiesRunning) return@execute
+        val list = liveBodies(pose, faces, img.width.toFloat(), img.height.toFloat())
+        if (list.isEmpty()) {
+          if (!bodiesLastEmpty) {
+            bodiesLastEmpty = true
+            emitBodies(list, vw, vh)
+          }
+        } else {
+          bodiesLastEmpty = false
+          emitBodies(list, vw, vh)
+        }
+      } catch (_: Throwable) {
+        // skip this frame
+      } finally {
+        try {
+          val s = small
+          if (s != null && s !== full) s.recycle()
+          full.recycle()
+        } catch (_: Throwable) {}
+        bodiesBusy.set(false)
+      }
+    }
+  }
+
+  private fun emitBodies(bodies: List<Map<String, Any?>>, w: Int, h: Int) {
+    try {
+      sendEvent("onLiveBodies", mapOf("bodies" to bodies, "layerW" to w.toDouble(), "layerH" to h.toDouble()))
+    } catch (_: Throwable) {}
+  }
+
+  private fun liveBodies(pose: Pose?, faces: List<Face>, w: Float, h: Float): List<Map<String, Any?>> {
+    if (w < 1f || h < 1f) return emptyList()
+    val faceRects = faces.mapNotNull { f ->
+      val b = f.boundingBox
+      if (b.width() <= 2 || b.height() <= 2) null
+      else Pair(f.trackingId ?: -1, NRect(b.left / w, b.top / h, b.width() / w, b.height() / h))
+    }
+    val used = mutableSetOf<Int>()
+    val out = mutableListOf<Map<String, Any?>>()
+
+    // The pose person (ML Kit pose tracks one, the most prominent).
+    if (pose != null) {
+      val visible = pose.allPoseLandmarks.filter { it.inFrameLikelihood >= 0.5f }
+      val shoulders = listOf(PoseLandmark.LEFT_SHOULDER, PoseLandmark.RIGHT_SHOULDER).count { type ->
+        (pose.getPoseLandmark(type)?.inFrameLikelihood ?: 0f) >= 0.5f
+      }
+      if (visible.size >= 6 && shoulders >= 1) {
+        val xs = visible.map { it.position.x / w }
+        val ys = visible.map { it.position.y / h }
+        var box = rectOf(xs, ys, 0.03f, 0.04f)
+        if (box != null) {
+          // Head: the face inside the top of the box, else the face landmarks of the pose.
+          var head: NRect? = null
+          var bestArea = 0f
+          var bestIdx = -1
+          for ((i, fr) in faceRects.withIndex()) {
+            val r = fr.second
+            if (r.cx < box.x || r.cx > box.x + box.w) continue
+            if (r.cy < box.y - box.h * 0.05f || r.cy > box.y + box.h * 0.45f) continue
+            val area = r.w * r.h
+            if (area > bestArea) {
+              bestArea = area
+              bestIdx = i
+            }
+          }
+          if (bestIdx >= 0) {
+            used.add(bestIdx)
+            head = faceRects[bestIdx].second
+          } else {
+            val headTypes = listOf(PoseLandmark.NOSE, PoseLandmark.LEFT_EYE, PoseLandmark.RIGHT_EYE, PoseLandmark.LEFT_EAR, PoseLandmark.RIGHT_EAR)
+            val pts = headTypes.mapNotNull { type ->
+              val l = pose.getPoseLandmark(type)
+              if (l == null || l.inFrameLikelihood < 0.5f) null else PointF(l.position.x / w, l.position.y / h)
+            }
+            if (pts.isNotEmpty()) {
+              val pad = maxOf(0.015f, box.w * 0.12f)
+              head = rectOf(pts.map { it.x }, pts.map { it.y }, pad, pad * 1.3f)
+            }
+          }
+          val hd = head
+          if (hd != null) box = box.union(hd)
+          val clipped = box.clipped()
+          if (clipped != null) {
+            val conf = visible.map { it.inFrameLikelihood.toDouble() }.average()
+            out.add(
+              mapOf(
+                "id" to 0,
+                "x" to clipped.x.toDouble(),
+                "y" to clipped.y.toDouble(),
+                "w" to clipped.w.toDouble(),
+                "h" to clipped.h.toDouble(),
+                "head" to hd?.clipped()?.toMap(),
+                "conf" to conf,
+                "kind" to "pose",
+              )
+            )
+          }
+        }
+      }
+    }
+
+    // Everyone else the camera sees a face of: a body box estimated from the face.
+    for ((i, fr) in faceRects.withIndex()) {
+      if (used.contains(i) || out.size >= 8) continue
+      val r = fr.second
+      val body = NRect(r.x - r.w * 0.9f, r.y - r.h * 0.15f, r.w * 2.8f, r.h * 7.5f).clipped() ?: continue
+      out.add(
+        mapOf(
+          "id" to (if (fr.first >= 0) fr.first + 1000 else -1),
+          "x" to body.x.toDouble(),
+          "y" to body.y.toDouble(),
+          "w" to body.w.toDouble(),
+          "h" to body.h.toDouble(),
+          "head" to r.clipped()?.toMap(),
+          "conf" to 0.6,
+          "kind" to "face",
+        )
+      )
+    }
+    return out
   }
 
   // --- stills ----------------------------------------------------------------------------

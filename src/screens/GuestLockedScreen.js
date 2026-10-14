@@ -5,30 +5,34 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { colors, font } from '../theme'
 import GlassPanel from '../components/GlassPanel'
 import { GUEST_PROMPTS, SignUpButton, useGuestAuth } from '../components/GuestPrompt'
+import { useT } from '../i18n'
+import strings from '../i18n/strings/guest'
 
 // The Camera and Arcade tabs for logged-out visitors: visible, but they only explain what's
 // behind them and ask the visitor to sign up. The real camera and games never open for guests.
+// text / SUBS values are keys in i18n/strings/guest.
 const PERKS = {
   camera: [
-    { icon: 'aperture-outline', text: 'Photos and videos with live filters' },
-    { icon: 'people-outline', text: 'Tag the people around you' },
-    { icon: 'albums-outline', text: 'Post straight to your profile and the feed' },
+    { icon: 'aperture-outline', text: 'perkCameraFilters' },
+    { icon: 'people-outline', text: 'perkCameraTag' },
+    { icon: 'albums-outline', text: 'perkCameraPost' },
   ],
   arcade: [
-    { icon: 'flash-outline', text: 'Real-time games against people nearby' },
-    { icon: 'trophy-outline', text: 'Challenge friends and climb the leaderboards' },
-    { icon: 'sparkles-outline', text: 'New games added all the time' },
+    { icon: 'flash-outline', text: 'perkArcadeRealtime' },
+    { icon: 'trophy-outline', text: 'perkArcadeChallenge' },
+    { icon: 'sparkles-outline', text: 'perkArcadeNew' },
   ],
 }
 
 const SUBS = {
-  camera: 'The iYiYi camera is for members. Create a free account to start shooting.',
-  arcade: 'The Arcade is for members. Create a free account to start playing.',
+  camera: 'lockedCameraSub',
+  arcade: 'lockedArcadeSub',
 }
 
 export default function GuestLockedScreen({ route }) {
   const kind = route?.params?.kind === 'arcade' ? 'arcade' : 'camera'
   const p = GUEST_PROMPTS[kind]
+  const t = useT(strings)
   const insets = useSafeAreaInsets()
   const { signUp, logIn } = useGuestAuth()
 
@@ -44,19 +48,19 @@ export default function GuestLockedScreen({ route }) {
             <Ionicons name={p.icon} size={38} color="#fff" />
             <View style={styles.lock}><Ionicons name="lock-closed" size={12} color="#fff" /></View>
           </LinearGradient>
-          <Text style={styles.title}>{p.title}</Text>
-          <Text style={styles.sub}>{SUBS[kind]}</Text>
+          <Text style={styles.title} accessibilityRole="header">{t(p.title)}</Text>
+          <Text style={styles.sub}>{t(SUBS[kind])}</Text>
           <View style={styles.perks}>
             {PERKS[kind].map((k) => (
               <View key={k.text} style={styles.perk}>
                 <Ionicons name={k.icon} size={18} color={colors.accent} />
-                <Text style={styles.perkText}>{k.text}</Text>
+                <Text style={styles.perkText}>{t(k.text)}</Text>
               </View>
             ))}
           </View>
           <SignUpButton onPress={signUp} style={{ alignSelf: 'stretch', marginTop: 24 }} />
-          <Pressable onPress={logIn} hitSlop={8} accessibilityRole="button" style={{ marginTop: 16 }}>
-            <Text style={styles.login}>Already have an account? <Text style={styles.loginStrong}>Log in</Text></Text>
+          <Pressable onPress={logIn} hitSlop={8} accessibilityRole="button" accessibilityLabel={`${t('haveAccount')} ${t('logIn')}`} style={{ marginTop: 16 }}>
+            <Text style={styles.login}>{t('haveAccount')} <Text style={styles.loginStrong}>{t('logIn')}</Text></Text>
           </Pressable>
         </View>
       </GlassPanel>

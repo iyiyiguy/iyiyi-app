@@ -5,6 +5,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { ImageManipulator, SaveFormat } from 'expo-image-manipulator'
 import { supabase } from './supabase'
+import { translate } from '../i18n'
+import strings from '../i18n/strings/events'
 
 export const UNLIMITED_CAPACITY = 10000
 export const isUnlimited = (max) => max == null || max === '' || !Number.isFinite(Number(max)) || Number(max) >= UNLIMITED_CAPACITY
@@ -22,6 +24,14 @@ export const CATEGORIES = [
   { key: 'other', label: 'Other', icon: 'ellipsis-horizontal-circle-outline' },
 ]
 export const getCategory = (key) => CATEGORIES.find((c) => c.key === key) || null
+
+// Category name in the app language (c.label stays the English name). Call it while rendering
+// so a language change shows up on the next render.
+const CATEGORY_KEYS = {
+  party: 'catParty', meetup: 'catMeetup', networking: 'catNetworking', creator: 'catCreator', music: 'catMusic',
+  fitness: 'catFitness', food: 'catFood', gaming: 'catGaming', art: 'catArt', other: 'catOther',
+}
+export const categoryLabel = (c) => (c && CATEGORY_KEYS[c.key] ? translate(strings, CATEGORY_KEYS[c.key]) : c?.label ?? '')
 
 const BASE_COLS = 'id, name, description, location, game_id, event_date, max_players, creator_id'
 const EXT_COLS = `${BASE_COLS}, cover_url, category, ends_at, latitude, longitude, address, visibility`
@@ -64,7 +74,7 @@ export function normalizeEvent(row) {
   const interested = atts.filter((a) => a && a.status === 'interested').length
   return {
     ...row,
-    name: row.name || 'Untitled event',
+    name: row.name || translate(strings, 'untitled'),
     category: row.category || null,
     cover_url: row.cover_url || null,
     ends_at: row.ends_at || null,
@@ -78,10 +88,89 @@ export function normalizeEvent(row) {
   }
 }
 
-export async function fetchEvents() {
+const HOUR = 3600 * 1000
+// An event is still "upcoming" while it may be running: events without an end time count for
+// UPCOMING_GRACE_H hours after they start (the same 2 h default as defaultEnd, plus slack).
+const UPCOMING_GRACE_H = 6
+
+const haversineM = (a, b) => {
+  const toRad = (d) => (d * Math.PI) / 180
+  const dLat = toRad(b.latitude - a.latitude)
+  const dLng = toRad(b.longitude - a.longitude)
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(a.latitude)) * Math.cos(toRad(b.latitude)) * Math.sin(dLng / 2) ** 2
+  return 2 * 6371000 * Math.asin(Math.sqrt(h))
+}
+
+// Distance in meters from `near` ({ latitude, longitude }), or null when either side has no position.
+export function eventDistanceM(event, near) {
+  if (!near || event?.latitude == null || event?.longitude == null) return null
+  if (!Number.isFinite(near.latitude) || !Number.isFinite(near.longitude)) return null
+  return haversineM(near, { latitude: event.latitude, longitude: event.longitude })
+}
+
+// Soonest day first; within a day, nearest first (events without a position after those with
+// one), then by start time.
+export function sortEventsSoonestNearest(rows, near) {
+  const dayOf = (e) => {
+    const d = new Date(e.event_date)
+    return Number.isNaN(d.getTime()) ? Infinity : new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime()
+  }
+  return [...rows].sort((a, b) => {
+    const da = dayOf(a), db = dayOf(b)
+    if (da !== db) return da - db
+    const ma = eventDistanceM(a, near), mb = eventDistanceM(b, near)
+    if (ma != null || mb != null) {
+      if (ma == null) return 1
+      if (mb == null) return -1
+      if (Math.abs(ma - mb) > 50) return ma - mb
+    }
+    return new Date(a.event_date).getTime() - new Date(b.event_date).getTime()
+  })
+}
+
+// Upcoming events, filtered on the server: anything that started less than UPCOMING_GRACE_H
+// hours ago or later, soonest first, at most `limit` rows. Pass `near` to order each day by
+// distance. (Earlier versions fetched the oldest 300 events overall, so once 300 events existed
+// upcoming ones silently dropped off both the Events list and the Map pins.)
+export async function fetchEvents({ near = null, limit = 200, graceHours = UPCOMING_GRACE_H } = {}) {
+  const since = new Date(Date.now() - graceHours * HOUR).toISOString()
+  const nowIso = new Date().toISOString()
   const { data, error } = await withFallback(
-    () => supabase.from('events').select(`${EXT_COLS}, event_attendees(user_id, status)`).order('event_date', { ascending: true }).limit(300),
-    () => supabase.from('events').select(`${BASE_COLS}, event_attendees(user_id)`).order('event_date', { ascending: true }).limit(300),
+    // With the 010 columns, multi-day events that started earlier but haven't ended count too.
+    () => supabase.from('events').select(`${EXT_COLS}, event_attendees(user_id, status)`)
+      .or(`event_date.gte."${since}",ends_at.gte."${nowIso}"`).order('event_date', { ascending: true }).limit(limit),
+    () => supabase.from('events').select(`${BASE_COLS}, event_attendees(user_id)`)
+      .gte('event_date', since).order('event_date', { ascending: true }).limit(limit),
+  )
+  if (error) throw error
+  const now = Date.now()
+  const rows = (data || []).map(normalizeEvent).filter(Boolean)
+    .filter((e) => (defaultEnd(e)?.getTime() ?? 0) > now)
+  return sortEventsSoonestNearest(rows, near)
+}
+
+// Past events, newest first (for the Events "Past" tab).
+export async function fetchPastEvents({ limit = 60 } = {}) {
+  const until = new Date().toISOString()
+  const { data, error } = await withFallback(
+    () => supabase.from('events').select(`${EXT_COLS}, event_attendees(user_id, status)`)
+      .lt('event_date', until).order('event_date', { ascending: false }).limit(limit),
+    () => supabase.from('events').select(`${BASE_COLS}, event_attendees(user_id)`)
+      .lt('event_date', until).order('event_date', { ascending: false }).limit(limit),
+  )
+  if (error) throw error
+  const now = Date.now()
+  return (data || []).map(normalizeEvent).filter(Boolean).filter((e) => (defaultEnd(e)?.getTime() ?? 0) <= now)
+}
+
+// Events you host, any date (newest first), so "My events" doesn't depend on the other lists.
+export async function fetchHostedEvents(userId, { limit = 100 } = {}) {
+  if (!userId) return []
+  const { data, error } = await withFallback(
+    () => supabase.from('events').select(`${EXT_COLS}, event_attendees(user_id, status)`)
+      .eq('creator_id', userId).order('event_date', { ascending: false }).limit(limit),
+    () => supabase.from('events').select(`${BASE_COLS}, event_attendees(user_id)`)
+      .eq('creator_id', userId).order('event_date', { ascending: false }).limit(limit),
   )
   if (error) throw error
   return (data || []).map(normalizeEvent).filter(Boolean)
@@ -148,7 +237,7 @@ async function setLocalInterested(eventId, on) {
 
 // status: 'going' | 'interested' | null (remove RSVP)
 export async function setRsvp(eventId, userId, status) {
-  if (!eventId || !userId) throw new Error('Sign in to RSVP.')
+  if (!eventId || !userId) throw new Error(translate(strings, 'signInToRsvp'))
   if (!status) {
     const { error } = await supabase.from('event_attendees').delete().eq('event_id', eventId).eq('user_id', userId)
     await setLocalInterested(eventId, false)
@@ -246,7 +335,7 @@ export function formatTime(d) {
 
 export function formatEventWhen(start, end) {
   const s = validDate(start)
-  if (!s) return 'Date to be announced'
+  if (!s) return translate(strings, 'dateTba')
   const e = validDate(end)
   const sameDay = e && e.toDateString() === s.toDateString()
   if (!e || e <= s) return `${formatDay(s)} · ${formatTime(s)}`
@@ -254,4 +343,4 @@ export function formatEventWhen(start, end) {
   return `${formatDay(s)} ${formatTime(s)} – ${formatDay(e)} ${formatTime(e)}`
 }
 
-export const eventPlace = (event) => event?.location || event?.address || 'Location to be announced'
+export const eventPlace = (event) => event?.location || event?.address || translate(strings, 'placeTba')

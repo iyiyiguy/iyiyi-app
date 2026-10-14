@@ -2,27 +2,27 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { View, Text, Pressable, StyleSheet, ScrollView, Alert, Modal, Image, useWindowDimensions } from 'react-native'
 import { useFocusEffect } from '@react-navigation/native'
 import { LinearGradient } from 'expo-linear-gradient'
-import { Ionicons } from '@expo/vector-icons'
-import Glass from '../components/Glass'
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons'
 import GunSpinViewer from '../components/GunSpinViewer'
 import {
   GUNS, GUN_CATEGORIES, RARITIES, FEATURED_GUN_IDS, setEquippedGun, ensureOwnerUnlocks, gunRatings, fireRateLabel,
+  getGunById, isPaidGun, tagStats, cycleMs, SIDE_GRADE_TEXT,
 } from '../lib/guns'
 import { loadArcadeStats, subscribeArcadeStats } from '../lib/arcadeStats'
 import { buzz } from '../lib/gamePrefs'
 import {
-  AC, ArcadeBackground, useArcadeInsets, GhostButton, IconCircle, PlayButton, SectionHeader, arcadeText, useArcadeStatusBar,
+  AC, ArcadeBackground, ArcadePanel as Glass, useArcadeInsets, GhostButton, IconCircle, PlayButton, SectionHeader, arcadeText, useArcadeStatusBar,
 } from '../games/arcadeUI'
-import { font } from '../theme'
+import { FONT, ST, stType, withAlpha } from '../games/studio'
 import { useUavInventory } from '../lib/uav'
 import { UavShopCard } from '../games/laser/Uav'
 import { UavBalancePill, openArcadeStore } from '../games/UavStore'
 import { fetchGunProducts, purchaseGun, restoreGunPurchases, isUserCancelled } from '../lib/iap'
 import { gunArt } from '../lib/gunArt'
 import { gunSpinFrames } from '../lib/gunSpin'
-import { useGrenadeInventory, useGrenadeStore, GRENADE_PACK } from '../lib/grenades'
-import { useStickyBombInventory, useStickyBombStore, STICKY_BOMB_PACK } from '../lib/stickyBombs'
-import { useLandMineInventory, useLandMineStore, LAND_MINE_PACK } from '../lib/landMines'
+import { useGrenadeInventory, useGrenadeStore, GRENADE_PACK, GRENADES_PER_MATCH } from '../lib/grenades'
+import { useStickyBombInventory, useStickyBombStore, STICKY_BOMB_PACK, STICKY_BOMBS_PER_MATCH } from '../lib/stickyBombs'
+import { useLandMineInventory, useLandMineStore, LAND_MINE_PACK, LAND_MINES_PER_MATCH } from '../lib/landMines'
 import { isReviewAccount } from '../lib/reviewAccount'
 
 // Kept for existing importers (e.g. the Laser Tag lobby).
@@ -34,11 +34,15 @@ const GAP = 12
 const HERO_MS = 5000
 
 const rarityOf = (gun) => RARITIES[gun?.rarity] || RARITIES.common
+// The free Starter Pistol is the yardstick every stat bar is compared against.
+const BASELINE = getGunById('pistol')
 const safeFrames = (gun) => { try { return gunSpinFrames(gun) } catch { return null } }
 
 // The Arcade Shop (Armory): buy Laser Tag weapons with real money (one Non-Consumable In-App
-// Purchase per gun, lib/iap.js), then equip one. UAV packs and grenade packs are consumable
-// In-App Purchases (lib/uav.js, lib/grenades.js). Optional route params (legacy):
+// Purchase per gun, lib/iap.js), then equip one. Guns are side-grades (lib/guns.js): the
+// inspect view shows each one's trade-off and stat bars against the free Starter Pistol.
+// UAV packs and explosive packs are consumable In-App Purchases with per-match use limits
+// (lib/uav.js, lib/grenades.js, lib/stickyBombs.js, lib/landMines.js, lib/matchLimits.js). Optional route params (legacy):
 // { onGunSelected(gunId), selectedGunId }.
 export default function GunShopScreen({ navigation, route }) {
   const { onGunSelected } = route?.params || {}
@@ -51,6 +55,7 @@ export default function GunShopScreen({ navigation, route }) {
   const [detail, setDetail] = useState(null)
   const [toast, setToast] = useState(null)
   const [prices, setPrices] = useState({}) // gunId -> localized store price
+  const [pricesLoaded, setPricesLoaded] = useState(false)
   const uav = useUavInventory()
   const grenades = useGrenadeInventory()
   const grenadeStore = useGrenadeStore()
@@ -70,8 +75,8 @@ export default function GunShopScreen({ navigation, route }) {
       if (!alive) return
       setOwner(!!o)
       setStats(s)
-      const p = await fetchGunProducts()
-      if (alive) setPrices(p)
+      const p = await fetchGunProducts().catch(() => ({}))
+      if (alive) { setPrices(p || {}); setPricesLoaded(true) }
       // Re-grant any gun bought with money on this account (new phone, reinstall, interrupted buy).
       // Not for the App Review demo account, which is wiped on every sign-out.
       if (await isReviewAccount()) return
@@ -241,10 +246,10 @@ export default function GunShopScreen({ navigation, route }) {
           </View>
 
           {owner && (
-            <LinearGradient colors={['#ffcf5c', '#ff9a3c']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.ownerBanner}>
-              <Ionicons name="key" size={18} color="#3a2200" />
+            <View style={styles.ownerBanner}>
+              <Ionicons name="key" size={18} color={ST.objective} />
               <Text style={styles.ownerText}>Owner access — every weapon is unlocked on this account.</Text>
-            </LinearGradient>
+            </View>
           )}
 
           {/* Hero */}
@@ -253,6 +258,7 @@ export default function GunShopScreen({ navigation, route }) {
               guns={featured}
               width={contentW}
               prices={prices}
+              loading={!pricesLoaded}
               owns={owns}
               equippedId={equippedGun.id}
               onOpen={open}
@@ -306,6 +312,7 @@ export default function GunShopScreen({ navigation, route }) {
               gun={g}
               width={cardW}
               price={prices[g.id]}
+              loading={!pricesLoaded}
               owned={owns(g)}
               equipped={equippedGun.id === g.id}
               onPress={() => open(g)}
@@ -316,7 +323,7 @@ export default function GunShopScreen({ navigation, route }) {
 
         {/* Equipment */}
         <View onLayout={(e) => { equipY.current = e.nativeEvent.layout.y }}>
-          <SectionHeader title="Equipment" action="Arcade Store ›" onAction={toStore} style={styles.pad} />
+          <SectionHeader title="Equipment" action="Arcade Store" onAction={toStore} style={styles.pad} />
           <View style={styles.pad}>
             <UavShopCard balance={uav.balance} owner={uav.owner || owner} onOpenStore={toStore} />
             <GrenadeCard
@@ -346,7 +353,8 @@ export default function GunShopScreen({ navigation, route }) {
             <Ionicons name="refresh" size={14} color={AC.text} />
             <Text style={styles.restoreText}>Restore Purchases</Text>
           </Pressable>
-          <Text style={styles.footer}>Each gun is a one-time purchase and stays unlocked on your Apple ID or Google account.</Text>
+          <Text style={styles.footer}>{SIDE_GRADE_TEXT}</Text>
+          <Text style={styles.footer}>Each gun is a one-time purchase and stays unlocked on your Apple ID or Google account. Prices come from the App Store / Google Play.</Text>
         </View>
       </ScrollView>
 
@@ -355,6 +363,7 @@ export default function GunShopScreen({ navigation, route }) {
         owned={detail ? owns(detail) : false}
         equipped={detail ? equippedGun.id === detail.id : false}
         price={detail ? prices[detail.id] : null}
+        loading={!pricesLoaded}
         onMoney={() => detail && buyWithMoney(detail)}
         onAct={() => detail && act(detail)}
         busy={busy}
@@ -364,8 +373,8 @@ export default function GunShopScreen({ navigation, route }) {
 
       {toast && (
         <View style={[styles.toastWrap, { top: insets.top + 8 }]} pointerEvents="none">
-          <Glass scheme="dark" radius={20} style={styles.toast}>
-            <Ionicons name="checkmark-circle" size={20} color={AC.live} />
+          <Glass style={styles.toast} accent={ST.health}>
+            <Ionicons name="checkmark-circle" size={20} color={ST.health} />
             <Text style={styles.toastText}>{toast}</Text>
           </Glass>
         </View>
@@ -378,29 +387,32 @@ export default function GunShopScreen({ navigation, route }) {
 function rarityPanel(gun, strength = 1) {
   const c = rarityOf(gun).color
   const a = (x) => Math.round(Math.min(1, x * strength) * 255).toString(16).padStart(2, '0')
-  return [c + a(0.28), '#11142a', '#090b18']
+  return [c + a(0.14), ST.ground2, ST.ground2]
 }
 
-function priceLabel({ gun, price, owned, equipped }) {
+function priceLabel({ gun, price, owned, equipped, loading }) {
   if (equipped) return { text: 'Equipped', kind: 'equipped' }
   if (owned) return { text: 'Owned', kind: 'owned' }
+  // Store-sold guns (gun.iap, e.g. the Rocket Launcher with unlockPoints 0, and every other
+  // paid gun) are never "Free": the store price, '…' while it loads, else "Coming soon".
+  if (gun.iap || isPaidGun(gun)) return price ? { text: price, kind: 'price' } : loading ? { text: '…', kind: 'soon' } : { text: 'Coming soon', kind: 'soon' }
   if (!gun.unlockPoints) return { text: 'Free', kind: 'owned' }
   if (price) return { text: price, kind: 'price' }
   return { text: 'Coming soon', kind: 'soon' }
 }
 
-function PricePill({ gun, price, owned, equipped, large }) {
-  const p = priceLabel({ gun, price, owned, equipped })
+function PricePill({ gun, price, owned, equipped, large, loading }) {
+  const p = priceLabel({ gun, price, owned, equipped, loading })
   const base = [styles.pill, large && styles.pillLarge]
   if (p.kind === 'price') {
     return (
-      <LinearGradient colors={['#ffd76a', '#ff9a3c']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={base}>
-        <Text style={[styles.pillText, large && styles.pillTextLarge, { color: '#2b1600' }]}>{p.text}</Text>
-      </LinearGradient>
+      <View style={[base, { backgroundColor: ST.objective }]}>
+        <Text style={[styles.pillText, large && styles.pillTextLarge, { color: ST.ink }]}>{p.text}</Text>
+      </View>
     )
   }
   const look = {
-    equipped: { bg: 'rgba(47,220,143,0.16)', border: 'rgba(47,220,143,0.55)', color: AC.live, icon: 'checkmark-circle' },
+    equipped: { bg: withAlpha(ST.health, 0.12), border: withAlpha(ST.health, 0.6), color: ST.health, icon: 'checkmark-circle' },
     owned: { bg: 'rgba(255,255,255,0.08)', border: AC.border, color: AC.text, icon: null },
     soon: { bg: 'rgba(255,255,255,0.05)', border: AC.border, color: AC.muted, icon: 'time-outline' },
   }[p.kind]
@@ -416,8 +428,8 @@ function RarityTag({ gun, solid }) {
   const r = rarityOf(gun)
   return (
     <View style={[styles.rarity, solid ? { backgroundColor: r.color } : { borderColor: r.color + 'aa', borderWidth: 1, backgroundColor: r.color + '1f' }]}>
-      <View style={[styles.rarityDot, { backgroundColor: solid ? '#0b0d1c' : r.color }]} />
-      <Text style={[styles.rarityText, { color: solid ? '#0b0d1c' : r.color }]}>{r.name.toUpperCase()}</Text>
+      <View style={[styles.rarityDot, { backgroundColor: solid ? ST.ink : r.color }]} />
+      <Text style={[styles.rarityText, { color: solid ? ST.ink : r.color }]}>{r.name.toUpperCase()}</Text>
     </View>
   )
 }
@@ -436,13 +448,13 @@ function Glow({ color, size, style }) {
 function GrenadePill({ balance, owner, onPress }) {
   return (
     <Pressable onPress={onPress} hitSlop={6} style={({ pressed }) => [styles.gPill, pressed && { opacity: 0.8 }]} accessibilityRole="button" accessibilityLabel={`Grenades: ${owner ? 'unlimited' : balance}`}>
-      <Text style={styles.gPillIcon}>💣</Text>
-      <Text style={styles.gPillText}>{owner ? '∞' : Number(balance || 0).toLocaleString()}</Text>
+      <MaterialCommunityIcons name="bomb" size={15} color={ST.objective} />
+      {owner ? <MaterialCommunityIcons name="infinity" size={16} color={ST.text} /> : <Text style={styles.gPillText}>{Number(balance || 0).toLocaleString()}</Text>}
     </Pressable>
   )
 }
 
-function HeroCarousel({ guns, width, prices, owns, equippedId, onOpen }) {
+function HeroCarousel({ guns, width, prices, loading, owns, equippedId, onOpen }) {
   const [idx, setIdx] = useState(0)
   const ref = useRef(null)
   const lastTouch = useRef(0)
@@ -486,6 +498,7 @@ function HeroCarousel({ guns, width, prices, owns, equippedId, onOpen }) {
               width={width}
               height={height}
               price={prices[g.id]}
+              loading={loading}
               owned={owns(g)}
               equipped={equippedId === g.id}
               onOpen={() => { lastTouch.current = Date.now(); onOpen(g) }}
@@ -504,7 +517,7 @@ function HeroCarousel({ guns, width, prices, owns, equippedId, onOpen }) {
   )
 }
 
-function HeroSlide({ gun, width, height, price, owned, equipped, onOpen }) {
+function HeroSlide({ gun, width, height, price, loading, owned, equipped, onOpen }) {
   const r = rarityOf(gun)
   const imgW = Math.min(width - 24, 420)
   return (
@@ -523,14 +536,14 @@ function HeroSlide({ gun, width, height, price, owned, equipped, onOpen }) {
         <Image source={gunArt(gun)} style={{ width: imgW, height: imgW / 2 * 0.86 }} resizeMode="contain" fadeDuration={0} />
         <View style={[styles.heroFloor, { width: imgW * 0.6, backgroundColor: r.color }]} />
       </View>
-      <LinearGradient colors={['rgba(9,11,24,0)', 'rgba(9,11,24,0.92)']} style={styles.heroBottomFade} pointerEvents="none" />
+      <LinearGradient colors={[withAlpha(ST.ground2, 0), withAlpha(ST.ground2, 0.94)]} style={styles.heroBottomFade} pointerEvents="none" />
       <View style={styles.heroInfo}>
         <Text style={styles.heroName} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{gun.name.toUpperCase()}</Text>
         <Text style={styles.heroDesc} numberOfLines={2}>{gun.description}</Text>
         <View style={styles.heroFoot}>
-          <PricePill gun={gun} price={price} owned={owned} equipped={equipped} large />
+          <PricePill gun={gun} price={price} loading={loading} owned={owned} equipped={equipped} large />
           <View style={styles.inspectBtn}>
-            <Ionicons name="cube-outline" size={15} color="#fff" />
+            <Ionicons name="cube-outline" size={15} color={ST.text} />
             <Text style={styles.inspectText}>Inspect</Text>
           </View>
         </View>
@@ -539,17 +552,17 @@ function HeroSlide({ gun, width, height, price, owned, equipped, onOpen }) {
   )
 }
 
-function WeaponCard({ gun, width, price, owned, equipped, onPress }) {
+function WeaponCard({ gun, width, price, loading, owned, equipped, onPress }) {
   const r = rarityOf(gun)
   const artH = Math.round(width * 0.62)
   return (
     <Pressable
       onPress={onPress}
       accessibilityRole="button"
-      accessibilityLabel={`${gun.name}, ${r.name}. ${priceLabel({ gun, price, owned, equipped }).text}`}
+      accessibilityLabel={`${gun.name}, ${r.name}. ${priceLabel({ gun, price, owned, equipped, loading }).text}${gun.weakness ? `. Trade-off: ${gun.weakness}` : ''}`}
       style={({ pressed }) => [{ width, marginBottom: GAP }, pressed && { transform: [{ scale: 0.97 }] }]}
     >
-      <View style={[styles.card, { borderColor: equipped ? AC.live : r.color + '55', shadowColor: r.color }]}>
+      <View style={[styles.card, { borderColor: equipped ? ST.health : r.color + '55' }]}>
         <LinearGradient colors={rarityPanel(gun)} start={{ x: 0, y: 0 }} end={{ x: 0.6, y: 1 }} style={StyleSheet.absoluteFill} />
         <View style={[styles.cardStrip, { backgroundColor: r.color }]} />
         <View style={[styles.cardArt, { height: artH }]}>
@@ -571,7 +584,7 @@ function WeaponCard({ gun, width, price, owned, equipped, onPress }) {
             <Text style={styles.cardMeta} numberOfLines={1}>{FIRE_MODE[gun.fireMode]}</Text>
           </View>
           <View style={styles.cardFoot}>
-            <PricePill gun={gun} price={price} owned={owned} equipped={equipped} />
+            <PricePill gun={gun} price={price} loading={loading} owned={owned} equipped={equipped} />
           </View>
         </View>
       </View>
@@ -583,25 +596,24 @@ function GrenadeCard({ balance, owner, store, onBuy }) {
   const count = GRENADE_PACK?.count || 10
   return (
     <View style={[styles.gCard]}>
-      <LinearGradient colors={['rgba(255,94,58,0.22)', '#121428', '#0b0d1c']} start={{ x: 0, y: 0 }} end={{ x: 0.7, y: 1 }} style={StyleSheet.absoluteFill} />
       <View style={styles.gArt}>
-        <Glow color="#ff7a3c" size={110} />
-        <Text style={styles.gEmoji}>💣</Text>
-        <View style={styles.gBadge}><Text style={styles.gBadgeText}>×{count}</Text></View>
+        <Glow color={ST.objective} size={110} />
+        <MaterialCommunityIcons name="bomb" size={52} color={ST.objective} />
+        <View style={[styles.gBadge, { backgroundColor: ST.objective }]}><Text style={styles.gBadgeText}>×{count}</Text></View>
       </View>
       <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
         <Text style={styles.gTitle}>{count} Grenades</Text>
-        <Text style={styles.gMeta}>Throw grenades in Laser Tag to flush enemies out of cover.</Text>
+        <Text style={styles.gMeta}>Throw grenades in Laser Tag to flush enemies out of cover. Use up to {GRENADES_PER_MATCH} per match; the rest stay in your balance.</Text>
         <Text style={styles.gBal}>{owner ? 'Unlimited (owner)' : `Balance: ${Number(balance || 0).toLocaleString()}`}</Text>
         <View style={{ marginTop: 6, alignSelf: 'flex-start' }}>
           {owner ? (
             <GhostButton title="Unlimited" icon="infinite" small disabled />
           ) : store.status === 'ready' ? (
-            <PlayButton title={store.displayPrice ? `Buy · ${store.displayPrice}` : 'Buy'} icon="cart" small busy={store.busy} onPress={onBuy} colors={['#ffc94d', '#ff8a3c']} />
+            <PlayButton title={store.displayPrice ? `Buy · ${store.displayPrice}` : 'Buy'} icon="cart" small busy={store.busy} onPress={onBuy} colors={[ST.objective]} />
           ) : store.status === 'loading' ? (
             <GhostButton title="Loading…" icon="hourglass-outline" small disabled />
           ) : (
-            <GhostButton title="Unavailable" icon="time-outline" small disabled />
+            <GhostButton title="Coming soon" icon="time-outline" small disabled />
           )}
         </View>
       </View>
@@ -612,26 +624,25 @@ function GrenadeCard({ balance, owner, store, onBuy }) {
 function StickyBombCard({ balance, owner, store, onBuy }) {
   const count = STICKY_BOMB_PACK?.count || 5
   return (
-    <View style={[styles.gCard, { borderColor: 'rgba(180,108,255,0.35)' }]}>
-      <LinearGradient colors={['rgba(180,108,255,0.22)', '#121428', '#0b0d1c']} start={{ x: 0, y: 0 }} end={{ x: 0.7, y: 1 }} style={StyleSheet.absoluteFill} />
+    <View style={[styles.gCard, { borderLeftColor: ST.epic }]}>
       <View style={styles.gArt}>
-        <Glow color="#b46cff" size={110} />
+        <Glow color={ST.epic} size={110} />
         <Image source={require('../../assets/guns/stickybomb.png')} style={{ width: 80, height: 50 }} resizeMode="contain" />
-        <View style={[styles.gBadge, { backgroundColor: '#b46cff' }]}><Text style={styles.gBadgeText}>×{count}</Text></View>
+        <View style={[styles.gBadge, { backgroundColor: ST.epic }]}><Text style={styles.gBadgeText}>×{count}</Text></View>
       </View>
       <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
         <Text style={styles.gTitle}>{count} Sticky Bombs</Text>
-        <Text style={styles.gMeta}>Place on any surface — detonate remotely when enemies are near.</Text>
-        <Text style={[styles.gBal, { color: '#b46cff' }]}>{owner ? 'Unlimited (owner)' : `Balance: ${Number(balance || 0).toLocaleString()}`}</Text>
+        <Text style={styles.gMeta}>Place on any surface — detonate remotely when enemies are near. Use up to {STICKY_BOMBS_PER_MATCH} per match; the rest stay in your balance.</Text>
+        <Text style={[styles.gBal, { color: ST.epic }]}>{owner ? 'Unlimited (owner)' : `Balance: ${Number(balance || 0).toLocaleString()}`}</Text>
         <View style={{ marginTop: 6, alignSelf: 'flex-start' }}>
           {owner ? (
             <GhostButton title="Unlimited" icon="infinite" small disabled />
           ) : store.status === 'ready' ? (
-            <PlayButton title={store.displayPrice ? `Buy · ${store.displayPrice}` : 'Buy'} icon="cart" small busy={store.busy} onPress={onBuy} colors={['#b46cff', '#8f7bff']} />
+            <PlayButton title={store.displayPrice ? `Buy · ${store.displayPrice}` : 'Buy'} icon="cart" small busy={store.busy} onPress={onBuy} colors={[ST.epic]} />
           ) : store.status === 'loading' ? (
             <GhostButton title="Loading…" icon="hourglass-outline" small disabled />
           ) : (
-            <GhostButton title="Unavailable" icon="time-outline" small disabled />
+            <GhostButton title="Coming soon" icon="time-outline" small disabled />
           )}
         </View>
       </View>
@@ -642,26 +653,25 @@ function StickyBombCard({ balance, owner, store, onBuy }) {
 function LandMineCard({ balance, owner, store, onBuy }) {
   const count = LAND_MINE_PACK?.count || 5
   return (
-    <View style={[styles.gCard, { borderColor: 'rgba(47,220,143,0.35)' }]}>
-      <LinearGradient colors={['rgba(47,220,143,0.22)', '#121428', '#0b0d1c']} start={{ x: 0, y: 0 }} end={{ x: 0.7, y: 1 }} style={StyleSheet.absoluteFill} />
+    <View style={[styles.gCard, { borderLeftColor: ST.health }]}>
       <View style={styles.gArt}>
-        <Glow color="#2fdc8f" size={110} />
+        <Glow color={ST.health} size={110} />
         <Image source={require('../../assets/guns/landmine.png')} style={{ width: 80, height: 50 }} resizeMode="contain" />
-        <View style={[styles.gBadge, { backgroundColor: '#2fdc8f' }]}><Text style={[styles.gBadgeText, { color: '#0b0d1c' }]}>×{count}</Text></View>
+        <View style={[styles.gBadge, { backgroundColor: ST.health }]}><Text style={styles.gBadgeText}>×{count}</Text></View>
       </View>
       <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
         <Text style={styles.gTitle}>{count} Land Mines</Text>
-        <Text style={styles.gMeta}>Place on the ground — detonates when an enemy walks within 3 ft. Persists until triggered.</Text>
-        <Text style={[styles.gBal, { color: '#2fdc8f' }]}>{owner ? 'Unlimited (owner)' : `Balance: ${Number(balance || 0).toLocaleString()}`}</Text>
+        <Text style={styles.gMeta}>Place on the ground — detonates when an enemy walks within 3 ft. Persists until triggered. Use up to {LAND_MINES_PER_MATCH} per match; the rest stay in your balance.</Text>
+        <Text style={[styles.gBal, { color: ST.health }]}>{owner ? 'Unlimited (owner)' : `Balance: ${Number(balance || 0).toLocaleString()}`}</Text>
         <View style={{ marginTop: 6, alignSelf: 'flex-start' }}>
           {owner ? (
             <GhostButton title="Unlimited" icon="infinite" small disabled />
           ) : store.status === 'ready' ? (
-            <PlayButton title={store.displayPrice ? `Buy · ${store.displayPrice}` : 'Buy'} icon="cart" small busy={store.busy} onPress={onBuy} colors={['#2fdc8f', '#1fae84']} />
+            <PlayButton title={store.displayPrice ? `Buy · ${store.displayPrice}` : 'Buy'} icon="cart" small busy={store.busy} onPress={onBuy} colors={[ST.health]} />
           ) : store.status === 'loading' ? (
             <GhostButton title="Loading…" icon="hourglass-outline" small disabled />
           ) : (
-            <GhostButton title="Unavailable" icon="time-outline" small disabled />
+            <GhostButton title="Coming soon" icon="time-outline" small disabled />
           )}
         </View>
       </View>
@@ -669,27 +679,38 @@ function LandMineCard({ balance, owner, store, onBuy }) {
   )
 }
 
-function StatBar({ label, value, color }) {
+// One stat bar. `base` (0-1) draws a white marker for the free Starter Pistol so every bar
+// reads as a trade-off: above the marker = better than the free gun, below = worse.
+function StatBar({ label, value, color, base }) {
   const pct = Math.round(Math.max(0, Math.min(1, value || 0)) * 100)
+  const basePct = Number.isFinite(base) ? Math.round(Math.max(0, Math.min(1, base)) * 100) : null
+  const diff = basePct == null ? 0 : pct - basePct
   return (
-    <View style={styles.bar}>
+    <View style={styles.bar} accessible accessibilityLabel={`${label} ${pct}${basePct != null ? `, Starter Pistol ${basePct}` : ''}`}>
       <Text style={styles.barLabel}>{label}</Text>
       <View style={styles.barTrack}>
-        <LinearGradient colors={[color + '88', color]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={[styles.barFill, { width: `${pct}%` }]} />
+        <View style={[styles.barFill, { width: `${pct}%`, backgroundColor: color }]} />
         {[0.25, 0.5, 0.75].map((t) => <View key={t} style={[styles.barTick, { left: `${t * 100}%` }]} />)}
+        {basePct != null ? <View style={[styles.barBase, { left: `${Math.min(98, basePct)}%` }]} /> : null}
       </View>
-      <Text style={styles.barValue}>{pct}</Text>
+      <Text style={[styles.barValue, basePct != null && diff !== 0 && { color: diff > 0 ? ST.health : ST.enemy }]}>{basePct != null && Math.abs(diff) >= 3 ? (diff > 0 ? '▲' : '▼') : ''}{pct}</Text>
     </View>
   )
 }
 
-function InspectModal({ gun, owned, equipped, price, onMoney, onAct, busy, onClose, insets }) {
+function InspectModal({ gun, owned, equipped, price, loading, onMoney, onAct, busy, onClose, insets }) {
   const { height } = useWindowDimensions()
   const g = gun
   const r = rarityOf(g)
   const viewerH = Math.round(Math.max(240, height * 0.42))
   let ratings = { power: 0, fireRate: 0, accuracy: 0, range: 0 }
   try { if (g) ratings = gunRatings(g) } catch { /* keep zeros */ }
+  let base = null
+  try { base = g && g.id !== BASELINE.id ? gunRatings(BASELINE) : null } catch { base = null }
+  let ttk = null
+  try { ttk = g ? tagStats(g) : null } catch { ttk = null }
+  let cycle = 0
+  try { cycle = g ? cycleMs(g) : 0 } catch { cycle = 0 }
   let rate = ''
   try { rate = g ? fireRateLabel(g) : '' } catch { rate = '' }
   const frames = useMemo(() => (g ? safeFrames(g) : null), [g])
@@ -698,7 +719,7 @@ function InspectModal({ gun, owned, equipped, price, onMoney, onAct, busy, onClo
     <Modal visible={!!g} animationType="slide" presentationStyle="fullScreen" onRequestClose={onClose} statusBarTranslucent>
       {g && (
         <View style={styles.inspect}>
-          <LinearGradient colors={[r.color + '33', '#0a0c1c', '#05060f']} locations={[0, 0.5, 1]} style={StyleSheet.absoluteFill} />
+          <LinearGradient colors={[r.color + '22', ST.ground, ST.ground]} locations={[0, 0.5, 1]} style={StyleSheet.absoluteFill} />
           <View style={[styles.inspectTop, { paddingTop: insets.top + 8 }]}>
             <IconCircle icon="close" label="Close" onPress={onClose} />
             <View style={{ flex: 1, alignItems: 'center' }}>
@@ -717,25 +738,54 @@ function InspectModal({ gun, owned, equipped, price, onMoney, onAct, busy, onClo
             <Text style={styles.inspectName}>{g.name.toUpperCase()}</Text>
             <Text style={styles.inspectDesc}>{g.description}</Text>
 
+            {(g.strength || g.weakness) ? (
+              <View style={styles.tradeoff}>
+                {g.strength ? (
+                  <View style={styles.tradeRow}>
+                    <Ionicons name="add-circle" size={15} color={ST.health} />
+                    <Text style={styles.tradeText}>{g.strength}</Text>
+                  </View>
+                ) : null}
+                {g.weakness ? (
+                  <View style={styles.tradeRow}>
+                    <Ionicons name="remove-circle" size={15} color={ST.enemy} />
+                    <Text style={styles.tradeText}>{g.weakness}</Text>
+                  </View>
+                ) : null}
+              </View>
+            ) : null}
+
             <View style={styles.inspectPanel}>
-              <StatBar label="Power" value={ratings.power} color={r.color} />
-              <StatBar label="Fire rate" value={ratings.fireRate} color={r.color} />
-              <StatBar label="Accuracy" value={ratings.accuracy} color={r.color} />
-              <StatBar label="Range" value={ratings.range} color={r.color} />
+              <StatBar label="Power" value={ratings.power} base={base?.power} color={r.color} />
+              <StatBar label="Fire rate" value={ratings.fireRate} base={base?.fireRate} color={r.color} />
+              <StatBar label="Hip aim" value={ratings.accuracy} base={base?.accuracy} color={r.color} />
+              <StatBar label="Range" value={ratings.range} base={base?.range} color={r.color} />
+              {base ? (
+                <View style={styles.legend}>
+                  <View style={styles.legendMark} />
+                  <Text style={styles.legendText}>Free Starter Pistol</Text>
+                </View>
+              ) : null}
             </View>
 
             <View style={styles.specs}>
               <Spec label="Mode" value={FIRE_MODE[g.fireMode]} />
-              <Spec label="Ammo" value="∞" />
-              <Spec label={g.fireMode === 'automatic' ? 'Rate' : 'Per tap'} value={g.fireMode === 'automatic' ? rate.replace(' held', '') : `${g.shotsPerClick || 1}×`} />
+              <Spec label={g.fireMode === 'automatic' ? 'Rate' : cycle > 0 ? 'Cycle' : 'Per tap'} value={g.fireMode === 'automatic' ? rate.replace(' held', '') : cycle > 0 ? `${Math.round(cycle / 100) / 10} s` : `${g.shotsPerClick || 1}×`} />
+              <Spec label="Tag-out" value={ttk ? `${ttk.hitsBody} hit${ttk.hitsBody === 1 ? '' : 's'}` : '—'} />
               <Spec label="Range" value={`${g.range} m`} />
             </View>
+            {ttk ? (
+              <Text style={styles.specNote}>
+                {`Body: ${ttk.hitsBody} hit${ttk.hitsBody === 1 ? '' : 's'} (${ttk.ttkBody.toFixed(1)} s) · Head: ${ttk.hitsHead} (${ttk.ttkHead.toFixed(1)} s), every hit landing within 20 m.${g.blastRadius ? ` Plus a ${g.blastRadius} m splash.` : ''} Unlimited ammo.`}
+              </Text>
+            ) : null}
+            <Text style={styles.specNote}>{SIDE_GRADE_TEXT}</Text>
           </ScrollView>
 
           <View style={[styles.actionBar, { paddingBottom: insets.bottom + 12 }]}>
             <View style={{ flex: 1, minWidth: 0 }}>
               <Text style={styles.actionLabel}>{equipped ? 'IN YOUR LOADOUT' : owned ? 'OWNED' : 'PRICE'}</Text>
-              <Text style={styles.actionPrice} numberOfLines={1} adjustsFontSizeToFit>{equipped ? 'Equipped' : owned ? 'Ready to equip' : price || 'Coming soon'}</Text>
+              <Text style={styles.actionPrice} numberOfLines={1} adjustsFontSizeToFit>{equipped ? 'Equipped' : owned ? 'Ready to equip' : price || (loading ? 'Loading…' : 'Coming soon')}</Text>
             </View>
             <View style={{ flex: 1.4 }}>
               {equipped ? (
@@ -744,6 +794,8 @@ function InspectModal({ gun, owned, equipped, price, onMoney, onAct, busy, onClo
                 <PlayButton title="Equip" icon="flash" onPress={onAct} busy={busy} />
               ) : price ? (
                 <PlayButton title={`Buy for ${price}`} icon="cart" onPress={onMoney} busy={busy} colors={['#ffc94d', '#ff8a3c']} />
+              ) : loading ? (
+                <GhostButton title="Loading…" icon="hourglass-outline" disabled />
               ) : (
                 <GhostButton title="Coming soon" icon="time-outline" disabled />
               )}
@@ -758,120 +810,128 @@ function InspectModal({ gun, owned, equipped, price, onMoney, onAct, busy, onClo
 function Spec({ label, value }) {
   return (
     <View style={styles.spec}>
-      <Text style={styles.specValue} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{value}</Text>
       <Text style={styles.specLabel} numberOfLines={1}>{label}</Text>
+      <Text style={styles.specValue} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{value}</Text>
     </View>
   )
 }
 
+const LABEL = { fontFamily: FONT.ui, fontSize: 10, letterSpacing: 1.8, textTransform: 'uppercase' }
+const DISPLAY = { fontFamily: FONT.display, includeFontPadding: false }
+
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: AC.bg[0] },
+  screen: { flex: 1, backgroundColor: ST.ground },
   pad: { paddingHorizontal: PAD },
 
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', minHeight: 44 },
-  headerTitle: { fontSize: 26, ...font.heavy, color: AC.text, letterSpacing: -0.5 },
-  headerKicker: { fontSize: 11, ...font.heavy, color: AC.accent, letterSpacing: 2.4 },
-  headerRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  gPill: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, height: 32, borderRadius: 16, backgroundColor: 'rgba(255,138,60,0.16)', borderWidth: 1, borderColor: 'rgba(255,154,60,0.55)' },
-  gPillIcon: { fontSize: 13 },
-  gPillText: { fontSize: 14, ...font.heavy, color: '#fff' },
+  headerTitle: { ...DISPLAY, fontSize: 24, letterSpacing: 1, color: ST.text, textTransform: 'uppercase' },
+  headerKicker: { ...stType.kicker },
+  headerRight: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  gPill: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, height: 34, borderRadius: ST.radius, backgroundColor: ST.panelStrong, borderWidth: 1, borderColor: withAlpha(ST.objective, 0.55) },
+  gPillText: { ...DISPLAY, fontSize: 14, color: ST.text, fontVariant: ['tabular-nums'] },
 
-  ownerBanner: { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 12, borderRadius: 16, marginTop: 16 },
-  ownerText: { flex: 1, fontSize: 13, ...font.bold, color: '#3a2200' },
+  ownerBanner: { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 12, borderRadius: ST.radius, marginTop: 16, backgroundColor: ST.panelStrong, borderWidth: 1, borderColor: ST.line, borderLeftWidth: 3, borderLeftColor: ST.objective },
+  ownerText: { flex: 1, fontFamily: FONT.uiSemi, fontSize: 13, color: ST.text },
 
-  hero: { borderRadius: 26, overflow: 'hidden', borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)', backgroundColor: '#0b0d1c' },
-  heroStripe: { position: 'absolute', top: 0, left: 0, right: 0, height: 3 },
+  hero: { borderRadius: ST.radius, overflow: 'hidden', borderWidth: 1, borderColor: ST.line, backgroundColor: ST.ground2 },
+  heroStripe: { position: 'absolute', top: 0, left: 0, right: 0, height: 2 },
   heroTop: { zIndex: 3, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingTop: 16 },
   heroKickerRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
-  heroKicker: { fontSize: 11, ...font.heavy, letterSpacing: 2 },
+  heroKicker: { ...LABEL, fontSize: 11, letterSpacing: 2.4 },
   heroFloor: { height: 10, borderRadius: 999, opacity: 0.25, marginTop: -8, transform: [{ scaleY: 0.6 }] },
   heroBottomFade: { position: 'absolute', left: 0, right: 0, bottom: 0, height: '42%', zIndex: 1 },
   heroInfo: { position: 'absolute', left: 16, right: 16, bottom: 30, zIndex: 4 },
-  heroName: { fontSize: 26, ...font.heavy, color: '#fff', letterSpacing: 0.5 },
-  heroDesc: { fontSize: 13, color: 'rgba(255,255,255,0.78)', marginTop: 2, lineHeight: 18 },
+  heroName: { ...DISPLAY, fontSize: 26, letterSpacing: 1.4, color: ST.text },
+  heroDesc: { fontFamily: FONT.uiSemi, fontSize: 13, color: 'rgba(242,244,247,0.78)', marginTop: 4, lineHeight: 18 },
   heroFoot: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 12 },
-  inspectBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 14, height: 34, borderRadius: 17, backgroundColor: 'rgba(255,255,255,0.12)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.28)' },
-  inspectText: { fontSize: 13, ...font.heavy, color: '#fff', letterSpacing: 0.3 },
-  dots: { position: 'absolute', bottom: 12, left: 0, right: 0, flexDirection: 'row', justifyContent: 'center', gap: 6 },
-  dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: 'rgba(255,255,255,0.3)' },
-  dotActive: { width: 18 },
+  inspectBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, height: 34, borderRadius: ST.radius, backgroundColor: 'rgba(8,10,14,0.5)', borderWidth: 1, borderColor: ST.lineStrong },
+  inspectText: { ...DISPLAY, fontSize: 12, letterSpacing: 1.6, textTransform: 'uppercase', color: ST.text },
+  dots: { position: 'absolute', bottom: 12, left: 0, right: 0, flexDirection: 'row', justifyContent: 'center', gap: 4 },
+  dot: { width: 14, height: 3, backgroundColor: 'rgba(255,255,255,0.25)' },
+  dotActive: { width: 24 },
 
-  loadout: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 12, marginTop: 14, borderRadius: 18, backgroundColor: AC.card, borderWidth: 1, borderColor: AC.border },
-  loadoutIcon: { width: 64, height: 44, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.3)', borderWidth: 1 },
+  loadout: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 12, marginTop: 14, borderRadius: ST.radius, backgroundColor: ST.panelStrong, borderWidth: 1, borderColor: ST.line, borderLeftWidth: 3, borderLeftColor: ST.health },
+  loadoutIcon: { width: 64, height: 44, borderRadius: ST.radius, alignItems: 'center', justifyContent: 'center', backgroundColor: ST.cell, borderWidth: 1 },
   loadoutImg: { width: 58, height: 29 },
-  loadoutLabel: { fontSize: 10, ...font.heavy, color: AC.live, letterSpacing: 1.6 },
-  loadoutName: { fontSize: 16, ...font.heavy, color: AC.text, marginTop: 1 },
+  loadoutLabel: { ...LABEL, color: ST.health },
+  loadoutName: { ...DISPLAY, fontSize: 16, letterSpacing: 0.6, color: ST.text, marginTop: 2, textTransform: 'uppercase' },
   ownedBox: { alignItems: 'flex-end' },
-  ownedNum: { fontSize: 18, ...font.heavy, color: AC.text },
-  ownedOf: { fontSize: 13, color: AC.faint },
-  ownedLabel: { fontSize: 9, ...font.heavy, color: AC.faint, letterSpacing: 1.4 },
+  ownedNum: { ...DISPLAY, fontSize: 18, color: ST.text, fontVariant: ['tabular-nums'] },
+  ownedOf: { fontSize: 13, color: ST.faint },
+  ownedLabel: { ...LABEL, fontSize: 9, letterSpacing: 1.4, color: ST.faint },
 
   tabs: { paddingHorizontal: PAD, gap: 6, paddingBottom: 14 },
-  tab: { paddingHorizontal: 14, height: 36, borderRadius: 10, justifyContent: 'center', alignItems: 'center', backgroundColor: AC.card, borderWidth: 1, borderColor: AC.border },
-  tabActive: { backgroundColor: 'rgba(124,140,255,0.18)', borderColor: 'rgba(124,140,255,0.7)' },
-  tabText: { fontSize: 12, ...font.heavy, color: AC.muted, letterSpacing: 1.2 },
-  tabTextActive: { color: '#fff' },
-  tabUnderline: { position: 'absolute', bottom: 4, width: 16, height: 2, borderRadius: 1, backgroundColor: AC.accent },
+  tab: { paddingHorizontal: 14, height: 34, borderRadius: ST.radius, justifyContent: 'center', alignItems: 'center', backgroundColor: ST.cell, borderWidth: 1, borderColor: ST.line },
+  tabActive: { backgroundColor: ST.friendly, borderColor: ST.friendly },
+  tabText: { ...LABEL, fontSize: 12, letterSpacing: 1.6, color: ST.muted },
+  tabTextActive: { color: ST.ink },
+  tabUnderline: { position: 'absolute', bottom: 0, width: 0, height: 0 },
 
   grid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' },
-  card: { borderRadius: 20, borderWidth: 1, overflow: 'hidden', backgroundColor: '#0d0f20', shadowOpacity: 0.35, shadowRadius: 12, shadowOffset: { width: 0, height: 6 } },
-  cardStrip: { height: 3, width: '100%' },
+  card: { borderRadius: ST.radius, borderWidth: 1, overflow: 'hidden', backgroundColor: ST.ground2 },
+  cardStrip: { height: 2, width: '100%' },
   cardArt: { alignItems: 'center', justifyContent: 'center' },
   cardRarity: { position: 'absolute', top: 8, left: 10 },
-  cardRarityText: { fontSize: 9, ...font.heavy, letterSpacing: 1.4 },
-  lock: { position: 'absolute', top: 7, right: 8, width: 22, height: 22, borderRadius: 11, backgroundColor: 'rgba(0,0,0,0.55)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.18)', alignItems: 'center', justifyContent: 'center' },
-  cardBody: { paddingHorizontal: 12, paddingBottom: 12, paddingTop: 2 },
-  cardName: { fontSize: 15, ...font.heavy, color: AC.text, lineHeight: 19, minHeight: 38 },
+  cardRarityText: { ...LABEL, fontSize: 9, letterSpacing: 1.4 },
+  lock: { position: 'absolute', top: 7, right: 8, width: 22, height: 22, borderRadius: 2, backgroundColor: ST.panelStrong, borderWidth: 1, borderColor: ST.line, alignItems: 'center', justifyContent: 'center' },
+  cardBody: { paddingHorizontal: 10, paddingBottom: 10, paddingTop: 2 },
+  cardName: { ...DISPLAY, fontSize: 14, letterSpacing: 0.4, color: ST.text, lineHeight: 18, minHeight: 36, textTransform: 'uppercase' },
   cardMetaRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 },
-  cardMeta: { fontSize: 11, ...font.semibold, color: AC.faint, letterSpacing: 0.4, flexShrink: 1 },
+  cardMeta: { ...LABEL, color: ST.faint, flexShrink: 1 },
   cardFoot: { flexDirection: 'row', justifyContent: 'flex-end', marginTop: 10 },
 
-  pill: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, height: 26, borderRadius: 13, maxWidth: '100%' },
-  pillLarge: { paddingHorizontal: 14, height: 34, borderRadius: 17 },
-  pillText: { fontSize: 12, ...font.heavy, letterSpacing: 0.2 },
+  pill: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8, height: 26, borderRadius: ST.radius, maxWidth: '100%' },
+  pillLarge: { paddingHorizontal: 12, height: 34 },
+  pillText: { ...DISPLAY, fontSize: 12, letterSpacing: 0.8, textTransform: 'uppercase', fontVariant: ['tabular-nums'] },
   pillTextLarge: { fontSize: 15 },
 
-  rarity: { flexDirection: 'row', alignItems: 'center', gap: 5, alignSelf: 'flex-start', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
-  rarityDot: { width: 5, height: 5, borderRadius: 3 },
-  rarityText: { fontSize: 10, ...font.heavy, letterSpacing: 1.2 },
+  rarity: { flexDirection: 'row', alignItems: 'center', gap: 5, alignSelf: 'flex-start', paddingHorizontal: 6, height: 20, borderRadius: 2 },
+  rarityDot: { width: 5, height: 5 },
+  rarityText: { ...LABEL, fontSize: 10, letterSpacing: 1.4 },
   glowWrap: { ...StyleSheet.absoluteFill, alignItems: 'center', justifyContent: 'center' },
 
-  gCard: { flexDirection: 'row', alignItems: 'center', gap: 14, padding: 16, borderRadius: 24, overflow: 'hidden', borderWidth: 1, borderColor: 'rgba(255,154,60,0.35)', marginBottom: 12 },
+  gCard: { flexDirection: 'row', alignItems: 'center', gap: 14, padding: 14, borderRadius: ST.radius, overflow: 'hidden', backgroundColor: ST.panelStrong, borderWidth: 1, borderColor: ST.line, borderLeftWidth: 3, borderLeftColor: ST.objective, marginBottom: 10 },
   gArt: { width: 96, height: 96, alignItems: 'center', justifyContent: 'center' },
-  gEmoji: { fontSize: 52 },
-  gBadge: { position: 'absolute', bottom: 2, right: 2, paddingHorizontal: 7, paddingVertical: 2, borderRadius: 8, backgroundColor: '#ff7a3c' },
-  gBadgeText: { fontSize: 12, ...font.heavy, color: '#fff' },
-  gTitle: { fontSize: 17, ...font.bold, color: AC.text },
-  gMeta: { fontSize: 12, color: AC.muted, lineHeight: 16 },
-  gBal: { fontSize: 14, ...font.heavy, color: AC.gold },
+  gBadge: { position: 'absolute', bottom: 2, right: 2, paddingHorizontal: 6, height: 20, justifyContent: 'center', borderRadius: 2 },
+  gBadgeText: { ...DISPLAY, fontSize: 12, color: ST.ink, fontVariant: ['tabular-nums'] },
+  gTitle: { ...DISPLAY, fontSize: 16, letterSpacing: 0.6, color: ST.text, textTransform: 'uppercase' },
+  gMeta: { fontFamily: FONT.uiMedium, fontSize: 12, color: ST.muted, lineHeight: 16 },
+  gBal: { ...LABEL, fontSize: 11, color: ST.objective },
 
-  restore: { flexDirection: 'row', alignItems: 'center', alignSelf: 'center', gap: 6, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 999, borderWidth: 1, borderColor: AC.border },
-  restoreText: { fontSize: 13, ...font.bold, color: AC.text },
-  footer: { fontSize: 12, color: AC.faint, textAlign: 'center', marginTop: 12, lineHeight: 17 },
+  restore: { flexDirection: 'row', alignItems: 'center', alignSelf: 'center', gap: 6, paddingHorizontal: 14, height: 36, borderRadius: ST.radius, borderWidth: 1, borderColor: ST.lineStrong },
+  restoreText: { ...LABEL, fontSize: 12, letterSpacing: 1.6, color: ST.text },
+  footer: { fontFamily: FONT.uiMedium, fontSize: 12, color: ST.faint, textAlign: 'center', marginTop: 12, lineHeight: 17 },
 
-  inspect: { flex: 1, backgroundColor: '#05060f' },
+  inspect: { flex: 1, backgroundColor: ST.ground },
   inspectTop: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: PAD },
-  inspectKicker: { fontSize: 11, ...font.heavy, color: AC.muted, letterSpacing: 3 },
-  inspectCat: { fontSize: 11, ...font.heavy, color: AC.faint, letterSpacing: 1.6 },
-  inspectName: { fontSize: 28, ...font.heavy, color: AC.text, letterSpacing: 0.3, marginTop: 8 },
-  inspectDesc: { fontSize: 15, color: AC.muted, lineHeight: 21, marginTop: 4 },
-  inspectPanel: { marginTop: 18, padding: 14, gap: 10, borderRadius: 18, backgroundColor: AC.card, borderWidth: 1, borderColor: AC.border },
+  inspectKicker: { ...LABEL, fontSize: 11, letterSpacing: 3, color: ST.muted },
+  inspectCat: { ...LABEL, fontSize: 11, color: ST.faint },
+  inspectName: { ...DISPLAY, fontSize: 28, letterSpacing: 1.2, color: ST.text, marginTop: 8 },
+  inspectDesc: { ...stType.body, fontSize: 15, lineHeight: 21, color: ST.muted, marginTop: 4 },
+  inspectPanel: { marginTop: 18, padding: 14, gap: 10, borderRadius: ST.radius, backgroundColor: ST.panelStrong, borderWidth: 1, borderColor: ST.line },
   bar: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  barLabel: { width: 72, fontSize: 12, ...font.semibold, color: AC.muted },
-  barTrack: { flex: 1, height: 8, borderRadius: 4, backgroundColor: 'rgba(255,255,255,0.08)', overflow: 'hidden' },
-  barFill: { height: 8, borderRadius: 4 },
-  barTick: { position: 'absolute', top: 0, bottom: 0, width: 1, backgroundColor: 'rgba(5,6,15,0.6)' },
-  barValue: { width: 28, textAlign: 'right', fontSize: 12, ...font.heavy, color: AC.text },
-  specs: { flexDirection: 'row', gap: 8, marginTop: 12 },
-  spec: { flex: 1, alignItems: 'center', paddingVertical: 12, paddingHorizontal: 4, borderRadius: 14, backgroundColor: AC.card, borderWidth: 1, borderColor: AC.border },
-  specValue: { fontSize: 14, ...font.heavy, color: AC.text },
-  specLabel: { fontSize: 10, ...font.semibold, color: AC.faint, marginTop: 2, textTransform: 'uppercase', letterSpacing: 0.6 },
-  actionBar: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingHorizontal: PAD, paddingTop: 12, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: 'rgba(255,255,255,0.16)', backgroundColor: 'rgba(8,9,20,0.96)' },
-  actionLabel: { fontSize: 10, ...font.heavy, color: AC.faint, letterSpacing: 1.4 },
-  actionPrice: { fontSize: 18, ...font.heavy, color: AC.text, marginTop: 2 },
+  barLabel: { ...LABEL, width: 72, color: ST.muted },
+  barTrack: { flex: 1, height: 6, backgroundColor: 'rgba(255,255,255,0.1)' },
+  barFill: { height: 6 },
+  barTick: { position: 'absolute', top: 0, bottom: 0, width: 1, backgroundColor: withAlpha(ST.ground, 0.7) },
+  barValue: { ...DISPLAY, width: 38, textAlign: 'right', fontSize: 13, color: ST.text, fontVariant: ['tabular-nums'] },
+  barBase: { position: 'absolute', top: -2, bottom: -2, width: 2, backgroundColor: '#fff' },
+  legend: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 },
+  legendMark: { width: 2, height: 10, backgroundColor: '#fff' },
+  legendText: { ...LABEL, fontSize: 9, color: ST.faint },
+  tradeoff: { marginTop: 14, gap: 6 },
+  tradeRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
+  tradeText: { flex: 1, fontFamily: FONT.uiSemi, fontSize: 13, lineHeight: 18, color: ST.text },
+  specNote: { fontFamily: FONT.uiMedium, fontSize: 12, lineHeight: 17, color: ST.faint, marginTop: 10 },
+  specs: { flexDirection: 'row', gap: 6, marginTop: 12 },
+  spec: { flex: 1, padding: 8, borderRadius: ST.radius, backgroundColor: ST.cell, gap: 2 },
+  specValue: { ...DISPLAY, fontSize: 14, color: ST.text },
+  specLabel: { ...LABEL, fontSize: 9, letterSpacing: 1.2, color: ST.faint },
+  actionBar: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingHorizontal: PAD, paddingTop: 12, borderTopWidth: 1, borderTopColor: ST.line, backgroundColor: withAlpha(ST.ground, 0.97) },
+  actionLabel: { ...LABEL, color: ST.faint },
+  actionPrice: { ...DISPLAY, fontSize: 18, color: ST.text, marginTop: 2 },
 
   toastWrap: { position: 'absolute', left: 0, right: 0, alignItems: 'center', zIndex: 50, elevation: 50 },
-  toast: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 16, paddingVertical: 10 },
-  toastText: { fontSize: 14, ...font.bold, color: AC.text },
+  toast: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 14, paddingVertical: 10 },
+  toastText: { fontFamily: FONT.ui, fontSize: 13, letterSpacing: 1, textTransform: 'uppercase', color: ST.text },
 })
-

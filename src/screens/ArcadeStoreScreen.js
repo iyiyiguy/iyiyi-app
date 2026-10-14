@@ -1,16 +1,16 @@
 // Arcade Store: real-money UAV packs (consumable IAPs) for Laser Tag + Battle Royale.
-// Weapons stay in the Shop (coins only). The same store body is used in-match as a sheet
-// (games/laser/Uav.js → UavSheet).
+// Weapons and explosives are in the Shop (GunShopScreen). The same store body is used
+// in-match as a sheet (games/laser/Uav.js → UavSheet). UAV use is capped per match
+// (lib/uav.js UAV_RULES_TEXT), and the copy says so.
 import { View, Text, ScrollView, StyleSheet } from 'react-native'
-import { LinearGradient } from 'expo-linear-gradient'
 import {
-  AC, ArcadeBackground, ArcadeHeader, CoinPill, StatusBarScrim, useArcadeInsets, useArcadeStatusBar,
+  ArcadeBackground, ArcadeHeader, CoinPill, StatusBarScrim, useArcadeInsets, useArcadeStatusBar,
 } from '../games/arcadeUI'
 import { SatelliteArt, UavStorePanel } from '../games/UavStore'
-import { useUavInventory } from '../lib/uav'
+import { UAV_DURATION_MS, useUavInventory } from '../lib/uav'
 import { useEffect, useState } from 'react'
 import { loadArcadeStats, subscribeArcadeStats } from '../lib/arcadeStats'
-import { font } from '../theme'
+import { FONT, ST, stType } from '../games/studio'
 
 export default function ArcadeStoreScreen({ navigation }) {
   const insets = useArcadeInsets()
@@ -35,15 +35,14 @@ export default function ArcadeStoreScreen({ navigation }) {
           right={<CoinPill value={coins} compact onPress={() => navigation?.navigate?.('GunShop')} />}
         />
 
-        <LinearGradient colors={['#2a1650', '#14183a', '#0a0c1f']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.hero}>
-          <View style={styles.heroGlow} />
+        <View style={styles.hero}>
           <View style={{ flex: 1 }}>
             <Text style={styles.heroKicker}>LASER TAG · BATTLE ROYALE</Text>
             <Text style={styles.heroTitle}>UAV Recon</Text>
-            <Text style={styles.heroSub}>See every enemy on your map for 15 seconds. Call one in when it counts.</Text>
+            <Text style={styles.heroSub}>{`See every enemy on your map for ${Math.round(UAV_DURATION_MS / 1000)} seconds. Call one in when it counts — you can also earn them with tag streaks.`}</Text>
           </View>
-          <SatelliteArt size={108} accent="#ff5d8a" glow="rgba(255,46,99,0.5)" />
-        </LinearGradient>
+          <SatelliteArt size={108} accent={ST.enemy} glow="rgba(255,61,82,0.35)" />
+        </View>
 
         <UavStorePanel variant="screen" balance={uav.balance} owner={uav.owner} />
       </ScrollView>
@@ -53,10 +52,9 @@ export default function ArcadeStoreScreen({ navigation }) {
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: AC.bg[0] },
-  hero: { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 18, borderRadius: 26, marginTop: 18, marginBottom: 18, borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)', overflow: 'hidden' },
-  heroGlow: { position: 'absolute', width: 260, height: 260, borderRadius: 130, right: -80, top: -90, backgroundColor: 'rgba(255,46,99,0.18)' },
-  heroKicker: { fontSize: 10, ...font.heavy, color: AC.hot, letterSpacing: 1.6 },
-  heroTitle: { fontSize: 28, ...font.heavy, color: AC.text, letterSpacing: -0.6, marginTop: 4 },
-  heroSub: { fontSize: 13, color: AC.muted, marginTop: 6, lineHeight: 18 },
+  screen: { flex: 1, backgroundColor: ST.ground },
+  hero: { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 16, borderRadius: ST.radius, marginTop: 18, marginBottom: 18, backgroundColor: ST.panelStrong, borderWidth: 1, borderColor: ST.line, borderTopWidth: 2, borderTopColor: ST.enemy, overflow: 'hidden' },
+  heroKicker: { ...stType.kicker, fontSize: 10, letterSpacing: 2, color: ST.enemy },
+  heroTitle: { fontFamily: FONT.display, fontSize: 26, letterSpacing: 1.2, color: ST.text, textTransform: 'uppercase', marginTop: 4, includeFontPadding: false },
+  heroSub: { ...stType.small, fontSize: 13, lineHeight: 18, marginTop: 6 },
 })

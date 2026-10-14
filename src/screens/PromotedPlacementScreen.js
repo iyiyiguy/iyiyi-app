@@ -8,7 +8,13 @@ import GlassPanel from '../components/GlassPanel'
 import { colors, radii, type } from '../theme'
 import { FadeIn, Press } from '../lib/motion'
 import { apiJson, post } from '../lib/api'
-import { useIsBusinessPro } from '../lib/useIsPro'
+import useBusinessAccess from '../lib/useBusinessAccess'
+import { BusinessGate, StateCard } from '../components/business/BusinessStates'
+import { useT } from '../i18n'
+import strings from '../i18n/strings/business'
+
+// Business Pro promotions. Only the server's own list is shown (no demo promotions): a failed
+// load shows an error with Retry. Viewers see promoted cards labelled "Promoted".
 
 const RADIUS_OPTIONS = [
   { label: '500 ft', value: 500, unit: 'ft' },
@@ -33,6 +39,7 @@ function PromotionCard({ promo, onToggle }) {
       <View style={styles.promoCard}>
         <View style={styles.promoHeader}>
           <View style={{ flex: 1 }}>
+            <View style={styles.promotedTag}><Text style={styles.promotedTagText}>PROMOTED</Text></View>
             <Text style={type.headline} numberOfLines={1}>{promo.headline || 'Promoted placement'}</Text>
             <Text style={type.caption}>
               {RADIUS_OPTIONS.find((r) => r.value === promo.radius)?.label ?? `${promo.radius} ft`} radius
@@ -56,8 +63,8 @@ function PromotionCard({ promo, onToggle }) {
           </View>
         </View>
         <View style={styles.promoToggle}>
-          <Text style={type.subhead}>{active ? 'Active' : 'Paused'}</Text>
-          <Switch value={active} onValueChange={() => onToggle(promo.id, !active)} trackColor={{ true: '#10b981' }} />
+          <Text style={type.subhead}>{active ? 'Active' : promo.status === 'pending' ? 'Waiting for approval' : 'Paused'}</Text>
+          <Switch value={active} disabled={promo.status === 'pending'} onValueChange={() => onToggle(promo.id, !active)} trackColor={{ true: '#10b981' }} accessibilityLabel={promo.headline || 'Promotion'} />
         </View>
       </View>
     </GlassPanel>
@@ -65,11 +72,22 @@ function PromotionCard({ promo, onToggle }) {
 }
 
 export default function PromotedPlacementScreen({ navigation }) {
+  const t = useT(strings)
+  const access = useBusinessAccess()
+  return (
+    <BusinessGate access={access} title={t('promos_title')} lockedText={t('locked_promos')} navigation={navigation}>
+      <Promotions navigation={navigation} />
+    </BusinessGate>
+  )
+}
+
+function Promotions({ navigation }) {
+  const t = useT(strings)
   const insets = useSafeAreaInsets()
-  const isBiz = useIsBusinessPro()
   const [tab, setTab] = useState('active') // 'active' | 'create'
   const [promotions, setPromotions] = useState([])
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState(null)
 
   // Create form
   const [headline, setHeadline] = useState('')
@@ -80,19 +98,16 @@ export default function PromotedPlacementScreen({ navigation }) {
 
   const loadPromos = useCallback(async () => {
     setLoading(true)
+    setLoadError(null)
     try {
       const data = await apiJson('/api/business/promotions')
-      setPromotions(data?.promotions ?? [])
-    } catch {
-      // Demo data for development
-      setPromotions([
-        { id: '1', headline: 'Grand Opening — 20% off all drinks!', radius: 1320, status: 'active', ends_at: new Date(Date.now() + 5 * 86400000).toISOString(), impressions: 2340, taps: 178, follows: 42 },
-        { id: '2', headline: 'Live music every Friday', radius: 5280, status: 'paused', ends_at: new Date(Date.now() + 12 * 86400000).toISOString(), impressions: 890, taps: 56, follows: 11 },
-      ])
+      setPromotions(Array.isArray(data?.promotions) ? data.promotions : [])
+    } catch (e) {
+      setLoadError(e?.message || t('err_access_msg'))
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { loadPromos() }, [loadPromos])
 
@@ -110,7 +125,7 @@ export default function PromotedPlacementScreen({ navigation }) {
     setCreating(true)
     try {
       await post('/api/business/promotions', { headline: headline.trim(), description: description.trim(), radius, duration_days: duration })
-      Alert.alert('Promotion created', 'Your promoted placement is now live!')
+      Alert.alert(t('promo_sent_title'), t('promo_sent_msg'))
       setHeadline('')
       setDescription('')
       setTab('active')
@@ -122,29 +137,9 @@ export default function PromotedPlacementScreen({ navigation }) {
     }
   }
 
-  if (isBiz === false) {
-    return (
-      <View style={styles.screen}>
-        <BrandHeader title="Promoted" onBack={() => navigation.goBack()} />
-        <View style={styles.locked}>
-          <Ionicons name="lock-closed" size={48} color={colors.textFaint} />
-          <Text style={[type.title, { textAlign: 'center', marginTop: 16 }]}>Business Pro Only</Text>
-          <Text style={[type.subhead, { textAlign: 'center', marginTop: 8, maxWidth: 300 }]}>
-            Promote your business to the top of the nearby feed for everyone within your chosen radius.
-          </Text>
-          <Pressable onPress={() => navigation.navigate('Subscription')} style={{ marginTop: 24 }}>
-            <LinearGradient colors={['#10b981', '#059669']} style={styles.upgradeGrad}>
-              <Text style={styles.upgradeText}>Upgrade to Business Pro</Text>
-            </LinearGradient>
-          </Pressable>
-        </View>
-      </View>
-    )
-  }
-
   return (
     <View style={styles.screen}>
-      <BrandHeader title="Promoted" onBack={() => navigation.goBack()} />
+      <BrandHeader title={t('promos_title')} onBack={() => navigation.goBack()} />
       <ScrollView
         contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 24 }]}
         showsVerticalScrollIndicator={false}
@@ -153,11 +148,11 @@ export default function PromotedPlacementScreen({ navigation }) {
         <FadeIn>
           <View style={styles.tabRow}>
             <Pressable onPress={() => setTab('active')} style={[styles.tabBtn, tab === 'active' && styles.tabActive]}>
-              <Text style={[styles.tabText, tab === 'active' && styles.tabTextActive]}>My promotions</Text>
+              <Text style={[styles.tabText, tab === 'active' && styles.tabTextActive]}>{t('promos_mine')}</Text>
             </Pressable>
             <Pressable onPress={() => setTab('create')} style={[styles.tabBtn, tab === 'create' && styles.tabActive]}>
               <Ionicons name="add-circle" size={16} color={tab === 'create' ? '#fff' : colors.textMuted} />
-              <Text style={[styles.tabText, tab === 'create' && styles.tabTextActive]}>Create new</Text>
+              <Text style={[styles.tabText, tab === 'create' && styles.tabTextActive]}>{t('promos_new')}</Text>
             </Pressable>
           </View>
         </FadeIn>
@@ -166,16 +161,16 @@ export default function PromotedPlacementScreen({ navigation }) {
           <>
             {loading ? (
               <ActivityIndicator color={colors.textMuted} style={{ marginTop: 60 }} />
+            ) : loadError ? (
+              <StateCard tone="error" title={t('err_promos_title')} message={loadError} actionLabel={t('retry')} onAction={loadPromos} />
             ) : promotions.length === 0 ? (
               <FadeIn index={1} style={styles.emptyWrap}>
                 <Ionicons name="megaphone-outline" size={48} color={colors.textFaint} />
-                <Text style={[type.subhead, { textAlign: 'center', marginTop: 12 }]}>
-                  No promotions yet. Create one to pin your business at the top of the nearby feed.
-                </Text>
+                <Text style={[type.subhead, { textAlign: 'center', marginTop: 12 }]}>{t('promos_empty')}</Text>
                 <Press onPress={() => setTab('create')} haptic="light" style={{ marginTop: 16 }}>
                   <LinearGradient colors={['#f97316', '#ef4444']} style={styles.createBtn}>
                     <Ionicons name="add" size={18} color="#fff" />
-                    <Text style={styles.createBtnText}>Create promotion</Text>
+                    <Text style={styles.createBtnText}>{t('promos_create_cta')}</Text>
                   </LinearGradient>
                 </Press>
               </FadeIn>
@@ -196,7 +191,7 @@ export default function PromotedPlacementScreen({ navigation }) {
               <View style={styles.form}>
                 <Text style={type.headline}>Create a promotion</Text>
                 <Text style={[type.caption, { marginBottom: 16 }]}>
-                  Your business will be pinned to the top of the nearby feed for everyone in your radius.
+                  Your business will be pinned to the top of the nearby feed for everyone in your radius. {t('promo_label_note')}
                 </Text>
 
                 <Text style={type.label}>Headline</Text>
@@ -264,9 +259,8 @@ export default function PromotedPlacementScreen({ navigation }) {
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: 'transparent' },
   scroll: { paddingHorizontal: 16 },
-  locked: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32 },
-  upgradeGrad: { paddingVertical: 14, paddingHorizontal: 28, borderRadius: 999, alignItems: 'center' },
-  upgradeText: { color: '#fff', fontWeight: '700', fontSize: 16 },
+  promotedTag: { alignSelf: 'flex-start', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 5, backgroundColor: 'rgba(249,115,22,0.16)', marginBottom: 4 },
+  promotedTagText: { color: '#f97316', fontSize: 9.5, fontWeight: '900', letterSpacing: 0.6 },
   // Tabs
   tabRow: { flexDirection: 'row', gap: 8, marginBottom: 16 },
   tabBtn: { flex: 1, flexDirection: 'row', gap: 6, paddingVertical: 12, borderRadius: radii.pill, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.inkSurface, borderWidth: 1, borderColor: colors.hairline },

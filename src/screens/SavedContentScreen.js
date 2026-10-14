@@ -8,13 +8,17 @@ import ContentViewer from '../components/ContentViewer'
 import { colors, type } from '../theme'
 import { apiJson } from '../lib/api'
 import { openProfile } from '../lib/profileNav'
+import { useT } from '../i18n'
+import strings from '../i18n/strings/people'
 
+// Labels are keys in i18n/strings/people.
 const TABS = [
-  { key: 'saved', label: 'Saved' },
-  { key: 'liked', label: 'Liked' },
+  { key: 'saved', label: 'saved' },
+  { key: 'liked', label: 'liked' },
 ]
 
 export default function SavedContentScreen({ navigation }) {
+  const t = useT(strings)
   const [tab, setTab] = useState('saved')
   const [items, setItems] = useState([])
   const [loading, setLoading] = useState(false)
@@ -37,11 +41,17 @@ export default function SavedContentScreen({ navigation }) {
 
   return (
     <View style={styles.screen}>
-      <BrandHeader title="Saved & Liked" onBack={() => navigation.goBack()} />
+      <BrandHeader title={t('savedLiked')} onBack={() => navigation.goBack()} />
       <GlassPanel radius={999} style={styles.tabs}>
-        {TABS.map((t) => (
-          <Pressable key={t.key} onPress={() => setTab(t.key)} style={[styles.tab, tab === t.key && styles.tabActive]}>
-            <Text style={[styles.tabText, tab === t.key && styles.tabTextActive]}>{t.label}</Text>
+        {TABS.map((tb) => (
+          <Pressable
+            key={tb.key}
+            onPress={() => setTab(tb.key)}
+            style={[styles.tab, tab === tb.key && styles.tabActive]}
+            accessibilityRole="tab"
+            accessibilityState={{ selected: tab === tb.key }}
+          >
+            <Text style={[styles.tabText, tab === tb.key && styles.tabTextActive]}>{t(tb.label)}</Text>
           </Pressable>
         ))}
       </GlassPanel>
@@ -50,7 +60,7 @@ export default function SavedContentScreen({ navigation }) {
           <MasonryGrid items={items} showOwner onOpen={(i) => setViewer({ open: true, index: i })} />
         ) : (
           <Text style={styles.empty}>
-            {loading ? 'Loading…' : tab === 'saved' ? 'Content you save will show up here.' : 'Content you like will show up here.'}
+            {loading ? t('loading') : tab === 'saved' ? t('emptySaved') : t('emptyLiked')}
           </Text>
         )}
       </ScrollView>

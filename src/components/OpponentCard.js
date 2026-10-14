@@ -1,5 +1,6 @@
 // Opponent strip for online games (studio look): square avatar with an enemy-colour edge,
-// caps username, "Rated 1420 · Black · thinking…" line, captured pieces, and quick actions
+// caps username, "Rated 1420 · Black · thinking…" line (or a caller's own ratingLabel, e.g.
+// "1016? online", in place of "Rated N"), captured pieces, and quick actions
 // (follow, view profile, chat with unread badge, video call). Chat / call can instead live in
 // the game's own action row: pass actions={false} to show only Follow.
 import React from 'react'
@@ -30,12 +31,13 @@ export function PlayerAvatar({ uri, name, size = 44, ring, square = false, accen
 }
 
 export default function OpponentCard({
-  player, rating, sideLabel, captured, thinking, connected = true,
+  player, rating, ratingLabel, sideLabel, captured, thinking, connected = true,
   onViewProfile, onChat, unread = 0, videoButton, bubble, actions = true, accent = ST.enemy,
 }) {
   const name = player?.name || 'Opponent'
   const status = !connected ? 'Offline' : thinking ? 'Thinking…' : null
-  const meta = [rating != null ? `Rated ${rating}` : 'Unrated', sideLabel, status].filter(Boolean).join(' · ')
+  const ratingText = typeof ratingLabel === 'string' && ratingLabel ? ratingLabel : rating != null ? `Rated ${rating}` : 'Unrated'
+  const meta = [ratingText, sideLabel, status].filter(Boolean).join(' · ')
   return (
     <View style={[styles.card, thinking && connected && { borderLeftWidth: 3, borderLeftColor: accent }]}>
       <Pressable

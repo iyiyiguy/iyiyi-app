@@ -23,20 +23,29 @@ import { captureRef } from 'react-native-view-shot'
 import { useIsFocused } from '@react-navigation/native'
 import PeopleSheet from '../components/PeopleSheet'
 import CaptureCard, { CARD_W } from '../components/camera/CaptureCard'
-import Shutter from '../components/camera/Shutter'
 import ModeSwitcher from '../components/camera/ModeSwitcher'
 import CameraOptionsBar from '../components/camera/CameraOptionsBar'
 import FirstUseTip from '../components/camera/FirstUseTip'
 import CameraHelpSheet, { HelpButton } from '../components/camera/CameraHelpSheet'
-import FilterPicker from '../components/camera/filters/FilterPicker'
 import LiveFilterLayer, { visionAvailable } from '../components/camera/filters/LiveFilterLayer'
 import BakeFilterLayer from '../components/camera/filters/BakeFilterLayer'
-import { brandVideo, detectBodies, detectFaces, isBrandVideoAvailable, isFaceDetectAvailable } from '../../modules/body-hit'
-import { FilterArt } from '../components/camera/filters/FilterArt'
+import LensCarousel from '../components/camera/filters/LensCarousel'
+import { LensArt } from '../components/camera/filters/LensArt'
+import { FrameOverlay, GradedPhoto, LiveLook } from '../components/camera/filters/LookLayer'
 import {
-  OVERLAY_BOX, fallbackHead, headsFromBodies, headsFromFaces, nameTagText, normalizeFilter, selectTargets,
+  lensEveryone, lensNeedsFace, lensPairedLook, normalizeLens, normalizeLook,
+} from '../components/camera/filters/lenses'
+import { DEFAULT_LENS_PREFS, loadLensPrefs, saveLensPrefs } from '../components/camera/filters/lensPrefs'
+import cameraStrings from '../components/camera/cameraStrings'
+import { PLATFORM_LABELS } from '../lib/socialLinks'
+import { brandVideo, detectBodies, detectFaces, isBrandVideoAvailable, isFaceDetectAvailable } from '../../modules/body-hit'
+import {
+  OVERLAY_BOX, fallbackHead, headsFromBodies, headsFromFaces, nameTagText, selectTargets,
 } from '../lib/cameraFilters'
 import { openProfile } from '../lib/profileNav'
+import { shareProfileLink } from '../lib/shareLinks'
+import { useT } from '../i18n'
+import reviewStrings from '../i18n/strings/cameraReview'
 import { colors, radii, type } from '../theme'
 import { apiJson } from '../lib/api'
 import { createCameraPost, fetchCameraNearby } from '../lib/cameraApi'
@@ -59,6 +68,26 @@ const CARD_SLOT = CARD_W + 8 // CaptureCard's outer width
 const wait = (ms) => new Promise((r) => setTimeout(r, ms))
 const haptic = (style = Haptics.ImpactFeedbackStyle.Light) => Haptics.impactAsync(style).catch(() => {})
 const isNotReady = (e) => /not ready/i.test(String(e?.message ?? e ?? ''))
+
+// People who turned off "tag me in nearby posts" are never tagged. camera_nearby() (and the
+// media_tags insert policy) already leave them out server-side; this is the client-side
+// belt and braces for any payload that carries the preference.
+const allowsTagging = (u) => !!u && typeof u.id === 'string' && u.id
+  && u.allow_tagging !== false && u.allowTagging !== false && u.taggable !== false && u.tagging_enabled !== false
+const myHandleOf = (me) => (typeof me?.username === 'string' && me.username.trim()
+  ? `@${me.username.trim().replace(/^@+/, '').slice(0, 24)}`
+  : null)
+// Platforms you've linked (for the Follow me lens), from whatever /api/profiles/me sends.
+function platformsOfMe(me) {
+  try {
+    const raw = Array.isArray(me?.social_links)
+      ? me.social_links.filter((l) => l?.value).map((l) => l.platform)
+      : Array.isArray(me?.platforms) ? me.platforms : []
+    return Array.from(new Set(raw.filter((p) => PLATFORM_LABELS[p]))).slice(0, 6)
+  } catch {
+    return []
+  }
+}
 
 // Saves both full video and trims metadata (keeping full video for now)
 // Trimming happens client-side on playback using duration tracking
@@ -199,10 +228,16 @@ function CountdownNumber({ value, hint }) {
 // the shutter: a photo, or start/stop a video. Options (countdown timer, burst, video cut-off)
 // sit in the glass pill above. Every capture hovers at the top for 5 seconds with a countdown
 // bar - tap its X to cancel - then flies off and posts. Everyone who is within 150 ft, visible
-// and has tagging turned on is tagged automatically. Originals are saved to an "iYiYi" album
-// on the phone the moment they're captured; posted photos carry the watermark.
+// and has tagging turned on is tagged automatically (people can turn "tag me in nearby posts"
+// off in Settings). Originals are saved to an "iYiYi" album on the phone the moment they're
+// captured; posted photos carry the watermark.
+// AR: swipe the lens carousel around the shutter (face-tracked lenses), pick a Look (colour
+// grade) and the iYiYi frame from the options pill. Photos get all of it baked in; videos get
+// the lens (iOS) and the iY logo.
 export default function CameraScreen({ navigation, route }) {
   const isFocused = useIsFocused()
+  const tr = useT(reviewStrings)
+  const tc = useT(cameraStrings)
   const { width: winWidth, height: winHeight } = useWindowDimensions()
   const isInline = route?.params?.inline ?? false
   const cardSize = isInline
@@ -258,7 +293,6 @@ export default function CameraScreen({ navigation, route }) {
   const [options, setOptionsState] = useState(DEFAULT_CAMERA_OPTIONS)
   const optionsRef = useRef(DEFAULT_CAMERA_OPTIONS)
   const mode = options.mode
-  const filter = normalizeFilter(options.filter)
   const modeRef = useRef(mode)
   modeRef.current = mode
   const [muted, setMuted] = useState(false)
@@ -284,7 +318,10 @@ export default function CameraScreen({ navigation, route }) {
   const [helpOpen, setHelpOpen] = useState(false)
   const [barOpen, setBarOpen] = useState(false) // an option's choices are showing in the bar
   const [notice, setNotice] = useState(null)
-  const [bottomH, setBottomH] = useState(0) // height of the bottom controls, to fit the filter strip
+  // AR lens / look / frame (remembered in filters/lensPrefs).
+  const [fxPrefs, setFxPrefsState] = useState(DEFAULT_LENS_PREFS)
+  const fxPrefsRef = useRef(DEFAULT_LENS_PREFS)
+  const myPlatforms = useMemo(() => platformsOfMe(me), [me])
   facingRef.current = facing
   meRef.current = me
   cardSizeRef.current = cardSize
@@ -303,6 +340,7 @@ export default function CameraScreen({ navigation, route }) {
     setTimeout(() => { if (mounted.current) setNotice((n) => (n === msg ? null : n)) }, 3200)
   }
   const dismiss = () => navigation.goBack()
+  const shareMine = () => { if (me?.username) shareProfileLink(me.username, tr('shareMessage')) }
   // Who's around (and will be tagged): tap the chip to see them, follow, or open a profile.
   // A profile is pushed on top of the camera; posting carries on underneath.
   const openPerson = (id) => {
@@ -319,6 +357,11 @@ export default function CameraScreen({ navigation, route }) {
       optionsRef.current = o
       modeChangedAt.current = Date.now()
       setOptionsState(o)
+      return loadLensPrefs(o?.filter).then((p) => {
+        if (!mounted.current) return
+        fxPrefsRef.current = p
+        setFxPrefsState(p)
+      })
     }).catch(() => {})
     return () => {
       mounted.current = false
@@ -385,7 +428,7 @@ export default function CameraScreen({ navigation, route }) {
       const c = { lat: loc.coords.latitude, lng: loc.coords.longitude, acc: loc.coords.accuracy ?? null }
       coordsRef.current = c
       const data = await fetchCameraNearby(c.lat, c.lng)
-      const users = Array.isArray(data?.users) ? data.users.filter(Boolean) : []
+      const users = Array.isArray(data?.users) ? data.users.filter(allowsTagging) : []
       nearbyRef.current = users
       if (mounted.current) setNearby(users)
       Location.reverseGeocodeAsync({ latitude: c.lat, longitude: c.lng })
@@ -447,13 +490,18 @@ export default function CameraScreen({ navigation, route }) {
   // Mounts the photo + watermark in a hidden view (behind the camera preview), waits for the
   // image to load, snapshots it, and unmounts it again. Returns null if anything goes wrong
   // (then the original is posted instead).
-  // With an AR filter (fx = { filter, facing }), the photo itself is run through Vision to find
-  // heads, and the still filter art is drawn over them (top-center if nobody is found).
+  // With an AR lens (fx = { filter, facing, look, frame }), the photo itself is run through
+  // Vision to find heads, and the still lens art is drawn over them (top-center if nobody is
+  // found, except face lenses, which need a face). A look redraws the photo through its colour
+  // matrix; the frame adds the keyline, @handle and date.
   const bakeWatermark = (uri, fx = null) => {
     const run = async () => {
       if (!mounted.current) return null
       const view = cardSizeRef.current || cardSize
       let overlay = null
+      const look = normalizeLook(fx?.look)
+      const graded = look !== 'none'
+      const framed = !!fx?.frame
       if (fx && fx.filter && fx.filter !== 'none') {
         try {
           // Faces on the photo itself (box, roll, yaw); body pose on older binaries.
@@ -468,32 +516,39 @@ export default function CameraScreen({ navigation, route }) {
           // Same matching as the live preview: nearby iYiYi users by compass bearing, else
           // the nearest face. Uses the heading/position captured with the photo.
           const targets = selectTargets({
-            heads, facing: fx.facing, nearby: nearbyRef.current, me: meRef.current, myPos: fx.myPos || coordsRef.current, headingDeg: fx.heading, everyone: fx.filter === 'logo',
+            heads, facing: fx.facing, nearby: nearbyRef.current, me: meRef.current, myPos: fx.myPos || coordsRef.current, headingDeg: fx.heading, everyone: lensEveryone(fx.filter),
           })
-          overlay = {
+          const list = targets.length ? targets : lensNeedsFace(fx.filter) && heads.length === 0 && (isFaceDetectAvailable || visionAvailable) ? [] : [fallbackHead(view, fx.facing)]
+          overlay = list.length ? {
             filter: fx.filter,
-            heads: targets.length ? targets : [fallbackHead(view, fx.facing)],
+            heads: list,
             name: nameTagText({ facing: fx.facing, headCount: heads.length, nearby: nearbyRef.current, me: meRef.current }),
-          }
+          } : null
         } catch {
           overlay = null
         }
       }
       if (!mounted.current) return null
       const loaded = new Promise((resolve) => {
-        let need = overlay ? 2 : 1
+        let need = 1 + (overlay ? 1 : 0) + (graded ? 1 : 0)
         bakeWaiter.current = (ok) => {
           if (!ok) { resolve(false); return }
           need -= 1
           if (need <= 0) resolve(true)
         }
       })
-      setBakeJob({ uri, key: `${Date.now()}-${Math.random()}`, overlay })
+      setBakeJob({
+        uri,
+        key: `${Date.now()}-${Math.random()}`,
+        overlay,
+        look: graded ? look : null,
+        frame: framed ? { handle: myHandleOf(meRef.current), place: showPhotoLocationRef.current ? locationLabelRef.current : null, date: new Date() } : null,
+      })
       const ok = await Promise.race([loaded, wait(3000).then(() => false)])
       bakeWaiter.current = null
       let out = null
       if (ok && mounted.current && bakeViewRef.current) {
-        await wait(overlay ? 160 : 80) // let the loaded frame (and filter art) commit before the snapshot
+        await wait(overlay || graded || framed ? 180 : 80) // let the loaded frame (and lens art / grade) commit before the snapshot
         try {
           out = await captureRef(bakeViewRef.current, { format: 'jpg', quality: 0.92, result: 'tmpfile' })
         } catch (e) {
@@ -538,7 +593,8 @@ export default function CameraScreen({ navigation, route }) {
     const run = async () => {
       if (!mounted.current) return null
       const ready = new Promise((resolve) => { artWaiter.current = resolve })
-      setArtJob({ filter, name, key: `${Date.now()}-${Math.random()}` })
+      const mine = myHandleOf(meRef.current)
+      setArtJob({ filter, name, platforms: mine && name === mine ? platformsOfMe(meRef.current) : null, key: `${Date.now()}-${Math.random()}` })
       await Promise.race([ready, wait(2500)])
       artWaiter.current = null
       await wait(120)
@@ -605,7 +661,8 @@ export default function CameraScreen({ navigation, route }) {
       lat: c?.lat ?? null,
       lng: c?.lng ?? null,
       location_label: showPhotoLocationRef.current ? locationLabelRef.current : null,
-      tagged_ids: nearbyRef.current.map((u) => u.id),
+      // Everyone nearby right now who allows tagging (see allowsTagging).
+      tagged_ids: nearbyRef.current.filter(allowsTagging).map((u) => u.id),
     })
   }
 
@@ -695,16 +752,19 @@ export default function CameraScreen({ navigation, route }) {
   }
 
   // --- AR filter helpers ------------------------------------------------------------------
-  // Filter to bake into a photo taken right now (stills only - see the video note below),
-  // with the compass heading and position at the moment of capture for name matching.
+  // Lens / look / frame to bake into a photo taken right now, with the compass heading and
+  // position at the moment of capture for name matching. null = nothing to add but the logo.
   const captureFx = () => {
-    const f = normalizeFilter(optionsRef.current?.filter)
-    if (f === 'none') return null
+    const p = fxPrefsRef.current || DEFAULT_LENS_PREFS
+    const f = normalizeLens(p.lens)
+    const look = normalizeLook(p.look)
+    if (f === 'none' && look === 'none' && !p.frame) return null
     let heading = null
     try { heading = filterCtlRef.current?.getHeading?.() ?? null } catch {}
     const pos = coordsRef.current
-    return { filter: f, facing: facingRef.current, heading, myPos: pos ? { ...pos } : null }
+    return { filter: f, look, frame: !!p.frame, facing: facingRef.current, heading, myPos: pos ? { ...pos } : null }
   }
+  const lensOn = () => normalizeLens(fxPrefsRef.current?.lens) !== 'none'
   // Stops head tracking from starting a new sample and waits (briefly) for one in flight, so
   // the real capture never queues behind it.
   const holdTracking = async () => {
@@ -726,9 +786,9 @@ export default function CameraScreen({ navigation, route }) {
     const fx = captureFx()
     try {
       await waitForCamera(false)
-      if (fx) await holdTracking()
+      if (lensOn()) await holdTracking()
       haptic(Haptics.ImpactFeedbackStyle.Medium)
-      if (fx) flashShutter() // the native shutter blink is off while tracking
+      if (lensOn()) flashShutter() // the native shutter blink is off while tracking
       // A quick second tap can land while the previous photo is still being delivered:
       // retry for a moment instead of failing.
       let photo = null
@@ -791,7 +851,7 @@ export default function CameraScreen({ navigation, route }) {
     setBurstTotal(shots)
     setBurstCount(0)
     await waitForCamera(false)
-    if (fx) await holdTracking()
+    if (lensOn()) await holdTracking()
     try {
       await runBurstShots(shots, token, fx)
     } finally {
@@ -899,7 +959,7 @@ export default function CameraScreen({ navigation, route }) {
     const record = () => cameraRef.current?.recordAsync({ maxDuration: cutoffS || MAX_RECORD_S })
     // Live filter tracking grabs stills from the same session: let any in-flight one finish
     // and hold new ones until the recording has started.
-    if (normalizeFilter(optionsRef.current?.filter) !== 'none') {
+    if (lensOn()) {
       await holdTracking()
       setTimeout(() => { holdFilter.current = false }, 1200)
     }
@@ -1073,13 +1133,28 @@ export default function CameraScreen({ navigation, route }) {
     setOptions({ mode: m })
     if (m === 'video') ensureMic()
   }
+  const setFxPrefs = (patch) => {
+    const next = { ...fxPrefsRef.current, ...patch }
+    fxPrefsRef.current = next
+    setFxPrefsState(next)
+    saveLensPrefs(next)
+  }
   const changeFilter = (f) => {
-    const next = normalizeFilter(f)
-    const prev = normalizeFilter(optionsRef.current?.filter)
+    const next = normalizeLens(f)
+    const prev = normalizeLens(fxPrefsRef.current?.lens)
     if (next === prev) return
-    setOptions({ filter: next })
+    // A lens with its own look (e.g. Doll Glam → Glam) switches it on, unless a look is already chosen.
+    const paired = lensPairedLook(next)
+    if (paired && normalizeLook(fxPrefsRef.current?.look) === 'none') setFxPrefs({ lens: next, look: paired })
+    else setFxPrefs({ lens: next })
     if (next !== 'none' && prev === 'none') maybeTip('filters')
   }
+  const changeLook = (l) => {
+    const next = normalizeLook(l)
+    if (next === fxPrefsRef.current?.look) return
+    setFxPrefs({ look: next })
+  }
+  const changeFrame = (on) => setFxPrefs({ frame: !!on })
   const flipCamera = () => {
     if (recording.current || phaseRef.current !== 'idle') return
     Haptics.selectionAsync().catch(() => {})
@@ -1123,11 +1198,14 @@ export default function CameraScreen({ navigation, route }) {
     <PeopleSheet
       visible={peopleOpen}
       onClose={() => setPeopleOpen(false)}
-      title={nearby.length ? `${nearby.length} nearby` : 'Nobody nearby yet'}
-      subtitle="Everyone within 150 ft who has tagging on is tagged in what you post."
+      title={nearby.length ? tr('peopleTitle', { n: nearby.length }) : tr('nobody')}
+      subtitle={tc('peopleSubtitle')}
       people={nearby}
       onOpenProfile={openPerson}
-      emptyText="When people with tagging on are within 150 ft, they’ll show up here."
+      emptyText={tr('peopleEmpty')}
+      onShareMine={me?.username ? shareMine : undefined}
+      shareLabel={tr('shareLink')}
+      qrLabel={tr('showQr')}
     />
   )
 
@@ -1155,10 +1233,17 @@ export default function CameraScreen({ navigation, route }) {
     ? Math.min(CARD_SLOT + 6, (cardSize.width - 28 - CARD_SLOT) / (capturedQueue.length - 1))
     : CARD_SLOT
   const flipRotate = flipSpin.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '180deg'] })
-  // Live AR filter: shown in photo and video mode (and while recording). Photos get it baked
-  // in; recorded video files don't (no video compositor in this build).
+  // Live AR lens: shown in photo and video mode (and while recording). Photos get it baked in;
+  // videos too where the native brander exists (iOS). Looks and the frame are photo-only.
+  const filter = normalizeLens(fxPrefs.lens)
+  const look = normalizeLook(fxPrefs.look)
   const filterLive = filter !== 'none' && isFocused
   const tracking = filterLive && visionAvailable
+  const videoNote = mode === 'video'
+    ? (look !== 'none' || fxPrefs.frame
+      ? tc('videoLookNote')
+      : filter !== 'none' && !isBrandVideoAvailable ? tc('videoLensNote') : null)
+    : null
 
   // --- live camera (captures hover on top of it) -------------------------------------------
   return (
@@ -1180,14 +1265,26 @@ export default function CameraScreen({ navigation, route }) {
             onLoad={() => bakeWaiter.current?.(true)}
             onError={() => bakeWaiter.current?.(false)}
           />
+          {bakeJob.look ? (
+            <GradedPhoto
+              uri={bakeJob.uri}
+              look={bakeJob.look}
+              width={cardSize.width}
+              height={cardSize.height}
+              onReady={() => bakeWaiter.current?.(true)}
+            />
+          ) : null}
           {bakeJob.overlay ? (
             <BakeFilterLayer
               filter={bakeJob.overlay.filter}
               heads={bakeJob.overlay.heads}
               name={bakeJob.overlay.name}
+              myHandle={myHandleOf(me)}
+              platforms={myPlatforms}
               onReady={() => bakeWaiter.current?.(true)}
             />
           ) : null}
+          {bakeJob.frame ? <FrameOverlay live={false} handle={bakeJob.frame.handle} place={bakeJob.frame.place} date={bakeJob.frame.date} /> : null}
           <Watermark />
         </View>
       )}
@@ -1199,7 +1296,7 @@ export default function CameraScreen({ navigation, route }) {
           style={[styles.hiddenBake, { width: OVERLAY_BOX, height: OVERLAY_BOX }]}
           pointerEvents="none"
         >
-          <FilterArt filter={artJob.filter} name={artJob.name || '@iyiyi'} live={false} onReady={() => artWaiter.current?.()} />
+          <LensArt lens={artJob.filter} name={artJob.name || '@iyiyi'} platforms={artJob.platforms} live={false} onReady={() => artWaiter.current?.()} />
         </View>
       )}
       <View style={[StyleSheet.absoluteFill, styles.bakeCover]} pointerEvents="none" />
@@ -1219,9 +1316,10 @@ export default function CameraScreen({ navigation, route }) {
         />
       )}
 
+      {isFocused && look !== 'none' && <LiveLook look={look} />}
+      {isFocused && fxPrefs.frame && <FrameOverlay live />}
       {filterLive && (
         <LiveFilterLayer
-          key={filter}
           filter={filter}
           cameraRef={cameraRef}
           cameraReadyRef={cameraReadyRef}
@@ -1234,23 +1332,13 @@ export default function CameraScreen({ navigation, route }) {
           view={cardSize}
           nearby={nearby}
           me={me}
+          platforms={myPlatforms}
         />
       )}
       <Animated.View style={[StyleSheet.absoluteFill, styles.flash, { opacity: shutterFlash }]} pointerEvents="none" />
 
       {/* Swipe surface for Photo/Video (sits under every control). */}
       <View style={StyleSheet.absoluteFill} {...swipe.panHandlers} />
-
-      {bottomH > 0 && (
-        <FilterPicker
-          value={filter}
-          onChange={changeFilter}
-          disabled={busy}
-          top={66}
-          bottom={16 + bottomH + 6}
-          note={mode === 'video' && filter !== 'none' ? 'Live only · not saved in video' : null}
-        />
-      )}
 
       {(phase === 'countdown' || phase === 'redoCountdown') && (
         <CountdownNumber
@@ -1274,10 +1362,10 @@ export default function CameraScreen({ navigation, route }) {
             <RecordingTimer startedAt={recordStartedAt} cutoffS={recordCutoffS} />
           </View>
         ) : (
-          <Pressable onPress={() => setPeopleOpen(true)} style={{ flex: 1, marginHorizontal: 12 }} accessibilityRole="button" accessibilityLabel="See who is nearby">
+          <Pressable onPress={() => setPeopleOpen(true)} style={{ flex: 1, marginHorizontal: 12 }} accessibilityRole="button" accessibilityLabel={tr('seeNearby')}>
             <GlassCard intensity={80} tint="dark" radius={20} padding={12}>
               <Text style={[styles.badgeText, { textAlign: 'center' }]}>
-                {nearby.length ? `${nearby.length} nearby will be tagged ›` : 'Nobody nearby yet'}
+                {nearby.length ? tc('nearbyChip', { n: nearby.length }) : tr('nobody')}
               </Text>
             </GlassCard>
           </Pressable>
@@ -1315,51 +1403,67 @@ export default function CameraScreen({ navigation, route }) {
         </View>
       )}
 
-      <View
-        style={styles.bottom}
-        pointerEvents="box-none"
-        onLayout={(e) => {
-          const h = e?.nativeEvent?.layout?.height
-          if (Number.isFinite(h) && Math.abs(h - bottomH) > 1) setBottomH(h)
-        }}
-      >
+      <View style={styles.bottom} pointerEvents="box-none">
         {hint ? <Text style={styles.hint}>{hint}</Text> : null}
         <View style={styles.optionsRow} pointerEvents="box-none">
           {/* Same width as the "?" on the right, so the bar stays centred. */}
           {!barOpen && <View style={styles.helpSpacer} />}
-          <CameraOptionsBar mode={mode} options={options} onChange={onOptionsChange} disabled={busy} onOpenChange={setBarOpen} />
+          <CameraOptionsBar
+            mode={mode}
+            options={options}
+            onChange={onOptionsChange}
+            disabled={busy}
+            onOpenChange={setBarOpen}
+            look={look}
+            frame={!!fxPrefs.frame}
+            onLook={changeLook}
+            onFrame={changeFrame}
+          />
           {!barOpen && <HelpButton onPress={() => { setTip(null); setHelpOpen(true) }} disabled={busy} />}
         </View>
-        <ModeSwitcher mode={mode} onChange={changeMode} disabled={busy} />
-        <View style={styles.shutterRow}>
+        <View style={styles.modeRow} pointerEvents="box-none">
           <Pressable
             onPress={pickFromLibrary}
             hitSlop={10}
-            style={[styles.sideButton, busy && { opacity: 0.4 }]}
+            style={[styles.sideButton, styles.sideButtonSmall, busy && { opacity: 0.4 }]}
             disabled={busy}
             accessibilityLabel="Choose from library"
           >
-            <Ionicons name="images-outline" size={21} color="#fff" />
+            <Ionicons name="images-outline" size={19} color="#fff" />
           </Pressable>
-          <Shutter mode={mode} recording={isRecording} busy={phase === 'burst'} onPress={onShutter} />
+          <View style={{ flex: 1 }}>
+            <ModeSwitcher mode={mode} onChange={changeMode} disabled={busy} />
+          </View>
           {isRecording ? (
-            <Pressable onPress={redoRecording} hitSlop={10} style={[styles.sideButton, styles.sideButtonArmed]} accessibilityLabel="Restart recording">
-              <Ionicons name="refresh" size={21} color="#fff" />
+            <Pressable onPress={redoRecording} hitSlop={10} style={[styles.sideButton, styles.sideButtonSmall, styles.sideButtonArmed]} accessibilityLabel="Restart recording">
+              <Ionicons name="refresh" size={19} color="#fff" />
             </Pressable>
           ) : (
             <Pressable
               onPress={flipCamera}
               hitSlop={10}
-              style={[styles.sideButton, phase !== 'idle' && { opacity: 0.4 }]}
+              style={[styles.sideButton, styles.sideButtonSmall, phase !== 'idle' && { opacity: 0.4 }]}
               disabled={phase !== 'idle'}
               accessibilityLabel={facing === 'back' ? 'Switch to front camera' : 'Switch to back camera'}
             >
               <Animated.View style={{ transform: [{ rotateY: flipRotate }] }}>
-                <Ionicons name="camera-reverse-outline" size={23} color="#fff" />
+                <Ionicons name="camera-reverse-outline" size={21} color="#fff" />
               </Animated.View>
             </Pressable>
           )}
         </View>
+        {/* Lens carousel with the shutter in the middle (Snapchat-style). */}
+        <LensCarousel
+          value={filter}
+          onChange={changeFilter}
+          mode={mode}
+          recording={isRecording}
+          shutterBusy={phase === 'burst'}
+          onShutter={onShutter}
+          disabled={busy}
+          hidden={isRecording}
+          note={videoNote}
+        />
       </View>
 
       <CameraHelpSheet visible={helpOpen && !tip} onClose={() => setHelpOpen(false)} onOpenTip={openHelpTip} />
@@ -1397,15 +1501,16 @@ const styles = StyleSheet.create({
   recLimit: { color: 'rgba(255,255,255,0.85)', fontWeight: '600', fontSize: 12, fontVariant: ['tabular-nums'] },
   noticeWrap: { position: 'absolute', left: 24, right: 24, top: '42%', alignItems: 'center' },
   noticeText: { color: '#fff', fontSize: 13, fontWeight: '600', textAlign: 'center' },
-  bottom: { position: 'absolute', bottom: 16, left: 12, right: 12, alignItems: 'center', gap: 10 },
+  bottom: { position: 'absolute', bottom: 8, left: 12, right: 12, alignItems: 'center', gap: 6 },
+  modeRow: { flexDirection: 'row', alignItems: 'center', alignSelf: 'stretch', paddingHorizontal: 4, gap: 8 },
   hint: { color: 'rgba(255,255,255,0.9)', fontWeight: '600', fontSize: 12, textShadowColor: 'rgba(0,0,0,0.5)', textShadowRadius: 3 },
   optionsRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, maxWidth: '100%' },
   helpSpacer: { width: 24 },
-  shutterRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 34 },
   sideButton: {
     width: 46, height: 46, borderRadius: 23, backgroundColor: 'rgba(30,30,50,0.35)',
     alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)',
   },
+  sideButtonSmall: { width: 40, height: 40, borderRadius: 20 },
   sideButtonArmed: { backgroundColor: 'rgba(255, 57, 48, 0.6)', borderColor: 'rgba(255, 100, 80, 0.5)' },
   overlayCenter: {
     ...StyleSheet.absoluteFill, alignItems: 'center', justifyContent: 'center',

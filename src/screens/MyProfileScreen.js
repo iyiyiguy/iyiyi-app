@@ -8,6 +8,7 @@ import { Ionicons } from '@expo/vector-icons'
 import * as ImagePicker from 'expo-image-picker'
 import { LinearGradient } from 'expo-linear-gradient'
 import GoProBanner from '../components/GoProBanner'
+import BusinessToolsCard from '../components/business/BusinessToolsCard'
 import { colors, gradients, radii, type } from '../theme'
 import { API_URL, supabase } from '../lib/supabase'
 import { apiJson } from '../lib/api'
@@ -19,7 +20,8 @@ import ContentViewer from '../components/ContentViewer'
 import ImportLinksPanel from '../components/ImportLinksPanel'
 import { mergeLinks } from '../lib/importLinks'
 import ContentGrid from '../components/ContentGrid'
-import { fetchMyMedia, normalizeMediaItem, sortMediaNewest } from '../lib/myContent'
+import { fetchMyMedia, normalizeMediaItem, sortMediaNewest, deleteMyMedia, withoutMedia } from '../lib/myContent'
+import { onMediaRemoved } from '../lib/mediaEvents'
 import { useT } from '../i18n'
 import strings from '../i18n/strings/myProfile'
 import { avatarSource } from '../lib/avatarSource'
@@ -81,6 +83,9 @@ export default function MyProfileScreen({ navigation }) {
   const [importOpen, setImportOpen] = useState(false)
   const [platformFollowCount, setPlatformFollowCount] = useState(0)
   const [viewer, setViewer] = useState({ open: false, index: 0 })
+  const deletingIds = useRef(new Set()) // posts with a delete in flight (no double deletes)
+  // A post deleted from the full-screen viewer (here or on another screen) leaves the grid.
+  useEffect(() => onMediaRemoved((id) => setMedia((m) => withoutMedia(m, id))), [setMedia])
 
   const [loadError, setLoadError] = useState(false)
   const [reloadKey, setReloadKey] = useState(0)
@@ -304,15 +309,22 @@ export default function MyProfileScreen({ navigation }) {
     }
   }
 
+  // API delete with a direct profile_media fallback (deleteMyMedia); on success it broadcasts
+  // emitMediaRemoved so the feed / stream drop the post too.
   const deleteMedia = async (id) => {
+    const key = String(id)
+    if (deletingIds.current.has(key)) return
+    deletingIds.current.add(key)
     const before = media
-    setMedia((m) => m.filter((item) => item.id !== id))
+    const item = media.find((m) => String(m?.id) === key) ?? id
+    setMedia((m) => withoutMedia(m, id))
     try {
-      const res = await authedFetch(`/api/profiles/me/media/${id}`, { method: 'DELETE' })
-      if (!res.ok) throw new Error(t('deleteFailed'))
+      await deleteMyMedia(item)
     } catch (e) {
       setMedia(before)
-      setError(e?.message ?? t('deleteFailed'))
+      setError(e?.message || t('deleteFailed'))
+    } finally {
+      deletingIds.current.delete(key)
     }
   }
 
@@ -437,6 +449,9 @@ export default function MyProfileScreen({ navigation }) {
         <Row label={t('settings')} onPress={() => navigation.navigate('Settings')} />
       </View>
 
+      {/* Business Pro tools (Analytics, QR & poster, Promotions, Team); an upsell for everyone else. */}
+      <BusinessToolsCard navigation={navigation} style={styles.businessTools} />
+
       {stats && (
         <GlassPanel radius={radii.lg} style={styles.statsCard}>
           <View style={styles.statsRow}>
@@ -444,11 +459,11 @@ export default function MyProfileScreen({ navigation }) {
             <Stat label={t('thisWeek')} value={stats.views_last_7_days} />
             <Stat label={t('likes')} value={stats.total_likes ?? 0} />
           </View>
-          <Pressable onPress={() => navigation.navigate('Recap')} style={styles.viewersLink}>
+          <Pressable onPress={() => navigation.navigate('Recap')} style={styles.viewersLink} accessibilityRole="button">
             <Text style={styles.viewersLinkText}>{t('growthRecap')}</Text>
           </Pressable>
           <TagLinks navigation={navigation} />
-          <Pressable onPress={() => navigation.navigate('Viewers')} style={styles.viewersLink}>
+          <Pressable onPress={() => navigation.navigate('Viewers')} style={styles.viewersLink} accessibilityRole="button">
             <Text style={styles.viewersLinkText}>{t('whoViewed')}</Text>
           </Pressable>
           {!profile.stats_public && (
@@ -746,6 +761,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
     padding: 16, borderBottomWidth: 1, borderBottomColor: colors.hairline,
   },
+  businessTools: { marginHorizontal: 20, marginBottom: 16 },
   statsCard: { marginHorizontal: 20, marginBottom: 16, padding: 16 },
   statsRow: { flexDirection: 'row' },
   statValue: { fontSize: 22, fontWeight: '800', color: colors.magenta },

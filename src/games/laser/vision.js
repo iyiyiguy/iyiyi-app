@@ -1,4 +1,9 @@
-// Camera-based hit detection for Laser Tag.
+// Camera-based hit detection for Laser Tag (and Battle Royale).
+//
+// Live tracking (liveBodies.js + aimAssist.js) is the primary path when the binary has it:
+// bodies in preview space, aim assist around the crosshair and tap-to-shoot. This file keeps
+// the still-frame path (one photo per shot) as the fallback and converts both into the same
+// preview-space body shape.
 //
 // The shooter's phone grabs a frame from the camera and runs Apple Vision on
 // it (modules/body-hit). If a person is under the crosshair we classify the hit
@@ -113,12 +118,73 @@ export function useVisionCapture(cameraRef) {
 }
 
 // Maps a normalized photo rect onto the on-screen camera preview, which fills
-// the view with aspect-fill (cropping the photo's longer dimension).
+// the view with aspect-fill (cropping the photo's longer dimension). Bodies already in
+// preview space (space: 'view', from viewBodiesFromStill / the live tracker) map 1:1.
 export function photoRectToScreen(r, body, view) {
+  if (body?.space === 'view') return viewRectToScreen(r, view)
   const iw = Math.min(body.imageWidth || 3, body.imageHeight || 4)
   const ih = Math.max(body.imageWidth || 3, body.imageHeight || 4)
   const scale = Math.max(view.width / iw, view.height / ih)
   const offX = (iw * scale - view.width) / 2
   const offY = (ih * scale - view.height) / 2
   return { left: r.x * iw * scale - offX, top: r.y * ih * scale - offY, width: r.w * iw * scale, height: r.h * ih * scale }
+}
+
+// Preview-space rect (0..1 of the preview view) -> screen points (before the scope zoom).
+export function viewRectToScreen(r, view) {
+  const W = view?.width || 0
+  const H = view?.height || 0
+  return { left: r.x * W, top: r.y * H, width: r.w * W, height: r.h * H }
+}
+
+const toViewRect = (r, body, view) => {
+  if (!r) return null
+  const s = photoRectToScreen(r, body, view)
+  const W = view.width
+  const H = view.height
+  const out = { x: s.left / W, y: s.top / H, w: s.width / W, h: s.height / H }
+  return Number.isFinite(out.x + out.y + out.w + out.h) && out.w > 0 && out.h > 0 ? out : null
+}
+
+// Still-frame detections (photo space) -> preview-space bodies for aimAssist.js. `src` keeps
+// the photo-space body for pickVisionTarget / pickBystander.
+export function viewBodiesFromStill(bodies, view) {
+  if (!Array.isArray(bodies) || !(view?.width > 0) || !(view?.height > 0)) return []
+  const out = []
+  bodies.forEach((b, i) => {
+    try {
+      const box = toViewRect(b?.box, b, view)
+      if (!box) return
+      out.push({ id: `s${i}`, box, head: toViewRect(b.head, b, view), torso: toViewRect(b.torso, b, view), kind: b.source || 'still', conf: b.confidence, space: 'view', src: b })
+    } catch {}
+  })
+  return out
+}
+
+// Live tracks (liveBodies.js) -> the same body shape.
+export function viewBodiesFromLive(tracks) {
+  return (tracks || []).map((t) => ({ id: t.id, box: t.box, head: t.head || null, torso: null, kind: t.kind || 'live', conf: t.conf, space: 'view', live: true }))
+}
+
+// Horizontal field of view the preview actually shows (aspect-fill crops the 4:3 photo).
+export function visibleHfovDeg(view) {
+  const W = view?.width || 0
+  const H = view?.height || 0
+  if (!(W > 0) || !(H > 0)) return CAMERA_HFOV_DEG
+  const portrait = W <= H
+  const halfTan = Math.tan((CAMERA_HFOV_DEG * Math.PI) / 360) * (portrait ? 1 : 4 / 3) // tan(half HFOV) of the photo width
+  const photoAspect = portrait ? 3 / 4 : 4 / 3
+  const frac = Math.min(1, (W / H) / photoAspect) // share of the photo width that is on screen
+  return (2 * Math.atan(halfTan * frac) * 180) / Math.PI
+}
+
+// A preview-space body as pickVisionTarget / pickBystander expect it (horizontal position
+// in a CAMERA_HFOV_DEG-wide photo frame).
+export function angularBody(body, view) {
+  if (!body) return body
+  if (body.src) return body.src
+  if (body.space !== 'view' || !body.box) return body
+  const k = visibleHfovDeg(view) / CAMERA_HFOV_DEG
+  const b = body.box
+  return { ...body, box: { x: 0.5 + (b.x - 0.5) * k, y: b.y, w: b.w * k, h: b.h }, source: 'live' }
 }

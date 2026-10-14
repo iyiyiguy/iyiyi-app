@@ -11,7 +11,7 @@ const SIZES = {
 
 // Glass pill button. variant="primary" is the solid, high-contrast call to action
 // (dark pill on light glass / light pill in dark mode) like the reference designs.
-export const GlassButton = ({ onPress, children, style, tint, size = 'md', icon = null, disabled = false, variant = 'glass', textStyle }) => {
+export const GlassButton = ({ onPress, children, style, tint, size = 'md', icon = null, disabled = false, variant = 'glass', textStyle, accessibilityLabel, hitSlop }) => {
   const s = SIZES[size] ?? SIZES.md
   const primary = variant === 'primary'
   const content = (
@@ -23,7 +23,15 @@ export const GlassButton = ({ onPress, children, style, tint, size = 'md', icon 
     </View>
   )
   return (
-    <Press onPress={onPress} disabled={disabled} style={style} scaleTo={0.96}>
+    <Press
+      onPress={onPress}
+      disabled={disabled}
+      style={style}
+      scaleTo={0.96}
+      hitSlop={hitSlop}
+      accessibilityLabel={accessibilityLabel ?? (typeof children === 'string' ? children : undefined)}
+      accessibilityState={{ disabled: !!disabled }}
+    >
       {primary ? (
         <View style={[styles.primary, { borderRadius: s.radius }]}>{content}</View>
       ) : (

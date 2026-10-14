@@ -6,11 +6,15 @@ import { fetchImportedLinks } from '../lib/importLinks'
 import { PLATFORM_LABELS } from '../lib/socialLinks'
 import SocialIcon from './SocialIcon'
 import GlassPanel from './GlassPanel'
+import { useT } from '../i18n'
+import strings from '../i18n/strings/importLinks'
 
 // Paste a Linktree (or Beacons, Bio.link, Carrd, Bitly, Stan, Taplink...) link, review
 // what was found, and hand the selected links to onImport({ social_links, websites }).
 // onSkip is optional (shown during onboarding).
-export default function ImportLinksPanel({ onImport, onSkip, importLabel = 'Add to my profile', intro }) {
+export default function ImportLinksPanel({ onImport, onSkip, importLabel: importLabelProp, intro }) {
+  const t = useT(strings)
+  const importLabel = importLabelProp ?? t('linktreeAdd')
   const [url, setUrl] = useState('')
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -36,7 +40,7 @@ export default function ImportLinksPanel({ onImport, onSkip, importLabel = 'Add 
   const rows = found
     ? [
         ...(found.social_links ?? []).map((l, i) => ({ key: `s${i}`, kind: 'social', platform: l.platform, label: PLATFORM_LABELS[l.platform] ?? l.platform, value: l.value })),
-        ...(found.websites ?? []).map((w, i) => ({ key: `w${i}`, kind: 'web', label: 'Website', value: w })),
+        ...(found.websites ?? []).map((w, i) => ({ key: `w${i}`, kind: 'web', label: t('website'), value: w })),
       ]
     : []
   const selected = rows.filter((r) => !off.has(r.key))
@@ -58,7 +62,7 @@ export default function ImportLinksPanel({ onImport, onSkip, importLabel = 'Add 
         websites: selected.filter((r) => r.kind === 'web').map((r) => r.value),
       })
     } catch (e) {
-      setError(e.message || 'Could not save those links')
+      setError(e.message || t('panelSaveFailed'))
     } finally {
       setSaving(false)
     }
@@ -79,13 +83,21 @@ export default function ImportLinksPanel({ onImport, onSkip, importLabel = 'Add 
           keyboardType="url"
           returnKeyType="go"
           onSubmitEditing={find}
+          accessibilityLabel={t('panelUrlA11y')}
         />
       </GlassPanel>
-      <Text style={styles.supported}>Works with Linktree, Beacons, Bio.link, Carrd, Bitly, Stan, Taplink and more.</Text>
+      <Text style={styles.supported}>{t('panelSupported')}</Text>
 
-      <Pressable onPress={find} disabled={!url.trim() || loading} style={{ opacity: !url.trim() || loading ? 0.5 : 1 }}>
+      <Pressable
+        onPress={find}
+        disabled={!url.trim() || loading}
+        style={{ opacity: !url.trim() || loading ? 0.5 : 1 }}
+        accessibilityRole="button"
+        accessibilityLabel={t('panelFind')}
+        accessibilityState={{ disabled: !url.trim() || loading, busy: loading }}
+      >
         <LinearGradient colors={gradients.brand} style={styles.button}>
-          {loading ? <ActivityIndicator color={colors.onBrand} /> : <Text style={styles.buttonText}>Find my links</Text>}
+          {loading ? <ActivityIndicator color={colors.onBrand} /> : <Text style={styles.buttonText}>{t('panelFind')}</Text>}
         </LinearGradient>
       </Pressable>
 
@@ -93,11 +105,18 @@ export default function ImportLinksPanel({ onImport, onSkip, importLabel = 'Add 
 
       {found && (
         <View style={styles.results}>
-          <Text style={type.label}>Found {rows.length} link{rows.length === 1 ? '' : 's'} - uncheck any you don't want</Text>
+          <Text style={type.label}>{t(rows.length === 1 ? 'panelFoundOne' : 'panelFoundMany', { n: rows.length })}</Text>
           {rows.map((r) => {
             const on = !off.has(r.key)
             return (
-              <Pressable key={r.key} onPress={() => toggle(r.key)} style={styles.row}>
+              <Pressable
+                key={r.key}
+                onPress={() => toggle(r.key)}
+                style={styles.row}
+                accessibilityRole="checkbox"
+                accessibilityState={{ checked: on }}
+                accessibilityLabel={`${r.label}, ${r.value}`}
+              >
                 <View style={[styles.check, on && styles.checkOn]}>{on ? <Text style={styles.checkMark}>✓</Text> : null}</View>
                 <View style={styles.iconWrap}>
                   {r.kind === 'social' ? <SocialIcon platform={r.platform} size={18} color={colors.text} /> : <Text>🔗</Text>}
@@ -109,7 +128,14 @@ export default function ImportLinksPanel({ onImport, onSkip, importLabel = 'Add 
               </Pressable>
             )
           })}
-          <Pressable onPress={confirm} disabled={selected.length === 0 || saving} style={{ opacity: selected.length === 0 || saving ? 0.5 : 1 }}>
+          <Pressable
+            onPress={confirm}
+            disabled={selected.length === 0 || saving}
+            style={{ opacity: selected.length === 0 || saving ? 0.5 : 1 }}
+            accessibilityRole="button"
+            accessibilityLabel={`${importLabel} (${selected.length})`}
+            accessibilityState={{ disabled: selected.length === 0 || saving, busy: saving }}
+          >
             <LinearGradient colors={gradients.brand} style={styles.button}>
               {saving ? <ActivityIndicator color={colors.onBrand} /> : <Text style={styles.buttonText}>{importLabel} ({selected.length})</Text>}
             </LinearGradient>
@@ -118,8 +144,8 @@ export default function ImportLinksPanel({ onImport, onSkip, importLabel = 'Add 
       )}
 
       {onSkip ? (
-        <Pressable onPress={onSkip} style={styles.skip}>
-          <Text style={styles.skipText}>Skip for now</Text>
+        <Pressable onPress={onSkip} style={styles.skip} accessibilityRole="button">
+          <Text style={styles.skipText}>{t('skip')}</Text>
         </Pressable>
       ) : null}
     </ScrollView>

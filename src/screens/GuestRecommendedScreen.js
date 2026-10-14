@@ -10,14 +10,17 @@ import { GuestLoginButton, useGuestPrompt } from '../components/GuestPrompt'
 import { supabase, API_URL } from '../lib/supabase'
 import { matchesTags, matchesSearch } from '../lib/tags'
 import { avatarSource } from '../lib/avatarSource'
+import { useT } from '../i18n'
+import strings from '../i18n/strings/guest'
+import socialStrings from '../i18n/strings/social'
 
 // Logged-out "Discover": popular public profiles (database function guest_recommended,
 // migration 070), same glass cards as the member Recommended tab. Tapping a card opens the
-// public profile; Follow asks the visitor to sign up.
+// public profile; Follow asks the visitor to sign up. Tier labels are keys in i18n/strings/social.
 const TIER = {
-  premium: { label: 'Premium', color: colors.gold, tint: 'rgba(232,176,75,0.14)', mark: '👑' },
-  pro: { label: 'Pro', color: colors.magenta, tint: 'rgba(91,108,240,0.14)', mark: '⭐' },
-  creator: { label: 'Creator', color: colors.violet, tint: 'rgba(125,108,240,0.14)', mark: '★' },
+  premium: { label: 'tierPremium', color: colors.gold, tint: 'rgba(232,176,75,0.14)', mark: '👑' },
+  pro: { label: 'tierPro', color: colors.magenta, tint: 'rgba(91,108,240,0.14)', mark: '⭐' },
+  creator: { label: 'tierCreator', color: colors.violet, tint: 'rgba(125,108,240,0.14)', mark: '★' },
 }
 
 const compact = (n) => {
@@ -28,12 +31,16 @@ const compact = (n) => {
 }
 
 function GuestUserCard({ user, onPress, onFollow }) {
+  const t = useT(strings)
+  const tsoc = useT(socialStrings)
   const tier = TIER[user.account_type]
   const followers = Number(user.follower_count) || 0
   const posts = Number(user.post_count) || 0
-  const stat = followers > 0 ? `${compact(followers)} ${followers === 1 ? 'follower' : 'followers'}` : posts > 0 ? `${compact(posts)} ${posts === 1 ? 'post' : 'posts'}` : 'New on iYiYi'
+  const stat = followers > 0
+    ? t(followers === 1 ? 'followerOne' : 'followerMany', { n: compact(followers) })
+    : posts > 0 ? t(posts === 1 ? 'postOne' : 'postMany', { n: compact(posts) }) : t('newOnIyiyi')
   return (
-    <Pressable onPress={onPress} style={({ pressed }) => [{ flex: 1 }, pressed && { transform: [{ scale: 0.97 }] }]} accessibilityRole="button" accessibilityLabel={`Open ${user.username}'s profile`}>
+    <Pressable onPress={onPress} style={({ pressed }) => [{ flex: 1 }, pressed && { transform: [{ scale: 0.97 }] }]} accessibilityRole="button" accessibilityLabel={`${t('openProfileA11y', { name: user.username })}, ${stat}`}>
       <GlassPanel radius={28} style={{ flex: 1 }}>
         <View style={styles.cardInner}>
           <Image source={avatarSource(user?.avatar_url)} style={styles.avatar} />
@@ -42,11 +49,11 @@ function GuestUserCard({ user, onPress, onFollow }) {
           <View style={styles.cardFooter}>
             {tier ? (
               <View style={[styles.tag, { backgroundColor: tier.tint }]}>
-                <Text style={[styles.tagText, { color: tier.color }]}>{tier.mark} {tier.label}</Text>
+                <Text style={[styles.tagText, { color: tier.color }]}>{tier.mark} {tsoc(tier.label)}</Text>
               </View>
             ) : <View />}
-            <Pressable onPress={onFollow} hitSlop={6} accessibilityRole="button" accessibilityLabel={`Follow ${user.username}`} style={({ pressed }) => [styles.follow, pressed && { opacity: 0.85 }]}>
-              <Text style={styles.followText}>Follow</Text>
+            <Pressable onPress={onFollow} hitSlop={8} accessibilityRole="button" accessibilityLabel={t('followNameA11y', { name: user.username })} style={({ pressed }) => [styles.follow, pressed && { opacity: 0.85 }]}>
+              <Text style={styles.followText}>{t('follow')}</Text>
             </Pressable>
           </View>
         </View>
@@ -56,6 +63,7 @@ function GuestUserCard({ user, onPress, onFollow }) {
 }
 
 export default function GuestRecommendedScreen({ navigation }) {
+  const t = useT(strings)
   const { width } = useWindowDimensions()
   const cols = width >= 1000 ? 4 : width >= 680 ? 3 : 2
   const [users, setUsers] = useState(null)
@@ -94,16 +102,16 @@ export default function GuestRecommendedScreen({ navigation }) {
     <View style={styles.screen}>
       <GlowBackdrop preset="social" />
       <BrandHeader
-        title="Discover"
-        subtitle={users?.length ? `${users.length} popular ${users.length === 1 ? 'profile' : 'profiles'}` : 'Popular on iYiYi'}
+        title={t('discoverTitle')}
+        subtitle={users?.length ? t(users.length === 1 ? 'popularProfileOne' : 'popularProfileMany', { n: users.length }) : t('popularOnIyiyi')}
         right={<GuestLoginButton />}
       />
-      <SearchField style={styles.search} value={search} onChangeText={setSearch} placeholder="Search people or tags" />
+      <SearchField style={styles.search} value={search} onChangeText={setSearch} placeholder={t('searchPeopleTags')} />
       <View style={styles.toolbar}>
         <TagDropdown selected={activeTags} onApply={setActiveTags} />
         {filtering ? (
-          <Pressable onPress={() => { setSearch(''); setActiveTags([]) }} hitSlop={8} accessibilityRole="button">
-            <Text style={styles.filterClear}>Clear · {data.length} {data.length === 1 ? 'match' : 'matches'}</Text>
+          <Pressable onPress={() => { setSearch(''); setActiveTags([]) }} hitSlop={12} accessibilityRole="button">
+            <Text style={styles.filterClear}>{t(data.length === 1 ? 'clearMatchOne' : 'clearMatchMany', { n: data.length })}</Text>
           </Pressable>
         ) : null}
       </View>

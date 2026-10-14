@@ -3,6 +3,8 @@ import { Animated, Easing, View, Text, Pressable, StyleSheet } from 'react-nativ
 import * as Haptics from 'expo-haptics'
 import { colors, font, radii } from '../theme'
 import Glass from './Glass'
+import { useT } from '../i18n'
+import strings from '../i18n/strings/social'
 
 // Pulsing red dot - the "on air" signal used by the Live button and the Stream screen.
 export function LiveDot({ size = 8, color = '#ff3b4f' }) {
@@ -31,13 +33,15 @@ export function LiveDot({ size = 8, color = '#ff3b4f' }) {
 }
 
 // Glass "● Live" pill for headers; opens the Stream screen.
-export default function LiveButton({ onPress, label = 'Live' }) {
+export default function LiveButton({ onPress, label: labelProp }) {
+  const t = useT(strings)
+  const label = labelProp ?? t('live')
   return (
     <Pressable
       onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {}); onPress?.() }}
       hitSlop={6}
       accessibilityRole="button"
-      accessibilityLabel="Open live stream"
+      accessibilityLabel={t('openLive')}
       style={({ pressed }) => [pressed && { transform: [{ scale: 0.94 }] }]}
     >
       <Glass radius={21} style={styles.pill} interactive shadow={false}>

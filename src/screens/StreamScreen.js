@@ -15,9 +15,11 @@ import { colors, font, radii } from '../theme'
 import { apiJson } from '../lib/api'
 import { supabase } from '../lib/supabase'
 import { openProfile, getMyUserId } from '../lib/profileNav'
-import { fetchMyMedia, mergeMine, itemFromMediaRow } from '../lib/myContent'
-import { onMediaPosted } from '../lib/mediaEvents'
+import { fetchMyMedia, mergeMine, itemFromMediaRow, withoutMedia } from '../lib/myContent'
+import { onMediaPosted, onMediaRemoved, sameMediaId } from '../lib/mediaEvents'
 import { avatarSource } from '../lib/avatarSource'
+import { useT } from '../i18n'
+import contentStrings from '../i18n/strings/content'
 
 // Live Stream as a 3D cover-flow "TV": the current photo is a big portrait card in the
 // centre, ~3 cards each side recede in perspective (rotated toward the centre, smaller,
@@ -65,21 +67,22 @@ function dedupe(list) {
   })
 }
 
-function timeAgo(v, now) {
+function timeAgo(v, now, tr) {
   const t = toTime(v)
   if (t == null) return ''
   const s = Math.max(0, Math.round((now - t) / 1000))
-  if (s < 45) return 'just now'
+  if (s < 45) return tr('justNow')
   const m = Math.round(s / 60)
-  if (m < 60) return `${m}m ago`
+  if (m < 60) return tr('minsAgo', { n: m })
   const h = Math.round(m / 60)
-  if (h < 24) return `${h}h ago`
-  return `${Math.round(h / 24)}d ago`
+  if (h < 24) return tr('hoursAgo', { n: h })
+  return tr('daysAgo', { n: Math.round(h / 24) })
 }
 
 const clampIndex = (i, n) => (n <= 0 ? 0 : Math.min(n - 1, Math.max(0, Math.round(Number(i) || 0))))
 
 export default function StreamScreen({ navigation }) {
+  const tr = useT(contentStrings)
   const { width: screenW } = useWindowDimensions()
   const [items, setItems] = useState([]) // oldest -> newest (display order)
   const [fresh, setFresh] = useState(() => new Set())
@@ -228,6 +231,29 @@ export default function StreamScreen({ navigation }) {
     return () => { off?.() }
   }, [ingest])
 
+  // A post you deleted leaves the carousel at once. Its id stays in `known`, so a poll that
+  // still returns it (server cache) doesn't slide it back in. The card you're looking at
+  // stays put; deleting the centre card shows its newer neighbour (or the last card).
+  useEffect(() => onMediaRemoved((id) => {
+    if (!alive.current) return
+    const prev = itemsRef.current
+    const at = prev.findIndex((m) => sameMediaId(m?.id, id))
+    if (at === -1) return
+    const next = withoutMedia(prev, id)
+    itemsRef.current = next
+    setItems(next)
+    if (!next.length) {
+      indexRef.current = 0
+      setIndex(0)
+      return
+    }
+    const cur = indexRef.current
+    const target = clampIndex(at < cur ? cur - 1 : cur, next.length)
+    indexRef.current = target
+    setIndex(target)
+    setTimeout(() => { if (alive.current) goTo(target, false) }, 30)
+  }), [goTo])
+
   useFocusEffect(
     useCallback(() => {
       let cancelled = false
@@ -349,8 +375,12 @@ export default function StreamScreen({ navigation }) {
   return (
     <View style={styles.screen}>
       <BrandHeader
-        title="Live"
-        subtitle={loaded ? `${n} ${n === 1 ? 'photo' : 'photos'}${lastHour ? ` · ${lastHour} in the last hour` : ''}` : 'Connecting…'}
+        title={tr('live')}
+        subtitle={loaded
+          ? (lastHour
+            ? tr('photosLastHour', { photos: tr(n === 1 ? 'photoCountOne' : 'photoCountMany', { n }), n: lastHour })
+            : tr(n === 1 ? 'photoCountOne' : 'photoCountMany', { n }))
+          : tr('connecting')}
         onBack={() => navigation.goBack()}
         right={
           <Pressable
@@ -358,12 +388,12 @@ export default function StreamScreen({ navigation }) {
             hitSlop={6}
             accessibilityRole="switch"
             accessibilityState={{ checked: live }}
-            accessibilityLabel="Live mode"
+            accessibilityLabel={tr('liveMode')}
             style={({ pressed }) => [pressed && { transform: [{ scale: 0.95 }] }]}
           >
             <Glass radius={radii.pill} interactive shadow={false} style={[styles.liveToggle, live && styles.liveToggleOn]}>
               {live ? <LiveDot size={7} /> : <Ionicons name="pause" size={12} color={colors.text} />}
-              <Text style={styles.liveToggleText}>{live ? 'LIVE' : 'Paused'}</Text>
+              <Text style={styles.liveToggleText}>{live ? tr('liveBadge') : tr('paused')}</Text>
             </Glass>
           </Pressable>
         }
@@ -384,13 +414,13 @@ export default function StreamScreen({ navigation }) {
         {!loaded ? (
           <View style={styles.center}>
             <ActivityIndicator color="#fff" />
-            <Text style={styles.centerCaption}>Tuning in…</Text>
+            <Text style={styles.centerCaption}>{tr('tuningIn')}</Text>
           </View>
         ) : n === 0 ? (
           <View style={styles.center}>
             <View style={styles.emptyOrb}><LiveDot size={12} /></View>
-            <Text style={styles.emptyTitle}>Waiting for the first photo</Text>
-            <Text style={styles.centerCaption}>New uploads play here the moment they're posted.</Text>
+            <Text style={styles.emptyTitle}>{tr('waitingFirst')}</Text>
+            <Text style={styles.centerCaption}>{tr('waitingSub')}</Text>
           </View>
         ) : stageH > 0 ? (
           <>
@@ -444,15 +474,15 @@ export default function StreamScreen({ navigation }) {
 
             <View style={styles.footer} pointerEvents="box-none">
               {!live ? (
-                <Pressable onPress={backToLive} accessibilityRole="button" accessibilityLabel="Back to live" style={({ pressed }) => [pressed && { transform: [{ scale: 0.95 }] }]}>
+                <Pressable onPress={backToLive} accessibilityRole="button" accessibilityLabel={tr('backToLive')} style={({ pressed }) => [pressed && { transform: [{ scale: 0.95 }] }]}>
                   <View style={styles.pill}>
                     <LiveDot size={7} />
-                    <Text style={styles.pillText}>{unseen > 0 ? `LIVE · ${unseen} new` : 'LIVE'}</Text>
+                    <Text style={styles.pillText}>{unseen > 0 ? tr('liveNew', { n: unseen }) : tr('liveBadge')}</Text>
                   </View>
                 </Pressable>
               ) : (
                 <Text style={styles.footerText} numberOfLines={1}>
-                  {cur ? `${cur.is_mine ? 'You' : cur.owner_username ?? 'Someone'} · ${timeAgo(cur.created_at, now) || 'recent'}` : ''}
+                  {cur ? `${cur.is_mine ? tr('you') : cur.owner_username ?? tr('someone')} · ${timeAgo(cur.created_at, now, tr) || tr('recent')}` : ''}
                 </Text>
               )}
               <Text style={styles.counter}>{clampIndex(index, n) + 1} / {n}</Text>
@@ -478,6 +508,7 @@ export default function StreamScreen({ navigation }) {
 // One cover-flow card + its reflection. All motion comes from scrollX (native driver):
 // d = i - scrollX/step is the card's distance from the centre (positive = right side).
 function CoverCard({ item, i, scrollX, step, left, top, cardW, cardH, reflH, zIndex, centered, fresh, now, onPress, onOwner }) {
+  const tr = useT(contentStrings)
   const enter = useRef(new Animated.Value(0)).current
   useEffect(() => {
     Animated.timing(enter, { toValue: 1, duration: 520, easing: Easing.out(Easing.cubic), useNativeDriver: true }).start()
@@ -534,24 +565,24 @@ function CoverCard({ item, i, scrollX, step, left, top, cardW, cardH, reflH, zIn
         ],
       }}
     >
-      <Pressable onPress={onPress} accessibilityRole="imagebutton" accessibilityLabel={`Photo by ${item.owner_username ?? 'someone'}`} style={[styles.card, { width: cardW, height: cardH }, fresh && styles.cardFresh]}>
+      <Pressable onPress={onPress} accessibilityRole="imagebutton" accessibilityLabel={tr('photoBy', { name: item.owner_username ?? tr('someoneLower') })} style={[styles.card, { width: cardW, height: cardH }, fresh && styles.cardFresh]}>
         <Image source={{ uri: item.media_url }} style={StyleSheet.absoluteFill} resizeMode="cover" />
         <LinearGradient colors={['rgba(0,0,0,0)', 'rgba(0,0,0,0.78)']} locations={[0.55, 1]} style={StyleSheet.absoluteFill} pointerEvents="none" />
-        <Pressable onPress={centered ? onOwner : onPress} style={styles.cardOwner} hitSlop={4} accessibilityRole="button" accessibilityLabel={`Open ${item.owner_username ?? 'their'} profile`}>
+        <Pressable onPress={centered ? onOwner : onPress} style={styles.cardOwner} hitSlop={4} accessibilityRole="button" accessibilityLabel={item.owner_username ? tr('openProfileA11y', { name: item.owner_username }) : tr('openTheirProfile')}>
           {item.owner_avatar_url ? (
             <Image source={avatarSource(item?.owner_avatar_url)} style={styles.avatar} />
           ) : (
             <View style={[styles.avatar, styles.avatarFallback]}><Ionicons name="person" size={13} color="#fff" /></View>
           )}
           <View style={{ flex: 1, minWidth: 0 }}>
-            <Text style={styles.ownerName} numberOfLines={1}>{item.is_mine ? 'You' : item.owner_username ?? 'Someone'}</Text>
-            <Text style={styles.ownerSub} numberOfLines={1}>{timeAgo(item.created_at, now) || 'recent'}</Text>
+            <Text style={styles.ownerName} numberOfLines={1}>{item.is_mine ? tr('you') : item.owner_username ?? tr('someone')}</Text>
+            <Text style={styles.ownerSub} numberOfLines={1}>{timeAgo(item.created_at, now, tr) || tr('recent')}</Text>
           </View>
         </Pressable>
         {fresh ? (
           <View style={styles.newBadge} pointerEvents="none">
             <LiveDot size={5} color="#fff" />
-            <Text style={styles.newBadgeText}>NEW</Text>
+            <Text style={styles.newBadgeText}>{tr('newBadge')}</Text>
           </View>
         ) : null}
         <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.dim, { opacity: dim }]} />

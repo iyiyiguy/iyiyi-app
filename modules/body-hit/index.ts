@@ -1,4 +1,4 @@
-// JS side of the local `body-hit` Expo module (Apple Vision, iOS only).
+// JS side of the local `body-hit` Expo module (Apple Vision on iOS, ML Kit on Android).
 // Returns null when the native module isn't in this build (Android, web,
 // Expo Go, or an older binary) so callers can fall back to compass aiming.
 import { requireOptionalNativeModule } from 'expo'
@@ -36,6 +36,9 @@ type NativeBodyHit = {
   // Missing in binaries built before live face tracking was added.
   startLiveFaces?: () => Promise<boolean>
   stopLiveFaces?: () => Promise<void>
+  // Missing in binaries built before live body tracking was added.
+  startLiveBodies?: () => Promise<boolean>
+  stopLiveBodies?: () => Promise<void>
   addListener?: (event: string, fn: (e: any) => void) => { remove: () => void }
   // Missing in binaries built before video branding was added (and on Android).
   brandVideo?: (uri: string, opts: BrandVideoOptions) => Promise<string | null>
@@ -122,6 +125,40 @@ export function addLiveFacesListener(fn: (e: LiveFacesEvent) => void): { remove:
   }
 }
 
+// Real-time people (Laser Tag target brackets + aim assist) from the preview's own capture
+// session (iOS: AVFoundation human body / full body / face detectors) or the on-screen preview
+// copy (Android: ML Kit pose STREAM_MODE + faces). Boxes are normalized 0..1 of the preview
+// view, top-left origin. id: the native tracker's id (-1 = none; JS keeps its own sticky ids).
+// kind: 'full' | 'upper' | 'face' (iOS), 'pose' | 'face' (Android).
+export type LiveBody = { id: number; x: number; y: number; w: number; h: number; head?: NormRect | null; conf?: number; kind?: string }
+export type LiveBodiesEvent = { bodies: LiveBody[]; layerW: number; layerH: number }
+
+export const isLiveBodiesAvailable = !!(Native && typeof Native.startLiveBodies === 'function' && typeof Native.addListener === 'function')
+
+export async function startLiveBodies(): Promise<boolean> {
+  if (!isLiveBodiesAvailable) return false
+  try {
+    return !!(await Native!.startLiveBodies!())
+  } catch {
+    return false
+  }
+}
+
+export async function stopLiveBodies(): Promise<void> {
+  if (!isLiveBodiesAvailable) return
+  try {
+    await Native!.stopLiveBodies!()
+  } catch {}
+}
+
+export function addLiveBodiesListener(fn: (e: LiveBodiesEvent) => void): { remove: () => void } {
+  if (!isLiveBodiesAvailable) return { remove: () => {} }
+  try {
+    return Native!.addListener!('onLiveBodies', fn)
+  } catch {
+    return { remove: () => {} }
+  }
+}
 
 // Burns the iY logo (and the AR filter, following the recorded head track) into a recorded
 // video. Resolves to a new file uri, or null when unavailable / it failed (use the original).

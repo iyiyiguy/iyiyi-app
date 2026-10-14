@@ -3,12 +3,36 @@ import { View, Text, StyleSheet, Pressable, ActivityIndicator, ScrollView } from
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { LinearGradient } from 'expo-linear-gradient'
 import { colors, gradients, radii, type } from '../theme'
-import { API_URL } from '../lib/supabase'
+import { API_URL, supabase } from '../lib/supabase'
+import { getMyUserId } from '../lib/profileNav'
 import { socialUrl, openLink } from '../lib/socialLinks'
-import SocialIcon from '../components/SocialIcon'
+import SocialIcon, { socialA11yLabel } from '../components/SocialIcon'
 import Avatar from '../components/Avatar'
+import { useT } from '../i18n'
+import profileStrings from '../i18n/strings/profile'
+import socialStrings from '../i18n/strings/social'
 
-const TIER_LABEL = { premium: '👑 Premium', pro: '⭐ Pro', creator: '★ Creator', normal: '' }
+// [badge, social.js key]; the badge glyph stays, the tier word is translated.
+const TIER_LABEL = {
+  premium: ['⭐', 'tierPro'], pro: ['⭐', 'tierPro'], pro_local: ['⭐', 'tierPro'], pro_national: ['⭐', 'tierPro'], pro_all: ['⭐', 'tierPro'], creator: ['⭐', 'tierPro'],
+  business: ['✓', 'tierBusiness'], business_pro: ['✓', 'tierBusiness'], normal: null,
+}
+const tierLabel = (accountType, ts) => {
+  const tier = TIER_LABEL[accountType]
+  return tier ? `${tier[0]} ${ts(tier[1])}` : ''
+}
+
+// Signed-in members who open app.iyiyi.xyz/u/<username> belong on the full UserProfile screen
+// (Follow, posts, etc.); the member stack has no SignIn route. Resolves the username to an id.
+async function resolveUserId(username, publicProfile) {
+  if (publicProfile?.id) return publicProfile.id
+  try {
+    const { data } = await supabase.from('profiles').select('id').eq('username', username).limit(1)
+    return data?.[0]?.id ?? null
+  } catch {
+    return null
+  }
+}
 
 // A no-auth preview of a profile, reachable straight from the sign-in screen's
 // avatar wall so a curious visitor can see who's on iYiYi before creating an
@@ -17,14 +41,39 @@ const TIER_LABEL = { premium: '👑 Premium', pro: '⭐ Pro', creator: '★ Crea
 export default function PublicProfileScreen({ route, navigation }) {
   const { username, avatarUrl: avatarHint = null } = route.params
   const [profile, setProfile] = useState(undefined)
+  const [member, setMember] = useState(null) // null = unknown, false = guest, true = signed in
   const insets = useSafeAreaInsets()
+  const t = useT(profileStrings)
+  const ts = useT(socialStrings)
 
   useEffect(() => {
-    fetch(`${API_URL}/api/public/profile/${encodeURIComponent(username)}`)
-      .then((r) => (r.ok ? r.json() : null))
-      .then((p) => setProfile(p ? { ...p, avatar_url: p.avatar_url || p.avatar || p.photo_url || p.profile_photo_url || avatarHint } : p))
-      .catch(() => setProfile(null))
-  }, [username])
+    let alive = true
+    const load = async () => {
+      const me = await getMyUserId()
+      if (!alive) return
+      setMember(!!me)
+      let p = null
+      try {
+        const r = await fetch(`${API_URL}/api/public/profile/${encodeURIComponent(username)}`)
+        p = r.ok ? await r.json() : null
+      } catch {
+        p = null
+      }
+      if (!alive) return
+      if (me) {
+        const id = await resolveUserId(username, p)
+        if (!alive) return
+        if (id === me) { navigation.navigate('Tabs', { screen: 'MyProfile' }); return }
+        if (id) { navigation.replace('UserProfile', { userId: id, avatarUrl: p?.avatar_url ?? avatarHint }); return }
+      }
+      setProfile(p ? { ...p, avatar_url: p.avatar_url || p.avatar || p.photo_url || p.profile_photo_url || avatarHint } : p)
+    }
+    load()
+    return () => { alive = false }
+  }, [username]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // A cold deep link has no history to go back to.
+  const goBack = () => (navigation.canGoBack() ? navigation.goBack() : navigation.navigate('Tabs'))
 
   if (profile === undefined) {
     return (
@@ -37,9 +86,9 @@ export default function PublicProfileScreen({ route, navigation }) {
   if (!profile) {
     return (
       <View style={[styles.screen, { alignItems: 'center', justifyContent: 'center', padding: 24 }]}>
-        <Text style={type.body}>This profile isn't available.</Text>
-        <Pressable onPress={() => navigation.goBack()} style={styles.joinButton}>
-          <Text style={styles.joinButtonText}>Back</Text>
+        <Text style={type.body}>{t('unavailable')}</Text>
+        <Pressable onPress={goBack} style={styles.joinButton} accessibilityRole="button">
+          <Text style={styles.joinButtonText}>{t('back')}</Text>
         </Pressable>
       </View>
     )
@@ -53,7 +102,7 @@ export default function PublicProfileScreen({ route, navigation }) {
   return (
     <View style={[styles.screen, styles.wideBackdrop]}>
       <ScrollView contentContainerStyle={[styles.column, { paddingTop: insets.top + 6, paddingBottom: insets.bottom + 32 }]}>
-        <Pressable onPress={() => navigation.goBack()} style={styles.back} accessibilityRole="button" accessibilityLabel="Back">
+        <Pressable onPress={goBack} style={styles.back} accessibilityRole="button" accessibilityLabel={t('back')}>
           <Text style={{ color: colors.text, fontSize: 26 }}>‹</Text>
         </Pressable>
 
@@ -63,13 +112,13 @@ export default function PublicProfileScreen({ route, navigation }) {
             <Avatar uri={profile.avatar_url} name={profile.username} size={96} transition={250} />
           </View>
           <View style={{ flex: 1 }}>
-            <Text style={styles.name} numberOfLines={2}>{profile.username} {TIER_LABEL[profile.account_type]}</Text>
+            <Text style={styles.name} numberOfLines={2}>{profile.username} {tierLabel(profile.account_type, ts)}</Text>
             {!isGated && profile.bio ? <Text style={styles.bio}>{profile.bio}</Text> : null}
           </View>
         </View>
 
         {isGated ? (
-          <Text style={styles.privateNotice}>🔒 This account is private. Create an account and follow to see more.</Text>
+          <Text style={styles.privateNotice}>{t('privateGuest')}</Text>
         ) : profile.tags?.length > 0 ? (
           <View style={styles.tagRow}>
             {profile.tags.map((tag) => (
@@ -86,6 +135,8 @@ export default function PublicProfileScreen({ route, navigation }) {
               <Pressable
                 key={i}
                 style={styles.socialPill}
+                accessibilityRole="link"
+                accessibilityLabel={socialA11yLabel(ts, link.platform, /^https?:\/\//i.test(String(link.value ?? '')) ? undefined : link.value)}
                 onPress={() => {
                   const url = socialUrl(link.platform, link.value)
                   if (url) openLink(url)
@@ -98,6 +149,8 @@ export default function PublicProfileScreen({ route, navigation }) {
               <Pressable
                 key={`w${i}`}
                 style={styles.socialPill}
+                accessibilityRole="link"
+                accessibilityLabel={t('websiteA11y', { site })}
                 onPress={() => {
                   const url = site.startsWith('http') ? site : `https://${site}`
                   openLink(url)
@@ -109,11 +162,13 @@ export default function PublicProfileScreen({ route, navigation }) {
           </View>
         )}
 
-        <Pressable onPress={() => navigation.navigate('SignIn', { mode: 'signup' })} style={styles.joinButton}>
-          <LinearGradient colors={gradients.brand} style={styles.joinButtonGradient}>
-            <Text style={styles.joinButtonText}>Create your own iYiYi profile</Text>
-          </LinearGradient>
-        </Pressable>
+        {member === false ? (
+          <Pressable onPress={() => navigation.navigate('SignIn', { mode: 'signup' })} style={styles.joinButton} accessibilityRole="button">
+            <LinearGradient colors={gradients.brand} style={styles.joinButtonGradient}>
+              <Text style={styles.joinButtonText}>{t('createOwn')}</Text>
+            </LinearGradient>
+          </Pressable>
+        ) : null}
       </ScrollView>
     </View>
   )

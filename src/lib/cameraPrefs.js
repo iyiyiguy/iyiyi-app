@@ -112,7 +112,7 @@ export const FIRST_USE_TIPS = {
   filters: {
     icon: 'sparkles-outline',
     title: 'Filters',
-    body: 'Pick a filter from the round buttons on the right (or the Filter option). It finds people with iYiYi nearby and follows them (using where they are and which way your phone points), with their name on the Name Tag; otherwise it follows the closest face. It shrinks and grows as people move away or come closer. It’s added to your photos; in video it shows live while you record, but isn’t saved into the video file.',
+    body: 'Swipe the lens carousel along the bottom, next to the shutter, to try a lens (Shades, Crown, Doll Glam and more). Lenses lock onto faces and follow them, growing and tilting as people move; the Name Tag and Follow me cards can find people with iYiYi nearby and show their name. Tap Look in the options for a colour grade (like Glam or Film) and the iYiYi frame. Lenses are added to your photos and videos; looks and the frame are saved on photos only, not into video.',
   },
   flip: {
     icon: 'camera-reverse-outline',
@@ -133,7 +133,7 @@ export const HELP_TOPICS = [
   { id: 'cutoff', short: 'Video stops itself after this long. ∞ = until you stop.' },
   { id: 'burst', short: 'Many photos with one tap.' },
   { id: 'burstAfterCountdown', short: 'Countdown, then a burst.' },
-  { id: 'filters', short: 'Overlays that follow people (saved on photos).' },
+  { id: 'filters', short: 'Bottom lens carousel follows faces; Look & frame save on photos only.' },
   { id: 'flip', short: 'Switch front / back camera.' },
   { id: 'previews', short: 'Tap X within 5s to cancel a post.' },
 ]

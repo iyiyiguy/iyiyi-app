@@ -1,13 +1,12 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native'
-import { LinearGradient } from 'expo-linear-gradient'
 import { Ionicons } from '@expo/vector-icons'
 import { CODE_LENGTH, LASER_MODES, MP_GAMES, formatDistance, gameIdFromCode, isValidCode, normalizeCode, useNearbyRooms } from '../lib/multiplayer'
 import { useOpenProfile } from '../lib/profileNav'
 import {
-  AC, ArcadeBackground, ArcadeHeader, GhostButton, PlayButton, StatusBarScrim, arcadeText, useArcadeInsets, useArcadeStatusBar,
+  AC, ArcadeBackground, ArcadeHeader, ArcadePanel, gameIcon, GhostButton, PlayButton, StatusBarScrim, arcadeText, useArcadeInsets, useArcadeStatusBar,
 } from '../games/arcadeUI'
-import { font } from '../theme'
+import { FONT, ST, withAlpha } from '../games/studio'
 
 // Open rooms advertised nearby (optionally for one game). Shared with GameLobby.
 export function NearbyRoomsList({ gameId = null, onJoin }) {
@@ -38,7 +37,7 @@ export function NearbyRoomsList({ gameId = null, onJoin }) {
           const g = MP_GAMES[r.gameId]
           return (
             <View key={`${r.gameId}:${r.code}`} style={styles.room}>
-              <View style={styles.roomIconWrap}><Text style={styles.roomIcon}>{g?.icon}</Text></View>
+              <View style={styles.roomIconWrap}><Ionicons name={gameIcon(r.gameId)} size={20} color={ST.friendly} /></View>
               <Pressable
                 style={{ flex: 1, minWidth: 0 }}
                 disabled={!r.hostId}
@@ -77,6 +76,7 @@ export function CodeEntry({ onJoin, initialCode = '' }) {
           onChangeText={(t) => setCode(normalizeCode(t))}
           placeholder="ABCDE"
           placeholderTextColor={AC.faint}
+          selectionColor={ST.friendly}
           autoCapitalize="characters"
           autoCorrect={false}
           maxLength={CODE_LENGTH}
@@ -129,9 +129,9 @@ export default function JoinGameScreen({ navigation, route }) {
         <Text style={[arcadeText.caption, { marginTop: 6, marginBottom: 18 }]}>Play with people around you.</Text>
 
         {linkError ? <Text style={styles.linkError}>{linkError}</Text> : null}
-        <LinearGradient colors={AC.panel} style={styles.panel}>
+        <ArcadePanel style={styles.panel} accent={ST.friendly}>
           <CodeEntry initialCode={linkCode} onJoin={(code) => joinRoom(gameIdFromCode(code), code)} />
-        </LinearGradient>
+        </ArcadePanel>
         <View style={{ height: 22 }} />
         <NearbyRoomsList onJoin={joinRoom} />
 
@@ -144,30 +144,30 @@ export default function JoinGameScreen({ navigation, route }) {
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: AC.bg[0] },
-  panel: { padding: 16, borderRadius: 22, borderWidth: 1, borderColor: AC.border },
-  linkError: { fontSize: 13, color: AC.danger, marginBottom: 10 },
+  screen: { flex: 1, backgroundColor: ST.ground },
+  panel: { padding: 16 },
+  linkError: { fontFamily: FONT.uiSemi, fontSize: 13, color: ST.enemy, marginBottom: 10, paddingLeft: 10, borderLeftWidth: 3, borderLeftColor: ST.enemy },
   listHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
   refresh: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  refreshText: { fontSize: 13, ...font.semibold, color: AC.accent },
-  emptyBox: { alignItems: 'center', gap: 8, padding: 18, borderRadius: 18, borderWidth: 1, borderStyle: 'dashed', borderColor: AC.border },
-  room: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 12, marginBottom: 10, borderRadius: 18, backgroundColor: AC.card, borderWidth: 1, borderColor: AC.border },
-  roomIconWrap: { width: 44, height: 44, borderRadius: 14, backgroundColor: AC.cardStrong, alignItems: 'center', justifyContent: 'center' },
-  roomIcon: { fontSize: 24 },
-  roomTitle: { fontSize: 15, ...font.bold, color: AC.text },
+  refreshText: { fontFamily: FONT.ui, fontSize: 11, letterSpacing: 1.6, textTransform: 'uppercase', color: ST.friendly },
+  emptyBox: { alignItems: 'center', gap: 8, padding: 18, borderRadius: ST.radius, borderWidth: 1, borderStyle: 'dashed', borderColor: ST.line },
+  room: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 12, marginBottom: 8, borderRadius: ST.radius, backgroundColor: ST.panelStrong, borderWidth: 1, borderColor: ST.line },
+  roomIconWrap: { width: 42, height: 42, borderRadius: ST.radius, backgroundColor: ST.cell, borderWidth: 1, borderColor: withAlpha(ST.friendly, 0.4), alignItems: 'center', justifyContent: 'center' },
+  roomTitle: { fontFamily: FONT.display, fontSize: 14, color: ST.text, includeFontPadding: false, marginBottom: 3 },
   codeRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   codeInput: {
     flex: 1,
+    fontFamily: FONT.display,
     fontSize: 22,
-    ...font.heavy,
-    color: AC.text,
+    color: ST.text,
     letterSpacing: 6,
     textAlign: 'center',
-    paddingVertical: 12,
-    borderRadius: 16,
+    height: 52,
+    paddingVertical: 0,
+    borderRadius: ST.radius,
     borderWidth: 1,
-    borderColor: AC.border,
-    backgroundColor: 'rgba(0,0,0,0.3)',
+    borderColor: ST.line,
+    backgroundColor: ST.cell,
   },
-  codeInputValid: { borderColor: AC.live },
+  codeInputValid: { borderColor: ST.health },
 })

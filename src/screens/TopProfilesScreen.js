@@ -8,13 +8,17 @@ import { colors, type } from '../theme'
 import { apiJson } from '../lib/api'
 import { useFollowStatuses } from '../lib/useFollowStatuses'
 import { openProfile } from '../lib/profileNav'
+import { useT } from '../i18n'
+import strings from '../i18n/strings/people'
 
+// Labels are keys in i18n/strings/people.
 const SORTS = [
-  { key: 'views', label: 'Most viewed' },
-  { key: 'followers', label: 'Most followed' },
+  { key: 'views', label: 'mostViewed' },
+  { key: 'followers', label: 'mostFollowed' },
 ]
 
 export default function TopProfilesScreen({ navigation }) {
+  const t = useT(strings)
   const [sort, setSort] = useState('views')
   const [users, setUsers] = useState([])
   const [loading, setLoading] = useState(false)
@@ -37,11 +41,17 @@ export default function TopProfilesScreen({ navigation }) {
 
   return (
     <View style={styles.screen}>
-      <BrandHeader title="Top Profiles" onBack={() => navigation.goBack()} />
+      <BrandHeader title={t('topProfiles')} onBack={() => navigation.goBack()} />
       <GlassPanel radius={999} style={styles.tabs}>
         {SORTS.map((s) => (
-          <Pressable key={s.key} onPress={() => setSort(s.key)} style={[styles.tab, sort === s.key && styles.tabActive]}>
-            <Text style={[styles.tabText, sort === s.key && styles.tabTextActive]}>{s.label}</Text>
+          <Pressable
+            key={s.key}
+            onPress={() => setSort(s.key)}
+            style={[styles.tab, sort === s.key && styles.tabActive]}
+            accessibilityRole="tab"
+            accessibilityState={{ selected: sort === s.key }}
+          >
+            <Text style={[styles.tabText, sort === s.key && styles.tabTextActive]}>{t(s.label)}</Text>
           </Pressable>
         ))}
       </GlassPanel>
@@ -60,7 +70,7 @@ export default function TopProfilesScreen({ navigation }) {
             onPress={() => openProfile(navigation, item.user_id)}
           />
         )}
-        ListEmptyComponent={<Text style={styles.empty}>{loading ? 'Loading…' : 'No profiles to rank yet.'}</Text>}
+        ListEmptyComponent={<Text style={styles.empty}>{loading ? t('loading') : t('noRanked')}</Text>}
       />
     </View>
   )

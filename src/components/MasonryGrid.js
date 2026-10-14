@@ -4,6 +4,8 @@ import { VideoView, useVideoPlayer } from 'expo-video'
 import { colors, radii } from '../theme'
 import { useOpenProfile } from '../lib/profileNav'
 import { avatarSource } from '../lib/avatarSource'
+import { useT } from '../i18n'
+import strings from '../i18n/strings/social'
 
 // A grid where every tile keeps its own shape: wide photos, tall vertical videos, squares.
 // Two columns; each new tile goes into whichever column is currently shorter. Videos show
@@ -20,6 +22,7 @@ function VideoFrame({ uri }) {
 }
 
 export default function MasonryGrid({ items, onOpen, showOwner, columns = 2, onOpenProfile }) {
+  const t = useT(strings)
   const navOpenProfile = useOpenProfile()
   const openOwner = onOpenProfile ?? navOpenProfile
   const { width } = useWindowDimensions()
@@ -48,7 +51,13 @@ export default function MasonryGrid({ items, onOpen, showOwner, columns = 2, onO
       {cols.map((c, ci) => (
         <View key={ci} style={{ width: colWidth, gap: GAP }}>
           {c.tiles.map(({ m, index, height, frame }) => (
-            <Pressable key={`${m.kind ?? 'm'}-${m.id ?? index}`} onPress={() => onOpen(index)} style={[styles.tile, { height }]}>
+            <Pressable
+              key={`${m.kind ?? 'm'}-${m.id ?? index}`}
+              onPress={() => onOpen(index)}
+              style={[styles.tile, { height }]}
+              accessibilityRole="button"
+              accessibilityLabel={[m.media_type === 'video' ? t('openVideo') : t('openPhoto'), m.is_mine ? t('yourPost') : null].filter(Boolean).join(', ')}
+            >
               {m.media_type === 'video' ? (
                 <>
                   {frame && m.media_url ? <VideoFrame uri={m.media_url} /> : <View style={styles.videoTile} />}
@@ -70,11 +79,11 @@ export default function MasonryGrid({ items, onOpen, showOwner, columns = 2, onO
                 <View style={styles.ytBadge}><Text style={styles.ytBadgeText}>▶ YouTube</Text></View>
               ) : null}
               {m.is_mine ? (
-                <View style={styles.mineBadge}><Text style={styles.mineBadgeText}>You</Text></View>
+                <View style={styles.mineBadge}><Text style={styles.mineBadgeText}>{t('you')}</Text></View>
               ) : null}
               {showOwner && m.owner_avatar_url ? (
                 m.owner_id ? (
-                  <Pressable onPress={() => openOwner(m.owner_id)} hitSlop={8} style={styles.ownerDotWrap} accessibilityRole="button" accessibilityLabel={`Open ${m.owner_username ?? 'owner'}’s profile`}>
+                  <Pressable onPress={() => openOwner(m.owner_id)} hitSlop={10} style={styles.ownerDotWrap} accessibilityRole="button" accessibilityLabel={t('openProfileA11y', { name: m.owner_username ?? t('iyiyiUser') })}>
                     <Image source={avatarSource(m?.owner_avatar_url)} style={styles.ownerDotImg} />
                   </Pressable>
                 ) : <Image source={avatarSource(m?.owner_avatar_url)} style={styles.ownerDot} />

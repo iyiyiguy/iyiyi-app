@@ -1,19 +1,34 @@
 // Laser Tag grenades: a purchased balance (arcadeStats, per account) bought in packs of 10
 // (GRENADE_PACK, a consumable In-App Purchase). The arcade owner accounts have unlimited
 // grenades. Every export is defensive: nothing throws into render.
+// Fair play: use as many as you own, but at most GRENADES_PER_MATCH per match (matchLimits.js; the
+// owner account too). Pass { matchKey } (`${code}:${round}`) to spendGrenade().
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { loadArcadeStats, subscribeArcadeStats, _spendGrenade } from './arcadeStats'
 import { isArcadeOwner } from './guns'
+import { MATCH_LIMITS, matchCheck, returnMatchUse, takeMatchUse } from './matchLimits'
 import { GRENADE_PACK, fetchGrenadeProduct, isUserCancelled, purchaseGrenadePack, recoverGrenadePurchases } from './iap'
 
 export { GRENADE_PACK }
 
-/** Spend one grenade. Resolves true on success. Never rejects. */
-export async function spendGrenade() {
+export const GRENADES_PER_MATCH = MATCH_LIMITS.grenade
+
+/** { ok, left, cap, text }: can another grenade be used in this match? Check before spending. */
+export const grenadeMatchCheck = (matchKey) => matchCheck('grenade', matchKey)
+
+/**
+ * Spend one grenade (counts toward the per-match limit). Resolves true on success, false when
+ * none are left OR the match limit is reached (see grenadeMatchCheck for the message). Never rejects.
+ */
+export async function spendGrenade({ matchKey } = {}) {
+  if (!takeMatchUse('grenade', matchKey)) return false
   try {
     if (await isArcadeOwner()) return true
-    return !!(await _spendGrenade())
+    const ok = !!(await _spendGrenade())
+    if (!ok) returnMatchUse('grenade', matchKey)
+    return ok
   } catch {
+    returnMatchUse('grenade', matchKey)
     return false
   }
 }

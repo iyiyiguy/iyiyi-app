@@ -1,8 +1,9 @@
 // Helpers so the signed-in user can see their own uploads / profile mixed into discovery
 // screens (Feed, Recommended, Stream), which the server endpoints otherwise leave out.
-import { apiJson } from './api'
+import { apiJson, apiFetch } from './api'
 import { supabase } from './supabase'
 import { getMyUserId } from './profileNav'
+import { emitMediaRemoved, sameMediaId } from './mediaEvents'
 
 const FAILED = Symbol('failed')
 
@@ -203,4 +204,91 @@ export function prependUnique(list, add) {
   const seen = new Set(base.filter((it) => it.kind !== 'youtube').map((it) => String(it.id)))
   const fresh = extra.filter((m) => !seen.has(String(m.id)))
   return fresh.length ? [...fresh, ...base] : base
+}
+
+// True when a feed/profile/stream item was posted by the signed-in user. Rows carry the
+// owner as owner_id (feed / content_feed RPC / myContent decoration) or user_id (raw
+// profile_media rows); is_mine is set by fetchMyMedia / mergeMine / itemFromMediaRow.
+export function isMyMedia(item, myId) {
+  if (!item || typeof item !== 'object' || item.kind === 'youtube') return false
+  // Until the session id has loaded, trust the is_mine flag our own loaders set.
+  if (!myId) return item.is_mine === true
+  const owner = item.owner_id ?? item.user_id ?? null
+  if (owner != null) return String(owner) === String(myId)
+  return item.is_mine === true
+}
+
+// Drop an id from a media list (no-op when it isn't there, so the same array comes back).
+export function withoutMedia(list, id) {
+  const arr = Array.isArray(list) ? list : []
+  const next = arr.filter((m) => !(m && m.kind !== 'youtube' && sameMediaId(m.id ?? m.media_id, id)))
+  return next.length === arr.length ? arr : next
+}
+
+const STORAGE_BUCKET = 'profile-media'
+const PUBLIC_PREFIX = `/storage/v1/object/public/${STORAGE_BUCKET}/`
+
+// "<supabase>/storage/v1/object/public/profile-media/<uid>/x.jpg" -> "<uid>/x.jpg"
+function storagePathFromUrl(url) {
+  if (typeof url !== 'string') return null
+  const at = url.indexOf(PUBLIC_PREFIX)
+  if (at === -1) return null
+  const path = url.slice(at + PUBLIC_PREFIX.length).split(/[?#]/)[0]
+  try { return decodeURIComponent(path) } catch { return path }
+}
+
+// Delete one of your own posts. Tries the API (DELETE /api/profiles/me/media/:id); if that
+// route isn't there (404/405) it deletes the profile_media row directly, filtered by id AND
+// your user id (RLS "Own media delete", migration 040, enforces the same), then best-effort
+// removes the uploaded file(s) from the profile-media bucket under your own folder.
+// Broadcasts emitMediaRemoved(id) on success. Throws an Error with a friendly message.
+export async function deleteMyMedia(item) {
+  const id = item && typeof item === 'object' ? (item.id ?? item.media_id) : item
+  if (id == null) throw new Error("This post can't be deleted.")
+  const myId = await getMyUserId()
+  if (!myId) throw new Error('Please sign in again.')
+
+  let res = null
+  try {
+    res = await apiFetch(`/api/profiles/me/media/${encodeURIComponent(String(id))}`, { method: 'DELETE' })
+  } catch (e) {
+    // Network error or no session: fall through to the direct delete below.
+    res = null
+  }
+  if (res?.ok) {
+    emitMediaRemoved(id)
+    return { via: 'api' }
+  }
+  if (res && res.status !== 404 && res.status !== 405) {
+    const body = await res.json().catch(() => ({}))
+    throw new Error(body?.error || "Couldn't delete this post.")
+  }
+
+  const { data, error } = await supabase
+    .from('profile_media')
+    .delete()
+    .eq('id', id)
+    .eq('user_id', myId)
+    .select('id, media_url, watermarked_url')
+  if (error) throw new Error(error.message || "Couldn't delete this post.")
+  if (!Array.isArray(data) || data.length === 0) {
+    // Nothing deleted: either it's already gone (fine) or it isn't yours.
+    const { data: still } = await supabase.from('profile_media').select('id').eq('id', id).maybeSingle()
+    if (still) throw new Error("You can only delete your own posts.")
+  } else {
+    const row = data[0] ?? {}
+    const paths = [row.media_url, row.watermarked_url, item?.media_url, item?.watermarked_url]
+      .map(storagePathFromUrl)
+      .filter((p) => p && p.startsWith(`${myId}/`))
+    const unique = Array.from(new Set(paths))
+    if (unique.length) {
+      try {
+        await supabase.storage.from(STORAGE_BUCKET).remove(unique)
+      } catch (e) {
+        console.warn('Post file cleanup failed', e?.message ?? e)
+      }
+    }
+  }
+  emitMediaRemoved(id)
+  return { via: 'supabase' }
 }

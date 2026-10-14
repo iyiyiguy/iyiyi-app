@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { View, Text, ScrollView, StyleSheet, RefreshControl } from 'react-native'
+import { View, Text, ScrollView, StyleSheet, RefreshControl, Pressable } from 'react-native'
 import { useFocusEffect } from '@react-navigation/native'
 import { getPositionFast } from '../lib/location'
 import { getCached, setCached } from '../lib/cache'
@@ -16,11 +16,14 @@ import { colors, type } from '../theme'
 import { apiJson } from '../lib/api'
 import { openLink } from '../lib/socialLinks'
 import { openProfile, getMyUserId } from '../lib/profileNav'
-import { fetchMyMedia, mergeMine, itemFromMediaRow, prependUnique } from '../lib/myContent'
+import { fetchMyMedia, mergeMine, itemFromMediaRow, prependUnique, withoutMedia } from '../lib/myContent'
 import { fetchCountryFeed } from '../lib/countryFeed'
 import { countryMatches } from '../lib/countries'
-import { onMediaPosted } from '../lib/mediaEvents'
+import { onMediaPosted, onMediaRemoved } from '../lib/mediaEvents'
 import CountryPicker from '../components/CountryPicker'
+import { useT, translate } from '../i18n'
+import contentStrings from '../i18n/strings/content'
+import scopeStrings from '../i18n/strings/scope'
 
 // "blend" is the algorithmic default: recency while a range is sparse, blending in
 // engagement + the paid-tier boost once there's enough content to actually rank.
@@ -28,10 +31,12 @@ import CountryPicker from '../components/CountryPicker'
 // "Country" sits after the ranges and opens a searchable picker; the feed then shows posts
 // from users whose profile country matches.
 const feedScopeLabel = (key, country) => {
-  if (key === 'mine') return 'Your posts'
-  if (key === 'country') return country ? `${country.flag} ${country.name}` : 'Country'
+  if (key === 'mine') return translate(scopeStrings, 'yourPosts')
+  if (key === 'country') return country ? `${country.flag} ${country.name}` : translate(scopeStrings, 'country')
   return scopeLabel(key)
 }
+
+const GRID_PAGE = 40
 
 const SORTS = [
   { key: 'blend', label: 'For You' },
@@ -45,6 +50,7 @@ const MINE_SORTS = [
 ]
 
 export default function ContentFeedScreen({ navigation }) {
+  const t = useT(contentStrings)
   const [scope, setScope] = useState('local')
   const [sort, setSort] = useState('blend')
   const [layout, setLayout] = useState('grid') // grid | scroll
@@ -55,6 +61,7 @@ export default function ContentFeedScreen({ navigation }) {
   const [viewer, setViewer] = useState({ open: false, index: 0 })
   const [country, setCountry] = useState(null) // { code, name, flag }
   const [pickerOpen, setPickerOpen] = useState(false)
+  const [gridLimit, setGridLimit] = useState(GRID_PAGE)
   const scopeRef = useRef(scope)
   scopeRef.current = scope
   const countryRef = useRef(country)
@@ -93,6 +100,9 @@ export default function ContentFeedScreen({ navigation }) {
     })
     return () => { alive = false; off?.() }
   }, [])
+
+  // A post you deleted (from the viewer here or anywhere else) leaves the feed right away.
+  useEffect(() => onMediaRemoved((id) => setItems((prev) => withoutMedia(prev, id))), [setItems])
 
   // Your own posts are fetched alongside the feed and merged in by time, so you always see
   // what you've shared (the server's content_feed excludes your own rows). They're fetched in
@@ -149,6 +159,7 @@ export default function ContentFeedScreen({ navigation }) {
   }, [])
 
   useFocusEffect(useCallback(() => { load(scope, sort, country) }, [scope, sort, country, load]))
+  useEffect(() => { setGridLimit(GRID_PAGE) }, [scope, sort, country])
 
   // Optimistic like update from the inline scroll-view action row, matched by id since
   // youtube items are mixed into the same array without stable numeric indices.
@@ -161,7 +172,11 @@ export default function ContentFeedScreen({ navigation }) {
   // Uploads open in the full-screen viewer (like/save/comments); YouTube videos open on
   // YouTube. The viewer only gets the uploads, so map a tapped tile to its viewer index.
   const tiles = items
-  const viewerItems = items.filter((m) => m.kind !== 'youtube')
+  const viewerItems = useMemo(() => items.filter((m) => m.kind !== 'youtube'), [items])
+  const gridTiles = useMemo(() => (tiles.length > gridLimit ? tiles.slice(0, gridLimit) : tiles), [tiles, gridLimit])
+  const refreshControl = <RefreshControl refreshing={loading} onRefresh={() => load(scope, sort, country)} tintColor={colors.magenta} />
+  const scopeIdx = SCOPES.findIndex((x) => x.key === scope)
+  const nextScope = scopeIdx >= 0 ? SCOPES[scopeIdx + 1] ?? null : null
   const openTile = (i) => {
     const item = tiles[i]
     if (!item) return
@@ -173,44 +188,69 @@ export default function ContentFeedScreen({ navigation }) {
     <View style={styles.screen}>
       <GlowBackdrop preset="social" />
       <BrandHeader
-        title="Feed"
+        title={t('feedTitle')}
         subtitle={feedScopeLabel(scope, country)}
         right={
           <>
             <LiveButton onPress={() => navigation.navigate('Stream')} />
             <HeaderButton
               icon={layout === 'grid' ? 'reorder-four-outline' : 'grid-outline'}
-              label={layout === 'grid' ? 'Show as list' : 'Show as grid'}
+              label={layout === 'grid' ? t('showAsList') : t('showAsGrid')}
               onPress={() => setLayout((l) => (l === 'grid' ? 'scroll' : 'grid'))}
             />
-            <HeaderButton icon="bookmark-outline" label="Saved" onPress={() => navigation.navigate('SavedContent')} />
+            <HeaderButton icon="bookmark-outline" label={t('saved')} onPress={() => navigation.navigate('SavedContent')} />
           </>
         }
       />
       <ScopeChips options={feedScopes} value={scope} onChange={setScope} />
       <Segmented options={scope === 'mine' ? MINE_SORTS : SORTS} value={scope === 'mine' && sort !== 'popular' ? 'recent' : sort} onChange={setSort} style={styles.sort} />
 
-      <ScrollView contentContainerStyle={styles.content} refreshControl={<RefreshControl refreshing={loading} onRefresh={() => load(scope, sort, country)} tintColor={colors.magenta} />}>
-        {tiles.length > 0 ? (
-          layout === 'scroll' ? (
-            <FeedScroll items={viewerItems} onOpen={(i) => setViewer({ open: true, index: i })} onChange={updateItem} />
+      {layout === 'scroll' && tiles.length > 0 ? (
+        // List mode is a windowed FlatList: rows mount near the screen only and just the
+        // most visible video plays.
+        <FeedScroll
+          items={viewerItems}
+          onOpen={(i) => setViewer({ open: true, index: i })}
+          onChange={updateItem}
+          contentContainerStyle={styles.content}
+          refreshControl={refreshControl}
+        />
+      ) : (
+        // The grid renders in pages of GRID_PAGE tiles, adding more as you near the bottom, so
+        // a 200-post Country feed doesn't mount every tile at once.
+        <ScrollView
+          contentContainerStyle={styles.content}
+          refreshControl={refreshControl}
+          scrollEventThrottle={200}
+          onScroll={({ nativeEvent: e }) => {
+            if (gridLimit >= tiles.length) return
+            if (e.contentOffset.y + e.layoutMeasurement.height > e.contentSize.height - e.layoutMeasurement.height * 1.5) {
+              setGridLimit((n) => Math.min(tiles.length, n + GRID_PAGE))
+            }
+          }}
+        >
+          {tiles.length > 0 ? (
+            <MasonryGrid items={gridTiles} showOwner onOpen={openTile} />
           ) : (
-            <MasonryGrid items={tiles} showOwner onOpen={openTile} />
-          )
-        ) : (
-          <Text style={styles.empty}>
-            {loading
-              ? 'Loading…'
-              : scope === 'mine'
-                ? "You haven't posted anything yet. Share a photo or video from your profile or the camera."
-                : scope === 'country'
-                  ? (country ? `No posts from ${country.name} yet.` : 'Pick a country to see posts from there.')
-                  : permissionDenied
-                  ? 'Location access is off. Turn it on to see content near you.'
-                  : 'No content in this range yet. Try a wider range.'}
-          </Text>
-        )}
-      </ScrollView>
+            <Text style={styles.empty}>
+              {loading
+                ? t('loading')
+                : scope === 'mine'
+                  ? t('emptyMine')
+                  : scope === 'country'
+                    ? (country ? t('noPostsFrom', { country: country.name }) : t('pickCountry'))
+                    : permissionDenied
+                    ? t('locationOff')
+                    : t('emptyRange')}
+            </Text>
+          )}
+          {tiles.length === 0 && !loading && !permissionDenied && nextScope ? (
+            <Pressable onPress={() => setScope(nextScope.key)} style={styles.widen} accessibilityRole="button" accessibilityLabel={t('widenTo', { scope: scopeLabel(nextScope.key) })}>
+              <Text style={styles.widenText}>{t('widenTo', { scope: scopeLabel(nextScope.key) })}</Text>
+            </Pressable>
+          ) : null}
+        </ScrollView>
+      )}
 
       <CountryPicker
         visible={pickerOpen}
@@ -218,7 +258,7 @@ export default function ContentFeedScreen({ navigation }) {
         onSelect={pickCountry}
         onClose={() => setPickerOpen(false)}
         allowAll
-        title="Posts from"
+        title={t('postsFrom')}
       />
 
       <ContentViewer
@@ -240,4 +280,6 @@ const styles = StyleSheet.create({
   sort: { marginHorizontal: 16, marginTop: 4, marginBottom: 10 },
   content: { paddingBottom: 32 },
   empty: { ...type.caption, textAlign: 'center', marginTop: 60, paddingHorizontal: 40 },
+  widen: { alignSelf: 'center', marginTop: 14, minHeight: 44, paddingHorizontal: 18, justifyContent: 'center', borderRadius: 999, borderWidth: 1, borderColor: colors.hairline },
+  widenText: { fontSize: 15, fontWeight: '600', color: colors.text },
 })

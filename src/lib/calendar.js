@@ -11,6 +11,8 @@ import { Alert, Linking, Platform } from 'react-native'
 import * as Sharing from 'expo-sharing'
 import { File, Paths } from 'expo-file-system'
 import { defaultEnd, eventPlace, eventShareUrl } from './events'
+import { translate } from '../i18n'
+import strings from '../i18n/strings/events'
 
 const pad = (n) => String(n).padStart(2, '0')
 const icsDate = (d) =>
@@ -27,7 +29,7 @@ function fold(line) {
 
 function eventTimes(event) {
   const start = new Date(event?.event_date)
-  if (Number.isNaN(start.getTime())) throw new Error('This event has no valid date.')
+  if (Number.isNaN(start.getTime())) throw new Error(translate(strings, 'calNoDate'))
   const end = defaultEnd(event) || new Date(start.getTime() + 2 * 3600 * 1000)
   return { start, end }
 }
@@ -89,8 +91,8 @@ async function shareIcs(event) {
   try { if (file.exists) file.delete() } catch { /* overwritten below */ }
   file.create({ overwrite: true })
   file.write(ics)
-  if (!(await Sharing.isAvailableAsync())) throw new Error('Sharing isn’t available on this device.')
-  await Sharing.shareAsync(file.uri, { mimeType: 'text/calendar', UTI: 'com.apple.ical.ics', dialogTitle: 'Add to calendar' })
+  if (!(await Sharing.isAvailableAsync())) throw new Error(translate(strings, 'calNoSharing'))
+  await Sharing.shareAsync(file.uri, { mimeType: 'text/calendar', UTI: 'com.apple.ical.ics', dialogTitle: translate(strings, 'calAdd') })
 }
 
 const ALERT_MINUTES_BEFORE = 30
@@ -197,7 +199,7 @@ function offerFallback(event, reason) {
     try {
       await fn()
     } catch (e) {
-      Alert.alert('Couldn’t add to calendar', e?.message || 'Please try again.')
+      Alert.alert(translate(strings, 'calFailed'), e?.message || translate(strings, 'tryAgain'))
     }
   }
   const openGoogle = run(() => Linking.openURL(googleCalendarUrl(event)))
@@ -207,16 +209,16 @@ function offerFallback(event, reason) {
     return
   }
   const buttons = [
-    { text: Platform.OS === 'ios' ? 'Apple Calendar / other (.ics)' : 'Calendar file (.ics)', onPress: ics },
+    { text: Platform.OS === 'ios' ? translate(strings, 'calAppleOther') : translate(strings, 'calFile'), onPress: ics },
     { text: 'Google Calendar', onPress: openGoogle },
   ]
-  if (reason === 'denied') buttons.push({ text: 'Allow in Settings', onPress: () => { Linking.openSettings().catch(() => {}) } })
-  buttons.push({ text: 'Cancel', style: 'cancel' })
+  if (reason === 'denied') buttons.push({ text: translate(strings, 'allowInSettings'), onPress: () => { Linking.openSettings().catch(() => {}) } })
+  buttons.push({ text: translate(strings, 'cancel'), style: 'cancel' })
   Alert.alert(
-    'Add to calendar',
+    translate(strings, 'calAdd'),
     reason === 'denied'
-      ? 'iYiYi doesn’t have calendar access, so pick another way to save this event.'
-      : (event.name || 'Event'),
+      ? translate(strings, 'calDenied')
+      : (event.name || translate(strings, 'event')),
     buttons,
   )
 }
@@ -229,16 +231,16 @@ export async function addToCalendar(event, { skipDuplicateCheck = false } = {}) 
   try {
     eventTimes(event) // validates the date up front
   } catch (e) {
-    Alert.alert('Couldn’t add to calendar', e?.message || 'This event has no valid date.')
+    Alert.alert(translate(strings, 'calFailed'), e?.message || translate(strings, 'calNoDate'))
     return 'error'
   }
   const key = String(event.id ?? event.name ?? '')
   if (!skipDuplicateCheck && key && added.has(key)) {
     return new Promise((resolve) => {
-      Alert.alert('Already in your calendar', 'You added this event earlier. Add it again?', [
-        { text: 'Open Calendar', onPress: () => { openCalendarApp(event); resolve('duplicate-skipped') } },
-        { text: 'Add again', onPress: () => { addToCalendar(event, { skipDuplicateCheck: true }).then(resolve, () => resolve('error')) } },
-        { text: 'Cancel', style: 'cancel', onPress: () => resolve('duplicate-skipped') },
+      Alert.alert(translate(strings, 'calAlready'), translate(strings, 'calAlreadyMsg'), [
+        { text: translate(strings, 'calOpen'), onPress: () => { openCalendarApp(event); resolve('duplicate-skipped') } },
+        { text: translate(strings, 'calAddAgain'), onPress: () => { addToCalendar(event, { skipDuplicateCheck: true }).then(resolve, () => resolve('error')) } },
+        { text: translate(strings, 'cancel'), style: 'cancel', onPress: () => resolve('duplicate-skipped') },
       ], { cancelable: true, onDismiss: () => resolve('duplicate-skipped') })
     })
   }
@@ -246,11 +248,11 @@ export async function addToCalendar(event, { skipDuplicateCheck = false } = {}) 
     const id = await addNative(event)
     if (key) added.set(key, id)
     Alert.alert(
-      'Added to your calendar',
-      `${event.name || 'Event'} · you’ll get an alert ${ALERT_MINUTES_BEFORE} minutes before it starts.`,
+      translate(strings, 'calAdded'),
+      translate(strings, 'calAddedMsg', { name: event.name || translate(strings, 'event'), n: ALERT_MINUTES_BEFORE }),
       [
-        { text: 'Open Calendar', onPress: () => openCalendarApp(event) },
-        { text: 'OK', style: 'cancel' },
+        { text: translate(strings, 'calOpen'), onPress: () => openCalendarApp(event) },
+        { text: translate(strings, 'ok'), style: 'cancel' },
       ],
     )
     return 'added'

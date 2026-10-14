@@ -7,6 +7,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { font } from '../theme'
 import { useGuestPrompt } from './GuestPrompt'
 import { avatarSource } from '../lib/avatarSource'
+import { useT, useLanguage } from '../i18n'
+import strings from '../i18n/strings/guest'
 
 // Read-only full-screen viewer for logged-out visitors (the member ContentViewer talks to the
 // authed API for likes/saves/comments). Swipe up/down between posts; like, comment and save
@@ -29,6 +31,8 @@ const fmt = (n) => {
 }
 
 export default function GuestViewer({ visible, items, startIndex = 0, onClose, onOpenProfile }) {
+  const t = useT(strings)
+  const lang = useLanguage() // renderItem below is rebuilt when the language changes
   const { width, height } = useWindowDimensions()
   const insets = useSafeAreaInsets()
   const [active, setActive] = useState(startIndex)
@@ -53,25 +57,31 @@ export default function GuestViewer({ visible, items, startIndex = 0, onClose, o
         )}
         <LinearGradient colors={['transparent', 'rgba(0,0,0,0.75)']} style={styles.shade} pointerEvents="none" />
         <View style={[styles.actions, { bottom: insets.bottom + 40 }]}>
-          <Action icon="heart-outline" label={fmt(item.like_count)} onPress={() => prompt('like')} a11y="Like" />
-          <Action icon="chatbubble-outline" label={fmt(item.comment_count)} onPress={() => prompt('comment')} a11y="Comments" />
-          <Action icon="bookmark-outline" onPress={() => prompt('save')} a11y="Save" />
+          <Action icon="heart-outline" label={fmt(item.like_count)} onPress={() => prompt('like')} a11y={t('likeA11y', { n: fmt(item.like_count) })} />
+          <Action icon="chatbubble-outline" label={fmt(item.comment_count)} onPress={() => prompt('comment')} a11y={t('commentsA11y', { n: fmt(item.comment_count) })} />
+          <Action icon="bookmark-outline" onPress={() => prompt('save')} a11y={t('save')} />
         </View>
         <Pressable
           onPress={() => item.owner_username && onOpenProfile?.(item)}
           style={[styles.owner, { bottom: insets.bottom + 40 }]}
           accessibilityRole="button"
-          accessibilityLabel={`Open ${item.owner_username ?? 'owner'}'s profile`}
+          accessibilityLabel={t('openProfileA11y', { name: item.owner_username ?? t('someone') })}
         >
           {<Image source={avatarSource(item?.owner_avatar_url)} style={styles.avatar} />}
-          <Text style={styles.ownerName} numberOfLines={1}>@{item.owner_username ?? 'someone'}</Text>
-          <Pressable onPress={() => prompt('follow')} hitSlop={6} style={styles.follow} accessibilityRole="button">
-            <Text style={styles.followText}>Follow</Text>
+          <Text style={styles.ownerName} numberOfLines={1}>@{item.owner_username ?? t('someone')}</Text>
+          <Pressable
+            onPress={() => prompt('follow')}
+            hitSlop={8}
+            style={styles.follow}
+            accessibilityRole="button"
+            accessibilityLabel={item.owner_username ? t('followNameA11y', { name: item.owner_username }) : t('follow')}
+          >
+            <Text style={styles.followText}>{t('follow')}</Text>
           </Pressable>
         </Pressable>
       </View>
     )
-  }, [width, height, active, insets.bottom, prompt, onOpenProfile])
+  }, [width, height, active, insets.bottom, prompt, onOpenProfile, lang])
 
   return (
     <Modal visible={visible} animationType="fade" onRequestClose={onClose} statusBarTranslucent>
@@ -93,7 +103,7 @@ export default function GuestViewer({ visible, items, startIndex = 0, onClose, o
             decelerationRate="fast"
           />
         ) : null}
-        <Pressable onPress={onClose} hitSlop={10} style={[styles.close, { top: insets.top + 12 }]} accessibilityRole="button" accessibilityLabel="Close">
+        <Pressable onPress={onClose} hitSlop={10} style={[styles.close, { top: insets.top + 12 }]} accessibilityRole="button" accessibilityLabel={t('close')}>
           <Ionicons name="close" size={24} color="#fff" />
         </Pressable>
         {sheet}

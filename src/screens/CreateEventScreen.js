@@ -15,8 +15,10 @@ import { colors, radii, type } from '../theme'
 import { supabase } from '../lib/supabase'
 import { GAMES } from '../lib/games'
 import {
-  CATEGORIES, UNLIMITED_CAPACITY, createEvent, setRsvp, uploadEventCover, formatEventWhen, getCategory,
+  CATEGORIES, UNLIMITED_CAPACITY, createEvent, setRsvp, uploadEventCover, formatEventWhen, getCategory, categoryLabel,
 } from '../lib/events'
+import { useT } from '../i18n'
+import strings from '../i18n/strings/events'
 
 const DAY_MS = 24 * 3600 * 1000
 const CAPACITY_PRESETS = [10, 25, 50, 100, 250]
@@ -42,6 +44,7 @@ function formatAddress(a) {
 // capacity and privacy, with a live preview. Inserts into `events` (002 + 010 migrations; the
 // 010 columns are dropped automatically if that migration hasn't run) and RSVPs the host.
 export default function CreateEventScreen({ navigation }) {
+  const t = useT(strings)
   const [userId, setUserId] = useState(null)
   const [cover, setCover] = useState(null) // local uri
   const [name, setName] = useState('')
@@ -58,7 +61,7 @@ export default function CreateEventScreen({ navigation }) {
   const [capacity, setCapacity] = useState(25)
   const [unlimited, setUnlimited] = useState(false)
   const [visibility, setVisibility] = useState('public')
-  const [errors, setErrors] = useState({})
+  const [errors, setErrors] = useState({}) // field -> key in strings/events
   const [loading, setLoading] = useState(false)
 
   useEffect(() => {
@@ -84,7 +87,7 @@ export default function CreateEventScreen({ navigation }) {
       if (res?.canceled || !res?.assets?.[0]?.uri) return
       setCover(res.assets[0].uri)
     } catch (e) {
-      Alert.alert('Couldn’t open photos', e?.message || 'Please try again.')
+      Alert.alert(t('photosFailed'), e?.message || t('tryAgain'))
     }
   }
 
@@ -112,7 +115,7 @@ export default function CreateEventScreen({ navigation }) {
     try {
       const { status } = await Location.requestForegroundPermissionsAsync()
       if (status !== 'granted') {
-        Alert.alert('Location needed', 'Allow location access to use where you are now.')
+        Alert.alert(t('locationNeeded'), t('locationNeededMsg'))
         return
       }
       const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High })
@@ -125,7 +128,7 @@ export default function CreateEventScreen({ navigation }) {
         if (text) setAddress(text)
       } catch { /* coordinates are enough */ }
     } catch (e) {
-      Alert.alert('Couldn’t get your location', e?.message || 'Please try again.')
+      Alert.alert(t('locationFailed'), e?.message || t('tryAgain'))
     } finally {
       setLocBusy(null)
     }
@@ -140,13 +143,13 @@ export default function CreateEventScreen({ navigation }) {
       const results = await Location.geocodeAsync(q)
       const r = results?.[0]
       if (!r || !Number.isFinite(r.latitude) || !Number.isFinite(r.longitude)) {
-        Alert.alert('Address not found', 'Try adding a city, or pick the spot on the map.')
+        Alert.alert(t('addressNotFound'), t('addressNotFoundMsg'))
         return
       }
       setCoords({ latitude: r.latitude, longitude: r.longitude })
       clearError('where')
     } catch (e) {
-      Alert.alert('Couldn’t look that up', e?.message || 'Try picking the spot on the map.')
+      Alert.alert(t('lookupFailed'), e?.message || t('lookupFailedMsg'))
     } finally {
       setLocBusy(null)
     }
@@ -166,11 +169,11 @@ export default function CreateEventScreen({ navigation }) {
   // ---- validation + submit ----
   const validate = () => {
     const e = {}
-    if (name.trim().length < 3) e.name = 'Give your event a name (at least 3 characters).'
-    if (!category) e.category = 'Pick a category.'
-    if (start.getTime() <= Date.now() + 5 * 60000) e.when = 'Start time must be in the future.'
-    if (!venue.trim() && !address.trim()) e.where = 'Add a venue name or an address.'
-    if (!unlimited && (!Number.isFinite(capacity) || capacity < 2 || capacity >= UNLIMITED_CAPACITY)) e.capacity = 'Capacity must be at least 2.'
+    if (name.trim().length < 3) e.name = 'errName'
+    if (!category) e.category = 'errCategory'
+    if (start.getTime() <= Date.now() + 5 * 60000) e.when = 'errWhen'
+    if (!venue.trim() && !address.trim()) e.where = 'errWhere'
+    if (!unlimited && (!Number.isFinite(capacity) || capacity < 2 || capacity >= UNLIMITED_CAPACITY)) e.capacity = 'errCapacity'
     setErrors(e)
     return e
   }
@@ -178,18 +181,18 @@ export default function CreateEventScreen({ navigation }) {
   const confirmAsync = (title, msg, okText) =>
     new Promise((resolve) => {
       Alert.alert(title, msg, [
-        { text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
+        { text: t('cancel'), style: 'cancel', onPress: () => resolve(false) },
         { text: okText, onPress: () => resolve(true) },
       ], { cancelable: true, onDismiss: () => resolve(false) })
     })
 
   const handleCreate = async () => {
-    if (!userId) return Alert.alert('Sign in required', 'Sign in to create an event.')
+    if (!userId) return Alert.alert(t('signInRequired'), t('signInToCreate'))
     const e = validate()
     const first = Object.values(e).find(Boolean)
     if (first) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(() => {})
-      return Alert.alert('Almost there', first)
+      return Alert.alert(t('almostThere'), t(first))
     }
 
     setLoading(true)
@@ -199,7 +202,7 @@ export default function CreateEventScreen({ navigation }) {
         try {
           coverUrl = await uploadEventCover(cover, userId)
         } catch {
-          const go = await confirmAsync('Cover photo didn’t upload', 'Create the event without a cover? You can try again later.', 'Create anyway')
+          const go = await confirmAsync(t('coverFailed'), t('coverFailedMsg'), t('createAnyway'))
           if (!go) return
         }
       }
@@ -228,7 +231,7 @@ export default function CreateEventScreen({ navigation }) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {})
       navigation.replace('EventDetails', { eventId: data.id, created: true })
     } catch (err) {
-      Alert.alert('Couldn’t create event', err?.message || 'Please try again.')
+      Alert.alert(t('createFailed'), err?.message || t('tryAgain'))
     } finally {
       setLoading(false)
     }
@@ -238,49 +241,51 @@ export default function CreateEventScreen({ navigation }) {
 
   return (
     <View style={styles.screen}>
-      <BrandHeader title="New Event" subtitle="Host something great" onBack={() => navigation.goBack()} />
+      <BrandHeader title={t('newEvent')} subtitle={t('hostSubtitle')} onBack={() => navigation.goBack()} />
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
           {/* Cover */}
-          <Pressable onPress={pickCover} accessibilityRole="button" accessibilityLabel="Choose cover photo">
+          <Pressable onPress={pickCover} accessibilityRole="button" accessibilityLabel={cover ? t('changeCoverA11y') : t('chooseCover')}>
             <GlassPanel radius={radii.md} animateIn={false} style={styles.coverPanel}>
               {cover ? (
                 <View style={styles.coverBox}>
                   <Image source={{ uri: cover }} style={styles.coverImg} />
                   <View style={styles.coverActions}>
-                    <GlassButton size="sm" tint="dark" onPress={pickCover} icon={<Ionicons name="image-outline" size={14} color="#fff" />}>Change</GlassButton>
-                    <GlassButton size="sm" tint="dark" onPress={() => setCover(null)} icon={<Ionicons name="trash-outline" size={14} color="#fff" />}>Remove</GlassButton>
+                    <GlassButton size="sm" tint="dark" onPress={pickCover} accessibilityLabel={t('changeCoverA11y')} icon={<Ionicons name="image-outline" size={14} color="#fff" />}>{t('change')}</GlassButton>
+                    <GlassButton size="sm" tint="dark" onPress={() => setCover(null)} accessibilityLabel={t('removeCoverA11y')} icon={<Ionicons name="trash-outline" size={14} color="#fff" />}>{t('remove')}</GlassButton>
                   </View>
                 </View>
               ) : (
                 <View style={[styles.coverBox, styles.coverEmpty]}>
                   <Ionicons name="image-outline" size={30} color={colors.textMuted} />
-                  <Text style={styles.coverTitle}>Add a cover photo</Text>
-                  <Text style={type.caption}>16:9 looks best · optional</Text>
+                  <Text style={styles.coverTitle}>{t('addCover')}</Text>
+                  <Text style={type.caption}>{t('coverHint')}</Text>
                 </View>
               )}
             </GlassPanel>
           </Pressable>
 
           {/* Details */}
-          <Section icon="create-outline" title="Details">
-            <Text style={styles.label}>Event name</Text>
+          <Section icon="create-outline" title={t('details')}>
+            <Text style={styles.label}>{t('eventName')}</Text>
             <TextInput
               style={[styles.input, errors.name && styles.inputError]}
-              placeholder="e.g. Rooftop sunset meetup"
+              placeholder={t('namePlaceholder')}
+              accessibilityLabel={t('eventName')}
               placeholderTextColor={colors.textFaint}
               value={name}
               onChangeText={(t) => { setName(t); clearError('name') }}
               maxLength={80}
             />
-            <FieldError text={errors.name} />
+            <FieldError text={errors.name && t(errors.name)} />
             <View style={styles.labelRow}>
-              <Text style={styles.label}>Description</Text>
+              <Text style={styles.label}>{t('description')}</Text>
               <Text style={styles.counter}>{description.length}/600</Text>
             </View>
             <TextInput
               style={[styles.input, styles.multiline]}
-              placeholder="What should people expect? Dress code, what to bring, schedule…"
+              placeholder={t('descPlaceholder')}
+              accessibilityLabel={t('description')}
               placeholderTextColor={colors.textFaint}
               value={description}
               onChangeText={setDescription}
@@ -290,16 +295,16 @@ export default function CreateEventScreen({ navigation }) {
           </Section>
 
           {/* Category */}
-          <Section icon="pricetag-outline" title="Category">
+          <Section icon="pricetag-outline" title={t('category')}>
             <View style={styles.chips}>
               {CATEGORIES.map((c) => (
-                <Chip key={c.key} active={category === c.key} icon={c.icon} label={c.label} onPress={() => { tap(); setCategory(c.key); clearError('category') }} />
+                <Chip key={c.key} active={category === c.key} icon={c.icon} label={categoryLabel(c)} onPress={() => { tap(); setCategory(c.key); clearError('category') }} />
               ))}
             </View>
-            <FieldError text={errors.category} />
+            <FieldError text={errors.category && t(errors.category)} />
             {category === 'gaming' ? (
               <>
-                <Text style={[styles.label, { marginTop: 14 }]}>Game (optional)</Text>
+                <Text style={[styles.label, { marginTop: 14 }]}>{t('gameOptional')}</Text>
                 <View style={styles.chips}>
                   {GAMES.map((g) => (
                     <Chip key={g.id} active={selectedGame === g.id} label={`${g.icon} ${g.name}`} onPress={() => { tap(); setSelectedGame(selectedGame === g.id ? null : g.id) }} />
@@ -310,13 +315,20 @@ export default function CreateEventScreen({ navigation }) {
           </Section>
 
           {/* When */}
-          <Section icon="time-outline" title="Date & time">
-            <Text style={styles.label}>Day</Text>
+          <Section icon="time-outline" title={t('dateTime')}>
+            <Text style={styles.label}>{t('day')}</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.dayRow}>
               {days.map((d) => {
                 const active = sameDay(d, start)
                 return (
-                  <Pressable key={d.toISOString()} onPress={() => pickDay(d)} style={[styles.day, active && styles.dayActive]}>
+                  <Pressable
+                    key={d.toISOString()}
+                    onPress={() => pickDay(d)}
+                    style={[styles.day, active && styles.dayActive]}
+                    accessibilityRole="button"
+                    accessibilityLabel={d.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}
+                    accessibilityState={{ selected: active }}
+                  >
                     <Text style={[styles.dayWeek, active && styles.dayTextActive]}>{d.toLocaleDateString(undefined, { weekday: 'short' })}</Text>
                     <Text style={[styles.dayNum, active && styles.dayTextActive]}>{d.getDate()}</Text>
                     <Text style={[styles.dayWeek, active && styles.dayTextActive]}>{d.toLocaleDateString(undefined, { month: 'short' })}</Text>
@@ -325,7 +337,7 @@ export default function CreateEventScreen({ navigation }) {
               })}
             </ScrollView>
 
-            <Text style={[styles.label, { marginTop: 14 }]}>Starts</Text>
+            <Text style={[styles.label, { marginTop: 14 }]}>{t('starts')}</Text>
             <Stepper
               value={start.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}
               sub={start.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}
@@ -335,38 +347,40 @@ export default function CreateEventScreen({ navigation }) {
               onPlusBig={() => nudgeStart(60)}
             />
 
-            <Text style={[styles.label, { marginTop: 14 }]}>Length</Text>
+            <Text style={[styles.label, { marginTop: 14 }]}>{t('length')}</Text>
             <View style={styles.chips}>
               {DURATIONS.map((m) => (
                 <Chip key={m} active={duration === m} label={durationLabel(m)} onPress={() => { tap(); setDuration(m) }} />
               ))}
             </View>
-            <Text style={[styles.label, { marginTop: 14 }]}>Ends</Text>
+            <Text style={[styles.label, { marginTop: 14 }]}>{t('ends')}</Text>
             <Stepper
               value={end.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}
-              sub={sameDay(end, start) ? `${durationLabel(duration)} event` : end.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}
+              sub={sameDay(end, start) ? t('durationEvent', { d: durationLabel(duration) }) : end.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}
               onMinus={() => nudgeDuration(-15)}
               onPlus={() => nudgeDuration(15)}
             />
-            <FieldError text={errors.when} />
+            <FieldError text={errors.when && t(errors.when)} />
           </Section>
 
           {/* Where */}
-          <Section icon="location-outline" title="Location">
-            <Text style={styles.label}>Venue name</Text>
+          <Section icon="location-outline" title={t('location')}>
+            <Text style={styles.label}>{t('venueName')}</Text>
             <TextInput
               style={[styles.input, errors.where && styles.inputError]}
-              placeholder="e.g. The Grove, rooftop bar"
+              placeholder={t('venuePlaceholder')}
+              accessibilityLabel={t('venueName')}
               placeholderTextColor={colors.textFaint}
               value={venue}
               onChangeText={(t) => { setVenue(t); clearError('where') }}
               maxLength={80}
             />
-            <Text style={[styles.label, { marginTop: 10 }]}>Address</Text>
+            <Text style={[styles.label, { marginTop: 10 }]}>{t('address')}</Text>
             <View style={styles.addressRow}>
               <TextInput
                 style={[styles.input, { flex: 1 }]}
-                placeholder="Street, city"
+                placeholder={t('addressPlaceholder')}
+                accessibilityLabel={t('address')}
                 placeholderTextColor={colors.textFaint}
                 value={address}
                 onChangeText={(t) => { setAddress(t); clearError('where') }}
@@ -374,44 +388,44 @@ export default function CreateEventScreen({ navigation }) {
                 returnKeyType="search"
                 maxLength={160}
               />
-              <GlassButton size="sm" onPress={findAddress} disabled={!address.trim() || !!locBusy}>
-                {locBusy === 'find' ? 'Finding…' : 'Find'}
+              <GlassButton size="sm" onPress={findAddress} disabled={!address.trim() || !!locBusy} accessibilityLabel={t('findAddressA11y')}>
+                {locBusy === 'find' ? t('finding') : t('find')}
               </GlassButton>
             </View>
             <View style={styles.locButtons}>
               <GlassButton size="sm" onPress={useCurrentLocation} disabled={!!locBusy} icon={locBusy === 'here' ? <ActivityIndicator size="small" color={colors.text} /> : <Ionicons name="navigate-outline" size={15} color={colors.text} />}>
-                Use current location
+                {t('useCurrent')}
               </GlassButton>
               {Platform.OS !== 'web' ? (
                 <GlassButton size="sm" onPress={() => setPickerOpen(true)} disabled={!!locBusy} icon={<Ionicons name="map-outline" size={15} color={colors.text} />}>
-                  Pick on map
+                  {t('pickOnMap')}
                 </GlassButton>
               ) : null}
             </View>
             {coords ? (
               <View style={styles.pinned}>
                 <Ionicons name="checkmark-circle" size={16} color={colors.success} />
-                <Text style={styles.pinnedText}>Pinned on the map · {coords.latitude.toFixed(4)}, {coords.longitude.toFixed(4)}</Text>
-                <Pressable onPress={() => setCoords(null)} hitSlop={8}><Text style={styles.link}>Clear</Text></Pressable>
+                <Text style={styles.pinnedText}>{t('pinnedAt', { coords: `${coords.latitude.toFixed(4)}, ${coords.longitude.toFixed(4)}` })}</Text>
+                <Pressable onPress={() => setCoords(null)} hitSlop={14} accessibilityRole="button" accessibilityLabel={t('clearPinA11y')}><Text style={styles.link}>{t('clear')}</Text></Pressable>
               </View>
             ) : (
-              <Text style={[type.caption, { marginTop: 8 }]}>Pin the exact spot so guests get a map and directions.</Text>
+              <Text style={[type.caption, { marginTop: 8 }]}>{t('pinHint')}</Text>
             )}
-            <FieldError text={errors.where} />
+            <FieldError text={errors.where && t(errors.where)} />
           </Section>
 
           {/* Capacity */}
-          <Section icon="people-outline" title="Capacity">
+          <Section icon="people-outline" title={t('capacity')}>
             <View style={styles.chips}>
               {CAPACITY_PRESETS.map((n) => (
                 <Chip key={n} active={!unlimited && capacity === n} label={String(n)} onPress={() => { tap(); setUnlimited(false); setCapacity(n); clearError('capacity') }} />
               ))}
-              <Chip active={unlimited} icon="infinite-outline" label="Unlimited" onPress={() => { tap(); setUnlimited(true); clearError('capacity') }} />
+              <Chip active={unlimited} icon="infinite-outline" label={t('unlimited')} onPress={() => { tap(); setUnlimited(true); clearError('capacity') }} />
             </View>
             {!unlimited ? (
               <View style={{ marginTop: 12 }}>
                 <Stepper
-                  value={`${capacity} guests`}
+                  value={t('guests', { n: capacity })}
                   onMinusBig={() => { tap(); setCapacity((c) => Math.max(2, c - 10)) }}
                   onMinus={() => { tap(); setCapacity((c) => Math.max(2, c - 1)) }}
                   onPlus={() => { tap(); setCapacity((c) => Math.min(UNLIMITED_CAPACITY - 1, c + 1)) }}
@@ -419,19 +433,19 @@ export default function CreateEventScreen({ navigation }) {
                 />
               </View>
             ) : null}
-            <FieldError text={errors.capacity} />
+            <FieldError text={errors.capacity && t(errors.capacity)} />
           </Section>
 
           {/* Privacy */}
-          <Section icon="lock-closed-outline" title="Who can see it">
+          <Section icon="lock-closed-outline" title={t('whoCanSee')}>
             <View style={styles.segment}>
               {[
-                { key: 'public', icon: 'globe-outline', title: 'Public', sub: 'Anyone on iYiYi can find and join' },
-                { key: 'invite', icon: 'mail-outline', title: 'Invite only', sub: 'Only people you invite can see it' },
+                { key: 'public', icon: 'globe-outline', title: t('public'), sub: t('publicSub') },
+                { key: 'invite', icon: 'mail-outline', title: t('inviteOnly'), sub: t('inviteOnlySub') },
               ].map((o) => {
                 const active = visibility === o.key
                 return (
-                  <Pressable key={o.key} onPress={() => { tap(); setVisibility(o.key) }} style={[styles.segmentItem, active && styles.segmentItemActive]} accessibilityRole="radio" accessibilityState={{ selected: active }}>
+                  <Pressable key={o.key} onPress={() => { tap(); setVisibility(o.key) }} style={[styles.segmentItem, active && styles.segmentItemActive]} accessibilityRole="radio" accessibilityLabel={`${o.title}. ${o.sub}`} accessibilityState={{ selected: active, checked: active }}>
                     <Ionicons name={o.icon} size={18} color={active ? colors.ink : colors.text} />
                     <Text style={[styles.segmentTitle, active && { color: colors.ink }]}>{o.title}</Text>
                     <Text style={[styles.segmentSub, active && { color: colors.ink, opacity: 0.75 }]}>{o.sub}</Text>
@@ -439,11 +453,11 @@ export default function CreateEventScreen({ navigation }) {
                 )
               })}
             </View>
-            <Text style={[type.caption, { marginTop: 10 }]}>You can invite people right after creating the event.</Text>
+            <Text style={[type.caption, { marginTop: 10 }]}>{t('inviteAfter')}</Text>
           </Section>
 
           {/* Preview */}
-          <Text style={styles.previewLabel}>Preview</Text>
+          <Text style={styles.previewLabel} accessibilityRole="header">{t('preview')}</Text>
           <GlassPanel radius={radii.md} animateIn={false} style={styles.previewCard}>
             <View style={styles.previewCover}>
               {cover ? (
@@ -454,21 +468,21 @@ export default function CreateEventScreen({ navigation }) {
               {cat ? (
                 <View style={styles.previewBadge}>
                   <Ionicons name={cat.icon} size={12} color="#fff" />
-                  <Text style={styles.previewBadgeText}>{cat.label}</Text>
+                  <Text style={styles.previewBadgeText}>{categoryLabel(cat)}</Text>
                 </View>
               ) : null}
             </View>
             <View style={{ padding: 14, gap: 4 }}>
               <Text style={styles.previewWhen}>{formatEventWhen(start, end).toUpperCase()}</Text>
-              <Text style={type.title} numberOfLines={2}>{name.trim() || 'Your event name'}</Text>
+              <Text style={type.title} numberOfLines={2}>{name.trim() || t('yourEventName')}</Text>
               <Text style={type.caption} numberOfLines={1}>
-                {venue.trim() || address.trim() || 'Location'} · {unlimited ? 'Unlimited spots' : `${capacity} spots`} · {visibility === 'invite' ? 'Invite only' : 'Public'}
+                {venue.trim() || address.trim() || t('location')} · {unlimited ? t('unlimitedSpots') : t('spots', { n: capacity })} · {visibility === 'invite' ? t('inviteOnly') : t('public')}
               </Text>
             </View>
           </GlassPanel>
 
           <GlassButton variant="primary" size="lg" onPress={handleCreate} disabled={loading} style={{ marginTop: 8 }}>
-            {loading ? 'Creating…' : 'Create event'}
+            {loading ? t('creating') : t('createEvent')}
           </GlassButton>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -484,7 +498,7 @@ function Section({ icon, title, children }) {
     <GlassPanel style={styles.section} radius={radii.md} animateIn={false}>
       <View style={styles.sectionHead}>
         <Ionicons name={icon} size={16} color={colors.textMuted} />
-        <Text style={styles.sectionTitle}>{title}</Text>
+        <Text style={styles.sectionTitle} accessibilityRole="header">{title}</Text>
       </View>
       {children}
     </GlassPanel>
@@ -510,16 +524,17 @@ function StepBtn({ label, onPress, icon }) {
 }
 
 function Stepper({ value, sub, onMinus, onPlus, onMinusBig, onPlusBig }) {
+  const t = useT(strings)
   return (
     <View style={styles.stepper}>
-      <StepBtn label={onMinusBig ? '−−' : ''} icon="play-back-outline" onPress={onMinusBig} />
-      <StepBtn label="Decrease" icon="remove" onPress={onMinus} />
+      <StepBtn label={t('decreaseMore')} icon="play-back-outline" onPress={onMinusBig} />
+      <StepBtn label={t('decrease')} icon="remove" onPress={onMinus} />
       <View style={styles.stepValue}>
         <Text style={styles.stepValueText}>{value}</Text>
         {sub ? <Text style={type.caption}>{sub}</Text> : null}
       </View>
-      <StepBtn label="Increase" icon="add" onPress={onPlus} />
-      <StepBtn label={onPlusBig ? '++' : ''} icon="play-forward-outline" onPress={onPlusBig} />
+      <StepBtn label={t('increase')} icon="add" onPress={onPlus} />
+      <StepBtn label={t('increaseMore')} icon="play-forward-outline" onPress={onPlusBig} />
     </View>
   )
 }
@@ -527,7 +542,7 @@ function Stepper({ value, sub, onMinus, onPlus, onMinusBig, onPlusBig }) {
 function FieldError({ text }) {
   if (!text) return null
   return (
-    <View style={styles.errorRow}>
+    <View style={styles.errorRow} accessibilityLiveRegion="polite">
       <Ionicons name="alert-circle" size={14} color={colors.danger} />
       <Text style={styles.errorText}>{text}</Text>
     </View>

@@ -3,13 +3,16 @@ import { View, Text, Modal, Pressable, TextInput, ActivityIndicator, StyleSheet 
 import { colors, radii, type } from '../theme'
 import { parseDay } from '../lib/exportPeople'
 import GlassPanel from './GlassPanel'
+import { useT } from '../i18n'
+import strings from '../i18n/strings/people'
 
+// Labels are keys in i18n/strings/people.
 const RANGES = [
-  { key: 'all', label: 'All time' },
-  { key: 'today', label: 'Today' },
-  { key: '7', label: 'Last 7 days' },
-  { key: '30', label: 'Last 30 days' },
-  { key: 'custom', label: 'Custom dates' },
+  { key: 'all', label: 'rangeAll' },
+  { key: 'today', label: 'rangeToday' },
+  { key: '7', label: 'range7' },
+  { key: '30', label: 'range30' },
+  { key: 'custom', label: 'rangeCustom' },
 ]
 
 const daysAgo = (n) => {
@@ -22,13 +25,13 @@ const daysAgo = (n) => {
 function Chip({ active, label, onPress }) {
   if (active) {
     return (
-      <Pressable onPress={onPress} style={styles.chipActive}>
+      <Pressable onPress={onPress} style={styles.chipActive} accessibilityRole="button" accessibilityState={{ selected: true }}>
         <Text style={styles.chipTextActive}>{label}</Text>
       </Pressable>
     )
   }
   return (
-    <Pressable onPress={onPress}>
+    <Pressable onPress={onPress} accessibilityRole="button" accessibilityState={{ selected: false }}>
       <GlassPanel radius={radii.pill}>
         <View style={styles.chip}><Text style={styles.chipText}>{label}</Text></View>
       </GlassPanel>
@@ -39,6 +42,7 @@ function Chip({ active, label, onPress }) {
 // Choose a date range, a format (PDF or Excel/CSV) and where it goes (email to yourself
 // with the file attached, or the share sheet). onExport receives the ready options.
 export default function ExportSheet({ visible, onClose, onExport, busy }) {
+  const t = useT(strings)
   const [range, setRange] = useState('all')
   const [format, setFormat] = useState('pdf')
   const [fromText, setFromText] = useState('')
@@ -54,9 +58,9 @@ export default function ExportSheet({ visible, onClose, onExport, busy }) {
     else if (range === 'custom') {
       from = parseDay(fromText, false)
       to = parseDay(toText, true)
-      if (from === undefined || to === undefined) return setError('Use dates like 2026-09-01.')
-      if (!from && !to) return setError('Enter a start date, an end date, or both.')
-      if (from && to && from > to) return setError('The start date must be before the end date.')
+      if (from === undefined || to === undefined) return setError(t('dateFormatError'))
+      if (!from && !to) return setError(t('dateMissingError'))
+      if (from && to && from > to) return setError(t('dateOrderError'))
     }
     setError('')
     onExport({ format, from, to, method })
@@ -64,27 +68,27 @@ export default function ExportSheet({ visible, onClose, onExport, busy }) {
 
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
-      <Pressable style={styles.backdrop} onPress={onClose} />
+      <Pressable style={styles.backdrop} onPress={onClose} accessibilityRole="button" accessibilityLabel={t('cancel')} />
       <View style={styles.sheet}>
-        <Text style={type.title}>Export contacts</Text>
-        <Text style={[type.caption, { marginBottom: 14 }]}>People you crossed paths with, with their photo and social links.</Text>
+        <Text style={type.title} accessibilityRole="header">{t('exportContacts')}</Text>
+        <Text style={[type.caption, { marginBottom: 14 }]}>{t('exportContactsSub')}</Text>
 
-        <Text style={styles.label}>Date range</Text>
+        <Text style={styles.label}>{t('dateRange')}</Text>
         <View style={styles.row}>
-          {RANGES.map((r) => <Chip key={r.key} label={r.label} active={range === r.key} onPress={() => setRange(r.key)} />)}
+          {RANGES.map((r) => <Chip key={r.key} label={t(r.label)} active={range === r.key} onPress={() => setRange(r.key)} />)}
         </View>
         {range === 'custom' && (
           <View style={styles.dates}>
             <GlassPanel radius={12} style={{ flex: 1 }}>
-              <TextInput style={styles.input} value={fromText} onChangeText={setFromText} placeholder="From 2026-09-01" placeholderTextColor={colors.textFaint} autoCapitalize="none" />
+              <TextInput style={styles.input} value={fromText} onChangeText={setFromText} placeholder={t('fromPlaceholder')} accessibilityLabel={t('fromPlaceholder')} placeholderTextColor={colors.textFaint} autoCapitalize="none" />
             </GlassPanel>
             <GlassPanel radius={12} style={{ flex: 1 }}>
-              <TextInput style={styles.input} value={toText} onChangeText={setToText} placeholder="To 2026-09-30" placeholderTextColor={colors.textFaint} autoCapitalize="none" />
+              <TextInput style={styles.input} value={toText} onChangeText={setToText} placeholder={t('toPlaceholder')} accessibilityLabel={t('toPlaceholder')} placeholderTextColor={colors.textFaint} autoCapitalize="none" />
             </GlassPanel>
           </View>
         )}
 
-        <Text style={styles.label}>Format</Text>
+        <Text style={styles.label}>{t('format')}</Text>
         <View style={styles.row}>
           <Chip label="PDF" active={format === 'pdf'} onPress={() => setFormat('pdf')} />
           <Chip label="Excel (CSV)" active={format === 'csv'} onPress={() => setFormat('csv')} />
@@ -96,14 +100,14 @@ export default function ExportSheet({ visible, onClose, onExport, busy }) {
           <ActivityIndicator color={colors.magenta} style={{ marginTop: 20 }} />
         ) : (
           <View style={{ gap: 10, marginTop: 20 }}>
-            <Pressable style={styles.primary} onPress={() => go('email')}>
-              <Text style={styles.primaryText}>Email to myself</Text>
+            <Pressable style={styles.primary} onPress={() => go('email')} accessibilityRole="button">
+              <Text style={styles.primaryText}>{t('emailMyself')}</Text>
             </Pressable>
-            <Pressable style={styles.secondary} onPress={() => go('share')}>
-              <Text style={styles.secondaryText}>Share or save…</Text>
+            <Pressable style={styles.secondary} onPress={() => go('share')} accessibilityRole="button">
+              <Text style={styles.secondaryText}>{t('shareOrSave')}</Text>
             </Pressable>
-            <Pressable onPress={onClose} hitSlop={8} style={{ alignItems: 'center', padding: 6 }}>
-              <Text style={type.caption}>Cancel</Text>
+            <Pressable onPress={onClose} hitSlop={12} style={{ alignItems: 'center', padding: 6 }} accessibilityRole="button">
+              <Text style={type.caption}>{t('cancel')}</Text>
             </Pressable>
           </View>
         )}

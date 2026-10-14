@@ -1,7 +1,8 @@
 // Sticky bomb and land mine HUD buttons for laser tag, plus the shared square equipment
 // tile (studio kit: 38 px black-glass square, line icon, count underneath).
 //
-// Sticky bomb: tap to place at your current position. Tap again to detonate remotely.
+// Sticky bomb: tap to place one at your current position (as many as you carry); a separate
+// DETONATE ALL tile appears once one is down and blows every one of them at once.
 // Land mine: tap to drop at your current position. It triggers automatically when an
 // enemy walks within range. No second press needed.
 import React, { useCallback, useEffect, useRef, useState } from 'react'
@@ -47,42 +48,57 @@ export function TileHint({ text, color = ST.objective }) {
 }
 
 /**
- * StickyBombButton — two-tap flow: first tap places, second detonates.
- *   count, disabled, size, placed (controlled by the game: a bomb is down), onPlace(), onDetonate(), onEmpty()
+ * StickyBombButton — every tap places ANOTHER sticky bomb where you stand (one from your
+ * inventory each; place as many as you carry). The badge shows how many are down.
+ *   count (inventory), placedCount, disabled, size, onPlace(), onEmpty()
  */
-export function StickyBombButton({ count, disabled, size = 38, placed: placedProp, onPlace, onDetonate, onEmpty }) {
-  // The game says whether a bomb is actually down (placing can fail: no GPS, none left).
-  // Without that prop, fall back to remembering the last tap.
-  const [placedLocal, setPlacedLocal] = useState(false)
-  const placed = placedProp ?? placedLocal
+export function StickyBombButton({ count, placedCount = 0, disabled, size = 38, onPlace, onEmpty }) {
   const empty = !(count > 0)
-
   const handlePress = useCallback(() => {
     if (disabled) return
-    if (placed) {
-      setPlacedLocal(false)
-      onDetonate?.()
-      return
-    }
     if (empty) { onEmpty?.(); return }
-    setPlacedLocal(true)
     onPlace?.()
-  }, [disabled, placed, empty, onPlace, onDetonate, onEmpty])
-
-  const label = placed ? 'DET' : count === Infinity ? '∞' : String(Math.max(0, count | 0))
+  }, [disabled, empty, onPlace, onEmpty])
+  const label = count === Infinity ? '∞' : String(Math.max(0, count | 0))
   return (
     <View style={{ alignItems: 'center' }} pointerEvents="box-none">
-      {placed ? <TileHint text="TAP TO DETONATE" color={ST.enemy} /> : null}
       <Pressable
         onPress={handlePress}
         hitSlop={4}
         accessibilityRole="button"
-        accessibilityLabel={placed ? 'Detonate sticky bomb' : `Sticky bomb, ${label} left. Tap to place at your position.`}
+        accessibilityLabel={`Sticky bomb, ${label} left${placedCount ? `, ${placedCount} placed` : ''}. Tap to place one at your position.`}
         style={({ pressed }) => pressed && { transform: [{ scale: 0.94 }] }}
       >
-        <EquipTileFace kind="c4" label={label} size={size} accent={placed ? ST.enemy : null} dim={(disabled || empty) && !placed} />
+        <EquipTileFace kind="c4" label={label} size={size} accent={placedCount > 0 ? ST.objective : null} dim={disabled || empty} />
       </Pressable>
+      {placedCount > 0 ? (
+        <View style={s.badge} pointerEvents="none"><Text style={s.badgeText}>×{placedCount}</Text></View>
+      ) : null}
     </View>
+  )
+}
+
+/**
+ * DetonateAllButton — a red pill that appears once a sticky bomb is down (above the
+ * equipment row); one press blows all of them.
+ *   count (placed), disabled, onDetonate(), style
+ */
+export function DetonateAllButton({ count, disabled, onDetonate, style }) {
+  const handlePress = useCallback(() => { if (!disabled) onDetonate?.() }, [disabled, onDetonate])
+  if (!(count > 0)) return null
+  return (
+    <Pressable
+      onPress={handlePress}
+      hitSlop={6}
+      accessibilityRole="button"
+      accessibilityLabel={count > 1 ? `Detonate all ${count} sticky bombs` : 'Detonate the sticky bomb'}
+      style={({ pressed }) => [s.det, disabled && { opacity: 0.45 }, pressed && { transform: [{ scale: 0.97 }] }, style]}
+    >
+      <Svg width={16} height={16} viewBox="0 0 24 24">
+        <Path d="M13 2L4 14h7l-1 8 9-12h-7z" stroke="#fff" strokeWidth={2} fill="none" strokeLinejoin="round" />
+      </Svg>
+      <Text style={s.detText} numberOfLines={1}>{count > 1 ? `DETONATE ALL · ${count}` : 'DETONATE'}</Text>
+    </Pressable>
   )
 }
 
@@ -124,6 +140,10 @@ export function LandMineButton({ count, disabled, size = 38, onDrop, onEmpty }) 
 const s = StyleSheet.create({
   tile: { alignItems: 'center', justifyContent: 'center', overflow: 'hidden', borderRadius: ST.radius, backgroundColor: 'rgba(8,10,14,0.62)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.16)' },
   count: { fontFamily: FONT.display, fontSize: 10, lineHeight: 12, color: ST.text, marginTop: -1, includeFontPadding: false },
+  badge: { position: 'absolute', top: -6, right: -6, minWidth: 18, height: 16, paddingHorizontal: 3, borderRadius: 8, backgroundColor: ST.objective, alignItems: 'center', justifyContent: 'center' },
+  badgeText: { fontFamily: FONT.display, fontSize: 10, color: ST.ink, includeFontPadding: false },
+  det: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, height: 34, paddingHorizontal: 10, borderRadius: ST.radius, backgroundColor: 'rgba(255,61,82,0.9)', borderWidth: 1, borderColor: '#ff8a96', alignSelf: 'stretch' },
+  detText: { fontFamily: FONT.display, fontSize: 13, letterSpacing: 1.2, color: '#ffffff', includeFontPadding: false },
   hint: { position: 'absolute', bottom: '100%', marginBottom: 6, paddingHorizontal: 8, paddingVertical: 4, borderRadius: ST.radius, backgroundColor: 'rgba(8,10,14,0.85)', borderLeftWidth: 2, minWidth: 120, alignItems: 'center' },
   hintText: { fontFamily: FONT.ui, fontSize: 11, letterSpacing: 1.2, color: '#ffffff', ...stShadow },
 })

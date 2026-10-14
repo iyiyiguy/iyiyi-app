@@ -6,6 +6,8 @@ import { colors, font, radii, type } from '../theme'
 import { TAGS } from '../lib/tags'
 import GlassPanel from './GlassPanel'
 import { GlassButton } from './GlassButton'
+import { useT } from '../i18n'
+import strings from '../i18n/strings/social'
 
 // "Tags" pill button that opens a grid of tag tiles (multi-select, X to close) with
 // Clear / Apply. The selection only takes effect when Apply is tapped; closing the
@@ -30,11 +32,14 @@ export default function TagDropdown({
   selected = [],
   onApply,
   tags = TAGS,
-  label = 'Tags',
-  title = 'Filter by tags',
+  label: labelProp,
+  title: titleProp,
   style,
   disabled = false,
 }) {
+  const t = useT(strings)
+  const label = labelProp ?? t('tags')
+  const title = titleProp ?? t('filterByTags')
   const triggerRef = useRef(null)
   const [open, setOpen] = useState(false)
   const [anchor, setAnchor] = useState(null)
@@ -62,13 +67,13 @@ export default function TagDropdown({
 
   const toggle = (tag) => {
     Haptics.selectionAsync().catch(() => {})
-    setDraft((d) => (d.includes(tag) ? d.filter((t) => t !== tag) : [...d, tag]))
+    setDraft((d) => (d.includes(tag) ? d.filter((x) => x !== tag) : [...d, tag]))
   }
 
   const apply = () => {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {})
     // Keep the canonical order of the option list.
-    onApply?.(tags.filter((t) => draft.includes(t)))
+    onApply?.(tags.filter((x) => draft.includes(x)))
     setOpen(false)
   }
 
@@ -95,7 +100,8 @@ export default function TagDropdown({
         onPress={show}
         disabled={disabled}
         accessibilityRole="button"
-        accessibilityLabel={count ? `${label}, ${count} selected` : label}
+        accessibilityLabel={count ? t('labelSelectedA11y', { label, n: count }) : label}
+        accessibilityState={{ disabled }}
         style={({ pressed }) => [style, { opacity: disabled ? 0.5 : 1 }, pressed && { transform: [{ scale: 0.96 }] }]}
       >
         {count > 0 ? (
@@ -116,14 +122,14 @@ export default function TagDropdown({
       </Pressable>
 
       <Modal visible={open} transparent animationType="fade" onRequestClose={close} statusBarTranslucent>
-        <Pressable style={styles.backdrop} onPress={close} accessibilityLabel="Close tags" />
+        <Pressable style={styles.backdrop} onPress={close} accessibilityRole="button" accessibilityLabel={t('closeTags')} />
         <View style={[styles.panel, { width: panelW, top: panelPos.top, left: panelPos.left, maxHeight: panelPos.maxHeight }]}>
           <View style={styles.header}>
             <View style={{ flex: 1 }}>
               <Text style={type.headline}>{title}</Text>
-              <Text style={type.caption}>{draft.length ? `${draft.length} selected` : 'Any'}</Text>
+              <Text style={type.caption}>{draft.length ? t('nSelected', { n: draft.length }) : t('any')}</Text>
             </View>
-            <Pressable onPress={close} hitSlop={10} style={styles.closeBtn} accessibilityRole="button" accessibilityLabel="Close">
+            <Pressable onPress={close} hitSlop={10} style={styles.closeBtn} accessibilityRole="button" accessibilityLabel={t('close')}>
               <Ionicons name="close" size={18} color={colors.text} />
             </Pressable>
           </View>
@@ -148,10 +154,10 @@ export default function TagDropdown({
           </ScrollView>
           <View style={styles.footer}>
             <GlassButton size="sm" variant="glass" onPress={() => setDraft([])} disabled={draft.length === 0} style={{ flex: 1 }}>
-              Clear
+              {t('clear')}
             </GlassButton>
             <GlassButton size="sm" variant="primary" onPress={apply} style={{ flex: 1 }}>
-              {draft.length ? `Apply (${draft.length})` : 'Apply'}
+              {draft.length ? t('applyN', { n: draft.length }) : t('apply')}
             </GlassButton>
           </View>
         </View>

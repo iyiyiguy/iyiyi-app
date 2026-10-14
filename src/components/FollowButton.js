@@ -4,12 +4,19 @@ import { colors, radii } from '../theme'
 import { post, del } from '../lib/api'
 import { maybeOfferPushAfterFollow } from '../lib/pushPrompt'
 import Bounce from './Bounce'
+import { useT } from '../i18n'
+import strings from '../i18n/strings/social'
 
 // status: 'accepted' | 'pending' | null/undefined. onChange(userId, newStatus).
-export default function FollowButton({ userId, status, onChange, style, overPhoto }) {
+// name (optional) is read out by screen readers: "Follow {name}" / "Following {name}".
+export default function FollowButton({ userId, status, onChange, style, overPhoto, name }) {
+  const t = useT(strings)
   const [busy, setBusy] = useState(false)
   const active = status === 'accepted' || status === 'pending'
-  const label = status === 'accepted' ? 'Following' : status === 'pending' ? 'Requested' : 'Follow'
+  const label = status === 'accepted' ? t('following') : status === 'pending' ? t('requested') : t('follow')
+  const a11yLabel = name
+    ? t(status === 'accepted' ? 'followingNameA11y' : status === 'pending' ? 'requestedNameA11y' : 'followNameA11y', { name })
+    : label
 
   const toggle = async () => {
     if (busy) return
@@ -31,7 +38,15 @@ export default function FollowButton({ userId, status, onChange, style, overPhot
   }
 
   return (
-    <Bounce onPress={toggle} disabled={busy} hitSlop={6} style={[styles.button, active && styles.buttonActive, active && overPhoto && styles.buttonOverPhoto, style]}>
+    <Bounce
+      onPress={toggle}
+      disabled={busy}
+      hitSlop={8}
+      accessibilityRole="button"
+      accessibilityLabel={a11yLabel}
+      accessibilityHint={active ? t('unfollowHint') : undefined}
+      accessibilityState={{ busy, selected: active }}
+      style={[styles.button, active && styles.buttonActive, active && overPhoto && styles.buttonOverPhoto, style]}>
       {busy ? (
         <ActivityIndicator size="small" color={active ? colors.magenta : colors.onBrand} />
       ) : (

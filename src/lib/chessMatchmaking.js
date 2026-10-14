@@ -9,11 +9,17 @@
 // if it is already busy with another proposal. Presence views can briefly disagree between
 // phones, so a proposal is only binding once acked; a nack / timeout returns both players to
 // the queue and keeps that opponent out of the next couple of pairings.
+//
+// Pairing uses the ONLINE rating (stats.chess.online.rating, Elo between people - see
+// chessRating.js), not the vs-AI rating: that's the number that represents you against other
+// players. `games` (rated online games so far) rides along so the UI can mark a provisional
+// rating ("1016?").
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { AppState } from 'react-native'
 import { supabase } from './supabase'
 import { getMyProfile, makeCode, openRoom } from './multiplayer'
 import { loadArcadeStats } from './arcadeStats'
+import { ONLINE_START_RATING } from './chessRating'
 
 const TOPIC = 'chess:queue'
 const ACK_TIMEOUT_MS = 6000
@@ -24,6 +30,17 @@ export const SLOW_SEARCH_MS = 30000
 const GIVE_UP_MS = 4 * 60 * 1000
 const BASE_WINDOW = 150 // rating points
 const WINDOW_PER_SEC = 15 // widens by this much per second waited; anyone after ~60 s
+const PROVISIONAL_GAMES = 10 // fewer rated online games than this -> provisional
+
+const ratingOf = (p) => (Number.isFinite(Number(p?.rating)) && Number(p.rating) > 0 ? Number(p.rating) : ONLINE_START_RATING)
+
+/** "1016" / "1016?" (provisional: fewer than 10 rated online games). */
+export function formatOnlineRating(rating, games) {
+  const r = Number(rating)
+  if (!Number.isFinite(r) || r <= 0) return null
+  const n = Number(games)
+  return `${Math.round(r)}${Number.isFinite(n) && n < PROVISIONAL_GAMES ? '?' : ''}`
+}
 
 function windowFor(p, now) {
   const waited = Math.max(0, (now - (p.ts || now)) / 1000)
@@ -41,7 +58,7 @@ export function pickPartner(waiting, myId, now = Date.now()) {
     let bestD = Infinity
     for (const q of list) {
       if (q.id === p.id || paired.has(q.id)) continue
-      const d = Math.abs((p.rating || 1200) - (q.rating || 1200))
+      const d = Math.abs(ratingOf(p) - ratingOf(q))
       if (d > Math.max(windowFor(p, now), windowFor(q, now))) continue
       if (d < bestD) { best = q; bestD = d } // list is oldest-first, so ties keep the older one
     }
@@ -61,7 +78,8 @@ class Matchmaker {
     this.error = null
     this.notice = null
     this.me = null
-    this.rating = 1200
+    this.rating = ONLINE_START_RATING // online rating (stats.chess.online.rating)
+    this.games = 0 // rated online games
     this.channel = null
     this.startedAt = 0
     this.joinedQueueAt = 0
@@ -88,6 +106,8 @@ class Matchmaker {
       startedAt: this.startedAt,
       waitingCount: this.waitingCount,
       match: this.match,
+      myRating: this.rating, // online rating used for pairing
+      myGames: this.games,
     }
   }
 
@@ -111,8 +131,11 @@ class Matchmaker {
     }
     try {
       const stats = await loadArcadeStats()
-      const r = Number(stats?.chess?.rating)
-      if (Number.isFinite(r)) this.rating = Math.round(r)
+      const online = stats?.chess?.online
+      const r = Number(online?.rating)
+      if (Number.isFinite(r) && r > 0) this.rating = Math.round(r)
+      const n = Number(online?.games)
+      if (Number.isFinite(n) && n >= 0) this.games = Math.floor(n)
     } catch { /* default rating */ }
     if (this.stopped) return
     await this._openChannel()
@@ -170,13 +193,13 @@ class Matchmaker {
   _trackWaiting() {
     if (!this.channel || this.stopped) return
     if (!this.joinedQueueAt) this.joinedQueueAt = Date.now()
-    const meta = { id: this.me.id, name: this.me.username, avatar: this.me.avatar || null, rating: this.rating, ts: this.joinedQueueAt, st: 'w' }
+    const meta = { id: this.me.id, name: this.me.username, avatar: this.me.avatar || null, rating: this.rating, games: this.games, ts: this.joinedQueueAt, st: 'w' }
     this.channel.track(meta).catch(() => {})
   }
 
   _trackBusy() {
     if (!this.channel) return
-    this.channel.track({ id: this.me.id, name: this.me.username, avatar: this.me.avatar || null, rating: this.rating, ts: this.joinedQueueAt, st: 'b' }).catch(() => {})
+    this.channel.track({ id: this.me.id, name: this.me.username, avatar: this.me.avatar || null, rating: this.rating, games: this.games, ts: this.joinedQueueAt, st: 'b' }).catch(() => {})
   }
 
   _send(payload) {
@@ -192,9 +215,19 @@ class Matchmaker {
       const meta = (state[id] || []).find((m) => m && m.st === 'w')
       if (!meta) continue
       if (id !== this.me.id && ((this.excluded[id] || 0) > now || (this.recent[id] || 0) > now)) continue
-      out.push({ id, name: String(meta.name || 'Player').slice(0, 32), avatar: meta.avatar || null, rating: Number(meta.rating) || 1200, ts: Number(meta.ts) || now })
+      out.push({ id, name: String(meta.name || 'Player').slice(0, 32), avatar: meta.avatar || null, rating: ratingOf(meta), games: Number.isFinite(Number(meta.games)) ? Number(meta.games) : null, ts: Number(meta.ts) || now })
     }
     return out
+  }
+
+  // Latest presence (waiting or busy) for one player: { rating, games } or null.
+  _presenceOf(id) {
+    try {
+      const metas = this.channel?.presenceState?.()?.[id] || []
+      const m = metas[metas.length - 1]
+      if (!m) return null
+      return { rating: ratingOf(m), games: Number.isFinite(Number(m.games)) ? Number(m.games) : null }
+    } catch { return null }
   }
 
   _tick() {
@@ -287,14 +320,15 @@ class Matchmaker {
     }
     if (this.stopped || this.status !== 'joining') { try { room.leave() } catch { /* ignore */ } return }
     this.room = room
-    const partner = { id: partnerId }
+    const seen = this._waiting().find((p) => p.id === partnerId) || this._presenceOf(partnerId)
+    const partner = { id: partnerId, rating: seen?.rating ?? null, games: seen?.games ?? null }
     this.pending = { code: msg.code, partner, role: 'guest', timer: setTimeout(() => this._abortPending('timeout'), CONNECT_TIMEOUT_MS) }
     const check = () => {
       if (this.room !== room || this.stopped) return
       if (room.status === 'error') { this._abortPending('error'); return }
       if (room.info?.phase === 'playing') {
         const host = room.roster.find((p) => p.id === partnerId)
-        this._matched({ code: msg.code, opponent: { id: partnerId, name: host?.username || 'Opponent', avatar: host?.avatar || null } })
+        this._matched({ code: msg.code, opponent: { id: partnerId, name: host?.username || 'Opponent', avatar: host?.avatar || null, rating: partner.rating, games: partner.games } })
       }
     }
     this.pending.off = room.subscribe(check)
@@ -314,7 +348,7 @@ class Matchmaker {
       const guest = room.roster.find((p) => p.id === pend.partner.id)
       if (guest && room.isHost()) {
         try { room.setInfo({ phase: 'playing', round: (room.info.round || 0) + 1, startedAt: Date.now() }) } catch { /* ignore */ }
-        this._matched({ code: pend.code, opponent: { id: guest.id, name: guest.username || pend.partner.name || 'Opponent', avatar: guest.avatar || pend.partner.avatar || null } })
+        this._matched({ code: pend.code, opponent: { id: guest.id, name: guest.username || pend.partner.name || 'Opponent', avatar: guest.avatar || pend.partner.avatar || null, rating: pend.partner.rating ?? null, games: pend.partner.games ?? null } })
       }
     }
     pend.off = room.subscribe(check)

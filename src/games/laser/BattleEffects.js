@@ -199,7 +199,8 @@ const OUT_MAX = 10
 const BOLT_LEN = 120
 const BOLT_W = 13
 
-function LaserBolt({ id, fromX, fromY, toX, toY, color, onDone }) {
+// flat: hip fire (the radar is a top-down map): straight, constant size, no "into the scene".
+function LaserBolt({ id, fromX, fromY, toX, toY, color, flat = false, onDone }) {
   const t = useRef(new Animated.Value(0)).current
   useEffect(() => {
     Animated.timing(t, { toValue: 1, duration: OUT_MS + 140, easing: Easing.linear, useNativeDriver: true }).start(() => onDone(id))
@@ -210,15 +211,15 @@ function LaserBolt({ id, fromX, fromY, toX, toY, color, onDone }) {
   const angle = (Math.atan2(dy, dx) * 180) / Math.PI
   // Keyframes along the perspective curve (position + scale), then hold at the target.
   const inputRange = [...perspInput.map((u) => u * flightEnd), 1]
-  const px = [...perspInput.map((u) => dx * perspAt(u)), dx]
-  const py = [...perspInput.map((u) => dy * perspAt(u)), dy]
-  const sc = [...perspInput.map((u) => Math.max(0.06, shrinkAt(u))), 0.06]
+  const px = [...perspInput.map((u) => dx * (flat ? u : perspAt(u))), dx]
+  const py = [...perspInput.map((u) => dy * (flat ? u : perspAt(u))), dy]
+  const sc = [...perspInput.map((u) => (flat ? 0.55 : Math.max(0.06, shrinkAt(u)))), flat ? 0.55 : 0.06]
   const translateX = t.interpolate({ inputRange, outputRange: px })
   const translateY = t.interpolate({ inputRange, outputRange: py })
   const scale = t.interpolate({ inputRange, outputRange: sc })
   const opacity = t.interpolate({ inputRange: [0, 0.05, flightEnd, flightEnd + 0.02, 1], outputRange: [0.4, 1, 1, 0, 0] })
   const flare = t.interpolate({ inputRange: [0, flightEnd, flightEnd + 0.08, 1], outputRange: [0, 0, 1, 0] })
-  const flareScale = t.interpolate({ inputRange: [0, flightEnd, 1], outputRange: [0.2, 0.2, 1.8] })
+  const flareScale = t.interpolate({ inputRange: [0, flightEnd, 1], outputRange: flat ? [0.15, 0.15, 1.1] : [0.2, 0.2, 1.8] })
   return (
     <>
       <Animated.View
@@ -245,6 +246,96 @@ function LaserBolt({ id, fromX, fromY, toX, toY, color, onDone }) {
         <View style={[st.boltFlareCore, { backgroundColor: color }]} />
       </Animated.View>
     </>
+  )
+}
+
+// ─── Rocket: a real projectile (body + nose + fins + glowing exhaust trail) ───
+// 3D (camera aim): flies from the muzzle into the scene along the perspective curve and
+// shrinks with 1/depth; the further the impact, the deeper the curve and the longer the
+// flight. Flat (hip-fire radar): a small top-down rocket sliding across the map at constant
+// size. Either way it explodes where it lands (PointExplosion).
+const ROCKET_MAX = 4
+export const rocketFlightMs = (distM, flat = false) => (flat ? 420 : Math.round(Math.max(320, Math.min(1100, 260 + 15 * (Number(distM) || 25)))))
+const ROCKET_LEN = 92
+const ROCKET_W = 22
+
+function RocketShot({ id, fromX, fromY, toX, toY, dist, flat, onDone }) {
+  const t = useRef(new Animated.Value(0)).current
+  const ms = rocketFlightMs(dist, flat)
+  useEffect(() => {
+    Animated.timing(t, { toValue: 1, duration: ms, easing: flat ? Easing.in(Easing.quad) : Easing.linear, useNativeDriver: true }).start(() => onDone(id))
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  const dx = toX - fromX
+  const dy = toY - fromY
+  const angle = (Math.atan2(dy, dx) * 180) / Math.PI
+  // Depth of the curve from the impact distance: a wall 3 m away barely shrinks it.
+  const k = Math.max(1.2, Math.min(14, (Number(dist) || 25) / 2.5))
+  const pAt = (u) => (1 - 1 / (1 + k * u)) / (1 - 1 / (1 + k))
+  const sAt = (u) => Math.max(0.05, 1 / (1 + k * u))
+  const inputRange = perspInput
+  const px = perspInput.map((u) => dx * (flat ? u : pAt(u)))
+  const py = perspInput.map((u) => dy * (flat ? u : pAt(u)))
+  const sc = perspInput.map((u) => (flat ? 0.42 : sAt(u)))
+  const translateX = t.interpolate({ inputRange, outputRange: px })
+  const translateY = t.interpolate({ inputRange, outputRange: py })
+  const scale = t.interpolate({ inputRange, outputRange: sc })
+  const opacity = t.interpolate({ inputRange: [0, 0.04, 0.96, 1], outputRange: [0.5, 1, 1, 0] })
+  const flicker = t.interpolate({ inputRange: [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1], outputRange: [0.7, 1.15, 0.85, 1.2, 0.9, 1.15, 0.85, 1.2, 0.9, 1.1, 0.8] })
+  return (
+    <Animated.View
+      pointerEvents="none"
+      style={[st.rocketWrap, { left: fromX - ROCKET_LEN / 2, top: fromY - ROCKET_W / 2, opacity, transform: [{ translateX }, { translateY }, { rotate: `${angle}deg` }, { scale }] }]}
+    >
+      {/* exhaust trail (behind = left, the rocket points along +x) */}
+      <Animated.View style={[st.rocketTrail, { transform: [{ scaleX: flicker }] }]} />
+      <Animated.View style={[st.rocketFlame, { transform: [{ scale: flicker }] }]} />
+      <View style={st.rocketFlameCore} />
+      {/* fins, body, warhead */}
+      <View style={[st.rocketFin, { top: 0 }]} />
+      <View style={[st.rocketFin, { bottom: 0 }]} />
+      <View style={st.rocketBody} />
+      <View style={st.rocketBand} />
+      <View style={st.rocketNose} />
+    </Animated.View>
+  )
+}
+
+// ─── Explosion at a point on screen (rocket impact): flash, fireball, smoke ring ───
+// size: fireball diameter in px (bigger when the impact is close).
+const POINT_EXPLOSION_MS = 1300
+
+function SmokeRing({ size, duration }) {
+  const t = useRef(new Animated.Value(0)).current
+  useEffect(() => {
+    Animated.timing(t, { toValue: 1, duration, easing: Easing.out(Easing.quad), useNativeDriver: true }).start()
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  return (
+    <Animated.View
+      pointerEvents="none"
+      style={{
+        position: 'absolute', width: size, height: size, borderRadius: size / 2,
+        borderWidth: Math.max(6, size * 0.09), borderColor: 'rgba(70,64,60,0.85)',
+        opacity: t.interpolate({ inputRange: [0, 0.2, 1], outputRange: [0, 0.8, 0] }),
+        transform: [{ scale: t.interpolate({ inputRange: [0, 1], outputRange: [0.4, 2.3] }) }, { scaleY: 0.82 }],
+      }}
+    />
+  )
+}
+
+function PointExplosion({ id, x, y, size, label, flat, onDone }) {
+  const palette = paletteFor(label)
+  useEffect(() => {
+    const t = setTimeout(() => onDone(id), POINT_EXPLOSION_MS + 120)
+    return () => clearTimeout(t)
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  return (
+    <View style={StyleSheet.absoluteFill} pointerEvents="none">
+      <ScreenFlash color={palette[4]} peak={flat ? 0.28 : 0.42} duration={POINT_EXPLOSION_MS * 0.55} />
+      <View style={{ position: 'absolute', left: x - size / 2, top: y - size / 2, width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
+        <SmokeRing size={size * 0.8} duration={POINT_EXPLOSION_MS} />
+        <Fireball palette={palette} size={size} duration={POINT_EXPLOSION_MS * 0.85} />
+      </View>
+    </View>
   )
 }
 
@@ -450,7 +541,14 @@ export function useBattleEffects() {
   const [hits, setHits] = useState([])
   const [tracers, setTracers] = useState([])
   const [bullets, setBullets] = useState([])
+  const [rockets, setRockets] = useState([])
+  const [booms, setBooms] = useState([])
   const { width: screenW, height: screenH } = useWindowDimensions()
+  // Screen shake (big explosions): the game wraps its root view in `shakeStyle`.
+  const shakeT = useRef(new Animated.Value(0)).current
+  const [shakeAmp, setShakeAmp] = useState(0)
+  const timers = useRef([])
+  useEffect(() => () => timers.current.forEach(clearTimeout), [])
 
   const removeFlash = useCallback((id) => setFlashes((a) => a.filter((f) => f.id !== id)), [])
   const removeExplosion = useCallback((id) => setExplosions((a) => a.filter((f) => f.id !== id)), [])
@@ -461,6 +559,42 @@ export function useBattleEffects() {
   const removeHit = useCallback((id) => setHits((a) => a.filter((f) => f.id !== id)), [])
   const removeTracer = useCallback((id) => setTracers((a) => a.filter((f) => f.id !== id)), [])
   const removeBullet = useCallback((id) => setBullets((a) => a.filter((f) => f.id !== id)), [])
+  const removeRocket = useCallback((id) => setRockets((a) => a.filter((f) => f.id !== id)), [])
+  const removeBoom = useCallback((id) => setBooms((a) => a.filter((f) => f.id !== id)), [])
+
+  const shake = useCallback((amp = 12, ms = 520) => {
+    setShakeAmp(Math.max(2, Math.min(24, amp)))
+    shakeT.stopAnimation()
+    shakeT.setValue(0)
+    Animated.timing(shakeT, { toValue: 1, duration: ms, easing: Easing.linear, useNativeDriver: true }).start()
+  }, [shakeT])
+
+  // An explosion at a screen point: { x, y, size, label, flat }.
+  const addPointExplosion = useCallback((e) => {
+    if (!Number.isFinite(e?.x) || !Number.isFinite(e?.y)) return
+    setBooms((a) => [...a, { id: nextId++, label: 'Rocket', size: screenW * 0.6, ...e }].slice(-EXPLOSION_MAX))
+  }, [screenW])
+
+  // A rocket from `from` to `to` (screen points), `dist` metres away (sets the perspective and
+  // the flight time). It explodes on arrival; onImpact() runs then (sound, haptics).
+  // flat: hip-fire radar. Returns the flight time in ms.
+  const addRocket = useCallback(({ from, to, dist = 25, flat = false, boomSize, onImpact } = {}) => {
+    const fromX = Number.isFinite(from?.x) ? from.x : screenW * 0.7
+    const fromY = Number.isFinite(from?.y) ? from.y : screenH * 0.8
+    const toX = Number.isFinite(to?.x) ? to.x : screenW / 2
+    const toY = Number.isFinite(to?.y) ? to.y : screenH / 2
+    const ms = rocketFlightMs(dist, flat)
+    setRockets((a) => [...a, { id: nextId++, fromX, fromY, toX, toY, dist, flat }].slice(-ROCKET_MAX))
+    const size = Number.isFinite(boomSize) ? boomSize : flat ? Math.min(screenW * 0.5, 220) : Math.max(screenW * 0.38, Math.min(screenW * 1.15, (screenW * 2.4) / Math.sqrt(Math.max(3, dist))))
+    const t = setTimeout(() => {
+      timers.current = timers.current.filter((x) => x !== t)
+      addPointExplosion({ x: toX, y: toY, size, label: 'Rocket', flat })
+      shake(flat ? 10 : Math.max(8, Math.min(22, 60 / Math.sqrt(Math.max(3, dist)))))
+      try { onImpact?.() } catch {}
+    }, ms)
+    timers.current.push(t)
+    return ms
+  }, [screenW, screenH, addPointExplosion, shake])
 
   const addFlash = useCallback((angle) => {
     setFlashes((a) => {
@@ -487,7 +621,8 @@ export function useBattleEffects() {
   // Your own shot. leftHanded puts the gun (and the bullet's start) on the left.
   // target: optional { x, y } on screen (an enemy you're aiming at); default the crosshair.
   // from: optional { x, y } where the round leaves (the gun's muzzle).
-  const addOutgoing = useCallback((leftHanded = false, target = null, from = null, gunId = null) => {
+  // opts.flat: hip fire (radar): straight and constant size, from the radar centre.
+  const addOutgoing = useCallback((leftHanded = false, target = null, from = null, gunId = null, opts = null) => {
     // No target: the bolt flies down the crosshair into the distance (a little scatter so a
     // burst doesn't stack into one line).
     const toX = Number.isFinite(target?.x) ? target.x : screenW / 2 + (Math.random() - 0.5) * 14
@@ -495,7 +630,7 @@ export function useBattleEffects() {
     const fromX = Number.isFinite(from?.x) ? from.x : screenW * (leftHanded ? 0.3 : 0.7)
     const fromY = Number.isFinite(from?.y) ? from.y : screenH * 0.8
     setOuts((a) => {
-      const n = [...a, { id: nextId++, fromX, fromY, toX, toY, color: glowFor(gunId) }]
+      const n = [...a, { id: nextId++, fromX, fromY, toX, toY, color: glowFor(gunId), flat: !!opts?.flat }]
       return n.length > OUT_MAX ? n.slice(-OUT_MAX) : n
     })
   }, [screenW, screenH])
@@ -535,7 +670,9 @@ export function useBattleEffects() {
       {explosions.map((e) => <Explosion key={e.id} id={e.id} label={e.label} onDone={removeExplosion} />)}
       {hits.map((h) => <HitIndicator key={h.id} id={h.id} angle={h.angle} onDone={removeHit} />)}
       {tracers.map((t) => <Tracer key={t.id} id={t.id} angle={t.angle} onDone={removeTracer} />)}
-      {outs.map((o) => <LaserBolt key={o.id} id={o.id} fromX={o.fromX} fromY={o.fromY} toX={o.toX} toY={o.toY} color={o.color} onDone={removeOut} />)}
+      {outs.map((o) => <LaserBolt key={o.id} id={o.id} fromX={o.fromX} fromY={o.fromY} toX={o.toX} toY={o.toY} color={o.color} flat={o.flat} onDone={removeOut} />)}
+      {rockets.map((r) => <RocketShot key={r.id} id={r.id} fromX={r.fromX} fromY={r.fromY} toX={r.toX} toY={r.toY} dist={r.dist} flat={r.flat} onDone={removeRocket} />)}
+      {booms.map((b) => <PointExplosion key={b.id} id={b.id} x={b.x} y={b.y} size={b.size} label={b.label} flat={b.flat} onDone={removeBoom} />)}
       {bullets.map((b) => <IncomingBolt key={b.id} id={b.id} angle={b.angle} screenW={screenW} screenH={screenH} onDone={removeBullet} />)}
       {/* Newest elimination only (a quick double tag replaces the banner, CoD style). */}
       <View style={st.killWrap} pointerEvents="none">
@@ -545,7 +682,15 @@ export function useBattleEffects() {
     </View>
   )
 
-  return { addFlash, addExplosion, addMegaExplosion, addKill, addMedal, addOutgoing, addHit, addTracer, addBullet, overlay }
+  const k = shakeAmp
+  const shakeStyle = k > 0 ? {
+    transform: [
+      { translateX: shakeT.interpolate({ inputRange: [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 1], outputRange: [0, -k, k * 0.9, -k * 0.75, k * 0.6, -k * 0.45, k * 0.3, -k * 0.2, k * 0.1, 0] }) },
+      { translateY: shakeT.interpolate({ inputRange: [0, 0.15, 0.3, 0.45, 0.6, 0.75, 1], outputRange: [0, k * 0.7, -k * 0.6, k * 0.45, -k * 0.3, k * 0.15, 0] }) },
+    ],
+  } : null
+
+  return { addFlash, addExplosion, addMegaExplosion, addKill, addMedal, addOutgoing, addHit, addTracer, addBullet, addRocket, addPointExplosion, shake, shakeStyle, overlay }
 }
 
 /**
@@ -584,6 +729,14 @@ const st = StyleSheet.create({
   boltGlow: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, borderRadius: BOLT_W / 2, opacity: 0.55 },
   boltBody: { position: 'absolute', left: 6, right: 6, top: 2, bottom: 2, borderRadius: BOLT_W / 2 },
   boltCore: { position: 'absolute', left: 14, right: 14, top: BOLT_W / 2 - 2, height: 4, borderRadius: 2, backgroundColor: '#ffffff' },
+  rocketWrap: { position: 'absolute', width: ROCKET_LEN, height: ROCKET_W, justifyContent: 'center' },
+  rocketTrail: { position: 'absolute', left: -70, width: 96, top: ROCKET_W / 2 - 5, height: 10, borderRadius: 5, backgroundColor: 'rgba(255,170,90,0.55)', boxShadow: '0 0 16px 6px rgba(255,120,40,0.6)' },
+  rocketFlame: { position: 'absolute', left: 2, top: ROCKET_W / 2 - 8, width: 26, height: 16, borderRadius: 8, backgroundColor: '#ffb347', boxShadow: '0 0 14px 6px rgba(255,140,40,0.9)' },
+  rocketFlameCore: { position: 'absolute', left: 10, top: ROCKET_W / 2 - 4, width: 14, height: 8, borderRadius: 4, backgroundColor: '#fff6d5' },
+  rocketFin: { position: 'absolute', left: 22, width: 16, height: 6, borderRadius: 2, backgroundColor: '#5b6470' },
+  rocketBody: { position: 'absolute', left: 24, width: 50, top: ROCKET_W / 2 - 5, height: 10, borderRadius: 3, backgroundColor: '#d9dee5', borderWidth: 1, borderColor: '#7d8792' },
+  rocketBand: { position: 'absolute', left: 58, width: 5, top: ROCKET_W / 2 - 5, height: 10, backgroundColor: ST.enemy },
+  rocketNose: { position: 'absolute', left: 74, top: ROCKET_W / 2 - 5, width: 0, height: 0, borderTopWidth: 5, borderBottomWidth: 5, borderLeftWidth: 16, borderTopColor: 'transparent', borderBottomColor: 'transparent', borderLeftColor: '#ff6a3d' },
   boltFlare: { position: 'absolute', width: 48, height: 48, borderRadius: 24, borderWidth: 2, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.12)' },
   boltFlareCore: { width: 16, height: 16, borderRadius: 8, opacity: 0.9 },
   megaLabelWrap: { position: 'absolute', top: '18%', left: 0, right: 0, alignItems: 'center' },

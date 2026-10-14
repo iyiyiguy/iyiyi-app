@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { View, Text, Pressable, StyleSheet, ScrollView, Image, useWindowDimensions } from 'react-native'
 import { useFocusEffect } from '@react-navigation/native'
 import { LinearGradient } from 'expo-linear-gradient'
-import { Ionicons } from '@expo/vector-icons'
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons'
 import {
   GUNS, RARITIES, setEquippedGun, ensureOwnerUnlocks, gunRatings, fireRateLabel, isArcadeOwner,
 } from '../lib/guns'
@@ -11,19 +11,19 @@ import { buzz } from '../lib/gamePrefs'
 import {
   AC, ArcadeBackground, useArcadeInsets, GhostButton, PlayButton, SectionHeader, arcadeText, useArcadeStatusBar,
 } from '../games/arcadeUI'
-import { font } from '../theme'
-import { useUavInventory } from '../lib/uav'
-import { useGrenadeInventory } from '../lib/grenades'
-import { useStickyBombInventory } from '../lib/stickyBombs'
-import { useLandMineInventory } from '../lib/landMines'
+import { FONT, ST, stType, withAlpha } from '../games/studio'
+import { UAV_RULES_TEXT, useUavInventory } from '../lib/uav'
+import { GRENADES_PER_MATCH, useGrenadeInventory } from '../lib/grenades'
+import { STICKY_BOMBS_PER_MATCH, useStickyBombInventory } from '../lib/stickyBombs'
+import { LAND_MINES_PER_MATCH, useLandMineInventory } from '../lib/landMines'
 import { gunArt } from '../lib/gunArt'
-import Glass from '../components/Glass'
 
 const PAD = 20
 const GAP = 12
 const FIRE_MODE = { single: 'Semi-auto', burst: 'Burst', automatic: 'Full-auto' }
 
 const rarityOf = (gun) => RARITIES[gun?.rarity] || RARITIES.common
+const STAT_LABELS = { power: 'POWER', fireRate: 'FIRE RATE', accuracy: 'HIP AIM', range: 'RANGE' }
 
 function Glow({ color, size, style }) {
   return (
@@ -85,7 +85,7 @@ export default function MyEquipScreen({ navigation }) {
     <View style={styles.screen}>
       <ArcadeBackground />
       <ScrollView
-        contentContainerStyle={{ paddingTop: insets.top, paddingBottom: insets.bottom + 30 }}
+        contentContainerStyle={{ paddingTop: insets.top + 6, paddingBottom: insets.bottom + 30 }}
         showsVerticalScrollIndicator={false}
       >
         {/* Header */}
@@ -94,8 +94,8 @@ export default function MyEquipScreen({ navigation }) {
             <Text style={styles.headerKicker}>YOUR LOADOUT</Text>
             <Text style={styles.headerTitle}>My Equip</Text>
           </View>
-          <Pressable onPress={() => navigation.goBack()} hitSlop={12} style={({ pressed }) => pressed && { opacity: 0.7 }}>
-            <Ionicons name="close" size={26} color={AC.text} />
+          <Pressable onPress={() => navigation.goBack()} hitSlop={12} accessibilityRole="button" accessibilityLabel="Close" style={({ pressed }) => [styles.closeBtn, pressed && { opacity: 0.7 }]}>
+            <Ionicons name="close" size={22} color={ST.text} />
           </Pressable>
         </View>
 
@@ -103,13 +103,13 @@ export default function MyEquipScreen({ navigation }) {
         <View style={[styles.pad, { marginTop: 16 }]}>
           <View style={styles.equippedCard}>
             <LinearGradient
-              colors={[rarityOf(equippedGun).color + '48', '#11142a', '#090b18']}
+              colors={[rarityOf(equippedGun).color + '24', ST.ground2, ST.ground2]}
               start={{ x: 0, y: 0 }} end={{ x: 0.6, y: 1 }}
               style={StyleSheet.absoluteFill}
             />
             <View style={[styles.equippedStripe, { backgroundColor: rarityOf(equippedGun).color }]} />
             <View style={styles.equippedBadge}>
-              <Ionicons name="checkmark-circle" size={12} color={AC.live} />
+              <Ionicons name="checkmark-circle" size={12} color={ST.health} />
               <Text style={styles.equippedBadgeText}>EQUIPPED</Text>
             </View>
             <View style={styles.equippedArt}>
@@ -128,6 +128,7 @@ export default function MyEquipScreen({ navigation }) {
               </View>
               <Text style={styles.equippedName}>{equippedGun.name}</Text>
               <Text style={styles.equippedDesc}>{equippedGun.description}</Text>
+              {equippedGun.weakness ? <Text style={styles.equippedTrade}>{`Trade-off: ${equippedGun.weakness}`}</Text> : null}
               {/* Stats */}
               <View style={styles.statsRow}>
                 {Object.entries(gunRatings(equippedGun)).map(([k, v]) => (
@@ -135,7 +136,7 @@ export default function MyEquipScreen({ navigation }) {
                     <View style={styles.statBarBg}>
                       <View style={[styles.statBarFill, { width: `${Math.round(v * 100)}%`, backgroundColor: rarityOf(equippedGun).color }]} />
                     </View>
-                    <Text style={styles.statLabel}>{k.toUpperCase()}</Text>
+                    <Text style={styles.statLabel}>{STAT_LABELS[k] || k.toUpperCase()}</Text>
                   </View>
                 ))}
               </View>
@@ -147,36 +148,40 @@ export default function MyEquipScreen({ navigation }) {
         <View style={[styles.pad, { marginTop: 20 }]}>
           <View style={styles.summaryRow}>
             <View style={styles.summaryCard}>
-              <Ionicons name="flash" size={20} color={AC.accent} />
+              <Ionicons name="flash" size={18} color={ST.friendly} />
               <Text style={styles.summaryValue}>{ownedGuns.length}<Text style={styles.summaryOf}>/{GUNS.length}</Text></Text>
               <Text style={styles.summaryLabel}>WEAPONS</Text>
             </View>
             <View style={styles.summaryCard}>
-              <Text style={{ fontSize: 18 }}>🛸</Text>
+              <MaterialCommunityIcons name="satellite-variant" size={18} color={ST.enemy} />
               <Text style={styles.summaryValue}>{uav.owner ? '∞' : uav.balance}</Text>
               <Text style={styles.summaryLabel}>UAVS</Text>
             </View>
             <View style={styles.summaryCard}>
-              <Text style={{ fontSize: 18 }}>💣</Text>
+              <MaterialCommunityIcons name="bomb" size={18} color={ST.objective} />
               <Text style={styles.summaryValue}>{grenades.owner ? '∞' : grenades.balance}</Text>
               <Text style={styles.summaryLabel}>GRENADES</Text>
+              <Text style={styles.summaryLimit}>{`MAX ${GRENADES_PER_MATCH}/MATCH`}</Text>
             </View>
             <View style={styles.summaryCard}>
-              <Text style={{ fontSize: 18 }}>🧨</Text>
+              <Image source={require('../../assets/guns/stickybomb.png')} style={styles.summaryImg} resizeMode="contain" />
               <Text style={styles.summaryValue}>{stickyBombs.owner ? '∞' : stickyBombs.balance}</Text>
               <Text style={styles.summaryLabel}>STICKY</Text>
+              <Text style={styles.summaryLimit}>{`MAX ${STICKY_BOMBS_PER_MATCH}/MATCH`}</Text>
             </View>
             <View style={styles.summaryCard}>
-              <Text style={{ fontSize: 18 }}>💥</Text>
+              <Image source={require('../../assets/guns/landmine.png')} style={styles.summaryImg} resizeMode="contain" />
               <Text style={styles.summaryValue}>{landMines.owner ? '∞' : landMines.balance}</Text>
               <Text style={styles.summaryLabel}>MINES</Text>
+              <Text style={styles.summaryLimit}>{`MAX ${LAND_MINES_PER_MATCH}/MATCH`}</Text>
             </View>
             <View style={styles.summaryCard}>
-              <Ionicons name="diamond" size={18} color={AC.gold} />
+              <Ionicons name="diamond" size={16} color={ST.objective} />
               <Text style={styles.summaryValue}>{points.toLocaleString()}</Text>
               <Text style={styles.summaryLabel}>COINS</Text>
             </View>
           </View>
+          <Text style={styles.limitsNote}>{`Fair play: everything you own stays yours, but each match caps what you can use. ${UAV_RULES_TEXT}`}</Text>
         </View>
 
         {/* Owned weapons grid */}
@@ -192,9 +197,9 @@ export default function MyEquipScreen({ navigation }) {
                 disabled={isEquipped || busy}
                 style={({ pressed }) => [{ width: cardW, marginBottom: GAP }, pressed && { transform: [{ scale: 0.97 }] }]}
               >
-                <View style={[styles.card, { borderColor: isEquipped ? AC.live : r.color + '44', shadowColor: r.color }]}>
+                <View style={[styles.card, { borderColor: isEquipped ? ST.health : r.color + '44' }]}>
                   <LinearGradient
-                    colors={[r.color + '48', '#11142a', '#090b18']}
+                    colors={[r.color + '24', ST.ground2, ST.ground2]}
                     start={{ x: 0, y: 0 }} end={{ x: 0.6, y: 1 }}
                     style={StyleSheet.absoluteFill}
                   />
@@ -207,7 +212,7 @@ export default function MyEquipScreen({ navigation }) {
                     </View>
                     {isEquipped && (
                       <View style={styles.equippedBadgeSmall}>
-                        <Ionicons name="checkmark-circle" size={10} color="#fff" />
+                        <Ionicons name="checkmark" size={12} color={ST.ink} />
                       </View>
                     )}
                   </View>
@@ -219,14 +224,14 @@ export default function MyEquipScreen({ navigation }) {
                     </View>
                     <View style={styles.cardFoot}>
                       {isEquipped ? (
-                        <View style={[styles.pill, { backgroundColor: 'rgba(47,220,143,0.16)', borderWidth: 1, borderColor: 'rgba(47,220,143,0.55)' }]}>
-                          <Ionicons name="checkmark-circle" size={12} color={AC.live} style={{ marginRight: 4 }} />
-                          <Text style={[styles.pillText, { color: AC.live }]}>Equipped</Text>
+                        <View style={[styles.pill, { backgroundColor: withAlpha(ST.health, 0.12), borderWidth: 1, borderColor: withAlpha(ST.health, 0.6) }]}>
+                          <Ionicons name="checkmark-circle" size={12} color={ST.health} style={{ marginRight: 4 }} />
+                          <Text style={[styles.pillText, { color: ST.health }]}>Equipped</Text>
                         </View>
                       ) : (
-                        <View style={[styles.pill, { backgroundColor: 'rgba(124,140,255,0.16)', borderWidth: 1, borderColor: 'rgba(124,140,255,0.55)' }]}>
-                          <Ionicons name="swap-horizontal" size={12} color={AC.accent} style={{ marginRight: 4 }} />
-                          <Text style={[styles.pillText, { color: AC.accent }]}>Tap to Equip</Text>
+                        <View style={[styles.pill, { backgroundColor: withAlpha(ST.friendly, 0.1), borderWidth: 1, borderColor: withAlpha(ST.friendly, 0.6) }]}>
+                          <Ionicons name="swap-horizontal" size={12} color={ST.friendly} style={{ marginRight: 4 }} />
+                          <Text style={[styles.pillText, { color: ST.friendly }]}>Equip</Text>
                         </View>
                       )}
                     </View>
@@ -253,9 +258,9 @@ export default function MyEquipScreen({ navigation }) {
             onPress={() => navigation.navigate('GunShop')}
             style={({ pressed }) => [styles.shopLink, pressed && { opacity: 0.7 }]}
           >
-            <Ionicons name="bag-handle" size={16} color={AC.accent} />
-            <Text style={styles.shopLinkText}>Browse Shop for More Weapons</Text>
-            <Ionicons name="chevron-forward" size={14} color={AC.accent} />
+            <Ionicons name="bag-handle" size={16} color={ST.friendly} />
+            <Text style={styles.shopLinkText}>Browse the Shop</Text>
+            <Ionicons name="chevron-forward" size={14} color={ST.friendly} />
           </Pressable>
         </View>
       </ScrollView>
@@ -263,56 +268,64 @@ export default function MyEquipScreen({ navigation }) {
   )
 }
 
+const LABEL = { fontFamily: FONT.ui, fontSize: 10, letterSpacing: 1.8, textTransform: 'uppercase' }
+const DISPLAY = { fontFamily: FONT.display, includeFontPadding: false }
+
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: AC.bg[0] },
+  screen: { flex: 1, backgroundColor: ST.ground },
   pad: { paddingHorizontal: PAD },
 
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', minHeight: 44 },
-  headerTitle: { fontSize: 26, ...font.heavy, color: AC.text, letterSpacing: -0.5 },
-  headerKicker: { fontSize: 11, ...font.heavy, color: AC.accent, letterSpacing: 2.4 },
+  headerTitle: { ...DISPLAY, fontSize: 24, letterSpacing: 1, color: ST.text, textTransform: 'uppercase' },
+  headerKicker: { ...stType.kicker },
+  closeBtn: { width: 40, height: 40, borderRadius: ST.radius, alignItems: 'center', justifyContent: 'center', backgroundColor: ST.panelStrong, borderWidth: 1, borderColor: ST.line },
 
-  equippedCard: { borderRadius: 26, overflow: 'hidden', borderWidth: 1, borderColor: 'rgba(47,220,143,0.4)', backgroundColor: '#0b0d1c' },
-  equippedStripe: { height: 3, width: '100%' },
+  equippedCard: { borderRadius: ST.radius, overflow: 'hidden', borderWidth: 1, borderColor: withAlpha(ST.health, 0.45), backgroundColor: ST.ground2 },
+  equippedStripe: { height: 2, width: '100%' },
   equippedBadge: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 16, paddingTop: 14 },
-  equippedBadgeText: { fontSize: 11, ...font.heavy, color: AC.live, letterSpacing: 2 },
+  equippedBadgeText: { ...LABEL, fontSize: 11, letterSpacing: 2.4, color: ST.health },
   equippedArt: { alignItems: 'center', justifyContent: 'center', paddingVertical: 8 },
-  equippedInfo: { paddingHorizontal: 16, paddingBottom: 18 },
-  equippedName: { fontSize: 24, ...font.heavy, color: AC.text, letterSpacing: 0.3, marginTop: 8 },
-  equippedDesc: { fontSize: 13, color: AC.muted, lineHeight: 18, marginTop: 4 },
+  equippedInfo: { paddingHorizontal: 16, paddingBottom: 16 },
+  equippedName: { ...DISPLAY, fontSize: 24, letterSpacing: 1, color: ST.text, marginTop: 8, textTransform: 'uppercase' },
+  equippedDesc: { fontFamily: FONT.uiSemi, fontSize: 13, color: ST.muted, lineHeight: 18, marginTop: 4 },
   statsRow: { flexDirection: 'row', gap: 10, marginTop: 14 },
   statItem: { flex: 1 },
-  statBarBg: { height: 6, borderRadius: 3, backgroundColor: 'rgba(255,255,255,0.08)', overflow: 'hidden' },
-  statBarFill: { height: 6, borderRadius: 3 },
-  statLabel: { fontSize: 8, ...font.heavy, color: AC.faint, letterSpacing: 1.2, marginTop: 4, textAlign: 'center' },
+  statBarBg: { height: 4, backgroundColor: 'rgba(255,255,255,0.1)', overflow: 'hidden' },
+  statBarFill: { height: 4 },
+  statLabel: { ...LABEL, fontSize: 8, letterSpacing: 1.2, color: ST.faint, marginTop: 4, textAlign: 'center' },
 
-  rarityTag: { flexDirection: 'row', alignItems: 'center', gap: 5, alignSelf: 'flex-start', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, borderWidth: 1 },
-  rarityDot: { width: 5, height: 5, borderRadius: 3 },
-  rarityText: { fontSize: 10, ...font.heavy, letterSpacing: 1.2 },
+  rarityTag: { flexDirection: 'row', alignItems: 'center', gap: 5, alignSelf: 'flex-start', paddingHorizontal: 6, height: 20, borderRadius: 2, borderWidth: 1 },
+  rarityDot: { width: 5, height: 5 },
+  rarityText: { ...LABEL, letterSpacing: 1.4 },
 
-  summaryRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  summaryCard: { width: '31%', flexGrow: 1, alignItems: 'center', paddingVertical: 14, borderRadius: 16, backgroundColor: AC.card, borderWidth: 1, borderColor: AC.border, gap: 4 },
-  summaryValue: { fontSize: 18, ...font.heavy, color: AC.text },
-  summaryOf: { fontSize: 13, color: AC.faint },
-  summaryLabel: { fontSize: 8, ...font.heavy, color: AC.faint, letterSpacing: 1.4 },
+  summaryRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  summaryCard: { width: '31%', flexGrow: 1, alignItems: 'center', paddingVertical: 12, borderRadius: ST.radius, backgroundColor: ST.panelStrong, borderWidth: 1, borderColor: ST.line, gap: 4 },
+  summaryImg: { width: 26, height: 18 },
+  summaryValue: { ...DISPLAY, fontSize: 18, color: ST.text, fontVariant: ['tabular-nums'] },
+  summaryOf: { fontSize: 13, color: ST.faint },
+  summaryLabel: { ...LABEL, fontSize: 9, letterSpacing: 1.4, color: ST.faint },
+  summaryLimit: { ...LABEL, fontSize: 8, letterSpacing: 1, color: ST.muted, marginTop: 2 },
+  limitsNote: { fontFamily: FONT.uiMedium, fontSize: 12, lineHeight: 17, color: ST.faint, marginTop: 10 },
+  equippedTrade: { fontFamily: FONT.uiSemi, fontSize: 12, color: ST.enemy, lineHeight: 17, marginTop: 4 },
 
   grid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' },
-  card: { borderRadius: 20, borderWidth: 1, overflow: 'hidden', backgroundColor: '#0d0f20', shadowOpacity: 0.35, shadowRadius: 12, shadowOffset: { width: 0, height: 6 } },
-  cardStrip: { height: 3, width: '100%' },
+  card: { borderRadius: ST.radius, borderWidth: 1, overflow: 'hidden', backgroundColor: ST.ground2 },
+  cardStrip: { height: 2, width: '100%' },
   cardArt: { alignItems: 'center', justifyContent: 'center' },
   cardRarity: { position: 'absolute', top: 8, left: 10 },
-  cardRarityText: { fontSize: 9, ...font.heavy, letterSpacing: 1.4 },
-  equippedBadgeSmall: { position: 'absolute', top: 7, right: 8, width: 22, height: 22, borderRadius: 11, backgroundColor: 'rgba(47,220,143,0.25)', borderWidth: 1, borderColor: 'rgba(47,220,143,0.6)', alignItems: 'center', justifyContent: 'center' },
-  cardBody: { paddingHorizontal: 12, paddingBottom: 12, paddingTop: 2 },
-  cardName: { fontSize: 15, ...font.heavy, color: AC.text, lineHeight: 19, minHeight: 22 },
+  cardRarityText: { ...LABEL, fontSize: 9, letterSpacing: 1.4 },
+  equippedBadgeSmall: { position: 'absolute', top: 7, right: 8, width: 20, height: 20, borderRadius: 2, backgroundColor: ST.health, alignItems: 'center', justifyContent: 'center' },
+  cardBody: { paddingHorizontal: 10, paddingBottom: 10, paddingTop: 2 },
+  cardName: { ...DISPLAY, fontSize: 14, letterSpacing: 0.4, color: ST.text, lineHeight: 18, minHeight: 20, textTransform: 'uppercase' },
   cardMetaRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 },
-  cardMeta: { fontSize: 11, ...font.semibold, color: AC.faint, letterSpacing: 0.4, flexShrink: 1 },
+  cardMeta: { ...LABEL, color: ST.faint, flexShrink: 1 },
   cardFoot: { flexDirection: 'row', justifyContent: 'flex-end', marginTop: 10 },
 
-  pill: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, height: 26, borderRadius: 13, maxWidth: '100%' },
-  pillText: { fontSize: 12, ...font.heavy, letterSpacing: 0.2 },
+  pill: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8, height: 26, borderRadius: ST.radius, maxWidth: '100%' },
+  pillText: { ...DISPLAY, fontSize: 12, letterSpacing: 0.8, textTransform: 'uppercase' },
 
   glowWrap: { ...StyleSheet.absoluteFill, alignItems: 'center', justifyContent: 'center' },
 
-  shopLink: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 18, height: 44, borderRadius: 22, backgroundColor: AC.card, borderWidth: 1, borderColor: AC.border },
-  shopLinkText: { fontSize: 14, ...font.bold, color: AC.accent },
+  shopLink: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 16, height: 44, borderRadius: ST.radius, backgroundColor: ST.panelStrong, borderWidth: 1, borderColor: ST.line },
+  shopLinkText: { ...LABEL, fontSize: 12, letterSpacing: 1.6, color: ST.friendly },
 })

@@ -4,10 +4,13 @@ import { useFocusEffect } from '@react-navigation/native'
 import { colors, radii, type } from '../theme'
 import { apiJson } from '../lib/api'
 import GlassPanel from './GlassPanel'
+import { useT } from '../i18n'
+import strings from '../i18n/strings/social'
 
 // Two separate categories on My Profile: "Tagged in" (the photographer picked you) and
 // "Nearby" (shot within 150ft of you). Each opens the same screen on its own tab.
 export default function TagLinks({ navigation, userId, title }) {
+  const t = useT(strings)
   const [counts, setCounts] = useState({ tagged: null, nearby: null })
 
   useFocusEffect(
@@ -23,7 +26,13 @@ export default function TagLinks({ navigation, userId, title }) {
   )
 
   const Row = ({ kind, label, hint }) => (
-    <Pressable style={styles.row} onPress={() => navigation.navigate('Tagged', { tab: kind, userId, title })}>
+    <Pressable
+      style={styles.row}
+      onPress={() => navigation.navigate('Tagged', { tab: kind, userId, title })}
+      accessibilityRole="button"
+      accessibilityLabel={counts[kind] !== null ? t('rowCountA11y', { label, n: counts[kind] }) : label}
+      accessibilityHint={hint}
+    >
       <View style={{ flex: 1 }}>
         <Text style={type.body}>{label}</Text>
         <Text style={type.caption}>{hint}</Text>
@@ -35,8 +44,8 @@ export default function TagLinks({ navigation, userId, title }) {
 
   return (
     <GlassPanel radius={radii.md} style={styles.wrap}>
-      <Row kind="tagged" label="Tagged in" hint={userId ? "Posts where someone tagged them" : "Posts where someone tagged you"} />
-      <Row kind="nearby" label="Nearby" hint={userId ? "Posts shot within 150ft of them" : "Posts shot within 150ft of you"} />
+      <Row kind="tagged" label={t('taggedIn')} hint={userId ? t('taggedThemHint') : t('taggedYouHint')} />
+      <Row kind="nearby" label={t('nearby')} hint={userId ? t('nearbyThemHint') : t('nearbyYouHint')} />
     </GlassPanel>
   )
 }

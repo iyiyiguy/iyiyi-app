@@ -8,17 +8,23 @@ import GuestViewer from '../components/GuestViewer'
 import { GuestLoginButton, useGuestPrompt } from '../components/GuestPrompt'
 import { colors, type } from '../theme'
 import { supabase } from '../lib/supabase'
+import { useT } from '../i18n'
+import strings from '../i18n/strings/guest'
+import scopeStrings from '../i18n/strings/scope'
 
 // Logged-out Feed: public posts only (database function guest_feed, migration 070), newest
 // or most liked. Read-only - tapping a post opens GuestViewer, tapping an avatar opens the
 // public profile, and Live / like / comment / save ask the visitor to sign up.
+// Labels are keys in i18n/strings/scope.
 const SORTS = [
-  { key: 'recent', label: 'Recent' },
-  { key: 'popular', label: 'Popular' },
+  { key: 'recent', label: 'recent' },
+  { key: 'popular', label: 'popular' },
 ]
 const PAGE = 30
 
 export default function GuestFeedScreen({ navigation }) {
+  const t = useT(strings)
+  const ts = useT(scopeStrings)
   const { width } = useWindowDimensions()
   const columns = width >= 1000 ? 4 : width >= 680 ? 3 : 2
   const [sort, setSort] = useState('recent')
@@ -76,16 +82,16 @@ export default function GuestFeedScreen({ navigation }) {
     <View style={styles.screen}>
       <GlowBackdrop preset="social" />
       <BrandHeader
-        title="Feed"
-        subtitle="Public posts"
+        title={t('feedTitle')}
+        subtitle={t('feedSubtitle')}
         right={
           <>
-            <HeaderButton icon="radio-outline" label="Live" onPress={() => prompt('live')} />
+            <HeaderButton icon="radio-outline" label={t('live')} onPress={() => prompt('live')} />
             <GuestLoginButton />
           </>
         }
       />
-      <Segmented options={SORTS} value={sort} onChange={setSort} style={styles.sort} />
+      <Segmented options={SORTS.map((s) => ({ ...s, label: ts(s.label) }))} value={sort} onChange={setSort} style={styles.sort} />
 
       <ScrollView
         contentContainerStyle={styles.content}
@@ -107,7 +113,7 @@ export default function GuestFeedScreen({ navigation }) {
           <ActivityIndicator color={colors.text} style={{ marginTop: 60 }} />
         ) : (
           <Text style={styles.empty}>
-            {error ? "Couldn't load the feed right now. Pull down to try again." : 'No public posts yet.'}
+            {error ? t('feedError') : t('feedEmpty')}
           </Text>
         )}
         {more ? <ActivityIndicator color={colors.text} style={{ marginTop: 16 }} /> : null}

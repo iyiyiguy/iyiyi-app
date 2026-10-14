@@ -12,12 +12,15 @@ import { MP_GAMES } from '../lib/multiplayer'
 import { sendGameInvite } from '../lib/invites'
 import { inviteByText } from '../lib/textInvite'
 import { avatarSource } from '../lib/avatarSource'
+import { useT } from '../i18n'
+import inviteStrings from '../i18n/strings/invite'
 
 // "Invite" sheet: people within 150 ft (same lookup the camera uses), everyone you follow and
 // everyone who follows you. Each row sends an invite to that person's inbox.
 // Game lobbies pass gameId + code; anything else (events, ...) passes onInvite(user) plus a
 // title/subtitle. excludeIds: people already in the room / already invited.
 export default function InvitePeopleSheet({ visible, onClose, gameId, code, excludeIds = [], onInvite, title, subtitle }) {
+  const t = useT(inviteStrings)
   const [nearby, setNearby] = useState([])
   const [following, setFollowing] = useState([])
   const [followers, setFollowers] = useState([])
@@ -95,9 +98,15 @@ export default function InvitePeopleSheet({ visible, onClose, gameId, code, excl
     return (
       <View key={key} style={styles.row}>
         {<Image source={avatarSource(u?.avatar_url)} style={styles.avatar} />}
-        <Text style={[type.body, { flex: 1 }]} numberOfLines={1}>{u.username ?? 'iYiYi user'}</Text>
-        <GlassButton size="sm" variant={st === 'sent' ? 'glass' : 'primary'} disabled={st === 'sending' || st === 'sent'} onPress={() => invite(u)}>
-          {st === 'sending' ? 'Sending…' : st === 'sent' ? 'Invited' : st === 'error' ? 'Retry' : 'Invite'}
+        <Text style={[type.body, { flex: 1 }]} numberOfLines={1}>{u.username ?? t('iyiyiUser')}</Text>
+        <GlassButton
+          size="sm"
+          variant={st === 'sent' ? 'glass' : 'primary'}
+          disabled={st === 'sending' || st === 'sent'}
+          onPress={() => invite(u)}
+          accessibilityLabel={st === 'sent' ? t('invitedA11y', { name: u.username ?? t('iyiyiUser') }) : t('inviteA11y', { name: u.username ?? t('iyiyiUser') })}
+        >
+          {st === 'sending' ? t('sending') : st === 'sent' ? t('invited') : st === 'error' ? t('retry') : t('invite')}
         </GlassButton>
       </View>
     )
@@ -105,28 +114,28 @@ export default function InvitePeopleSheet({ visible, onClose, gameId, code, excl
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <Pressable style={styles.backdrop} onPress={onClose} accessibilityLabel="Close" />
+      <Pressable style={styles.backdrop} onPress={onClose} accessibilityRole="button" accessibilityLabel={t('close')} />
       <View style={styles.wrap} pointerEvents="box-none">
         <GlassPanel radius={radii.lg} strong animateIn={false}>
           <View style={styles.inner}>
             <View style={styles.head}>
-              <Text style={[type.title, { flex: 1 }]}>{title || `Invite to ${MP_GAMES[gameId]?.name ?? 'game'}`}</Text>
-              <Pressable onPress={onClose} hitSlop={10} accessibilityRole="button" accessibilityLabel="Close">
+              <Text style={[type.title, { flex: 1 }]}>{title || t('inviteTo', { game: MP_GAMES[gameId]?.name ?? t('game') })}</Text>
+              <Pressable onPress={onClose} hitSlop={10} accessibilityRole="button" accessibilityLabel={t('close')}>
                 <Ionicons name="close" size={24} color={colors.textMuted} />
               </Pressable>
             </View>
-            <Text style={type.caption}>{subtitle || `They get a challenge with code ${code} to jump straight into this lobby.`}</Text>
+            <Text style={type.caption}>{subtitle || t('lobbyHint', { code })}</Text>
             {!onInvite && code ? (
               <Pressable
                 onPress={() => inviteByText({ gameName: MP_GAMES[gameId]?.name, code })}
                 style={({ pressed }) => [styles.textInvite, pressed && { opacity: 0.7 }]}
                 accessibilityRole="button"
-                accessibilityLabel="Invite by text message"
+                accessibilityLabel={t('textInviteA11y')}
               >
                 <Ionicons name="chatbubble-ellipses-outline" size={18} color={colors.magenta} />
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.textInviteTitle}>Invite by text</Text>
-                  <Text style={type.caption} numberOfLines={1}>Send the code and app link to anyone, even without iYiYi</Text>
+                  <Text style={styles.textInviteTitle}>{t('textInvite')}</Text>
+                  <Text style={type.caption} numberOfLines={1}>{t('textInviteSub')}</Text>
                 </View>
                 <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
               </Pressable>
@@ -135,15 +144,15 @@ export default function InvitePeopleSheet({ visible, onClose, gameId, code, excl
               <ActivityIndicator color={colors.textMuted} style={{ marginVertical: 24 }} />
             ) : (
               <ScrollView style={{ maxHeight: 420, marginTop: 8 }}>
-                <Text style={styles.section}>Nearby</Text>
+                <Text style={styles.section} accessibilityRole="header">{t('nearby')}</Text>
                 {nearList.length ? nearList.map((u) => renderRow(u, `n-${u.id}`)) : (
-                  <Text style={type.caption}>No one within 150 ft right now.</Text>
+                  <Text style={type.caption}>{t('noOneNearby')}</Text>
                 )}
-                <Text style={styles.section}>People you follow</Text>
+                <Text style={styles.section} accessibilityRole="header">{t('peopleYouFollow')}</Text>
                 {followList.length ? followList.map((u) => renderRow(u, `f-${u.id}`)) : (
-                  <Text style={type.caption}>{following.length ? 'Everyone you follow is already listed.' : 'You aren’t following anyone yet.'}</Text>
+                  <Text style={type.caption}>{following.length ? t('allListed') : t('notFollowing')}</Text>
                 )}
-                {fanList.length ? <Text style={styles.section}>Your followers</Text> : null}
+                {fanList.length ? <Text style={styles.section} accessibilityRole="header">{t('yourFollowers')}</Text> : null}
                 {fanList.map((u) => renderRow(u, `fl-${u.id}`))}
               </ScrollView>
             )}

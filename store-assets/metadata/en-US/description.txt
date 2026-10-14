@@ -46,6 +46,10 @@ Perfect for coffee shops, restaurants, bars, salons, gyms, boutiques, pop-ups, f
 
 Follow us: Instagram @iyiyiapp, YouTube @iYiYiapp
 
-Pro subscription: $1/month for your first 3 months, then $10/month, renewing monthly until cancelled. Payment is charged to your Apple ID at confirmation of purchase. Subscriptions renew automatically unless auto-renew is turned off at least 24 hours before the end of the current period. Manage or cancel in your App Store account settings.
+Optional subscriptions (prices in US dollars; local prices are shown in the app):
+• Creator Pro: $0.99 for your first 2 months (new subscribers), then $9.99/month. Your profile is shown ahead of free profiles in Nearby and Discover, plus a Pro badge.
+• Business Pro: $9.99 for your first month (new subscribers), then $29/month. Everything in Creator Pro plus an analytics dashboard, promoted placement, a scannable QR code poster for your storefront, team members and history export.
+Arcade items (guns, UAVs, grenades and more) are sold separately and are not part of either subscription.
+Both renew monthly until cancelled. Payment is charged to your Apple ID at confirmation of purchase. Subscriptions renew automatically unless auto-renew is turned off at least 24 hours before the end of the current period. Manage or cancel in your App Store account settings.
 Terms: https://iyiyi.xyz/terms
 Privacy: https://iyiyi.xyz/privacy

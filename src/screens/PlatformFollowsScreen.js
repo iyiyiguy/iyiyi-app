@@ -9,15 +9,19 @@ import { apiJson } from '../lib/api'
 import { PLATFORM_LABELS } from '../lib/socialLinks'
 import { openProfile } from '../lib/profileNav'
 import { avatarSource } from '../lib/avatarSource'
+import { useT } from '../i18n'
+import strings from '../i18n/strings/people'
 
+// Labels are keys in i18n/strings/people.
 const TABS = [
-  { key: 'mine', label: 'Profiles I followed' },
-  { key: 'received', label: 'Followed me' },
+  { key: 'mine', label: 'tabIFollowed' },
+  { key: 'received', label: 'tabFollowedMe' },
 ]
 
 // People followed on other platforms through iYiYi's "Follow everywhere". These are
 // self-reported check-offs, not verified with the platforms.
 export default function PlatformFollowsScreen({ navigation }) {
+  const t = useT(strings)
   const [tab, setTab] = useState('mine')
   const [data, setData] = useState({ count: 0, by_platform: {}, items: [] })
   const [platform, setPlatform] = useState(null)
@@ -43,22 +47,43 @@ export default function PlatformFollowsScreen({ navigation }) {
 
   return (
     <View style={styles.screen}>
-      <BrandHeader title="Followed on platforms" onBack={() => navigation.goBack()} />
+      <BrandHeader title={t('platformFollowsTitle')} onBack={() => navigation.goBack()} />
       <GlassPanel radius={999} style={styles.tabs}>
-        {TABS.map((t) => (
-          <Pressable key={t.key} onPress={() => setTab(t.key)} style={[styles.tab, tab === t.key && styles.tabActive]}>
-            <Text style={[styles.tabText, tab === t.key && styles.tabTextActive]}>{t.label}</Text>
+        {TABS.map((tb) => (
+          <Pressable
+            key={tb.key}
+            onPress={() => setTab(tb.key)}
+            style={[styles.tab, tab === tb.key && styles.tabActive]}
+            accessibilityRole="tab"
+            accessibilityState={{ selected: tab === tb.key }}
+          >
+            <Text style={[styles.tabText, tab === tb.key && styles.tabTextActive]}>{t(tb.label)}</Text>
           </Pressable>
         ))}
       </GlassPanel>
 
       {platforms.length > 0 && (
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0 }} contentContainerStyle={styles.chips}>
-          <Pressable onPress={() => setPlatform(null)} style={[styles.chip, !platform && styles.chipActive]}>
-            <Text style={[styles.chipText, !platform && styles.chipTextActive]}>All {data.count}</Text>
+          <Pressable
+            onPress={() => setPlatform(null)}
+            style={[styles.chip, !platform && styles.chipActive]}
+            hitSlop={6}
+            accessibilityRole="button"
+            accessibilityState={{ selected: !platform }}
+            accessibilityLabel={t('allCountA11y', { n: data.count })}
+          >
+            <Text style={[styles.chipText, !platform && styles.chipTextActive]}>{t('allCount', { n: data.count })}</Text>
           </Pressable>
           {platforms.map((p) => (
-            <Pressable key={p} onPress={() => setPlatform(p)} style={[styles.chip, platform === p && styles.chipActive]}>
+            <Pressable
+              key={p}
+              onPress={() => setPlatform(p)}
+              style={[styles.chip, platform === p && styles.chipActive]}
+              hitSlop={6}
+              accessibilityRole="button"
+              accessibilityState={{ selected: platform === p }}
+              accessibilityLabel={t('platformCountA11y', { platform: PLATFORM_LABELS[p] ?? p, n: data.by_platform[p] })}
+            >
               <SocialIcon platform={p} size={13} color={platform === p ? colors.onBrand : colors.textMuted} />
               <Text style={[styles.chipText, platform === p && styles.chipTextActive]}>{data.by_platform[p]}</Text>
             </Pressable>
@@ -72,13 +97,18 @@ export default function PlatformFollowsScreen({ navigation }) {
         refreshing={loading}
         onRefresh={() => load(tab)}
         renderItem={({ item }) => (
-          <Pressable style={styles.row} onPress={() => openProfile(navigation, item.id, item.avatar_url ?? null)}>
+          <Pressable
+            style={styles.row}
+            onPress={() => openProfile(navigation, item.id, item.avatar_url ?? null)}
+            accessibilityRole="button"
+            accessibilityLabel={`${item.username}, ${t(tab === 'mine' ? 'youFollowedOn' : 'followedYouOn', { platform: PLATFORM_LABELS[item.platform] ?? item.platform })}`}
+          >
             <Image source={avatarSource(item?.avatar_url)} style={styles.avatar} />
             <View style={{ flex: 1 }}>
               <Text style={type.body}>{item.username}</Text>
               <Text style={type.caption}>
-                {tab === 'mine' ? 'You followed them on ' : 'Followed you on '}
-                {PLATFORM_LABELS[item.platform] ?? item.platform} via iYiYi · {new Date(item.created_at).toLocaleDateString()}
+                {t(tab === 'mine' ? 'youFollowedOn' : 'followedYouOn', { platform: PLATFORM_LABELS[item.platform] ?? item.platform })}
+                {' · '}{new Date(item.created_at).toLocaleDateString()}
               </Text>
             </View>
             <SocialIcon platform={item.platform} size={22} color={colors.text} />
@@ -87,10 +117,10 @@ export default function PlatformFollowsScreen({ navigation }) {
         ListEmptyComponent={
           <Text style={styles.empty}>
             {loading
-              ? 'Loading…'
+              ? t('loading')
               : tab === 'mine'
-                ? "When you use Follow everywhere on someone's profile and check off a platform, they'll show up here."
-                : "When someone follows you on another platform using iYiYi's Follow everywhere, they'll show up here."}
+                ? t('emptyMine')
+                : t('emptyReceived')}
           </Text>
         }
       />

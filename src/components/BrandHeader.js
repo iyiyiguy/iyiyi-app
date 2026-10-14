@@ -3,20 +3,23 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons'
 import { colors, type } from '../theme'
 import Glass from './Glass'
+import { useT } from '../i18n'
+import strings from '../i18n/strings/social'
 
 // Open, airy header in the style of the glass redesign: no bar, just a large title (and an
 // optional lighter subtitle) sitting on the aura, with round glass buttons.
 // onBack renders a glass back button wired to navigation.goBack(). Every stack screen (not
 // just tabs) should pass this - web has no OS back gesture, so without it a screen is a dead end.
 export default function BrandHeader({ title, subtitle, onBack, right }) {
+  const t = useT(strings)
   const insets = useSafeAreaInsets()
   return (
     <View style={[styles.wrap, { paddingTop: Math.max(insets.top, 20) + 8 }]}>
       <View style={styles.row}>
         <View style={styles.left}>
-          {onBack ? <HeaderButton icon="chevron-back" onPress={onBack} label="Back" /> : null}
+          {onBack ? <HeaderButton icon="chevron-back" onPress={onBack} label={t('back')} /> : null}
           <View style={{ flexShrink: 1 }}>
-            <Text style={styles.title} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>{title}</Text>
+            <Text style={styles.title} accessibilityRole="header" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>{title}</Text>
             {subtitle ? <Text style={styles.subtitle} numberOfLines={1}>{subtitle}</Text> : null}
           </View>
         </View>

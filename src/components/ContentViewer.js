@@ -12,8 +12,12 @@ import Bounce from './Bounce'
 import { removeCameraTag } from '../lib/cameraApi'
 import { shareMedia } from '../lib/shareMedia'
 import { displayCity } from '../lib/photoLocation'
-import { useOpenProfile } from '../lib/profileNav'
+import { useOpenProfile, useMyUserId } from '../lib/profileNav'
+import { deleteMyMedia, isMyMedia } from '../lib/myContent'
+import { onMediaRemoved, sameMediaId } from '../lib/mediaEvents'
 import { avatarSource } from '../lib/avatarSource'
+import { useT } from '../i18n'
+import contentStrings from '../i18n/strings/content'
 
 // Full-screen viewer for profile photos/videos with like, save, and comments.
 // items: [{ id, media_url, media_type, owner_id, owner_username, owner_avatar_url,
@@ -21,6 +25,8 @@ import { avatarSource } from '../lib/avatarSource'
 // Always dark: it sits over photos/video, so it doesn't follow the light/dark setting.
 // onOpenProfile(userId) is optional: without it the viewer closes itself and opens the
 // profile (or your own MyProfile tab) directly, so owner + tagged people are always tappable.
+// Your own posts (owner_id / user_id === signed-in user, see isMyMedia) get Delete in place of
+// Report; a delete is broadcast via mediaEvents.emitMediaRemoved so every list drops it.
 // Safe-area insets without throwing when no provider is above us (the viewer is a Modal that
 // can be opened from anywhere); falls back to the window's launch insets.
 function useViewerInsets() {
@@ -38,6 +44,7 @@ export default function ContentViewer({ visible, items, startIndex = 0, onClose,
   const { width, height } = useWindowDimensions()
   const insets = useViewerInsets()
   const navOpenProfile = useOpenProfile()
+  const t = useT(contentStrings)
   const onOpenProfile = useCallback((id, avatarUrl = null) => {
     if (!id) return
     if (onOpenProfileProp) {
@@ -51,6 +58,9 @@ export default function ContentViewer({ visible, items, startIndex = 0, onClose,
   const [index, setIndex] = useState(startIndex)
   const [commentsFor, setCommentsFor] = useState(null)
   const [tagsFor, setTagsFor] = useState(null)
+  const [deletingId, setDeletingId] = useState(null)
+  const deletingRef = useRef(false)
+  const myId = useMyUserId()
   const listRef = useRef(null)
 
   // The FlatList's scroll position and `index` must always agree, otherwise the photo on
@@ -86,21 +96,60 @@ export default function ContentViewer({ visible, items, startIndex = 0, onClose,
     return () => cancelAnimationFrame(raf)
   }, [list.length, visible, scrollTo])
 
-  const dropItem = (id) => {
+  // opts.advance: when the removed item is the one on screen, show the next one (the item
+  // that slides into its slot) instead of stepping back to the previous one.
+  const dropItem = (id, opts = {}) => {
     setList((prev) => {
-      const removedAt = prev.findIndex((m) => m.id === id)
-      const next = prev.filter((m) => m.id !== id)
+      const removedAt = prev.findIndex((m) => sameMediaId(m.id, id))
+      if (removedAt === -1) return prev
+      const next = prev.filter((m) => !sameMediaId(m.id, id))
       if (next.length === 0) {
         onClose?.()
-      } else if (removedAt !== -1) {
-        // Only shift the current index back if the removed item was at or before it -
-        // removing something further along in the list shouldn't move which photo you're
-        // looking at.
-        setIndex((i) => Math.min(next.length - 1, removedAt <= i ? Math.max(0, i - 1) : i))
+      } else {
+        // Only shift the current index back if the removed item was before it (or was it,
+        // unless advancing) - removing something further along in the list shouldn't move
+        // which photo you're looking at.
+        setIndex((i) => {
+          const shift = removedAt < i || (removedAt === i && !opts.advance)
+          return Math.min(next.length - 1, shift ? Math.max(0, i - 1) : i)
+        })
       }
       return next
     })
-    onChange?.(id, { removed: true })
+    if (!opts.silent) onChange?.(id, { removed: true })
+  }
+
+  // A post deleted elsewhere (another open screen, or this viewer) leaves this list too.
+  useEffect(() => {
+    if (!visible) return undefined
+    return onMediaRemoved((id) => dropItem(id, { advance: true, silent: true }))
+  }, [visible]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const deletePost = (m) => {
+    if (!m || m.id == null || deletingRef.current) return
+    Alert.alert(t('deleteTitle'), t('cantUndo'), [
+      { text: t('cancel'), style: 'cancel' },
+      {
+        text: t('delete'),
+        style: 'destructive',
+        onPress: async () => {
+          if (deletingRef.current) return
+          deletingRef.current = true
+          setDeletingId(m.id)
+          try {
+            await deleteMyMedia(m)
+            // deleteMyMedia broadcast the removal (our listener drops it); drop it here too
+            // in case the viewer was closing, and tell the parent.
+            dropItem(m.id, { advance: true })
+          } catch (e) {
+            Alert.alert(t('deleteFailed'), e?.message || t('checkConnection'))
+          } finally {
+            deletingRef.current = false
+            setDeletingId(null)
+          }
+        },
+      },
+    ])
   }
 
   const reportPost = (m) => {
@@ -129,36 +178,35 @@ export default function ContentViewer({ visible, items, startIndex = 0, onClose,
       if (ok) {
         dropItem(m.id)
         Alert.alert(
-          'Report sent',
-          blockedOwner
-            ? "Thanks. We hid this post, blocked its author for you and we'll review it."
-            : "Thanks. We hid this post for you and we'll review it.",
+          t('reportSent'),
+          blockedOwner ? t('reportSentBlocked') : t('reportSentHidden'),
         )
       } else {
-        Alert.alert("Couldn't send the report", 'Please check your connection and try again.')
+        Alert.alert(t('reportFailed'), t('checkConnection'))
       }
     }
-    Alert.alert('Report this post', 'Why are you reporting it?', [
-      { text: 'Nudity or sexual content', onPress: () => send('Nudity or sexual content') },
-      { text: 'Harassment or hate', onPress: () => send('Harassment or hate') },
-      { text: 'Spam or fake', onPress: () => send('Spam or fake') },
-      { text: 'Something else', onPress: () => send('Other') },
-      { text: 'Cancel', style: 'cancel' },
+    // The reason sent to the server stays in English (it is read by the review team).
+    Alert.alert(t('reportTitle'), t('reportWhy'), [
+      { text: t('reasonNudity'), onPress: () => send('Nudity or sexual content') },
+      { text: t('reasonHarassment'), onPress: () => send('Harassment or hate') },
+      { text: t('reasonSpam'), onPress: () => send('Spam or fake') },
+      { text: t('reasonOther'), onPress: () => send('Other') },
+      { text: t('cancel'), style: 'cancel' },
     ])
   }
 
   const removeMyTag = (m) => {
-    Alert.alert('Remove this tag?', "The post will disappear from your Tagged and Nearby lists. The photographer keeps their post.", [
-      { text: 'Cancel', style: 'cancel' },
+    Alert.alert(t('removeTagTitle'), t('removeTagMsg'), [
+      { text: t('cancel'), style: 'cancel' },
       {
-        text: 'Remove',
+        text: t('remove'),
         style: 'destructive',
         onPress: async () => {
           try {
             await removeCameraTag(m.id)
             dropItem(m.id)
           } catch {
-            Alert.alert("Couldn't remove the tag", 'Please try again.')
+            Alert.alert(t('removeTagFailed'), t('tryAgain'))
           }
         },
       },
@@ -193,6 +241,8 @@ export default function ContentViewer({ visible, items, startIndex = 0, onClose,
   }
 
   const current = list[index]
+  const mine = isMyMedia(current, myId)
+  const deleting = !!current && deletingId != null && sameMediaId(deletingId, current.id)
 
   return (
     <Modal visible={visible} animationType="fade" presentationStyle="fullScreen" onRequestClose={onClose} statusBarTranslucent>
@@ -223,7 +273,7 @@ export default function ContentViewer({ visible, items, startIndex = 0, onClose,
         />
 
         <View style={[styles.topBar, { paddingTop: insets.top + 8 }]} pointerEvents="box-none">
-          <Pressable onPress={onClose} hitSlop={12} style={styles.closeBtn}>
+          <Pressable onPress={onClose} hitSlop={12} style={styles.closeBtn} accessibilityRole="button" accessibilityLabel={t('close')}>
             <Text style={styles.closeText}>✕</Text>
           </Pressable>
           {list.length > 1 && <Text style={styles.counter}>{index + 1} / {list.length}</Text>}
@@ -239,7 +289,7 @@ export default function ContentViewer({ visible, items, startIndex = 0, onClose,
                 disabled={!current.owner_id}
                 hitSlop={6}
                 accessibilityRole="button"
-                accessibilityLabel={current.owner_username ? `Open ${current.owner_username}'s profile` : 'Open profile'}
+                accessibilityLabel={current.owner_username ? t('openProfileA11y', { name: current.owner_username }) : t('openProfile')}
               >
                 {<Image source={avatarSource(current?.owner_avatar_url)} style={styles.ownerAvatar} />}
                 <View style={styles.ownerText}>
@@ -250,13 +300,23 @@ export default function ContentViewer({ visible, items, startIndex = 0, onClose,
             ) : null}
 
             <View style={styles.actions}>
-              <ActionButton icon={current.liked_by_me ? '♥' : '♡'} label={current.like_count ?? 0} active={current.liked_by_me} onPress={() => toggleLike(current)} accessibilityLabel={`${current.liked_by_me ? 'Unlike' : 'Like'}, ${current.like_count ?? 0} likes`} />
-              <ActionButton icon="💬" label={current.comment_count ?? 0} onPress={() => setCommentsFor(current)} accessibilityLabel={`Comments, ${current.comment_count ?? 0}`} />
-              <ActionButton icon="🧑‍🤝‍🧑" label="Tagged" onPress={() => setTagsFor(current)} />
-              <ActionButton icon="↗" label="Share" onPress={() => shareMedia(current)} accessibilityLabel="Share to other apps" />
-              <ActionButton icon={current.saved_by_me ? '★' : '☆'} label={current.saved_by_me ? 'Saved' : 'Save'} active={current.saved_by_me} onPress={() => toggleSave(current)} />
-              {current.kind ? <ActionButton icon="✕" label="Remove tag" onPress={() => removeMyTag(current)} /> : null}
-              <ActionButton icon="⚑" label="Report" onPress={() => reportPost(current)} />
+              <ActionButton icon={current.liked_by_me ? '♥' : '♡'} label={current.like_count ?? 0} active={current.liked_by_me} selected={!!current.liked_by_me} onPress={() => toggleLike(current)} accessibilityLabel={t(current.liked_by_me ? 'unlikeA11y' : 'likeA11y', { n: current.like_count ?? 0 })} />
+              <ActionButton icon="💬" label={current.comment_count ?? 0} onPress={() => setCommentsFor(current)} accessibilityLabel={t('commentsA11y', { n: current.comment_count ?? 0 })} />
+              <ActionButton icon="🧑‍🤝‍🧑" label={t('tagged')} onPress={() => setTagsFor(current)} accessibilityLabel={t('taggedA11y')} />
+              <ActionButton icon="↗" label={t('share')} onPress={() => shareMedia(current)} accessibilityLabel={t('shareA11y')} />
+              <ActionButton icon={current.saved_by_me ? '★' : '☆'} label={current.saved_by_me ? t('savedOne') : t('save')} active={current.saved_by_me} selected={!!current.saved_by_me} onPress={() => toggleSave(current)} accessibilityLabel={t('save')} />
+              {current.kind ? <ActionButton icon="✕" label={t('removeTag')} onPress={() => removeMyTag(current)} /> : null}
+              {mine ? (
+                <ActionButton
+                  icon={deleting ? '…' : '🗑'}
+                  label={deleting ? t('deleting') : t('delete')}
+                  onPress={() => deletePost(current)}
+                  disabled={deletingId != null}
+                  accessibilityLabel={deleting ? t('deletingA11y') : t('deleteA11y')}
+                />
+              ) : (
+                <ActionButton icon="⚑" label={t('report')} onPress={() => reportPost(current)} accessibilityLabel={t('reportTitle')} />
+              )}
             </View>
           </View>
         )}
@@ -295,10 +355,10 @@ function VideoPage({ uri, active }) {
 }
 
 // Icon above its label; every button gets an equal share of the row.
-function ActionButton({ icon, label, onPress, active, accessibilityLabel }) {
+function ActionButton({ icon, label, onPress, active, accessibilityLabel, disabled = false, selected }) {
   return (
-    <View style={styles.actionSlot}>
-      <Bounce onPress={onPress} style={styles.action} hitSlop={6} scaleTo={0.75} accessibilityRole="button" accessibilityLabel={accessibilityLabel ?? String(label)}>
+    <View style={[styles.actionSlot, disabled && { opacity: 0.5 }]}>
+      <Bounce onPress={onPress} disabled={disabled} style={styles.action} hitSlop={6} scaleTo={0.75} accessibilityRole="button" accessibilityState={{ disabled, selected }} accessibilityLabel={accessibilityLabel ?? String(label)}>
         <Text style={[styles.actionIcon, active && { color: colors.magenta }]} allowFontScaling={false}>{icon}</Text>
         <Text style={styles.actionLabel} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>{String(label)}</Text>
       </Bounce>
@@ -307,6 +367,7 @@ function ActionButton({ icon, label, onPress, active, accessibilityLabel }) {
 }
 
 function CommentsSheet({ media, onClose, onCountChange, onOpenProfile }) {
+  const t = useT(contentStrings)
   const [comments, setComments] = useState([])
   const [loading, setLoading] = useState(false)
   const [text, setText] = useState('')
@@ -354,29 +415,29 @@ function CommentsSheet({ media, onClose, onCountChange, onOpenProfile }) {
   return (
     <Modal visible={!!media} transparent animationType="slide" onRequestClose={onClose}>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.sheetBackdrop}>
-        <Pressable style={{ flex: 1 }} onPress={onClose} />
+        <Pressable style={{ flex: 1 }} onPress={onClose} accessibilityRole="button" accessibilityLabel={t('close')} />
         <View style={styles.sheet}>
-          <Text style={styles.sheetTitle}>Comments</Text>
+          <Text style={styles.sheetTitle} accessibilityRole="header">{t('comments')}</Text>
           {loading ? (
             <ActivityIndicator color="#fff" style={{ marginVertical: 24 }} />
           ) : (
             <ScrollView style={{ maxHeight: 320 }} keyboardShouldPersistTaps="handled">
-              {comments.length === 0 ? <Text style={styles.empty}>No comments yet. Be the first.</Text> : null}
+              {comments.length === 0 ? <Text style={styles.empty}>{t('noComments')}</Text> : null}
               {comments.map((c) => {
                 // Only tappable when the row actually says who wrote it.
                 const authorId = c.user_id ?? c.author_id ?? c.profiles?.id ?? null
                 return (
                 <View key={c.id} style={styles.comment}>
-                  <Pressable disabled={!authorId} onPress={() => onOpenProfile?.(authorId)} hitSlop={6}>
+                  <Pressable disabled={!authorId} onPress={() => onOpenProfile?.(authorId)} hitSlop={6} accessibilityRole="button" accessibilityLabel={t('openProfileA11y', { name: c.profiles?.username ?? t('someoneLower') })}>
                     {c.profiles?.avatar_url ? <Image source={avatarSource(c?.profiles?.avatar_url)} style={styles.commentAvatar} /> : <View style={styles.commentAvatar} />}
                   </Pressable>
                   <View style={{ flex: 1 }}>
-                    <Pressable disabled={!authorId} onPress={() => onOpenProfile?.(authorId)} hitSlop={6} style={{ alignSelf: 'flex-start' }}>
-                      <Text style={styles.commentUser}>{c.profiles?.username ?? 'someone'}</Text>
+                    <Pressable disabled={!authorId} onPress={() => onOpenProfile?.(authorId)} hitSlop={6} style={{ alignSelf: 'flex-start' }} accessibilityRole="button">
+                      <Text style={styles.commentUser}>{c.profiles?.username ?? t('someoneLower')}</Text>
                     </Pressable>
                     <Text style={styles.commentBody}>{c.body}</Text>
                   </View>
-                  <Bounce onPress={() => toggleCommentLike(c)} hitSlop={8} style={styles.commentLike} scaleTo={0.7}>
+                  <Bounce onPress={() => toggleCommentLike(c)} hitSlop={12} style={styles.commentLike} scaleTo={0.7} accessibilityRole="button" accessibilityState={{ selected: !!c.liked_by_me }} accessibilityLabel={t(c.liked_by_me ? 'unlikeCommentA11y' : 'likeCommentA11y', { n: c.like_count ?? 0 })}>
                     <Text style={[styles.commentHeart, c.liked_by_me && { color: colors.magenta }]}>{c.liked_by_me ? '♥' : '♡'}</Text>
                     {c.like_count > 0 ? <Text style={styles.commentLikeCount}>{c.like_count}</Text> : null}
                   </Bounce>
@@ -390,14 +451,15 @@ function CommentsSheet({ media, onClose, onCountChange, onOpenProfile }) {
               style={styles.input}
               value={text}
               onChangeText={setText}
-              placeholder="Add a comment"
+              placeholder={t('addComment')}
+              accessibilityLabel={t('addComment')}
               placeholderTextColor="#8f8298"
               maxLength={500}
               returnKeyType="send"
               onSubmitEditing={send}
             />
-            <Pressable onPress={send} disabled={!text.trim() || sending} style={[styles.sendBtn, (!text.trim() || sending) && { opacity: 0.4 }]}>
-              <Text style={styles.sendText}>Post</Text>
+            <Pressable onPress={send} disabled={!text.trim() || sending} style={[styles.sendBtn, (!text.trim() || sending) && { opacity: 0.4 }]} accessibilityRole="button" accessibilityState={{ disabled: !text.trim() || sending }}>
+              <Text style={styles.sendText}>{t('postComment')}</Text>
             </Pressable>
           </View>
         </View>

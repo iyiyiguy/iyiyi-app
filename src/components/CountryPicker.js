@@ -6,6 +6,8 @@ import * as Haptics from 'expo-haptics'
 import { colors, font, radii, type } from '../theme'
 import { searchCountries, countryByCode } from '../lib/countries'
 import SearchField from './SearchField'
+import { useT } from '../i18n'
+import strings from '../i18n/strings/social'
 
 // Searchable country list with flags, as a bottom sheet. Shared by Feed and Map.
 //
@@ -18,7 +20,9 @@ import SearchField from './SearchField'
 //     allowAll                          // optional: show an "All countries" row (selects null)
 //     title="Choose a country"          // optional
 //   />
-export default function CountryPicker({ visible, value, onSelect, onClose, allowAll = false, title = 'Choose a country' }) {
+export default function CountryPicker({ visible, value, onSelect, onClose, allowAll = false, title: titleProp }) {
+  const t = useT(strings)
+  const title = titleProp ?? t('chooseCountry')
   const insets = useSafeAreaInsets()
   const [query, setQuery] = useState('')
   useEffect(() => { if (visible) setQuery('') }, [visible])
@@ -39,17 +43,17 @@ export default function CountryPicker({ visible, value, onSelect, onClose, allow
 
   return (
     <Modal visible={!!visible} transparent animationType="slide" onRequestClose={onClose} statusBarTranslucent>
-      <Pressable style={styles.backdrop} onPress={onClose} accessibilityLabel="Close" />
+      <Pressable style={styles.backdrop} onPress={onClose} accessibilityRole="button" accessibilityLabel={t('close')} />
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.sheetWrap} pointerEvents="box-none">
         <View style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, 12) }]}>
           <View style={styles.grabber} />
           <View style={styles.header}>
             <Text style={type.title}>{title}</Text>
-            <Pressable onPress={onClose} hitSlop={10} accessibilityRole="button" accessibilityLabel="Close">
+            <Pressable onPress={onClose} hitSlop={10} accessibilityRole="button" accessibilityLabel={t('close')}>
               <Ionicons name="close-circle" size={26} color={colors.textFaint} />
             </Pressable>
           </View>
-          <SearchField value={query} onChangeText={setQuery} placeholder="Search countries" style={styles.search} autoCapitalize="words" />
+          <SearchField value={query} onChangeText={setQuery} placeholder={t('searchCountries')} style={styles.search} autoCapitalize="words" />
           <FlatList
             data={data}
             keyExtractor={(c) => c.code}
@@ -57,12 +61,12 @@ export default function CountryPicker({ visible, value, onSelect, onClose, allow
             keyboardDismissMode="on-drag"
             initialNumToRender={20}
             ListHeaderComponent={allowAll && !query ? (
-              <Row flag="🌐" name="All countries" selected={!selected} onPress={() => pick(null)} />
+              <Row flag="🌐" name={t('allCountries')} selected={!selected} onPress={() => pick(null)} />
             ) : null}
             renderItem={({ item }) => (
               <Row flag={item.flag} name={item.name} code={item.code} selected={selected?.code === item.code} onPress={() => pick(item)} />
             )}
-            ListEmptyComponent={<Text style={styles.empty}>No country matches “{query}”.</Text>}
+            ListEmptyComponent={<Text style={styles.empty}>{t('noCountryMatch', { query })}</Text>}
           />
         </View>
       </KeyboardAvoidingView>

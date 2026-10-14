@@ -4,7 +4,13 @@ import { colors, radii, type } from '../theme'
 
 function statLine(game, s) {
   if (!s || !s.played) return 'Not played yet'
-  if (game.id === 'chess') return `Rating ${s.rating ?? '—'} · ${s.wins}W ${s.losses}L ${s.draws}D`
+  if (game.id === 'chess') {
+    // s.rating = vs AI; s.onlineRating / s.onlineGames = online (shown first once played).
+    const n = Number(s.onlineGames) || 0
+    const online = n > 0 && Number.isFinite(Number(s.onlineRating)) ? `Online ${Math.round(s.onlineRating)}${n < 10 ? '?' : ''}` : null
+    const ai = s.rating != null ? `vs AI ${s.rating}` : null
+    return [online, ai || (online ? null : 'Unrated'), `${s.wins}W ${s.losses}L ${s.draws}D`].filter(Boolean).join(' · ')
+  }
   if (game.id === 'word-race') return `Best ${s.bestScore ?? 0} · ${s.played} run${s.played === 1 ? '' : 's'}`
   return `${s.played} played · ${s.wins} won`
 }

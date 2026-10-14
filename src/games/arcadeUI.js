@@ -1,43 +1,56 @@
-// Shared look for the Arcade hub, Shop and game lobbies: a deep, always-dark game-hub
-// style layered over the app's aura, built from the same Liquid Glass primitive.
+// Shared look for the Arcade hub, Shop and game lobbies: the "studio" game language from
+// ./studio.js (dark ground in light AND dark mode, black glass panels, caps labels,
+// Chakra Petch numbers and titles, square 3 px corners, colour = role, no emoji in chrome).
+// Exports keep their old names and props so every screen and game keeps working.
 import React, { useCallback, useContext } from 'react'
 import { Dimensions, Image, Platform, Pressable, StatusBar, StyleSheet, Text, View } from 'react-native'
 import { SafeAreaInsetsContext, initialWindowMetrics } from 'react-native-safe-area-context'
 import { LinearGradient } from 'expo-linear-gradient'
 import { Ionicons } from '@expo/vector-icons'
 import { useFocusEffect } from '@react-navigation/native'
-import Glass from '../components/Glass'
-import { font } from '../theme'
+import { FONT, ST, stType, useStudioFonts, withAlpha } from './studio'
 
-// Fixed palette: the arcade is dark in both light and dark mode, like a game launcher.
+// Fixed palette (same keys as before, studio values): dark in both light and dark mode.
 export const AC = {
-  bg: ['#04050d', '#0a0e24', '#140a28'],
-  text: '#f4f6ff',
-  muted: '#a3abc8',
-  faint: '#6c7392',
-  card: 'rgba(255,255,255,0.06)',
-  cardStrong: 'rgba(255,255,255,0.10)',
-  border: 'rgba(255,255,255,0.10)',
-  gold: '#ffc94d',
-  accent: '#7c8cff',
-  hot: '#ff2e63',
-  live: '#2fdc8f',
-  danger: '#ff5d6c',
-  play: ['#8f7bff', '#5b6cf0'],
-  // Card surfaces + glows shared by every arcade page.
-  panel: ['rgba(30,36,72,0.85)', 'rgba(14,16,34,0.92)'],
-  glowAccent: 'rgba(124,140,255,0.45)',
-  glowHot: 'rgba(255,46,99,0.45)',
-  glowGold: 'rgba(255,201,77,0.45)',
+  bg: [ST.ground, ST.ground, ST.ground2],
+  text: ST.text,
+  muted: ST.muted,
+  faint: ST.faint,
+  card: ST.cell,
+  cardStrong: 'rgba(255,255,255,0.09)',
+  border: ST.line,
+  gold: ST.objective,
+  accent: ST.friendly,
+  hot: ST.enemy,
+  live: ST.health,
+  danger: ST.enemy,
+  play: [ST.friendly, ST.friendly],
+  // Card surfaces + glows shared by every arcade page (flat black glass now; glows are off).
+  panel: [ST.panelStrong, ST.panelStrong],
+  glowAccent: 'transparent',
+  glowHot: 'transparent',
+  glowGold: 'transparent',
 }
 
-// Deep gradient + two soft glows behind arcade screens.
+// Text colour that reads on a given solid fill (dark ink on bright fills, white on dark/red).
+export function inkOn(fill) {
+  const h = String(fill || '').replace('#', '')
+  if (h.length !== 6) return ST.ink
+  const n = parseInt(h, 16)
+  const r = (n >> 16) & 255
+  const g = (n >> 8) & 255
+  const b = n & 255
+  const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255
+  return lum > 0.55 ? ST.ink : '#ffffff'
+}
+
+// Flat studio ground with a faint grid-like top sheen. Also loads the studio fonts.
 export function ArcadeBackground() {
+  useStudioFonts()
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="none">
-      <LinearGradient colors={AC.bg} start={{ x: 0.1, y: 0 }} end={{ x: 0.9, y: 1 }} style={StyleSheet.absoluteFill} />
-      <View style={[s.orb, { top: -120, right: -90, backgroundColor: 'rgba(124,140,255,0.22)' }]} />
-      <View style={[s.orb, { top: 360, left: -140, backgroundColor: 'rgba(255,46,99,0.12)' }]} />
+      <View style={[StyleSheet.absoluteFill, { backgroundColor: ST.ground }]} />
+      <LinearGradient colors={['rgba(57,213,255,0.06)', 'rgba(57,213,255,0)']} start={{ x: 0, y: 0 }} end={{ x: 0, y: 0.4 }} style={StyleSheet.absoluteFill} />
     </View>
   )
 }
@@ -75,7 +88,7 @@ export function StatusBarScrim({ height }) {
   return (
     <LinearGradient
       pointerEvents="none"
-      colors={['rgba(4,5,13,0.94)', 'rgba(4,5,13,0.75)', 'rgba(4,5,13,0)']}
+      colors={[withAlpha(ST.ground, 0.96), withAlpha(ST.ground, 0.8), withAlpha(ST.ground, 0)]}
       locations={[0, 0.7, 1]}
       style={[s.scrim, { height: height + 14 }]}
     />
@@ -84,21 +97,21 @@ export function StatusBarScrim({ height }) {
 
 export function CoinPill({ value, onPress, compact }) {
   const body = (
-    <Glass scheme="dark" radius={18} shadow={false} style={[s.coin, compact && { paddingVertical: 6 }]}>
-      <View style={s.coinIcon}><Text style={s.coinGlyph}>◆</Text></View>
+    <View style={[s.coin, compact && { height: 30 }]}>
+      <View style={s.coinIcon}><Ionicons name="diamond" size={10} color={ST.ink} /></View>
       <Text style={s.coinText}>{value == null ? '—' : Number(value).toLocaleString()}</Text>
-    </Glass>
+    </View>
   )
   if (!onPress) return body
-  return <Pressable onPress={onPress} hitSlop={6} accessibilityRole="button" accessibilityLabel={`${value} coins`}>{body}</Pressable>
+  return <Pressable onPress={onPress} hitSlop={6} accessibilityRole="button" accessibilityLabel={`${value} coins`} style={({ pressed }) => pressed && { opacity: 0.8 }}>{body}</Pressable>
 }
 
 export function IconCircle({ icon, onPress, label, size = 42, badge }) {
   return (
-    <Pressable onPress={onPress} hitSlop={6} accessibilityRole="button" accessibilityLabel={label} style={({ pressed }) => pressed && { transform: [{ scale: 0.92 }] }}>
-      <Glass scheme="dark" radius={size / 2} shadow={false} interactive style={{ width: size, height: size }}>
-        <View style={s.center}><Ionicons name={icon} size={size * 0.46} color={AC.text} /></View>
-      </Glass>
+    <Pressable onPress={onPress} hitSlop={6} accessibilityRole="button" accessibilityLabel={label} style={({ pressed }) => pressed && { opacity: 0.8, transform: [{ scale: 0.95 }] }}>
+      <View style={[s.iconBtn, { width: size, height: size }]}>
+        <Ionicons name={icon} size={size * 0.46} color={ST.text} />
+      </View>
       {badge ? <View style={s.badge} /> : null}
     </Pressable>
   )
@@ -107,17 +120,10 @@ export function IconCircle({ icon, onPress, label, size = 42, badge }) {
 export function Chip({ label, active, onPress, icon }) {
   return (
     <Pressable onPress={onPress} accessibilityRole="button" accessibilityState={{ selected: !!active }} style={({ pressed }) => pressed && { opacity: 0.8 }}>
-      {active ? (
-        <LinearGradient colors={AC.play} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={s.chip}>
-          {icon ? <Ionicons name={icon} size={14} color="#fff" style={{ marginRight: 6 }} /> : null}
-          <Text style={[s.chipText, { color: '#fff' }]}>{label}</Text>
-        </LinearGradient>
-      ) : (
-        <View style={[s.chip, s.chipIdle]}>
-          {icon ? <Ionicons name={icon} size={14} color={AC.muted} style={{ marginRight: 6 }} /> : null}
-          <Text style={s.chipText}>{label}</Text>
-        </View>
-      )}
+      <View style={[s.chip, active ? s.chipOn : s.chipIdle]}>
+        {icon ? <Ionicons name={icon} size={13} color={active ? ST.ink : ST.muted} style={{ marginRight: 6 }} /> : null}
+        <Text style={[s.chipText, active && { color: ST.ink }]}>{label}</Text>
+      </View>
     </Pressable>
   )
 }
@@ -125,7 +131,10 @@ export function Chip({ label, active, onPress, icon }) {
 export function SectionHeader({ title, action, onAction, style }) {
   return (
     <View style={[s.section, style]}>
-      <Text style={s.sectionTitle}>{title}</Text>
+      <View style={s.sectionLeft}>
+        <View style={s.sectionTick} />
+        <Text style={s.sectionTitle} numberOfLines={1}>{title}</Text>
+      </View>
       {action ? (
         <Pressable onPress={onAction} hitSlop={8} accessibilityRole="button">
           <Text style={s.sectionAction}>{action}</Text>
@@ -145,7 +154,7 @@ export function LiveBadge({ count, label = 'playing' }) {
   )
 }
 
-// Cover art for a game: the cover image, or a gradient with the game's glyph.
+// Cover art for a game: the cover image, or a flat panel with a game icon.
 // The whole cover is always shown ('contain'): a blurred, dimmed copy of the same image fills
 // whatever the box has left over, so nothing of the art (logos!) gets cropped.
 // artStyle: optional box for the sharp image (e.g. { height, marginTop }) laid out in normal
@@ -155,7 +164,7 @@ export function CoverArt({ game, style, glyphSize = 96, artStyle, fit = 'contain
   const cover = game?.cover
   const sharpStyle = artStyle ? [s.artBox, artStyle] : StyleSheet.absoluteFill
   return (
-    <View style={[{ overflow: 'hidden', backgroundColor: '#0d1022' }, style]}>
+    <View style={[{ overflow: 'hidden', backgroundColor: ST.ground2, borderRadius: ST.radius }, style]}>
       {cover ? (
         <>
           {fit === 'contain' ? (
@@ -170,9 +179,9 @@ export function CoverArt({ game, style, glyphSize = 96, artStyle, fit = 'contain
         </>
       ) : (
         <>
-          <LinearGradient colors={game?.accent || AC.play} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
+          <View style={[StyleSheet.absoluteFill, { backgroundColor: ST.ground2 }]} />
           <View style={[sharpStyle, s.centerBox]} pointerEvents="none">
-            <Text style={{ fontSize: glyphSize, color: 'rgba(255,255,255,0.92)' }} allowFontScaling={false}>{game?.id === 'chess' ? '♞' : game?.icon}</Text>
+            <Ionicons name={gameIcon(game?.id)} size={Math.round(glyphSize * 0.7)} color={ST.faint} />
           </View>
         </>
       )}
@@ -181,33 +190,56 @@ export function CoverArt({ game, style, glyphSize = 96, artStyle, fit = 'contain
   )
 }
 
-// Big gradient call-to-action.
+// Ionicons for each game (multiplayer ids and catalogue ids) - used instead of emoji glyphs.
+export const GAME_ICONS = {
+  lasertag: 'locate', 'laser-tag': 'locate',
+  royale: 'planet', 'battle-royale': 'planet',
+  'spider-spider': 'bug', spider: 'bug',
+  'beside-them': 'eye-off',
+  chess: 'extension-puzzle',
+  mafia: 'moon',
+  'heads-up': 'hand-left', 'heads-up-7-up': 'hand-left',
+  'word-race': 'text', 'word-game': 'text',
+}
+export const gameIcon = (id) => GAME_ICONS[id] || 'game-controller'
+
+// Big call-to-action: flat role-colour fill, Chakra caps label. `colors` (an array, as
+// before) picks the fill from its first stop.
 export function PlayButton({ title = 'Play', icon = 'play', onPress, disabled, busy, style, colors = AC.play, small }) {
+  const fill = (Array.isArray(colors) ? colors[0] : colors) || ST.friendly
+  const fg = inkOn(fill)
   return (
     <Pressable
       onPress={onPress}
       disabled={disabled || busy}
       accessibilityRole="button"
-      style={({ pressed }) => [{ opacity: disabled ? 0.45 : 1, transform: [{ scale: pressed ? 0.97 : 1 }] }, style]}
+      accessibilityLabel={title}
+      accessibilityState={{ disabled: !!(disabled || busy), busy: !!busy }}
+      style={({ pressed }) => [{ opacity: disabled ? 0.45 : pressed ? 0.88 : 1, transform: [{ scale: pressed ? 0.98 : 1 }] }, style]}
     >
-      <LinearGradient colors={colors} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[s.play, small && s.playSmall]}>
-        {icon ? <Ionicons name={busy ? 'hourglass' : icon} size={small ? 15 : 18} color="#fff" style={{ marginRight: 8 }} /> : null}
-        <Text style={[s.playText, small && { fontSize: 14 }]}>{busy ? 'Please wait…' : title}</Text>
-      </LinearGradient>
+      <View style={[s.play, small && s.playSmall, { backgroundColor: fill, borderColor: fill }]}>
+        {icon ? <Ionicons name={busy ? 'hourglass' : icon} size={small ? 14 : 17} color={fg} style={{ marginRight: 8 }} /> : null}
+        <Text style={[s.playText, small && { fontSize: 13 }, { color: fg }]} numberOfLines={1}>{busy ? 'Please wait…' : title}</Text>
+      </View>
     </Pressable>
   )
 }
 
-// Secondary glass button for dark arcade surfaces.
+// Secondary outline button for dark arcade surfaces.
 export function GhostButton({ title, icon, onPress, disabled, style, small }) {
   return (
-    <Pressable onPress={onPress} disabled={disabled} accessibilityRole="button" style={({ pressed }) => [{ opacity: disabled ? 0.45 : 1, transform: [{ scale: pressed ? 0.97 : 1 }] }, style]}>
-      <Glass scheme="dark" radius={small ? 16 : 20} shadow={false} interactive>
-        <View style={[s.ghost, small && s.playSmall]}>
-          {icon ? <Ionicons name={icon} size={small ? 15 : 18} color={AC.text} style={{ marginRight: 8 }} /> : null}
-          <Text style={[s.ghostText, small && { fontSize: 14 }]}>{title}</Text>
-        </View>
-      </Glass>
+    <Pressable
+      onPress={onPress}
+      disabled={disabled}
+      accessibilityRole="button"
+      accessibilityLabel={title}
+      accessibilityState={{ disabled: !!disabled }}
+      style={({ pressed }) => [{ opacity: disabled ? 0.45 : pressed ? 0.8 : 1, transform: [{ scale: pressed ? 0.98 : 1 }] }, style]}
+    >
+      <View style={[s.ghost, small && s.playSmall]}>
+        {icon ? <Ionicons name={icon} size={small ? 14 : 17} color={ST.text} style={{ marginRight: 8 }} /> : null}
+        <Text style={[s.ghostText, small && { fontSize: 13 }]} numberOfLines={1}>{title}</Text>
+      </View>
     </Pressable>
   )
 }
@@ -217,7 +249,7 @@ export function GhostButton({ title, icon, onPress, disabled, style, small }) {
 export function ArcadeHeader({ title, kicker, onBack, right, style }) {
   return (
     <View style={[s.header, style]}>
-      {onBack ? <IconCircle icon="chevron-back" label="Back" onPress={onBack} /> : null}
+      {onBack ? <IconCircle icon="chevron-back" label="Back" onPress={onBack} size={40} /> : null}
       <View style={{ flex: 1, minWidth: 0 }}>
         {kicker ? <Text style={s.headerKicker} numberOfLines={1}>{kicker}</Text> : null}
         <Text style={s.headerTitle} numberOfLines={1}>{title}</Text>
@@ -227,34 +259,51 @@ export function ArcadeHeader({ title, kicker, onBack, right, style }) {
   )
 }
 
-// Glowing gradient card for arcade pages.
-export function ArcadeCard({ children, style, glow = AC.glowAccent, colors = AC.panel, padded = true }) {
+// Glow colours from the old palette map to a role-colour top edge.
+function edgeFor(glow) {
+  if (!glow || glow === 'transparent') return null
+  return glow
+}
+
+// Black glass card for arcade pages. glow (a colour) becomes a 2 px role-colour top edge.
+export function ArcadeCard({ children, style, glow, colors, padded = true }) {
+  const edge = edgeFor(glow)
+  const bg = Array.isArray(colors) ? colors[0] : ST.panelStrong
   return (
-    <View style={[s.cardOuter, { shadowColor: glow }, style]}>
-      <LinearGradient colors={colors} start={{ x: 0, y: 0 }} end={{ x: 0.6, y: 1 }} style={[s.card, padded && { padding: 16 }]}>
-        {children}
-      </LinearGradient>
+    <View style={[s.card, { backgroundColor: bg }, edge && { borderTopWidth: 2, borderTopColor: edge }, padded && { padding: 16 }, style]}>
+      {children}
+    </View>
+  )
+}
+
+// Drop-in for components/Glass on arcade pages (same props: scheme / radius / shadow /
+// interactive are accepted and ignored): a flat black-glass studio panel. accent draws a
+// 2 px role-colour top edge.
+export function ArcadePanel({ children, style, accent, onLayout }) {
+  return (
+    <View style={[s.panelBox, accent && { borderTopWidth: 2, borderTopColor: accent }, style]} onLayout={onLayout}>
+      {children}
     </View>
   )
 }
 
 // ---- Arcade drop-ins for the shared multiplayer kit (always dark, any system scheme) ----
 
-// Same keys as theme `type`, with arcade colors.
+// Same keys as theme `type`, with studio fonts and colours.
 export const arcadeType = {
-  display: { fontSize: 30, ...font.heavy, letterSpacing: -0.6, color: AC.text },
-  title: { fontSize: 20, ...font.bold, letterSpacing: -0.3, color: AC.text },
-  body: { fontSize: 15, ...font.regular, color: AC.text },
-  caption: { fontSize: 13, ...font.regular, color: AC.muted },
-  label: { fontSize: 11, ...font.bold, color: AC.muted, letterSpacing: 1.2, textTransform: 'uppercase' },
+  display: { fontFamily: FONT.display, fontSize: 30, letterSpacing: 1, color: ST.text, textTransform: 'uppercase', includeFontPadding: false },
+  title: { fontFamily: FONT.display, fontSize: 19, letterSpacing: 0.6, color: ST.text, textTransform: 'uppercase', includeFontPadding: false },
+  body: { fontFamily: FONT.uiSemi, fontSize: 15, lineHeight: 20, color: ST.text },
+  caption: { fontFamily: FONT.uiMedium, fontSize: 13, lineHeight: 17, color: ST.muted },
+  label: { ...stType.label },
 }
 
 // Card replacement (MultiplayerUI Card props).
 export function ArcadeBox({ children, style, padding = 14 }) {
   return (
-    <LinearGradient colors={AC.panel} start={{ x: 0, y: 0 }} end={{ x: 0.6, y: 1 }} style={[s.box, { padding }, style]}>
+    <View style={[s.box, { padding }, style]}>
       {children}
-    </LinearGradient>
+    </View>
   )
 }
 
@@ -262,7 +311,7 @@ export function ArcadeBox({ children, style, padding = 14 }) {
 export function ArcadeBtn({ title, onPress, disabled, variant = 'glass', size = 'md', style, busy }) {
   const small = size === 'sm'
   if (variant === 'primary' || variant === 'danger') {
-    return <PlayButton title={title} icon={null} onPress={onPress} disabled={disabled} busy={busy} small={small} style={style} colors={variant === 'danger' ? ['#ff5d6c', '#c81e3a'] : AC.play} />
+    return <PlayButton title={title} icon={null} onPress={onPress} disabled={disabled} busy={busy} small={small} style={style} colors={variant === 'danger' ? [ST.enemy, ST.enemy] : AC.play} />
   }
   return <GhostButton title={busy ? 'Please wait…' : title} onPress={onPress} disabled={disabled || busy} small={small} style={style} />
 }
@@ -270,18 +319,18 @@ export function ArcadeBtn({ title, onPress, disabled, variant = 'glass', size = 
 export function StatTile({ label, value, accent }) {
   return (
     <View style={s.stat}>
-      <Text style={[s.statValue, accent && { color: accent }]} numberOfLines={1} adjustsFontSizeToFit>{value}</Text>
       <Text style={s.statLabel} numberOfLines={1}>{label}</Text>
+      <Text style={[s.statValue, accent && { color: accent }]} numberOfLines={1} adjustsFontSizeToFit>{value}</Text>
     </View>
   )
 }
 
 export const arcadeText = {
-  display: { fontSize: 32, ...font.heavy, letterSpacing: -0.8, color: AC.text },
-  title: { fontSize: 20, ...font.bold, letterSpacing: -0.3, color: AC.text },
-  body: { fontSize: 15, ...font.regular, color: AC.text },
-  caption: { fontSize: 13, ...font.regular, color: AC.muted },
-  label: { fontSize: 11, ...font.bold, color: AC.muted, letterSpacing: 1.2, textTransform: 'uppercase' },
+  display: { fontFamily: FONT.display, fontSize: 32, letterSpacing: 1.2, color: ST.text, textTransform: 'uppercase', includeFontPadding: false },
+  title: { fontFamily: FONT.display, fontSize: 19, letterSpacing: 0.6, color: ST.text, textTransform: 'uppercase', includeFontPadding: false },
+  body: { fontFamily: FONT.uiSemi, fontSize: 15, lineHeight: 20, color: ST.text },
+  caption: { fontFamily: FONT.uiMedium, fontSize: 13, lineHeight: 17, color: ST.muted },
+  label: { ...stType.label },
 }
 
 const s = StyleSheet.create({
@@ -289,36 +338,37 @@ const s = StyleSheet.create({
   fill: { width: '100%', height: '100%' },
   artBox: { width: '100%' },
   centerBox: { alignItems: 'center', justifyContent: 'center' },
-  coverDim: { backgroundColor: 'rgba(4,5,13,0.45)' },
-  orb: { position: 'absolute', width: 360, height: 360, borderRadius: 180, opacity: 0.9 },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  badge: { position: 'absolute', top: 3, right: 3, width: 9, height: 9, borderRadius: 5, backgroundColor: AC.hot },
-  coin: { flexDirection: 'row', alignItems: 'center', paddingLeft: 6, paddingRight: 12, paddingVertical: 7, gap: 6 },
-  coinIcon: { width: 22, height: 22, borderRadius: 11, backgroundColor: AC.gold, alignItems: 'center', justifyContent: 'center' },
-  coinGlyph: { fontSize: 11, color: '#3a2600', ...font.heavy },
-  coinText: { fontSize: 15, ...font.heavy, color: AC.text },
-  chip: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 9, borderRadius: 999 },
-  chipIdle: { backgroundColor: AC.card, borderWidth: 1, borderColor: AC.border },
-  chipText: { fontSize: 14, ...font.semibold, color: AC.muted },
-  section: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 26, marginBottom: 12 },
-  sectionTitle: { fontSize: 20, ...font.bold, color: AC.text, letterSpacing: -0.3 },
-  sectionAction: { fontSize: 14, ...font.semibold, color: AC.accent },
-  live: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.55)', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 999 },
-  liveDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: AC.live, marginRight: 6 },
-  liveText: { fontSize: 12, ...font.bold, color: '#fff' },
-  play: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 15, paddingHorizontal: 22, borderRadius: 20 },
-  playSmall: { paddingVertical: 10, paddingHorizontal: 16, borderRadius: 16 },
-  playText: { fontSize: 16, ...font.heavy, color: '#fff', letterSpacing: 0.2 },
-  ghost: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 15, paddingHorizontal: 22 },
-  ghostText: { fontSize: 16, ...font.bold, color: AC.text },
-  box: { borderRadius: 20, borderWidth: 1, borderColor: AC.border, marginBottom: 12, overflow: 'hidden' },
+  coverDim: { backgroundColor: 'rgba(11,13,17,0.55)' },
+  iconBtn: { borderRadius: ST.radius, alignItems: 'center', justifyContent: 'center', backgroundColor: ST.panelStrong, borderWidth: 1, borderColor: ST.line },
+  badge: { position: 'absolute', top: 3, right: 3, width: 8, height: 8, backgroundColor: ST.enemy },
+  coin: { flexDirection: 'row', alignItems: 'center', height: 34, paddingLeft: 6, paddingRight: 10, gap: 6, borderRadius: ST.radius, backgroundColor: ST.panelStrong, borderWidth: 1, borderColor: ST.line },
+  coinIcon: { width: 18, height: 18, borderRadius: 2, backgroundColor: ST.objective, alignItems: 'center', justifyContent: 'center' },
+  coinText: { fontFamily: FONT.display, fontSize: 15, color: ST.text, fontVariant: ['tabular-nums'], includeFontPadding: false },
+  chip: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, height: 34, borderRadius: ST.radius, borderWidth: 1 },
+  chipOn: { backgroundColor: ST.friendly, borderColor: ST.friendly },
+  chipIdle: { backgroundColor: ST.cell, borderColor: ST.line },
+  chipText: { fontFamily: FONT.ui, fontSize: 12, letterSpacing: 1.6, textTransform: 'uppercase', color: ST.muted },
+  section: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 26, marginBottom: 12, gap: 12 },
+  sectionLeft: { flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1, minWidth: 0 },
+  sectionTick: { width: 3, height: 14, backgroundColor: ST.friendly },
+  sectionTitle: { fontFamily: FONT.display, fontSize: 16, letterSpacing: 1.6, color: ST.text, textTransform: 'uppercase', includeFontPadding: false, flexShrink: 1 },
+  sectionAction: { fontFamily: FONT.ui, fontSize: 12, letterSpacing: 1.6, textTransform: 'uppercase', color: ST.friendly },
+  live: { flexDirection: 'row', alignItems: 'center', backgroundColor: ST.panelStrong, paddingHorizontal: 8, height: 24, borderRadius: ST.radius, borderWidth: 1, borderColor: withAlpha(ST.health, 0.5) },
+  liveDot: { width: 6, height: 6, backgroundColor: ST.health, marginRight: 6 },
+  liveText: { fontFamily: FONT.ui, fontSize: 11, letterSpacing: 1.4, textTransform: 'uppercase', color: ST.health },
+  play: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', height: 52, paddingHorizontal: 20, borderRadius: ST.radius, borderWidth: 1 },
+  playSmall: { height: 42, paddingHorizontal: 14 },
+  playText: { fontFamily: FONT.display, fontSize: 15, letterSpacing: 2, textTransform: 'uppercase', color: ST.ink, includeFontPadding: false },
+  ghost: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', height: 52, paddingHorizontal: 20, borderRadius: ST.radius, borderWidth: 1, borderColor: ST.lineStrong, backgroundColor: 'rgba(8,10,14,0.4)' },
+  ghostText: { fontFamily: FONT.display, fontSize: 15, letterSpacing: 2, textTransform: 'uppercase', color: ST.text, includeFontPadding: false },
+  panelBox: { borderRadius: ST.radius, backgroundColor: ST.panelStrong, borderWidth: 1, borderColor: ST.line, overflow: 'hidden' },
+  box: { borderRadius: ST.radius, backgroundColor: ST.panelStrong, borderWidth: 1, borderColor: ST.line, marginBottom: 12, overflow: 'hidden' },
   header: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 44 },
-  headerKicker: { fontSize: 11, ...font.heavy, color: AC.accent, letterSpacing: 1.6, textTransform: 'uppercase' },
-  headerTitle: { fontSize: 24, ...font.heavy, color: AC.text, letterSpacing: -0.5 },
+  headerKicker: { ...stType.kicker },
+  headerTitle: { fontFamily: FONT.display, fontSize: 22, letterSpacing: 1, color: ST.text, textTransform: 'uppercase', includeFontPadding: false },
   headerRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  cardOuter: { borderRadius: 24, shadowOpacity: 0.5, shadowRadius: 18, shadowOffset: { width: 0, height: 8 } },
-  card: { borderRadius: 24, borderWidth: 1, borderColor: AC.border, overflow: 'hidden' },
-  stat: { flex: 1, alignItems: 'center', paddingVertical: 12, borderRadius: 16, backgroundColor: AC.card, borderWidth: 1, borderColor: AC.border },
-  statValue: { fontSize: 20, ...font.heavy, color: AC.text },
-  statLabel: { fontSize: 10, ...font.bold, color: AC.faint, letterSpacing: 1, textTransform: 'uppercase', marginTop: 2 },
+  card: { borderRadius: ST.radius, borderWidth: 1, borderColor: ST.line, overflow: 'hidden' },
+  stat: { flex: 1, paddingVertical: 10, paddingHorizontal: 10, borderRadius: ST.radius, backgroundColor: ST.cell, gap: 2 },
+  statValue: { fontFamily: FONT.display, fontSize: 20, color: ST.text, fontVariant: ['tabular-nums'], includeFontPadding: false },
+  statLabel: { ...stType.label, color: ST.faint },
 })

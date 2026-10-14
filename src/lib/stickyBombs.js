@@ -1,19 +1,34 @@
 // Laser Tag sticky bombs: a purchased balance (arcadeStats, per account) bought in packs of 5
 // (STICKY_BOMB_PACK, a consumable In-App Purchase). Place at a location, detonate remotely.
 // The arcade owner accounts have unlimited sticky bombs. Every export is defensive: nothing throws into render.
+// Fair play: use as many as you own, but at most STICKY_BOMBS_PER_MATCH per match (matchLimits.js; the
+// owner account too). Pass { matchKey } (`${code}:${round}`) to spendStickyBomb().
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { loadArcadeStats, subscribeArcadeStats, _spendStickyBomb } from './arcadeStats'
 import { isArcadeOwner } from './guns'
+import { MATCH_LIMITS, matchCheck, returnMatchUse, takeMatchUse } from './matchLimits'
 import { STICKY_BOMB_PACK, fetchStickyBombProduct, isUserCancelled, purchaseStickyBombPack, recoverStickyBombPurchases } from './iap'
 
 export { STICKY_BOMB_PACK }
 
-/** Spend one sticky bomb. Resolves true on success. Never rejects. */
-export async function spendStickyBomb() {
+export const STICKY_BOMBS_PER_MATCH = MATCH_LIMITS.stickyBomb
+
+/** { ok, left, cap, text }: can another sticky bomb be used in this match? Check before spending. */
+export const stickyBombMatchCheck = (matchKey) => matchCheck('stickyBomb', matchKey)
+
+/**
+ * Spend one sticky bomb (counts toward the per-match limit). Resolves true on success, false when
+ * none are left OR the match limit is reached (see stickyBombMatchCheck for the message). Never rejects.
+ */
+export async function spendStickyBomb({ matchKey } = {}) {
+  if (!takeMatchUse('stickyBomb', matchKey)) return false
   try {
     if (await isArcadeOwner()) return true
-    return !!(await _spendStickyBomb())
+    const ok = !!(await _spendStickyBomb())
+    if (!ok) returnMatchUse('stickyBomb', matchKey)
+    return ok
   } catch {
+    returnMatchUse('stickyBomb', matchKey)
     return false
   }
 }

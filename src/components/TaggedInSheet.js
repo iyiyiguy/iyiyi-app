@@ -3,10 +3,13 @@ import { View, Text, Image, Modal, Pressable, FlatList, ActivityIndicator, Style
 import { colors, radii, type } from '../theme'
 import { apiJson } from '../lib/api'
 import { avatarSource } from '../lib/avatarSource'
+import { useT } from '../i18n'
+import strings from '../i18n/strings/social'
 
 // One button on a post opens this: who was picked ("Tagged in") and who else was just
 // nearby when it was shot ("Nearby"), each a tappable list into their profile.
 export default function TaggedInSheet({ mediaId, visible, onClose, onOpenProfile }) {
+  const t = useT(strings)
   const [loading, setLoading] = useState(true)
   const [data, setData] = useState({ tagged: [], nearby: [] })
 
@@ -24,9 +27,15 @@ export default function TaggedInSheet({ mediaId, visible, onClose, onOpenProfile
       <View style={{ marginBottom: 8 }}>
         <Text style={styles.sectionTitle}>{title} ({people.length})</Text>
         {people.map((p) => (
-          <Pressable key={p.id} style={styles.row} onPress={() => onOpenProfile?.(p.id)}>
+          <Pressable
+            key={p.id}
+            style={styles.row}
+            onPress={() => onOpenProfile?.(p.id)}
+            accessibilityRole="button"
+            accessibilityLabel={t('openProfileA11y', { name: p.username ?? t('iyiyiUser') })}
+          >
             <Image source={avatarSource(p?.avatar_url)} style={styles.avatar} />
-            <Text style={type.body}>{p.username ?? 'iYiYi user'}</Text>
+            <Text style={type.body}>{p.username ?? t('iyiyiUser')}</Text>
           </Pressable>
         ))}
       </View>
@@ -34,27 +43,27 @@ export default function TaggedInSheet({ mediaId, visible, onClose, onOpenProfile
 
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
-      <Pressable style={styles.backdrop} onPress={onClose} />
+      <Pressable style={styles.backdrop} onPress={onClose} accessibilityRole="button" accessibilityLabel={t('close')} />
       <View style={styles.sheet}>
-        <Text style={type.title}>People in this post</Text>
+        <Text style={type.title} accessibilityRole="header">{t('peopleInPost')}</Text>
         {loading ? (
           <ActivityIndicator color={colors.magenta} style={{ marginTop: 20 }} />
         ) : !data.tagged.length && !data.nearby.length ? (
-          <Text style={[type.caption, { marginTop: 14 }]}>Nobody tagged in this post.</Text>
+          <Text style={[type.caption, { marginTop: 14 }]}>{t('nobodyTagged')}</Text>
         ) : (
           <FlatList
             data={[1]}
             keyExtractor={() => 'x'}
             renderItem={() => (
               <>
-                <Section title="Tagged in" people={data.tagged} />
-                <Section title="Nearby" people={data.nearby} />
+                <Section title={t('taggedIn')} people={data.tagged} />
+                <Section title={t('nearby')} people={data.nearby} />
               </>
             )}
             style={{ marginTop: 10, maxHeight: 360 }}
           />
         )}
-        <Pressable onPress={onClose} style={styles.close}><Text style={styles.closeText}>Close</Text></Pressable>
+        <Pressable onPress={onClose} style={styles.close} accessibilityRole="button"><Text style={styles.closeText}>{t('close')}</Text></Pressable>
       </View>
     </Modal>
   )

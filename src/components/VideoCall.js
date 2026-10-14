@@ -16,10 +16,9 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Alert, Animated, AppState, Linking, Modal, PanResponder, Pressable, StyleSheet, Text, View } from 'react-native'
 import { WebView } from 'react-native-webview'
 import { Ionicons } from '@expo/vector-icons'
-import { LinearGradient } from 'expo-linear-gradient'
 import { AC } from '../games/arcadeUI'
 import { Avatar } from '../games/MultiplayerUI'
-import { font } from '../theme'
+import { FONT, ST } from '../games/studio'
 
 const RING_TIMEOUT_MS = 30000
 const RING_REPEAT_MS = 2500
@@ -430,15 +429,15 @@ export function VideoCallLayer({ call, bounds }) {
       <Modal visible={call.status === 'incoming'} transparent animationType="fade" onRequestClose={call.decline}>
         <View style={styles.ringOverlay}>
           <View style={styles.ringCard}>
-            <View style={styles.ringAvatar}><Avatar uri={call.peer?.avatar} name={peerName} size={76} /></View>
+            <View style={styles.ringAvatar}><Avatar uri={call.peer?.avatar} name={peerName} size={76} teamColor={ST.health} /></View>
             <Text style={styles.ringName} numberOfLines={1}>{peerName}</Text>
             <Text style={styles.ringSub}>wants to video call</Text>
             <View style={styles.ringRow}>
               <Pressable onPress={call.decline} style={({ pressed }) => [styles.ringBtn, { backgroundColor: AC.danger }, pressed && styles.pressed]} accessibilityRole="button" accessibilityLabel="Decline call">
-                <Ionicons name="call" size={26} color="#fff" style={{ transform: [{ rotate: '135deg' }] }} />
+                <Ionicons name="call" size={26} color="#ffffff" style={{ transform: [{ rotate: '135deg' }] }} />
               </Pressable>
               <Pressable onPress={call.accept} style={({ pressed }) => [styles.ringBtn, { backgroundColor: AC.live }, pressed && styles.pressed]} accessibilityRole="button" accessibilityLabel="Accept call">
-                <Ionicons name="videocam" size={26} color="#fff" />
+                <Ionicons name="videocam" size={26} color={ST.ink} />
               </Pressable>
             </View>
             <View style={styles.ringLabels}>
@@ -554,41 +553,41 @@ export function VideoCallButton({ call, disabled }) {
       accessibilityLabel={busy ? 'End video call' : 'Video call'}
       style={({ pressed }) => [{ opacity: disabled ? 0.4 : 1 }, pressed && styles.pressed]}
     >
-      <LinearGradient colors={busy ? [AC.danger, '#c23a4a'] : ['#2fdc8f', '#1aa86b']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.vbtn}>
-        <Ionicons name={busy ? 'videocam-off' : 'videocam'} size={17} color="#fff" />
-      </LinearGradient>
+      <View style={[styles.vbtn, { backgroundColor: busy ? ST.enemy : ST.health, borderColor: busy ? ST.enemy : ST.health }]}>
+        <Ionicons name={busy ? 'videocam-off' : 'videocam'} size={17} color={busy ? '#ffffff' : ST.ink} />
+      </View>
     </Pressable>
   )
 }
 
 const styles = StyleSheet.create({
-  pressed: { transform: [{ scale: 0.92 }] },
+  pressed: { transform: [{ scale: 0.94 }] },
   panel: {
     position: 'absolute', left: 0, top: 0, zIndex: 50, elevation: 12,
-    borderRadius: 16, overflow: 'hidden', backgroundColor: 'rgba(10,12,28,0.96)',
-    borderWidth: 1, borderColor: 'rgba(255,255,255,0.18)',
+    borderRadius: ST.radius, overflow: 'hidden', backgroundColor: ST.panelStrong,
+    borderWidth: 1, borderColor: ST.lineStrong,
     shadowColor: '#000', shadowOpacity: 0.5, shadowRadius: 16, shadowOffset: { width: 0, height: 8 },
   },
   grip: { height: 18, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 6 },
-  gripBar: { width: 32, height: 4, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.35)' },
-  gripText: { fontSize: 9, ...font.bold, color: AC.muted },
-  web: { flex: 1, backgroundColor: '#070914' },
+  gripBar: { width: 28, height: 3, backgroundColor: 'rgba(255,255,255,0.35)' },
+  gripText: { fontFamily: FONT.ui, fontSize: 9, letterSpacing: 1.2, textTransform: 'uppercase', color: ST.muted },
+  web: { flex: 1, backgroundColor: ST.ground },
   bar: { height: BAR_H, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-evenly', paddingHorizontal: 4 },
-  pbtn: { width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.14)' },
+  pbtn: { width: 28, height: 28, borderRadius: 2, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.12)' },
   pbtnOn: { backgroundColor: 'rgba(255,255,255,0.4)' },
-  pbtnDanger: { backgroundColor: AC.danger },
+  pbtnDanger: { backgroundColor: ST.enemy },
   pillWrap: { position: 'absolute', top: 8, left: 0, right: 0, alignItems: 'center', zIndex: 60 },
-  pill: { flexDirection: 'row', alignItems: 'center', gap: 8, maxWidth: '90%', paddingHorizontal: 14, paddingVertical: 9, borderRadius: 999, backgroundColor: 'rgba(10,12,28,0.92)', borderWidth: 1, borderColor: AC.border },
-  pillText: { fontSize: 13, ...font.semibold, color: AC.text, flexShrink: 1 },
-  pillEnd: { width: 22, height: 22, borderRadius: 11, backgroundColor: AC.danger, alignItems: 'center', justifyContent: 'center' },
-  ringOverlay: { flex: 1, backgroundColor: 'rgba(2,3,10,0.72)', alignItems: 'center', justifyContent: 'center', padding: 24 },
-  ringCard: { width: '100%', maxWidth: 320, alignItems: 'center', paddingVertical: 28, paddingHorizontal: 20, borderRadius: 28, backgroundColor: '#0d1126', borderWidth: 1, borderColor: AC.border },
-  ringAvatar: { padding: 4, borderRadius: 50, borderWidth: 2, borderColor: AC.live, marginBottom: 14 },
-  ringName: { fontSize: 22, ...font.heavy, color: AC.text, letterSpacing: -0.3 },
-  ringSub: { fontSize: 14, ...font.regular, color: AC.muted, marginTop: 4 },
-  ringRow: { flexDirection: 'row', gap: 56, marginTop: 26 },
-  ringBtn: { width: 64, height: 64, borderRadius: 32, alignItems: 'center', justifyContent: 'center' },
+  pill: { flexDirection: 'row', alignItems: 'center', gap: 8, maxWidth: '90%', paddingHorizontal: 12, paddingVertical: 8, borderRadius: ST.radius, backgroundColor: ST.panelStrong, borderWidth: 1, borderColor: ST.line, borderLeftWidth: 3, borderLeftColor: ST.health },
+  pillText: { fontFamily: FONT.uiSemi, fontSize: 13, color: ST.text, flexShrink: 1 },
+  pillEnd: { width: 22, height: 22, borderRadius: 2, backgroundColor: ST.enemy, alignItems: 'center', justifyContent: 'center' },
+  ringOverlay: { flex: 1, backgroundColor: 'rgba(6,8,12,0.75)', alignItems: 'center', justifyContent: 'center', padding: 24 },
+  ringCard: { width: '100%', maxWidth: 320, alignItems: 'center', paddingVertical: 24, paddingHorizontal: 20, borderRadius: ST.radius, backgroundColor: ST.ground2, borderWidth: 1, borderColor: ST.line, borderTopWidth: 2, borderTopColor: ST.health },
+  ringAvatar: { marginBottom: 14 },
+  ringName: { fontFamily: FONT.display, fontSize: 22, color: ST.text, includeFontPadding: false },
+  ringSub: { fontFamily: FONT.ui, fontSize: 11, letterSpacing: 1.8, textTransform: 'uppercase', color: ST.health, marginTop: 6 },
+  ringRow: { flexDirection: 'row', gap: 56, marginTop: 24 },
+  ringBtn: { width: 64, height: 64, borderRadius: ST.radius, alignItems: 'center', justifyContent: 'center' },
   ringLabels: { flexDirection: 'row', gap: 56, marginTop: 8 },
-  ringLabel: { width: 64, textAlign: 'center', fontSize: 12, ...font.semibold, color: AC.muted },
-  vbtn: { width: 38, height: 38, borderRadius: 19, alignItems: 'center', justifyContent: 'center' },
+  ringLabel: { width: 64, textAlign: 'center', fontFamily: FONT.ui, fontSize: 11, letterSpacing: 1.4, textTransform: 'uppercase', color: ST.muted },
+  vbtn: { width: 38, height: 38, borderRadius: ST.radius, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
 })

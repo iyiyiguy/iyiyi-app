@@ -1,7 +1,8 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
-import { Alert, Pressable, ScrollView, StyleSheet, Switch, Text, View, useColorScheme, useWindowDimensions } from 'react-native'
+import { Alert, Pressable, ScrollView, StyleSheet, Switch, Text, View, useWindowDimensions } from 'react-native'
 import { useFocusEffect } from '@react-navigation/native'
 import { LinearGradient } from 'expo-linear-gradient'
+import { Ionicons } from '@expo/vector-icons'
 import { HUD, HudCta } from '../games/laser/HudPro'
 import * as Location from 'expo-location'
 import { Avatar, ConnectionBanner, Pill, PlayerTap, PlayerTapContext } from '../games/MultiplayerUI'
@@ -9,6 +10,8 @@ import InvitePeopleSheet from '../components/InvitePeopleSheet'
 import { openProfile } from '../lib/profileNav'
 import { inviteByText, shareInvite } from '../lib/textInvite'
 import { CodeEntry, NearbyRoomsList } from './JoinGameScreen'
+import { NeedPlayersPanel } from '../games/NeedPlayersPanel'
+import { formatOnlineRating } from '../lib/chessMatchmaking'
 import {
   LASER_MODES, MP_GAMES, gameIdFromCode, howToPlay, openRoom, resolveGameId, statsIdFor, useLiveCounts, useRoomSnapshot,
 } from '../lib/multiplayer'
@@ -18,14 +21,13 @@ import { buzz, setPref, useGamePrefs } from '../lib/gamePrefs'
 import { LaserTagSetup, laserCanStart } from '../games/laser/Setup'
 import { BesideSetup, besideCanStart } from '../games/beside/Setup'
 import {
-  AC, ArcadeBackground, ArcadeBox, ArcadeBtn, CoverArt, GhostButton, IconCircle, LiveBadge, PlayButton, StatusBarScrim, arcadeType, useArcadeInsets, useArcadeStatusBar,
+  ArcadeBackground, ArcadeBox, ArcadeBtn, CoverArt, GhostButton, IconCircle, LiveBadge, PlayButton, StatusBarScrim, arcadeType, useArcadeInsets, useArcadeStatusBar,
 } from '../games/arcadeUI'
-import { colors as themeColors, font, radii } from '../theme'
+import { FONT, ST, stType, withAlpha } from '../games/studio'
 
-// The lobby is always the dark arcade look, whatever the system appearance. (Beside Them's
-// setup panel follows the app theme, so in light mode it sits on its own light well.)
+// The lobby is always the dark studio look, whatever the system appearance.
 const type = arcadeType
-const colors = { ...themeColors, text: AC.text, textMuted: AC.muted, textFaint: AC.faint, hairline: AC.border }
+const colors = { text: ST.text, textMuted: ST.muted, textFaint: ST.faint, hairline: ST.line, magenta: ST.friendly, violet: ST.epic, success: ST.health, onBrand: ST.ink }
 const Card = ArcadeBox
 const Btn = ArcadeBtn
 function PlayerRow({ player, right, subtitle, dim }) {
@@ -34,8 +36,8 @@ function PlayerRow({ player, right, subtitle, dim }) {
       <PlayerTap player={player} style={styles.pRowTap}>
         <Avatar uri={player.avatar} name={player.username} />
         <View style={{ flex: 1, marginLeft: 10 }}>
-          <Text style={arcadeType.body} numberOfLines={1}>{player.username}</Text>
-          {!!subtitle && <Text style={arcadeType.caption} numberOfLines={1}>{subtitle}</Text>}
+          <Text style={styles.pName} numberOfLines={1}>{player.username}</Text>
+          {!!subtitle && <Text style={styles.pSub} numberOfLines={1}>{subtitle}</Text>}
         </View>
       </PlayerTap>
       {right}
@@ -60,7 +62,6 @@ export default function GameLobbyScreen({ navigation, route }) {
     if (initialCode) navigation.replace('GamePlayScreen', { gameId: 'royale', gameName: 'Battle Royale', code: initialCode })
     else navigation.replace('LaserTagLobby')
   }, [gameId, initialCode, navigation])
-  const scheme = useColorScheme()
   const insets = useArcadeInsets()
   useArcadeStatusBar() // light clock/battery over the dark cover header + scrim
   const { width: winW } = useWindowDimensions()
@@ -216,8 +217,10 @@ export default function GameLobbyScreen({ navigation, route }) {
   const enough = roster.length >= game.minPlayers
   const readiness = inRoom ? canStart(gameId, snap.info, roster) : null
   const myStats = stats?.games?.[statsIdFor(gameId)] || null
+  // Chess lobbies are games against people, so the hero shows the ONLINE rating ("?" while
+  // provisional); the vs-AI rating lives on the chess screen / records.
   const third = gameId === 'chess'
-    ? { label: 'Rating', value: stats?.chess?.rating ?? '—' }
+    ? { label: 'Online', value: stats?.chess?.online?.games > 0 ? formatOnlineRating(stats.chess.online.rating, stats.chess.online.games) ?? '—' : '—' }
     : { label: 'Best', value: myStats?.bestScore ?? '—' }
   const visibility = snap?.info?.settings?.visibility
   // Covers are square: show the whole thing, a little smaller once you're in a room.
@@ -231,7 +234,7 @@ export default function GameLobbyScreen({ navigation, route }) {
         {/* Hero art header */}
         {/* The whole cover sits between the top bar and the title block - nothing is drawn over it. */}
         <CoverArt game={meta || { icon: game.icon }} style={styles.hero} artStyle={{ height: heroArtH, marginTop: insets.top + HERO_BAR_H }} glyphSize={Math.round(heroArtH * 0.5)}>
-          <LinearGradient pointerEvents="none" colors={['rgba(4,5,13,0)', 'rgba(4,5,13,0.75)', AC.bg[0]]} locations={[0, 0.45, 1]} style={[styles.heroShade, { top: insets.top + HERO_BAR_H + heroArtH - 10 }]} />
+          <LinearGradient pointerEvents="none" colors={[withAlpha(ST.ground, 0), withAlpha(ST.ground, 0.8), ST.ground]} locations={[0, 0.45, 1]} style={[styles.heroShade, { top: insets.top + HERO_BAR_H + heroArtH - 10 }]} />
           <View style={[styles.heroBar, { top: insets.top + 6 }]}>
             <IconCircle icon="chevron-back" label="Back" onPress={() => navigation.goBack()} />
             <LiveBadge count={live[gameId] || 0} />
@@ -267,7 +270,7 @@ export default function GameLobbyScreen({ navigation, route }) {
                     <Text style={[type.label, { marginBottom: 6 }]}>Modes</Text>
                     {Object.values(LASER_MODES).map((m) => (
                       <Text key={m.id} style={[type.caption, { marginBottom: 4 }]}>
-                        <Text style={{ color: colors.text, fontWeight: '700' }}>{m.name}</Text> — {m.blurb}
+                        <Text style={{ color: colors.text, fontFamily: FONT.ui }}>{m.name}</Text> — {m.blurb}
                       </Text>
                     ))}
                   </View>
@@ -286,7 +289,7 @@ export default function GameLobbyScreen({ navigation, route }) {
                 <View style={styles.codeHead}>
                   <Text style={type.label}>Game code</Text>
                   {visibility && (
-                    <Pill text={visibility === 'private' ? 'PRIVATE' : 'PUBLIC'} color={visibility === 'private' ? colors.violet : colors.success} />
+                    <Pill text={visibility === 'private' ? 'PRIVATE' : 'PUBLIC'} color={visibility === 'private' ? ST.objective : ST.health} />
                   )}
                 </View>
                 <View style={styles.codeRow}>
@@ -302,6 +305,9 @@ export default function GameLobbyScreen({ navigation, route }) {
                 </Text>
               </Card>
 
+              {roster.length > 0 && (
+                <NeedPlayersPanel gameId={gameId} count={roster.length} code={room.code} gameName={game.name} onInvite={() => setInviteOpen(true)} onText={textInvite} />
+              )}
               <Card>
                 <Text style={[type.label, { marginBottom: 4 }]}>Players ({roster.length}/{game.maxPlayers})</Text>
                 {roster.length === 0 && <Text style={type.caption}>Connecting…</Text>}
@@ -311,25 +317,18 @@ export default function GameLobbyScreen({ navigation, route }) {
                     player={p}
                     right={
                       <View style={{ flexDirection: 'row' }}>
-                        {p.id === snap.hostId && <Pill text="HOST" color={colors.violet} />}
-                        {p.id === snap.me.id && <Pill text="YOU" color={colors.magenta} />}
+                        {p.id === snap.hostId && <Pill text="HOST" color={ST.objective} />}
+                        {p.id === snap.me.id && <Pill text="YOU" color={ST.friendly} />}
                       </View>
                     }
                   />
                 ))}
-                {!enough && (
-                  <Text style={[type.caption, { marginTop: 6 }]}>
-                    Waiting for {game.minPlayers - roster.length} more player{game.minPlayers - roster.length === 1 ? '' : 's'}…
-                  </Text>
-                )}
               </Card>
 
               <Settings game={game} info={snap.info} editable={snap.isHost} onChange={(patch) => room.setInfo({ settings: { ...(room.info.settings || {}), ...patch } })} />
               {gameId === 'lasertag' && <LaserTagSetup room={room} snap={snap} />}
               {gameId === 'beside-them' && (
-                <View style={scheme === 'light' ? styles.lightWell : null}>
-                  <BesideSetup room={room} snap={snap} />
-                </View>
+                <BesideSetup room={room} snap={snap} />
               )}
               <Card><HowTo gameId={gameId} settings={snap.info.settings} /></Card>
               <FeedbackPrefs laser={gameId === 'lasertag'} />
@@ -377,11 +376,11 @@ function FeedbackPrefs({ laser }) {
       <Text style={[type.label, { marginBottom: 4 }]}>Your settings</Text>
       <View style={styles.prefRow}>
         <Text style={type.body}>Vibration</Text>
-        <Switch value={!!prefs.haptics} onValueChange={(v) => { setPref('haptics', v); if (v) buzz('medium') }} trackColor={{ true: colors.magenta }} />
+        <Switch value={!!prefs.haptics} onValueChange={(v) => { setPref('haptics', v); if (v) buzz('medium') }} trackColor={{ true: ST.friendly, false: 'rgba(255,255,255,0.18)' }} thumbColor="#ffffff" ios_backgroundColor="rgba(255,255,255,0.18)" />
       </View>
       <View style={styles.prefRow}>
         <Text style={type.body}>Sound effects</Text>
-        <Switch value={!!prefs.sound} onValueChange={(v) => setPref('sound', v)} trackColor={{ true: colors.magenta }} />
+        <Switch value={!!prefs.sound} onValueChange={(v) => setPref('sound', v)} trackColor={{ true: ST.friendly, false: 'rgba(255,255,255,0.18)' }} thumbColor="#ffffff" ios_backgroundColor="rgba(255,255,255,0.18)" />
       </View>
       {laser && <Text style={type.caption}>Rumble and sound effects when you fire and when you get hit. Also in the in-game menu.</Text>}
     </Card>
@@ -391,8 +390,8 @@ function FeedbackPrefs({ laser }) {
 function HeroStat({ label, value }) {
   return (
     <View style={styles.heroStat}>
+      <Text style={styles.heroStatLabel} numberOfLines={1}>{label}</Text>
       <Text style={styles.heroStatValue} numberOfLines={1}>{value}</Text>
-      <Text style={styles.heroStatLabel}>{label}</Text>
     </View>
   )
 }
@@ -410,10 +409,16 @@ function HowTo({ gameId, settings, bare }) {
     <View>
       <Pressable onPress={() => setOpen((v) => !v)} style={styles.howHead} accessibilityRole="button" accessibilityState={{ expanded: open }}>
         <Text style={type.label}>How to play</Text>
-        <Text style={[type.caption, { color: colors.magenta }]}>{open ? 'Hide' : 'Show'}</Text>
+        <View style={styles.howToggle}>
+          <Text style={styles.howToggleText}>{open ? 'Hide' : 'Show'}</Text>
+          <Ionicons name={open ? 'chevron-up' : 'chevron-down'} size={13} color={ST.friendly} />
+        </View>
       </Pressable>
       {open && h.steps.map((r, i) => (
-        <Text key={r} style={[bare ? type.caption : type.body, { marginTop: 8 }]}>{i + 1}. {r}</Text>
+        <View key={r} style={styles.howStep}>
+          <Text style={styles.howNum}>{String(i + 1).padStart(2, '0')}</Text>
+          <Text style={[bare ? type.caption : type.body, { flex: 1 }]}>{r}</Text>
+        </View>
       ))}
     </View>
   )
@@ -440,15 +445,15 @@ function Settings({ game, info, editable, onChange }) {
                     key={o}
                     disabled={!editable}
                     onPress={() => { buzz('select'); onChange({ [k]: o }) }}
-                    style={[styles.modeOpt, active && { borderColor: colors.magenta, backgroundColor: 'rgba(91,108,240,0.16)' }]}
+                    style={[styles.modeOpt, active && { borderColor: ST.friendly, backgroundColor: withAlpha(ST.friendly, 0.1) }]}
                     accessibilityRole="radio"
                     accessibilityState={{ selected: active, disabled: !editable }}
                   >
-                    <View style={[styles.radio, active && { borderColor: colors.magenta }]}>
+                    <View style={[styles.radio, active && { borderColor: ST.friendly }]}>
                       {active && <View style={styles.radioDot} />}
                     </View>
                     <View style={{ flex: 1 }}>
-                      <Text style={[type.body, { fontWeight: '700' }]}>{LASER_MODES[o]?.name ?? d.labels?.[o]}</Text>
+                      <Text style={styles.modeName}>{LASER_MODES[o]?.name ?? d.labels?.[o]}</Text>
                       <Text style={type.caption}>{LASER_MODES[o]?.blurb}</Text>
                     </View>
                   </Pressable>
@@ -468,11 +473,11 @@ function Settings({ game, info, editable, onChange }) {
                     key={String(o)}
                     disabled={!editable}
                     onPress={() => { buzz('select'); onChange({ [k]: o }) }}
-                    style={[styles.opt, active && { backgroundColor: colors.magenta, borderColor: colors.magenta }]}
+                    style={[styles.opt, active && { backgroundColor: ST.friendly, borderColor: ST.friendly }]}
                     accessibilityRole="button"
                     accessibilityState={{ selected: active, disabled: !editable }}
                   >
-                    <Text style={[type.caption, { color: active ? colors.onBrand : colors.text }]}>{d.labels?.[o] ?? `${o}${d.unit ? ` ${d.unit}` : ''}`}</Text>
+                    <Text style={[styles.optText, { color: active ? ST.ink : ST.text }]}>{d.labels?.[o] ?? `${o}${d.unit ? ` ${d.unit}` : ''}`}</Text>
                   </Pressable>
                 )
               })}
@@ -488,34 +493,41 @@ function Settings({ game, info, editable, onChange }) {
 const HERO_BAR_H = 56 // back button row above the art
 
 const styles = StyleSheet.create({
-  startBar: { position: 'absolute', left: 0, right: 0, bottom: 0, flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingTop: 12, backgroundColor: 'rgba(4,5,13,0.94)', borderTopWidth: 1, borderTopColor: HUD.border },
-  startKicker: { fontSize: 10, fontWeight: '900', letterSpacing: 1.6, color: HUD.accent },
-  startNote: { fontSize: 13, fontWeight: '700', color: AC.text, marginTop: 2 },
-  screen: { flex: 1, backgroundColor: AC.bg[0] },
-  pRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 8 },
+  startBar: { position: 'absolute', left: 0, right: 0, bottom: 0, flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingTop: 12, backgroundColor: withAlpha(ST.ground, 0.96), borderTopWidth: 1, borderTopColor: ST.line },
+  startKicker: { ...stType.kicker, fontSize: 10, letterSpacing: 1.8, color: HUD.accent },
+  startNote: { fontFamily: FONT.uiSemi, fontSize: 13, color: ST.text, marginTop: 2 },
+  screen: { flex: 1, backgroundColor: ST.ground },
+  pRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 8, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: 'rgba(255,255,255,0.08)' },
   pRowTap: { flex: 1, flexDirection: 'row', alignItems: 'center' },
-  lightWell: { backgroundColor: '#e6eaf3', borderRadius: 20, padding: 6, marginBottom: 12 },
+  pName: { fontFamily: FONT.display, fontSize: 15, color: ST.text, includeFontPadding: false },
+  pSub: { fontFamily: FONT.ui, fontSize: 10, letterSpacing: 1.6, textTransform: 'uppercase', color: ST.muted, marginTop: 2 },
   container: { paddingHorizontal: 16, paddingTop: 8 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
-  hero: { width: '100%', borderBottomLeftRadius: 28, borderBottomRightRadius: 28 },
+  hero: { width: '100%', borderRadius: 0 },
   heroBar: { position: 'absolute', left: 16, right: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   heroShade: { position: 'absolute', left: 0, right: 0, bottom: 0 },
   heroInfo: { paddingHorizontal: 20, paddingTop: 10, paddingBottom: 18 },
-  heroCat: { fontSize: 11, ...font.bold, color: 'rgba(255,255,255,0.75)', letterSpacing: 1.2 },
-  heroTitle: { fontSize: 34, ...font.heavy, color: '#fff', letterSpacing: -0.8, marginTop: 4 },
-  heroTag: { fontSize: 15, color: 'rgba(255,255,255,0.85)', marginTop: 2 },
-  statRow: { flexDirection: 'row', gap: 8, marginTop: 14 },
-  heroStat: { flex: 1, alignItems: 'center', paddingVertical: 10, borderRadius: 16, backgroundColor: 'rgba(255,255,255,0.12)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.14)' },
-  heroStatValue: { fontSize: 18, ...font.heavy, color: AC.text },
-  heroStatLabel: { fontSize: 10, ...font.bold, color: 'rgba(255,255,255,0.65)', letterSpacing: 1, textTransform: 'uppercase', marginTop: 1 },
+  heroCat: { ...stType.kicker, fontSize: 10, letterSpacing: 2 },
+  heroTitle: { fontFamily: FONT.display, fontSize: 32, letterSpacing: 1.4, color: ST.text, textTransform: 'uppercase', marginTop: 4, includeFontPadding: false },
+  heroTag: { fontFamily: FONT.uiSemi, fontSize: 15, lineHeight: 20, color: 'rgba(242,244,247,0.82)', marginTop: 4 },
+  statRow: { flexDirection: 'row', gap: 6, marginTop: 14 },
+  heroStat: { flex: 1, paddingVertical: 8, paddingHorizontal: 10, borderRadius: ST.radius, backgroundColor: ST.cell, borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)', gap: 2 },
+  heroStatValue: { fontFamily: FONT.display, fontSize: 18, color: ST.text, fontVariant: ['tabular-nums'], includeFontPadding: false },
+  heroStatLabel: { ...stType.label },
   codeHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  codeRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginVertical: 8 },
-  code: { ...type.display, fontSize: 36, lineHeight: 44, letterSpacing: 8 },
+  codeRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginVertical: 10 },
+  code: { fontFamily: FONT.display, fontSize: 36, lineHeight: 44, letterSpacing: 8, color: ST.friendly, fontVariant: ['tabular-nums'], includeFontPadding: false },
   optRow: { flexDirection: 'row', gap: 8, flexWrap: 'wrap' },
   prefRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 8 },
-  howHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  modeOpt: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 12, borderRadius: radii.md, borderWidth: 1, borderColor: colors.hairline, marginBottom: 8 },
-  radio: { width: 20, height: 20, borderRadius: 10, borderWidth: 2, borderColor: colors.textMuted, alignItems: 'center', justifyContent: 'center' },
-  radioDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: colors.magenta },
-  opt: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: radii.pill, borderWidth: 1, borderColor: colors.hairline },
+  howHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', minHeight: 28 },
+  howToggle: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  howToggleText: { fontFamily: FONT.ui, fontSize: 11, letterSpacing: 1.6, textTransform: 'uppercase', color: ST.friendly },
+  howStep: { flexDirection: 'row', gap: 10, marginTop: 10 },
+  howNum: { fontFamily: FONT.display, fontSize: 13, color: ST.friendly, width: 20, fontVariant: ['tabular-nums'], includeFontPadding: false, marginTop: 1 },
+  modeOpt: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 12, borderRadius: ST.radius, borderWidth: 1, borderColor: ST.line, backgroundColor: ST.cell, marginBottom: 8 },
+  modeName: { fontFamily: FONT.display, fontSize: 15, letterSpacing: 0.6, color: ST.text, textTransform: 'uppercase', includeFontPadding: false, marginBottom: 2 },
+  radio: { width: 18, height: 18, borderRadius: 2, borderWidth: 2, borderColor: ST.muted, alignItems: 'center', justifyContent: 'center' },
+  radioDot: { width: 8, height: 8, backgroundColor: ST.friendly },
+  opt: { paddingHorizontal: 12, height: 34, justifyContent: 'center', borderRadius: ST.radius, borderWidth: 1, borderColor: ST.line, backgroundColor: ST.cell },
+  optText: { fontFamily: FONT.ui, fontSize: 12, letterSpacing: 1.4, textTransform: 'uppercase' },
 })

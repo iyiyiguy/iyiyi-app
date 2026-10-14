@@ -10,8 +10,13 @@ import { exportHistory } from '../lib/exportPeople'
 import ExportSheet from '../components/ExportSheet'
 import { openProfile } from '../lib/profileNav'
 import { useIsBusinessPro } from '../lib/useIsPro'
+import { useT } from '../i18n'
+import strings from '../i18n/strings/people'
+import socialStrings from '../i18n/strings/social'
 
 export default function HistoryScreen({ navigation }) {
+  const t = useT(strings)
+  const tsoc = useT(socialStrings)
   const [layout, setLayout] = useState('grid')
   const [history, setHistory] = useState([])
   const [activeTag, setActiveTag] = useState(null)
@@ -27,7 +32,7 @@ export default function HistoryScreen({ navigation }) {
       await exportHistory(opts)
       setShowExport(false)
     } catch (e) {
-      Alert.alert("Couldn't export", e?.message ?? 'Please try again.')
+      Alert.alert(t('exportFailed'), e?.message ?? t('tryAgain'))
     } finally {
       setExporting(false)
     }
@@ -54,31 +59,39 @@ export default function HistoryScreen({ navigation }) {
   return (
     <View style={styles.screen}>
       <BrandHeader
-        title="History"
+        title={t('history')}
         onBack={() => navigation.goBack()}
         right={
           <View style={{ flexDirection: 'row', gap: 18, alignItems: 'center' }}>
             <Pressable
               onPress={() => {
                 if (isBiz === false) {
-                  Alert.alert('Business Pro', 'Export history is available on the Business Pro plan.', [
-                    { text: 'Not now', style: 'cancel' },
-                    { text: 'Upgrade', onPress: () => navigation.navigate('Subscription') },
+                  Alert.alert('Business Pro', t('exportPlanOnly'), [
+                    { text: t('notNow'), style: 'cancel' },
+                    { text: t('upgrade'), onPress: () => navigation.navigate('Subscription') },
                   ])
                 } else {
                   setShowExport(true)
                 }
               }}
               disabled={exporting}
-              hitSlop={8}
+              hitSlop={12}
+              accessibilityRole="button"
+              accessibilityLabel={isBiz === false ? t('exportLockedA11y') : t('export')}
+              accessibilityState={{ disabled: exporting, busy: exporting }}
             >
               {exporting ? <ActivityIndicator color={colors.text} /> : (
                 <Text style={{ color: isBiz === false ? colors.textFaint : colors.text, fontSize: 15, fontWeight: '700' }}>
-                  {isBiz === false ? '🔒 Export' : 'Export'}
+                  {isBiz === false ? `🔒 ${t('export')}` : t('export')}
                 </Text>
               )}
             </Pressable>
-            <Pressable onPress={() => setLayout(l => (l === 'grid' ? 'list' : 'grid'))}>
+            <Pressable
+              onPress={() => setLayout(l => (l === 'grid' ? 'list' : 'grid'))}
+              hitSlop={12}
+              accessibilityRole="button"
+              accessibilityLabel={layout === 'grid' ? tsoc('showAsList') : tsoc('showAsGrid')}
+            >
               <Text style={{ color: colors.text, fontSize: 20 }}>{layout === 'grid' ? '☰' : '▦'}</Text>
             </Pressable>
           </View>
@@ -104,7 +117,7 @@ export default function HistoryScreen({ navigation }) {
               onPress={() => openProfile(navigation, item.id)}
             />
             <Text style={[styles.lastSeen, layout === 'list' && styles.lastSeenList]}>
-              Last seen {formatRelative(item.last_seen_at)}
+              {t('lastSeen', { time: formatRelative(item.last_seen_at, tsoc) })}
               {item.encounter_count > 1 ? ` · ${item.encounter_count}×` : ''}
             </Text>
           </View>
@@ -112,7 +125,7 @@ export default function HistoryScreen({ navigation }) {
         ListEmptyComponent={
           !loading && (
             <Text style={styles.empty}>
-              No one yet — once you cross paths with someone, they'll show up here.
+              {t('emptyHistory')}
             </Text>
           )
         }
@@ -122,15 +135,16 @@ export default function HistoryScreen({ navigation }) {
   )
 }
 
-function formatRelative(iso) {
+// tsoc: useT(i18n/strings/social).
+function formatRelative(iso, tsoc) {
   const diffMs = Date.now() - new Date(iso).getTime()
   const mins = Math.floor(diffMs / 60000)
-  if (mins < 1) return 'just now'
-  if (mins < 60) return `${mins}m ago`
+  if (mins < 1) return tsoc('justNow')
+  if (mins < 60) return tsoc('minsAgo', { n: mins })
   const hours = Math.floor(mins / 60)
-  if (hours < 24) return `${hours}h ago`
+  if (hours < 24) return tsoc('hoursAgo', { n: hours })
   const days = Math.floor(hours / 24)
-  return `${days}d ago`
+  return tsoc('daysAgo', { n: days })
 }
 
 const styles = StyleSheet.create({

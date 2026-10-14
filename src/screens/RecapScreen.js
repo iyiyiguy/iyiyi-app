@@ -6,19 +6,32 @@ import { captureRef } from 'react-native-view-shot'
 import BrandHeader from '../components/BrandHeader'
 import GlassPanel from '../components/GlassPanel'
 import { colors, radii, type } from '../theme'
-import { API_URL } from '../lib/supabase'
+import { profileShareUrl } from '../lib/shareLinks'
 import { fetchRecap } from '../lib/activityData'
 import { avatarSource } from '../lib/avatarSource'
+import { useT } from '../i18n'
+import strings from '../i18n/strings/activity'
 
+// Personality (lib/activityData personality.key) -> [title key, blurb key] in i18n/strings/activity.
+const PERSONA = {
+  creator: ['personaCreator', 'personaCreatorBlurb'],
+  explorer: ['personaExplorer', 'personaExplorerBlurb'],
+  magnet: ['personaMagnet', 'personaMagnetBlurb'],
+  rising: ['personaRising', 'personaRisingBlurb'],
+  original: ['personaOriginal', 'personaOriginalBlurb'],
+}
+
+// Labels are keys in i18n/strings/activity.
 const RANGES = [
-  { days: 7, label: 'This week' },
-  { days: 30, label: 'This month' },
+  { days: 7, label: 'thisWeekTab' },
+  { days: 30, label: 'thisMonthTab' },
 ]
 
 // A shareable recap card: "+N new followers" for creators and businesses, "you discovered N
 // people" for everyone else, plus a personality based on how you used iYiYi. The card is a
 // plain view that gets captured to an image and shared. (Visual style to be replaced by the redesign.)
 export default function RecapScreen({ navigation }) {
+  const t = useT(strings)
   const [days, setDays] = useState(7)
   const [recap, setRecap] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -50,11 +63,11 @@ export default function RecapScreen({ navigation }) {
     try {
       const uri = await captureRef(cardRef, { format: 'png', quality: 1 })
       await Share.share({
-        message: `My iYiYi recap. Find me: ${API_URL}/iyiyi-app/profile/${recap.username ?? ''}`,
+        message: profileShareUrl(recap.username) ? t('shareMessageUrl', { url: profileShareUrl(recap.username) }) : t('shareMessage'),
         url: uri,
       })
     } catch (e) {
-      Alert.alert("Couldn't share", e?.message ?? 'Please try again.')
+      Alert.alert(t('shareFailed'), e?.message ?? t('tryAgain'))
     } finally {
       setSharing(false)
     }
@@ -64,24 +77,34 @@ export default function RecapScreen({ navigation }) {
   const delta = recap && recap.new_followers != null && recap.previous_new_followers != null
     ? recap.new_followers - recap.previous_new_followers : 0
   const likesValue = recap?.likes_received ?? recap?.likes_all_time ?? null
-  const likesLabel = recap?.likes_received != null ? 'Likes' : 'Total likes'
+  const likesLabel = recap?.likes_received != null ? t('likes') : t('totalLikes')
   const series = recap?.series ?? {}
+  // lower: the word inside a sentence ("34 views this week").
   const METRICS = [
-    { key: 'views', label: 'Views', data: series.views },
-    { key: 'likes', label: 'Likes', data: series.likes },
-    { key: 'followers', label: 'Followers', data: series.followers },
-    { key: 'posts', label: 'Posts', data: series.posts },
+    { key: 'views', label: t('views'), lower: t('viewsLower'), data: series.views },
+    { key: 'likes', label: t('likes'), lower: t('likesLower'), data: series.likes },
+    { key: 'followers', label: t('followers'), lower: t('followersLower'), data: series.followers },
+    { key: 'posts', label: t('posts'), lower: t('postsLower'), data: series.posts },
   ].filter((m) => Array.isArray(m.data) && m.data.length)
   const activeMetric = METRICS.find((m) => m.key === metric) ?? METRICS[0]
-  const rangeWord = days === 7 ? 'this week' : 'this month'
+  const rangeWord = days === 7 ? t('thisWeekWord') : t('thisMonthWord')
+  const persona = PERSONA[recap?.personality?.key]
+  const personaTitle = persona ? t(persona[0]) : recap?.personality?.title
+  const personaBlurb = persona ? t(persona[1], { n: recap.personality.n ?? '', range: rangeWord }) : recap?.personality?.blurb
 
   return (
     <View style={styles.screen}>
-      <BrandHeader title="Your recap" onBack={() => navigation.goBack()} />
+      <BrandHeader title={t('yourRecap')} onBack={() => navigation.goBack()} />
       <GlassPanel radius={999} style={styles.tabs}>
         {RANGES.map((r) => (
-          <Pressable key={r.days} onPress={() => setDays(r.days)} style={[styles.tab, days === r.days && styles.tabActive]}>
-            <Text style={[styles.tabText, days === r.days && styles.tabTextActive]}>{r.label}</Text>
+          <Pressable
+            key={r.days}
+            onPress={() => setDays(r.days)}
+            style={[styles.tab, days === r.days && styles.tabActive]}
+            accessibilityRole="tab"
+            accessibilityState={{ selected: days === r.days }}
+          >
+            <Text style={[styles.tabText, days === r.days && styles.tabTextActive]}>{t(r.label)}</Text>
           </Pressable>
         ))}
       </GlassPanel>
@@ -90,8 +113,8 @@ export default function RecapScreen({ navigation }) {
         <ActivityIndicator color={colors.magenta} style={{ marginTop: 60 }} />
       ) : !recap ? (
         <View style={styles.emptyWrap}>
-          <Text style={type.headline}>Your recap is on its way</Text>
-          <Text style={[type.caption, { textAlign: 'center', marginTop: 6 }]}>Post, explore and connect - your stats will show up here.</Text>
+          <Text style={type.headline}>{t('recapOnWay')}</Text>
+          <Text style={[type.caption, { textAlign: 'center', marginTop: 6 }]}>{t('recapOnWaySub')}</Text>
         </View>
       ) : (
         <ScrollView contentContainerStyle={{ alignItems: 'center', paddingBottom: 40 }}>
@@ -100,66 +123,73 @@ export default function RecapScreen({ navigation }) {
               <Text style={styles.brand}>iYiYi ✦ recap</Text>
               <View style={styles.who}>
                 {<Image source={avatarSource(recap?.avatar_url)} style={styles.avatar} />}
-                <Text style={styles.name}>@{recap.username ?? 'you'}</Text>
+                <Text style={styles.name}>@{recap.username ?? t('youHandle')}</Text>
               </View>
 
               {grower ? (
                 <>
                   <Text style={styles.big}>+{fmt(recap.new_followers)}</Text>
-                  <Text style={styles.bigLabel}>new followers {rangeWord}</Text>
+                  <Text style={styles.bigLabel}>{t('newFollowersRange', { range: rangeWord })}</Text>
                   {(recap.previous_new_followers ?? 0) > 0 || delta !== 0 ? (
-                    <Text style={styles.delta}>{delta >= 0 ? '▲' : '▼'} {Math.abs(delta)} vs the period before</Text>
+                    <Text style={styles.delta}>{delta >= 0 ? '▲' : '▼'} {t('vsBefore', { n: Math.abs(delta) })}</Text>
                   ) : null}
                 </>
               ) : (
                 <>
                   <Text style={styles.big}>{fmt(recap.people_discovered)}</Text>
-                  <Text style={styles.bigLabel}>new people discovered {rangeWord}</Text>
+                  <Text style={styles.bigLabel}>{t('discoveredRange', { range: rangeWord })}</Text>
                 </>
               )}
 
               <View style={styles.statRow}>
-                <Stat label="Profile views" value={fmt(recap.profile_views)} />
+                <Stat label={t('profileViews')} value={fmt(recap.profile_views)} />
                 <Stat label={likesLabel} value={fmt(likesValue)} />
-                <Stat label="Followers" value={fmt(recap.total_followers)} />
+                <Stat label={t('followers')} value={fmt(recap.total_followers)} />
               </View>
 
               {recap.personality?.title ? (
                 <View style={styles.persona}>
-                  <Text style={styles.personaLabel}>YOUR VIBE</Text>
-                  <Text style={styles.personaTitle}>{recap.personality.title}</Text>
-                  {recap.personality.blurb ? <Text style={styles.personaBlurb}>{recap.personality.blurb}</Text> : null}
+                  <Text style={styles.personaLabel}>{t('yourVibe')}</Text>
+                  <Text style={styles.personaTitle}>{personaTitle}</Text>
+                  {personaBlurb ? <Text style={styles.personaBlurb}>{personaBlurb}</Text> : null}
                 </View>
               ) : null}
-              <Text style={styles.foot}>Get more followers with iYiYi</Text>
+              <Text style={styles.foot}>{t('recapFoot')}</Text>
             </LinearGradient>
           </View>
 
           {activeMetric ? (
             <GlassPanel radius={radii.lg} style={styles.chartPanel}>
               <View style={styles.chartHead}>
-                <Text style={type.headline}>Over time</Text>
-                <Text style={type.caption}>{activeMetric.data.reduce((a, b) => a + b, 0)} {activeMetric.label.toLowerCase()} {rangeWord}</Text>
+                <Text style={type.headline}>{t('overTime')}</Text>
+                <Text style={type.caption}>{t('metricTotal', { n: activeMetric.data.reduce((a, b) => a + b, 0), metric: activeMetric.lower, range: rangeWord })}</Text>
               </View>
               <View style={styles.metricRow}>
                 {METRICS.map((m) => (
-                  <Pressable key={m.key} onPress={() => setMetric(m.key)} style={[styles.metric, activeMetric.key === m.key && styles.metricOn]}>
+                  <Pressable
+                    key={m.key}
+                    onPress={() => setMetric(m.key)}
+                    style={[styles.metric, activeMetric.key === m.key && styles.metricOn]}
+                    hitSlop={{ top: 6, bottom: 6 }}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: activeMetric.key === m.key }}
+                  >
                     <Text style={[styles.metricText, activeMetric.key === m.key && styles.metricTextOn]}>{m.label}</Text>
                   </Pressable>
                 ))}
               </View>
               <Bars data={activeMetric.data} />
               <View style={styles.axis}>
-                <Text style={type.caption}>{days} days ago</Text>
-                <Text style={type.caption}>Today</Text>
+                <Text style={type.caption}>{t('daysAgoAxis', { n: days })}</Text>
+                <Text style={type.caption}>{t('todayAxis')}</Text>
               </View>
             </GlassPanel>
           ) : null}
 
           {sharing ? <ActivityIndicator color={colors.magenta} style={{ marginTop: 20 }} /> : (
-            <Pressable style={styles.shareBtn} onPress={share}><Text style={styles.shareText}>Share my recap</Text></Pressable>
+            <Pressable style={styles.shareBtn} onPress={share} accessibilityRole="button"><Text style={styles.shareText}>{t('shareRecap')}</Text></Pressable>
           )}
-          <Text style={[type.caption, styles.note]}>Every share brings people back to your profile.</Text>
+          <Text style={[type.caption, styles.note]}>{t('shareNote')}</Text>
         </ScrollView>
       )}
     </View>

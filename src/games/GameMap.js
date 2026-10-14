@@ -6,7 +6,7 @@ import { ActivityIndicator, StyleSheet, Text, View } from 'react-native'
 import MapView from '../components/SafeMapView'
 import { Circle, Marker } from 'react-native-maps'
 import * as Location from 'expo-location'
-import { colors, radii, type } from '../theme'
+import { FONT, ST } from './studio'
 
 export const isValidCoord = (lat, lng) =>
   Number.isFinite(lat) && Number.isFinite(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180
@@ -18,6 +18,15 @@ export function withAlpha(hex, a) {
   const g = parseInt(h.slice(2, 4), 16)
   const b = parseInt(h.slice(4, 6), 16)
   return `rgba(${r},${g},${b},${a})`
+}
+
+// Dark ink on bright pin colours, white on dark / red ones.
+function pinInk(hex) {
+  const h = String(hex || '').replace('#', '')
+  if (h.length !== 6) return '#ffffff'
+  const n = parseInt(h, 16)
+  const lum = (0.299 * ((n >> 16) & 255) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) / 255
+  return lum > 0.6 ? ST.ink : '#ffffff'
 }
 
 // Map span (degrees) that fits a circle of `r` metres with a little margin.
@@ -92,23 +101,23 @@ export function GameMap({ center, markers = [], circles = [], onPick, style, hei
               key={`c-${c.id}`}
               center={{ latitude: c.lat, longitude: c.lng }}
               radius={c.radius}
-              strokeColor={withAlpha(c.color || colors.magenta, 0.9)}
-              fillColor={withAlpha(c.color || colors.magenta, 0.18)}
+              strokeColor={withAlpha(c.color || ST.friendly, 0.9)}
+              fillColor={withAlpha(c.color || ST.friendly, 0.18)}
               strokeWidth={2}
             />
           ))}
           {markers.filter((m) => isValidCoord(m.lat, m.lng)).map((m) => (
             <Marker key={`m-${m.id}`} coordinate={{ latitude: m.lat, longitude: m.lng }} tracksViewChanges={false} anchor={{ x: 0.5, y: 0.5 }}>
-              <View style={[styles.pin, { backgroundColor: m.color || colors.magenta }]}>
-                <Text style={styles.pinText} numberOfLines={1}>{m.label}</Text>
+              <View style={[styles.pin, { backgroundColor: m.color || ST.friendly }]}>
+                <Text style={[styles.pinText, { color: pinInk(m.color || ST.friendly) }]} numberOfLines={1}>{m.label}</Text>
               </View>
             </Marker>
           ))}
         </MapView>
       ) : failed ? (
-        <View style={styles.center}><Text style={[type.caption, { textAlign: 'center' }]}>Location is off, so the map can’t be shown. Turn on location for iYiYi in Settings.</Text></View>
+        <View style={styles.center}><Text style={styles.offText}>Location is off, so the map can’t be shown. Turn on location for iYiYi in Settings.</Text></View>
       ) : (
-        <View style={styles.center}><ActivityIndicator color={colors.textMuted} /></View>
+        <View style={styles.center}><ActivityIndicator color={ST.muted} /></View>
       )}
       {!!hint && region && (
         <View style={styles.hint} pointerEvents="none">
@@ -120,10 +129,11 @@ export function GameMap({ center, markers = [], circles = [], onPick, style, hei
 }
 
 const styles = StyleSheet.create({
-  wrap: { borderRadius: radii.md, overflow: 'hidden', backgroundColor: colors.inkSurfaceRaised },
+  wrap: { borderRadius: ST.radius, overflow: 'hidden', backgroundColor: ST.ground2, borderWidth: 1, borderColor: ST.line },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 16 },
-  pin: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: radii.pill, borderWidth: 2, borderColor: colors.onBrand, maxWidth: 140 },
-  pinText: { fontSize: 11, fontWeight: '700', color: colors.onBrand },
+  offText: { fontFamily: FONT.uiSemi, fontSize: 13, lineHeight: 17, color: ST.muted, textAlign: 'center' },
+  pin: { paddingHorizontal: 6, height: 20, justifyContent: 'center', borderRadius: 2, borderWidth: 1.5, borderColor: '#ffffff', maxWidth: 140 },
+  pinText: { fontFamily: FONT.ui, fontSize: 11, letterSpacing: 1, textTransform: 'uppercase', color: '#ffffff' },
   hint: { position: 'absolute', top: 8, left: 8, right: 8, alignItems: 'center' },
-  hintText: { fontSize: 12, fontWeight: '600', color: colors.onBrand, backgroundColor: 'rgba(0,0,0,0.55)', paddingHorizontal: 10, paddingVertical: 4, borderRadius: radii.pill, overflow: 'hidden' },
+  hintText: { fontFamily: FONT.uiSemi, fontSize: 12, color: ST.text, backgroundColor: ST.panelStrong, paddingHorizontal: 10, paddingVertical: 4, borderRadius: ST.radius, overflow: 'hidden' },
 })

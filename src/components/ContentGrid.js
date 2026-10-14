@@ -3,6 +3,8 @@ import { VideoView, useVideoPlayer } from 'expo-video'
 import { colors, radii } from '../theme'
 import { useOpenProfile } from '../lib/profileNav'
 import { avatarSource } from '../lib/avatarSource'
+import { useT } from '../i18n'
+import strings from '../i18n/strings/social'
 
 // 3-column grid of photo/video tiles. items need { id, media_url, media_type,
 // owner_avatar_url? }. Videos show a play badge over a dark tile.
@@ -20,6 +22,7 @@ const MAX_AUTOPLAY = 6
 export default function ContentGrid({
   items: rawItems, onOpen, showOwner, columns = 3, autoplay = false, tall = false, onOpenProfile, onDelete, addTile,
 }) {
+  const t = useT(strings)
   const items = Array.isArray(rawItems) ? rawItems : []
   const navOpenProfile = useOpenProfile()
   const openOwner = onOpenProfile ?? navOpenProfile
@@ -45,14 +48,20 @@ export default function ContentGrid({
           disabled={!!addTile.busy}
           style={[styles.tile, styles.addTile, { width: size, height }]}
           accessibilityRole="button"
-          accessibilityLabel={addTile.label || 'Add a photo or video'}
+          accessibilityLabel={addTile.label || t('addPhotoOrVideo')}
         >
           {addTile.busy ? <ActivityIndicator color={colors.magenta} /> : <Text style={styles.addPlus}>+</Text>}
           {addTile.label ? <Text style={styles.addLabel} numberOfLines={1}>{addTile.label}</Text> : null}
         </Pressable>
       ) : null}
       {items.map((m, i) => (!m ? null : (
-        <Pressable key={m.id != null ? String(m.id) : `i${i}`} onPress={() => onOpen?.(i)} style={[styles.tile, { width: size, height }]}>
+        <Pressable
+          key={m.id != null ? String(m.id) : `i${i}`}
+          onPress={() => onOpen?.(i)}
+          style={[styles.tile, { width: size, height }]}
+          accessibilityRole="button"
+          accessibilityLabel={m.media_type === 'video' ? t('openVideo') : t('openPhoto')}
+        >
           {m.media_type === 'video' ? (
             shouldAutoplay[i] ? (
               <AutoVideo uri={m.media_url} />
@@ -71,7 +80,13 @@ export default function ContentGrid({
           ) : null}
           {showOwner && m.owner_avatar_url ? (
             m.owner_id ? (
-              <Pressable onPress={() => openOwner(m.owner_id)} hitSlop={8} style={styles.ownerDotWrap} accessibilityRole="button">
+              <Pressable
+                onPress={() => openOwner(m.owner_id)}
+                hitSlop={10}
+                style={styles.ownerDotWrap}
+                accessibilityRole="button"
+                accessibilityLabel={t('openProfileA11y', { name: m.owner_username ?? t('iyiyiUser') })}
+              >
                 <Image source={avatarSource(m?.owner_avatar_url)} style={styles.ownerDotImg} />
               </Pressable>
             ) : <Image source={avatarSource(m?.owner_avatar_url)} style={styles.ownerDot} />
@@ -79,10 +94,10 @@ export default function ContentGrid({
           {onDelete ? (
             <Pressable
               onPress={() => onDelete(m, i)}
-              hitSlop={8}
+              hitSlop={11}
               style={styles.deleteBadge}
               accessibilityRole="button"
-              accessibilityLabel="Delete this post"
+              accessibilityLabel={t('deletePost')}
             >
               <Text style={styles.deleteText}>✕</Text>
             </Pressable>

@@ -6,53 +6,56 @@ import Glass from './Glass'
 import { GlassButton } from './GlassButton'
 import { colors, radii, type } from '../theme'
 import { TAGS } from '../lib/tags'
+import { useT } from '../i18n'
+import strings from '../i18n/strings/social'
 
 // Glass dropdown of checkable tag rows for the Map (native + web). Changes apply on "Apply".
 // Render it inside an absolutely-positioned container (it fills its parent with a backdrop).
 export default function MapTagMenu({ initial = [], onApply, onClose }) {
+  const t = useT(strings)
   const [draft, setDraft] = useState(() => new Set(initial))
-  const toggle = (t) => {
+  const toggle = (tag) => {
     Haptics.selectionAsync().catch(() => {})
     setDraft((prev) => {
       const next = new Set(prev)
-      if (next.has(t)) next.delete(t)
-      else next.add(t)
+      if (next.has(tag)) next.delete(tag)
+      else next.add(tag)
       return next
     })
   }
   return (
     <View style={StyleSheet.absoluteFill}>
-      <Pressable style={[StyleSheet.absoluteFill, styles.backdrop]} onPress={onClose} accessibilityLabel="Close tag filter" />
+      <Pressable style={[StyleSheet.absoluteFill, styles.backdrop]} onPress={onClose} accessibilityRole="button" accessibilityLabel={t('closeTagFilter')} />
       <Glass radius={radii.md} strong style={styles.menu}>
         <View style={styles.head}>
-          <Text style={type.headline}>Show people tagged</Text>
+          <Text style={type.headline}>{t('showPeopleTagged')}</Text>
           {draft.size ? (
-            <Pressable onPress={() => setDraft(new Set())} hitSlop={8}>
-              <Text style={styles.clear}>Clear</Text>
+            <Pressable onPress={() => setDraft(new Set())} hitSlop={12} accessibilityRole="button">
+              <Text style={styles.clear}>{t('clear')}</Text>
             </Pressable>
           ) : null}
         </View>
         <ScrollView style={styles.list} keyboardShouldPersistTaps="handled">
-          {TAGS.map((t) => {
-            const on = draft.has(t)
+          {TAGS.map((tag) => {
+            const on = draft.has(tag)
             return (
               <Pressable
-                key={t}
-                onPress={() => toggle(t)}
+                key={tag}
+                onPress={() => toggle(tag)}
                 style={({ pressed }) => [styles.row, pressed && { opacity: 0.6 }]}
                 accessibilityRole="checkbox"
                 accessibilityState={{ checked: on }}
               >
-                <Text style={[type.body, on && { fontWeight: '600' }]}>{t}</Text>
+                <Text style={[type.body, on && { fontWeight: '600' }]}>{tag}</Text>
                 <Ionicons name={on ? 'checkmark-circle' : 'ellipse-outline'} size={20} color={on ? colors.magenta : colors.textFaint} />
               </Pressable>
             )
           })}
         </ScrollView>
         <View style={styles.foot}>
-          <GlassButton size="sm" onPress={onClose} style={{ flex: 1 }}>Cancel</GlassButton>
+          <GlassButton size="sm" onPress={onClose} style={{ flex: 1 }}>{t('cancel')}</GlassButton>
           <GlassButton size="sm" variant="primary" onPress={() => onApply?.([...draft])} style={{ flex: 1 }}>
-            {draft.size ? `Apply (${draft.size})` : 'Show everyone'}
+            {draft.size ? t('applyN', { n: draft.size }) : t('showEveryone')}
           </GlassButton>
         </View>
       </Glass>

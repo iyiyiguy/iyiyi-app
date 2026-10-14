@@ -7,7 +7,7 @@ import { MODE_ACTIVE_COLOR } from './ModeSwitcher'
 import {
   BURST_CHOICES, CUTOFF_CHOICES, DEFAULT_BURST_SHOTS, CUTOFF_RANGE, DEFAULT_CUTOFF_CUSTOM, DEFAULT_TIMER_CUSTOM, TIMER_CHOICES, TIMER_RANGE, clampSeconds,
 } from '../../lib/cameraPrefs'
-import { FILTERS, filterLabel, normalizeFilter } from '../../lib/cameraFilters'
+import { LOOKS, lookInfo, normalizeLook } from './filters/lenses'
 
 const tap = () => Haptics.selectionAsync().catch(() => {})
 
@@ -35,7 +35,8 @@ const OPTION_DEFS = {
     range: CUTOFF_RANGE, customKey: 'cutoffCustom', customDefault: DEFAULT_CUTOFF_CUSTOM,
   },
 }
-const FILTER_DEF = { icon: 'sparkles-outline', label: 'Filter' }
+// Scene look (colour grade) + the iYiYi frame. AR lenses live in the carousel by the shutter.
+const LOOK_DEF = { icon: 'color-palette-outline', label: 'Look' }
 const longOf = (def, v) => (def.longFmt ? def.longFmt(v) : def.fmt(v))
 
 // Bigger jumps for the longer cut-off once you get past a minute.
@@ -165,7 +166,9 @@ function Caption({ text }) {
 
 // One glass pill of camera options: icons with their current value under them; tap one and
 // the pill turns into that option's choices (Off / 3s / 5s / 10s ...), tap the icon to go back.
-export default function CameraOptionsBar({ mode, options, onChange, disabled, onOpenChange }) {
+export default function CameraOptionsBar({
+  mode, options, onChange, disabled, onOpenChange, look = 'none', frame = false, onLook, onFrame,
+}) {
   const [open, setOpen] = useState(null)
   const [custom, setCustom] = useState(null) // option key whose custom stepper is showing
   const o = options || {}
@@ -219,27 +222,35 @@ export default function CameraOptionsBar({ mode, options, onChange, disabled, on
         </View>
       </>
     )
-  } else if (open === 'filter') {
-    const value = normalizeFilter(o.filter)
+  } else if (open === 'look') {
+    const value = normalizeLook(look)
     content = (
       <>
-        <Caption text={`${FILTER_DEF.label} · ${filterLabel(value)}`} />
+        <Caption text={`${LOOK_DEF.label} · ${lookInfo(value).label}${frame ? ' + frame' : ''}`} />
         <View style={styles.row}>
-          <Chip icon={FILTER_DEF.icon} active={value !== 'none'} onPress={() => setOpen(null)} accessibilityLabel="Close filter options" />
+          <Chip icon={LOOK_DEF.icon} active={value !== 'none' || !!frame} onPress={() => setOpen(null)} accessibilityLabel="Close look options" />
           <View style={styles.divider} />
-          {FILTERS.map((f) => (
+          {LOOKS.map((l) => (
             <Pressable
-              key={f.id}
-              onPress={() => { tap(); change({ filter: f.id }) }}
+              key={l.id}
+              onPress={() => { tap(); try { onLook?.(l.id) } catch {} }}
               hitSlop={4}
-              style={[styles.choice, value === f.id && styles.choiceActive]}
+              style={[styles.choice, value === l.id && styles.choiceActive]}
               accessibilityRole="button"
-              accessibilityState={{ selected: value === f.id }}
-              accessibilityLabel={`${f.label} filter`}
+              accessibilityState={{ selected: value === l.id }}
+              accessibilityLabel={`${l.label} look`}
             >
-              <Text style={[styles.choiceText, value === f.id && styles.choiceTextActive]} numberOfLines={1}>{f.label}</Text>
+              <Text style={[styles.choiceText, value === l.id && styles.choiceTextActive]} numberOfLines={1}>{l.label}</Text>
             </Pressable>
           ))}
+          <View style={styles.divider} />
+          <Chip
+            icon="scan-outline"
+            text="Frame"
+            active={!!frame}
+            onPress={() => { try { onFrame?.(!frame) } catch {} }}
+            accessibilityLabel={`iYiYi frame ${frame ? 'on' : 'off'}`}
+          />
         </View>
       </>
     )
@@ -322,8 +333,9 @@ export default function CameraOptionsBar({ mode, options, onChange, disabled, on
       const burst = o.burst ?? 0
       items.push({ k: 'burst', icon: OPTION_DEFS.burst.icon, value: fmtShots(burst), active: !!burst, a11y: `Burst: ${fmtShots(burst)}. Tap to change.` })
     }
-    const f = normalizeFilter(o.filter)
-    items.push({ k: 'filter', icon: FILTER_DEF.icon, value: f === 'none' ? 'None' : filterLabel(f), active: f !== 'none', a11y: `Filter: ${filterLabel(f)}. Tap to change.` })
+    const lk = normalizeLook(look)
+    const lkLabel = lk === 'none' ? (frame ? 'Frame' : 'None') : `${lookInfo(lk).label}${frame ? '+' : ''}`
+    items.push({ k: 'look', icon: LOOK_DEF.icon, value: lkLabel, active: lk !== 'none' || !!frame, a11y: `Look: ${lookInfo(lk).label}${frame ? ', with frame' : ''}. Tap to change.` })
     content = (
       <View style={styles.row}>
         {items.map((it, i) => (

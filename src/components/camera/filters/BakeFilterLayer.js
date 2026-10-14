@@ -1,12 +1,15 @@
 import React, { useEffect, useRef } from 'react'
 import { StyleSheet, View } from 'react-native'
-import { OVERLAY_BOX, placeOverlay } from '../../../lib/cameraFilters'
-import { FilterArt } from './FilterArt'
+import { OVERLAY_BOX } from '../../../lib/cameraFilters'
+import { LensArt } from './LensArt'
+import { placeLens } from './lenses'
 
 // Still version of the AR filter, drawn over a captured photo inside the hidden "bake" view so
 // react-native-view-shot stamps it into the saved / posted image. `heads` are already in the
 // bake view's pixels, each optionally with its own `name` (matched iYiYi user). Calls onReady once every overlay has drawn (or after a short timeout).
-export default function BakeFilterLayer({ filter, heads, name, onReady }) {
+// `filter` is the lens id (lenses.js); `myHandle` + `platforms` put your linked platforms on the
+// Follow me card when it's on you.
+export default function BakeFilterLayer({ filter, heads, name, onReady, myHandle, platforms }) {
   const list = Array.isArray(heads) ? heads.filter((h) => h && Number.isFinite(h.cx) && Number.isFinite(h.top)) : []
   const pending = useRef(list.length)
   const fired = useRef(false)
@@ -29,7 +32,7 @@ export default function BakeFilterLayer({ filter, heads, name, onReady }) {
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="none">
       {list.map((h, i) => {
-        const { s, anchorY, anchorX } = placeOverlay(filter, h, 6) // same fit-on-screen rule as live
+        const { s, anchorY, anchorX } = placeLens(filter, h, 6) // same placement as live
         const roll = Number(h?.pose?.roll)
         const rollDeg = Number.isFinite(roll) ? (-roll * 180) / Math.PI : 0
         return (
@@ -48,7 +51,14 @@ export default function BakeFilterLayer({ filter, heads, name, onReady }) {
               },
             ]}
           >
-            <FilterArt filter={filter} name={h.name || name || '@iyiyi'} pose={h.pose} live={false} onReady={one} />
+            <LensArt
+              lens={filter}
+              name={h.name || name || '@iyiyi'}
+              platforms={myHandle && (h.name || name) === myHandle ? platforms : null}
+              pose={h.pose}
+              live={false}
+              onReady={one}
+            />
           </View>
         )
       })}

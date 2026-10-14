@@ -228,7 +228,8 @@ export const WeaponSlots = memo(function WeaponSlots({ ids, current, onSelect, d
 
 // ---- loot prompt --------------------------------------------------------------------
 
-export const PickupButton = memo(function PickupButton({ item, onPick }) {
+// swapFor: the weapon id this pickup would replace (both slots full), shown as a hint.
+export const PickupButton = memo(function PickupButton({ item, onPick, swapFor }) {
   if (!item) return null
   const w = getWeapon(item.w)
   const c = RARITY_COLORS[w.rarity] || ST.objective
@@ -244,7 +245,7 @@ export const PickupButton = memo(function PickupButton({ item, onPick }) {
       <Text style={s.pickName} numberOfLines={1}>{w.name.toUpperCase()}</Text>
       <View style={s.pickHint}>
         <Ionicons name="hand-left-outline" size={12} color={ST.muted} />
-        <Text style={s.pickHintText}>Tap to pick up</Text>
+        <Text style={s.pickHintText}>{swapFor ? `Tap to swap for your ${getWeapon(swapFor).short}` : 'Tap to pick up'}</Text>
       </View>
     </Pressable>
   )
@@ -284,7 +285,7 @@ export function TransitOverlay({ insets, mph, hp, zone, gasText, hint, mapProps,
           </View>
         </View>
         <Text style={[stType.body, { marginTop: 14, color: ST.text }]} accessibilityLiveRegion="polite">{TRANSIT_TEXT}</Text>
-        <Text style={[stType.small, { marginTop: 6 }]}>You can’t fire and can’t be hit until you’ve been at walking pace for a few seconds. The gas still hurts.</Text>
+        <Text style={[stType.small, { marginTop: 6 }]}>You can’t fire and can’t be hit until you’ve been at walking pace for a few seconds. The gas is paused for you meanwhile (5 min per match), so there’s no need to hurry anywhere by car.</Text>
         <View style={[s.transitMap, passenger && { flex: 1 }]}>
           <RoyaleMap {...mapProps} interactive={passenger} showRecenter={passenger} style={StyleSheet.absoluteFill} />
         </View>

@@ -6,8 +6,11 @@ import { colors, radii, type } from '../theme'
 import { apiJson } from '../lib/api'
 import { openProfile } from '../lib/profileNav'
 import { avatarSource } from '../lib/avatarSource'
+import { useT } from '../i18n'
+import strings from '../i18n/strings/people'
 
 export default function ViewersScreen({ navigation }) {
+  const t = useT(strings)
   const [viewers, setViewers] = useState([])
   const [loading, setLoading] = useState(false)
 
@@ -27,19 +30,24 @@ export default function ViewersScreen({ navigation }) {
 
   return (
     <View style={styles.screen}>
-      <BrandHeader title="Who viewed you" onBack={() => navigation.goBack()} />
+      <BrandHeader title={t('whoViewed')} onBack={() => navigation.goBack()} />
       <FlatList
         data={viewers}
         keyExtractor={(v) => v.id}
         refreshing={loading}
         onRefresh={load}
         renderItem={({ item }) => (
-          <Pressable style={styles.row} onPress={() => openProfile(navigation, item.id)}>
+          <Pressable
+            style={styles.row}
+            onPress={() => openProfile(navigation, item.id)}
+            accessibilityRole="button"
+            accessibilityLabel={`${item.username}, ${item.view_count > 1 ? t('viewedTimes', { n: item.view_count }) : t('viewed')}`}
+          >
             <Image source={avatarSource(item?.avatar_url)} style={styles.avatar} />
             <View style={{ flex: 1 }}>
               <Text style={type.body}>{item.username}</Text>
               <Text style={type.caption}>
-                {item.view_count > 1 ? `Viewed ${item.view_count} times · ` : 'Viewed · '}
+                {item.view_count > 1 ? t('viewedTimes', { n: item.view_count }) : t('viewed')}{' · '}
                 {new Date(item.last_viewed_at).toLocaleDateString()}
               </Text>
             </View>
@@ -47,7 +55,7 @@ export default function ViewersScreen({ navigation }) {
         )}
         ListEmptyComponent={
           <Text style={styles.empty}>
-            {loading ? 'Loading…' : "Nobody has viewed your profile yet. People who turn on private viewing won't show up here."}
+            {loading ? t('loading') : t('noViewers')}
           </Text>
         }
       />

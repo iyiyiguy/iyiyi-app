@@ -29,10 +29,10 @@ function GameFollowButton({ userId, name, size = 'md', style }) {
       ]}
     >
       {small ? (
-        <Ionicons name={on ? 'checkmark' : pending ? 'time-outline' : 'add'} size={16} color={on || pending ? ACCENT : '#07090c'} />
+        <Ionicons name={on ? 'checkmark' : pending ? 'time-outline' : 'add'} size={16} color={on || pending ? ACCENT : ST.ink} />
       ) : (
         <>
-          <Ionicons name={on ? 'checkmark' : pending ? 'time-outline' : 'person-add'} size={13} color={on || pending ? ACCENT : '#07090c'} />
+          <Ionicons name={on ? 'checkmark' : pending ? 'time-outline' : 'person-add'} size={13} color={on || pending ? ACCENT : ST.ink} />
           <Text style={[s.txt, (on || pending) && { color: ACCENT }]}>{label}</Text>
         </>
       )}
@@ -43,9 +43,9 @@ function GameFollowButton({ userId, name, size = 'md', style }) {
 export default memo(GameFollowButton)
 
 const s = StyleSheet.create({
-  btn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, height: 32, minWidth: 96, paddingHorizontal: 10, borderRadius: 3, borderWidth: 1 },
+  btn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, height: 32, minWidth: 96, paddingHorizontal: 10, borderRadius: ST.radius, borderWidth: 1 },
   sm: { minWidth: 30, width: 30, height: 26, paddingHorizontal: 0 },
   off: { backgroundColor: '#ffffff', borderColor: '#ffffff' },
   on: { backgroundColor: 'transparent', borderColor: ACCENT },
-  txt: { color: '#07090c', fontSize: 12, fontFamily: FONT.ui, letterSpacing: 1 },
+  txt: { color: ST.ink, fontSize: 13, fontFamily: FONT.display, letterSpacing: 1.4, includeFontPadding: false },
 })

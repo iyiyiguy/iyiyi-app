@@ -9,7 +9,7 @@ import Glass from '../../components/Glass'
 import { AC } from '../arcadeUI'
 import { UavPackCard, UavStorePanel, useUavBuyFlow } from '../UavStore'
 import { buzz } from '../../lib/gamePrefs'
-import { UAV_DURATION_MS } from '../../lib/uav'
+import { UAV_DURATION_MS, UAV_RULES_TEXT } from '../../lib/uav'
 import { font } from '../../theme'
 import { EquipTileFace } from './Consumables'
 import { FONT, ST } from '../studio'
@@ -18,13 +18,22 @@ const UAV_RED = '#ff3b4f'
 
 /**
  * Round translucent satellite button with a count badge. While a UAV is active it shows
- * the seconds left and is disabled (UAVs don't stack).
+ * the seconds left and is disabled (UAVs don't stack). During the cooldown between UAVs
+ * (lib/uav UAV_COOLDOWN_MS) it is dimmed with the seconds left; a tap explains why.
  * count: number | '∞'. activeMsLeft: ms left on my UAV (0 when idle).
+ * cooldownMsLeft: ms until the next UAV can be called (0 = ready).
  */
-export const UavButton = React.memo(function UavButton({ count, activeMsLeft = 0, disabled, onPress, size = 54, tile = false }) {
+export const UavButton = React.memo(function UavButton({ count, activeMsLeft = 0, cooldownMsLeft = 0, disabled, onPress, size = 54, tile = false }) {
   const active = activeMsLeft > 0
+  const cooling = !active && cooldownMsLeft > 0
   const empty = count === 0
   const secs = Math.max(0, Math.ceil(activeMsLeft / 1000))
+  const cdSecs = Math.max(0, Math.ceil(cooldownMsLeft / 1000))
+  const a11y = active
+    ? `UAV online, ${secs} seconds left`
+    : cooling
+      ? `UAV recharging, ready in ${cdSecs} seconds`
+      : empty ? 'UAV. None left — get more' : `Call in UAV. ${count === '∞' ? 'Unlimited' : count} available`
   if (tile) {
     // Studio kit square (Laser Tag HUD): objective-coloured, count in the corner.
     return (
@@ -34,11 +43,11 @@ export const UavButton = React.memo(function UavButton({ count, activeMsLeft = 0
         hitSlop={4}
         style={({ pressed }) => pressed && { transform: [{ scale: 0.94 }] }}
         accessibilityRole="button"
-        accessibilityLabel={active ? `UAV online, ${secs} seconds left` : empty ? 'UAV. None left — get more' : `Call in UAV. ${count === '∞' ? 'Unlimited' : count} available`}
+        accessibilityLabel={a11y}
         accessibilityState={{ disabled: !!disabled || active }}
       >
-        <EquipTileFace kind="uav" label={active ? `${secs}S` : 'UAV'} size={size} accent={empty ? null : active ? ST.enemy : ST.objective} dim={!!disabled || empty} />
-        {!active ? (
+        <EquipTileFace kind="uav" label={active ? `${secs}S` : cooling ? `${cdSecs}S` : 'UAV'} size={size} accent={empty || cooling ? null : active ? ST.enemy : ST.objective} dim={!!disabled || empty || cooling} />
+        {!active && !cooling ? (
           <View style={[st.tileBadge, empty && { backgroundColor: 'rgba(255,255,255,0.3)' }]} pointerEvents="none">
             <Text style={st.tileBadgeText}>{empty ? '+' : count}</Text>
           </View>
@@ -53,19 +62,21 @@ export const UavButton = React.memo(function UavButton({ count, activeMsLeft = 0
       hitSlop={6}
       style={({ pressed }) => [{ width: size, height: size, opacity: disabled ? 0.45 : 1, transform: [{ scale: pressed ? 0.94 : 1 }] }]}
       accessibilityRole="button"
-      accessibilityLabel={active ? `UAV online, ${secs} seconds left` : empty ? 'UAV. None left — get more' : `Call in UAV. ${count === '∞' ? 'Unlimited' : count} available`}
+      accessibilityLabel={a11y}
       accessibilityState={{ disabled: !!disabled || active }}
     >
       <Glass scheme="dark" radius={size / 2} shadow={false} interactive style={{ width: size, height: size }}>
         <View style={[st.btnInner, { width: size, height: size, borderRadius: size / 2 }, active && st.btnActive]}>
           {active ? (
             <Text style={st.btnSecs}>{secs}</Text>
+          ) : cooling ? (
+            <Text style={[st.btnSecs, { color: 'rgba(255,255,255,0.55)', fontSize: 15 }]}>{cdSecs}s</Text>
           ) : (
             <MaterialCommunityIcons name="satellite-variant" size={size * 0.46} color={empty ? 'rgba(255,255,255,0.55)' : '#fff'} />
           )}
         </View>
       </Glass>
-      {!active && (
+      {!active && !cooling && (
         <View style={[st.badge, empty && st.badgeEmpty]} pointerEvents="none">
           <Text style={st.badgeText}>{empty ? '+' : count}</Text>
         </View>
@@ -187,7 +198,7 @@ export function UavShopCard({ balance, owner, onOpenStore }) {
         </View>
         <View style={{ flex: 1, gap: 6 }}>
           <Text style={st.cardTitle}>UAVs</Text>
-          <Text style={st.cardMeta}>Reveal every enemy on your map for {Math.round(UAV_DURATION_MS / 1000)}s in Laser Tag and Battle Royale. 1 free every match.</Text>
+          <Text style={st.cardMeta}>Reveal every enemy on your map for {Math.round(UAV_DURATION_MS / 1000)}s in Laser Tag and Battle Royale. {UAV_RULES_TEXT}</Text>
           <Text style={st.cardBal}>{owner ? 'Unlimited (owner)' : `Balance: ${balance}`}</Text>
           <Pressable onPress={onOpenStore} style={({ pressed }) => [st.storeLink, pressed && { opacity: 0.75 }]} accessibilityRole="button" accessibilityLabel="Open the Arcade Store">
             <Text style={st.storeLinkText}>All packs</Text>

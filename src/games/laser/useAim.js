@@ -37,13 +37,13 @@ const STABLE_SAMPLES = 2
 export const AIM_MODE_LABELS = {
   trigger: 'AIM · tap screen to fire, hold for auto',
   top: 'HIP FIRE · point the top edge, tap anywhere',
-  camera: 'AIM · FIRE button',
+  camera: 'AIM · FIRE button or tap a target',
 }
 // One-line coaching shown at the start of a match.
 export const AIM_MODE_TIPS = {
-  trigger: 'Hold upright to AIM with the camera · tap the screen to fire, hold for auto · hold the phone flat for HIP FIRE',
+  trigger: 'Hold upright to AIM with the camera · tap a player (or anywhere) to fire, hold for auto · hold the phone flat for HIP FIRE',
   top: 'HIP FIRE: point the TOP EDGE of the phone at a player and tap · hold the phone upright to aim with the camera',
-  camera: 'Put the crosshair on a player and press FIRE · hold the phone flat for HIP FIRE',
+  camera: 'Get the crosshair near a player and press FIRE, or tap the box around them · hold the phone flat for HIP FIRE',
 }
 
 function holdFrom({ x, y, z }) {
@@ -58,9 +58,34 @@ function holdFrom({ x, y, z }) {
 
 const ANDROID_TRIAD = Platform.OS === 'android'
 
+// Accelerometer sign: at rest Android reports the reaction to gravity (pointing UP, +1 on z
+// with the phone face up; the TRIAD maths above relies on it) and iOS reports gravity itself
+// (pointing DOWN, z = -1 face up). UP_SIGN turns a sample into the world "up" direction.
+const UP_SIGN = Platform.OS === 'android' ? 1 : -1
+
+/**
+ * Camera pitch from one accelerometer sample: the elevation of the back camera's axis (−z) in
+ * degrees, 0 = horizon, −90 = straight down (phone flat, face up), +90 = straight up.
+ * yawOffset: degrees from the reported heading to the camera's azimuth (landscape: the heading
+ * follows the top edge, which points sideways; 0 otherwise).
+ */
+export function pitchRollFrom({ x, y, z }, upSign = UP_SIGN) {
+  if (![x, y, z].every(Number.isFinite)) return null
+  const ux = upSign * x
+  const uy = upSign * y
+  const uz = upSign * z
+  const n = Math.hypot(ux, uy, uz)
+  if (!(n > 0.3)) return null // free fall / garbage
+  const pitch = (Math.asin(Math.max(-1, Math.min(1, -uz / n))) * 180) / Math.PI
+  const landscape = Math.abs(ux) > STRONG * n && Math.abs(ux) > Math.abs(uy)
+  return { pitch, yawOffset: landscape ? (ux > 0 ? 90 : -90) : 0 }
+}
+
 export function useAim({ enabled = true, override = 'auto' } = {}) {
   const [heading, setHeading] = useState(null) // { deg, accuracy }
   const [hold, setHold] = useState('portrait') // portrait | landscape | flat
+  const [pitch, setPitch] = useState(null) // camera elevation, degrees (see pitchRollFrom)
+  const [yawOffset, setYawOffset] = useState(0)
   const holdRef = useRef('portrait')
   holdRef.current = hold
   const vec = useRef(null)
@@ -160,9 +185,19 @@ export function useAim({ enabled = true, override = 'auto' } = {}) {
     let sub = null
     let candidate = null
     let seen = 0
+    let smooth = null
     try {
       Accelerometer.setUpdateInterval(200)
       sub = Accelerometer.addListener((a) => {
+        try {
+          const pr = pitchRollFrom(a || {})
+          if (pr) {
+            smooth = smooth == null ? pr.pitch : smooth + 0.4 * (pr.pitch - smooth)
+            const rounded = Math.round(smooth)
+            setPitch((cur) => (cur != null && Math.abs(cur - rounded) < 2 ? cur : rounded))
+            setYawOffset((cur) => (cur === pr.yawOffset ? cur : pr.yawOffset))
+          }
+        } catch {}
         const h = holdFrom(a || {})
         if (!h) return
         if (h !== candidate) { candidate = h; seen = 1 } else seen += 1
@@ -177,5 +212,8 @@ export function useAim({ enabled = true, override = 'auto' } = {}) {
   // Upright in portrait = camera aim with the screen as the trigger; otherwise point the top edge.
   const auto = hold === 'portrait' ? 'trigger' : 'top'
   const mode = override === 'camera' || override === 'top' || override === 'trigger' ? override : auto
-  return { heading, mode, hold, autoDetected: override === 'auto' || !override }
+  // pitch: camera elevation in degrees (null until the accelerometer reports). cameraHeading:
+  // the back camera's azimuth (= heading, ±90° when the phone is held in landscape).
+  const cameraHeading = heading ? ((heading.deg + yawOffset) % 360 + 360) % 360 : null
+  return { heading, mode, hold, autoDetected: override === 'auto' || !override, pitch, cameraHeading }
 }

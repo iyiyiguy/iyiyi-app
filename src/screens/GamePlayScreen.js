@@ -1,10 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
-  FlatList, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput, View, useColorScheme,
+  FlatList, KeyboardAvoidingView, Platform, Pressable, StatusBar, StyleSheet, Text, TextInput, View,
 } from 'react-native'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
-import { GlassBackground } from '../components/GlassBackground'
-import { GlassCard } from '../components/GlassCard'
 import { BesideThemGame } from '../games/BesideThemGame'
 import { ChessGame } from '../games/ChessGame'
 import { OnlineChessGame } from '../games/OnlineChessGame'
@@ -17,12 +15,12 @@ import { HeadsUp7UpGame } from '../games/HeadsUp7UpGame'
 import { GameMenu } from '../games/GameMenu'
 import { Ionicons } from '@expo/vector-icons'
 import { HUD } from '../games/laser/HudPro'
-import { Btn, ConnectionBanner, Pill, PlayerRow, PlayerTapContext, useTint } from '../games/MultiplayerUI'
+import { Btn, ConnectionBanner, Pill, PlayerRow, PlayerTapContext } from '../games/MultiplayerUI'
+import { FONT, ST, stType, useStudioFonts } from '../games/studio'
 import ProfilePreviewSheet from '../components/ProfilePreviewSheet'
 import {
-  MP_GAMES, getActiveRoom, getMyProfile, isArenaCode, isMultiplayerGame, openRoom, resolveGameId, useRoomPositions, useRoomSnapshot,
+  MP_GAMES, TEAMS, getActiveRoom, getMyProfile, isArenaCode, isMultiplayerGame, openRoom, resolveGameId, useRoomPositions, useRoomSnapshot,
 } from '../lib/multiplayer'
-import { colors, radii, type } from '../theme'
 
 export default function GamePlayScreen({ navigation, route }) {
   const params = route.params || {}
@@ -31,9 +29,8 @@ export default function GamePlayScreen({ navigation, route }) {
   const gameName = params.gameName || MP_GAMES[gameId]?.name || 'Game'
   const multiplayer = isMultiplayerGame(gameId)
   const immersive = gameId === 'lasertag' || gameId === 'royale' // camera fills the whole screen
-  const scheme = useColorScheme()
-  const schemeTint = useTint()
-  const tint = immersive ? 'dark' : schemeTint // shooters: dark glass over the camera whatever the system theme
+  // Every game is dark (studio look) whatever the system theme, so the shell is too.
+  useStudioFonts()
   const insets = useSafeAreaInsets()
 
   const [room, setRoom] = useState(() => (multiplayer ? getActiveRoom(gameId, code) : null))
@@ -122,10 +119,12 @@ export default function GamePlayScreen({ navigation, route }) {
   }
 
   const myId = snap?.me?.id ?? me?.id
+  const snapRef = useRef(snap)
+  snapRef.current = snap
   const showPlayer = useCallback((p) => {
     if (!p?.id || p.id === myId) return
-    setPreview({ id: p.id, username: p.username, avatar: p.avatar })
-  }, [myId])
+    setPreview({ id: p.id, username: p.username, avatar: p.avatar, ...matchContext(gameId, snapRef.current, p.id, myId) })
+  }, [myId, gameId])
   const avatarOf = useMemo(() => {
     const map = {}
     for (const p of snap?.roster || []) map[p.id] = p.avatar
@@ -162,49 +161,55 @@ export default function GamePlayScreen({ navigation, route }) {
       case 'heads-up':
         return <HeadsUp7UpGame room={room} onExit={leave} />
       default:
-        return <Text style={[type.body, { padding: 24 }]}>This game isn’t available.</Text>
+        return <Text style={[stType.body, { padding: 24 }]}>This game isn’t available.</Text>
     }
   }
 
   const fatal = roomError || (snap?.status === 'error' ? snap.error : null)
   const body = fatal ? (
     <View style={styles.center}>
-      <Text style={[type.title, { textAlign: 'center' }]}>{fatal}</Text>
+      <Ionicons name="cloud-offline" size={28} color={ST.enemy} style={{ marginBottom: 10 }} />
+      <Text style={[stType.kicker, { color: ST.enemy, marginBottom: 4 }]}>Connection</Text>
+      <Text style={[stType.title, { textAlign: 'center' }]}>{fatal}</Text>
       <Btn title="Back to games" onPress={leave} style={{ marginTop: 16 }} />
     </View>
   ) : multiplayer && !room ? (
-    <View style={styles.center}><Text style={type.caption}>Connecting…</Text></View>
+    <View style={styles.center}><Text style={stType.label}>Connecting…</Text></View>
   ) : renderGame()
 
   if (!multiplayer) {
     return (
-      <GlassBackground isDark={scheme !== 'light'}>
+      <View style={styles.ground}>
+        <StatusBar barStyle="light-content" />
         <SafeAreaView style={{ flex: 1 }} edges={['top', 'bottom']}>
           <View style={styles.topBar}>
-            <Pressable onPress={() => navigation.goBack()} style={styles.iconBtn} accessibilityRole="button" accessibilityLabel="Close" hitSlop={8}>
-              <Text style={type.title}>✕</Text>
+            <Pressable onPress={() => navigation.goBack()} style={({ pressed }) => [styles.iconBtn, pressed && styles.pressed]} accessibilityRole="button" accessibilityLabel="Close" hitSlop={8}>
+              <Ionicons name="close" size={20} color={ST.text} />
             </Pressable>
-            <Text style={[type.title, { flex: 1, marginLeft: 8 }]} numberOfLines={1}>{gameName}</Text>
+            <View style={{ flex: 1, minWidth: 0, marginLeft: 6 }}>
+              <Text style={styles.kicker} numberOfLines={1}>iYiYi Arcade</Text>
+              <Text style={styles.title} numberOfLines={1}>{gameName}</Text>
+            </View>
           </View>
           <View style={{ flex: 1 }}>{body}</View>
         </SafeAreaView>
-      </GlassBackground>
+      </View>
     )
   }
 
   const buttons = (
     <View style={styles.btnRow}>
-      <Pressable onPress={() => setPanel((p) => (p === 'players' ? null : 'players'))} style={[styles.iconBtn, immersive && styles.iconBtnDark]} accessibilityRole="button" accessibilityLabel="Players">
-        <Ionicons name="people" size={18} color={immersive ? '#fff' : colors.text} />
+      <Pressable onPress={() => setPanel((p) => (p === 'players' ? null : 'players'))} style={({ pressed }) => [styles.iconBtn, panel === 'players' && styles.iconBtnOn, pressed && styles.pressed]} accessibilityRole="button" accessibilityLabel="Players" accessibilityState={{ selected: panel === 'players' }}>
+        <Ionicons name="people" size={18} color={panel === 'players' ? ST.friendly : ST.text} />
       </Pressable>
       {gameId !== 'chess' ? (
-        <Pressable onPress={() => setPanel((p) => (p === 'chat' ? null : 'chat'))} style={[styles.iconBtn, immersive && styles.iconBtnDark]} accessibilityRole="button" accessibilityLabel="Chat">
-          <Ionicons name="chatbubble-ellipses" size={18} color={immersive ? '#fff' : colors.text} />
-          {unread > 0 && <View style={[styles.badge, immersive && styles.badgeDark]}><Text style={styles.badgeText}>{unread > 9 ? '9+' : unread}</Text></View>}
+        <Pressable onPress={() => setPanel((p) => (p === 'chat' ? null : 'chat'))} style={({ pressed }) => [styles.iconBtn, panel === 'chat' && styles.iconBtnOn, pressed && styles.pressed]} accessibilityRole="button" accessibilityLabel="Chat" accessibilityState={{ selected: panel === 'chat' }}>
+          <Ionicons name="chatbubble-ellipses" size={18} color={panel === 'chat' ? ST.friendly : ST.text} />
+          {unread > 0 && <View style={styles.badge}><Text style={styles.badgeText}>{unread > 9 ? '9+' : unread}</Text></View>}
         </Pressable>
       ) : null}
-      <Pressable onPress={() => { setPanel(null); setMenuOpen(true) }} style={[styles.iconBtn, immersive && styles.iconBtnDark]} accessibilityRole="button" accessibilityLabel="Menu">
-        <Ionicons name="menu" size={20} color={immersive ? '#fff' : colors.text} />
+      <Pressable onPress={() => { setPanel(null); setMenuOpen(true) }} style={({ pressed }) => [styles.iconBtn, pressed && styles.pressed]} accessibilityRole="button" accessibilityLabel="Menu">
+        <Ionicons name="menu" size={20} color={ST.text} />
       </Pressable>
     </View>
   )
@@ -213,31 +218,31 @@ export default function GamePlayScreen({ navigation, route }) {
     <>
       {panel === 'players' && snap && (
         <View style={[styles.overlay, { top: insets.top + 56 }]}>
-          <GlassCard tint={tint} intensity={70} radius={radii.md} padding={14} style={{ marginBottom: 12 }}>
-            <Text style={[type.label, { marginBottom: 4 }]}>Players · code {snap.code}</Text>
+          <View style={[styles.panel, { borderTopColor: ST.friendly, borderTopWidth: 2 }]}>
+            <Text style={[stType.label, { marginBottom: 4 }]}>Players · code {snap.code}</Text>
             {snap.roster.map((p) => (
               <PlayerRow
                 key={p.id}
                 player={p}
                 subtitle={p.id === snap.hostId ? 'Host' : null}
                 right={p.id === snap.me.id
-                  ? <Pill text="YOU" color={colors.magenta} />
+                  ? <Pill text="YOU" color={ST.friendly} />
                   : <Btn size="sm" title={muted.has(p.id) ? 'Unmute' : 'Mute'} onPress={() => toggleMute(p.id)} />}
               />
             ))}
-            <Text style={[type.caption, { marginTop: 6 }]}>Muting hides that player’s chat messages on your phone.</Text>
-          </GlassCard>
+            <Text style={[stType.small, { marginTop: 8 }]}>Muting hides that player’s chat messages on your phone.</Text>
+          </View>
         </View>
       )}
       {panel === 'chat' && (
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={[styles.chatWrap, { bottom: insets.bottom + 12 }]} keyboardVerticalOffset={insets.top + 20}>
-          <GlassCard tint={tint} intensity={85} radius={radii.md} padding={10} style={{ flex: 1 }}>
+          <View style={[styles.panel, { flex: 1, padding: 10 }]}>
             <FlatList
               data={newestFirst}
               keyExtractor={(m, i) => String(m?.id ?? i)}
               style={{ maxHeight: 260 }}
               inverted
-              ListEmptyComponent={<Text style={type.caption}>No messages yet. Say hi!</Text>}
+              ListEmptyComponent={<Text style={stType.small}>No messages yet. Say hi!</Text>}
               renderItem={({ item }) => (
                 <View style={styles.msg}>
                   <Pressable
@@ -246,11 +251,11 @@ export default function GamePlayScreen({ navigation, route }) {
                     hitSlop={6}
                     style={{ alignSelf: 'flex-start' }}
                   >
-                    <Text style={[type.caption, { color: item.from === snap?.me?.id ? colors.magenta : colors.textMuted }]}>
+                    <Text style={[styles.msgName, { color: item.from === snap?.me?.id ? ST.friendly : ST.muted }]}>
                       {item.from === snap?.me?.id ? 'You' : nameOf[item.from] || 'Player'}
                     </Text>
                   </Pressable>
-                  <Text style={type.body}>{item.text}</Text>
+                  <Text style={stType.body}>{item.text}</Text>
                 </View>
               )}
             />
@@ -259,7 +264,9 @@ export default function GamePlayScreen({ navigation, route }) {
                 value={chatInput}
                 onChangeText={setChatInput}
                 placeholder="Message"
-                placeholderTextColor={colors.textFaint}
+                placeholderTextColor={ST.faint}
+                selectionColor={ST.friendly}
+                keyboardAppearance="dark"
                 style={styles.chatInput}
                 maxLength={300}
                 returnKeyType="send"
@@ -267,7 +274,7 @@ export default function GamePlayScreen({ navigation, route }) {
               />
               <Btn title="Send" size="sm" variant="primary" onPress={send} disabled={!chatInput.trim() || snap?.status !== 'connected'} />
             </View>
-          </GlassCard>
+          </View>
         </KeyboardAvoidingView>
       )}
       <GameMenu
@@ -302,12 +309,13 @@ export default function GamePlayScreen({ navigation, route }) {
 
   return (
     <PlayerTapContext.Provider value={showPlayer}>
-    <GlassBackground isDark={scheme !== 'light'}>
+    <View style={styles.ground}>
+      <StatusBar barStyle="light-content" />
       <SafeAreaView style={{ flex: 1 }} edges={['top', 'bottom']}>
         <View style={styles.topBar}>
-          <View style={{ flex: 1 }}>
-            <Text style={type.title} numberOfLines={1}>{gameName}</Text>
-            {snap && <Text style={type.caption}>Code {snap.code} · {snap.roster.length} player{snap.roster.length === 1 ? '' : 's'}</Text>}
+          <View style={{ flex: 1, minWidth: 0 }}>
+            {snap ? <Text style={styles.kicker} numberOfLines={1}>Code {snap.code} · {snap.roster.length} player{snap.roster.length === 1 ? '' : 's'}</Text> : null}
+            <Text style={styles.title} numberOfLines={1}>{gameName}</Text>
           </View>
           {buttons}
         </View>
@@ -315,26 +323,54 @@ export default function GamePlayScreen({ navigation, route }) {
         <View style={{ flex: 1 }}>{body}</View>
       </SafeAreaView>
       {overlays}
-    </GlassBackground>
+    </View>
     </PlayerTapContext.Provider>
   )
 }
 
+// What the match knows about a tapped player, for the player card: relation (teammate /
+// enemy / opponent), team label and this-match stats. Laser Tag only for now (its host
+// state has per-player teams and K/D); every other game shows the plain card.
+function matchContext(gameId, snap, id, myId) {
+  try {
+    const st = snap?.state
+    if (gameId !== 'lasertag' || !st?.players?.[id]) return {}
+    const them = st.players[id]
+    const mine = myId ? st.players[myId] : null
+    const out = { stats: [{ label: 'This match', value: `${them.kills || 0} / ${them.deaths || 0}` }, { label: 'Score', value: them.score ?? 0 }] }
+    if (st.mode && st.mode !== 'ffa' && them.team) {
+      out.teamLabel = `${TEAMS[them.team]?.name || them.team} team`
+      if (mine?.team) out.relation = mine.team === them.team ? 'teammate' : 'enemy'
+    } else if (mine) {
+      out.relation = 'opponent'
+    }
+    out.teamColor = out.relation === 'teammate' ? ST.friendly : ST.enemy
+    return out
+  } catch {
+    return {}
+  }
+}
+
 const styles = StyleSheet.create({
+  ground: { flex: 1, backgroundColor: ST.ground },
   immersive: { flex: 1, backgroundColor: HUD.bg },
-  topBar: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 8, gap: 6 },
+  topBar: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 8, gap: 6, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: ST.line },
+  kicker: { ...stType.kicker, fontSize: 10, letterSpacing: 2 },
+  title: { fontFamily: FONT.display, fontSize: 19, letterSpacing: 1, color: ST.text, textTransform: 'uppercase', includeFontPadding: false },
   btnRow: { flexDirection: 'row', gap: 8 },
-  iconBtn: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.glassFill, borderWidth: 1, borderColor: colors.glassBorderDark },
-  iconBtnDark: { backgroundColor: HUD.panelStrong, borderColor: HUD.border },
-  badge: { position: 'absolute', top: -2, right: -2, minWidth: 18, height: 18, borderRadius: 9, backgroundColor: colors.magenta, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4 },
-  badgeDark: { backgroundColor: HUD.red, borderWidth: 1.5, borderColor: HUD.bg },
-  badgeText: { fontSize: 10, fontWeight: '700', color: colors.onBrand },
+  iconBtn: { width: 40, height: 40, borderRadius: ST.radius, alignItems: 'center', justifyContent: 'center', backgroundColor: ST.panelStrong, borderWidth: 1, borderColor: ST.line },
+  iconBtnOn: { borderColor: ST.friendly },
+  pressed: { opacity: 0.8, transform: [{ scale: 0.96 }] },
+  badge: { position: 'absolute', top: -4, right: -4, minWidth: 18, height: 18, borderRadius: 2, backgroundColor: ST.enemy, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4, borderWidth: 1.5, borderColor: ST.ground },
+  badgeText: { fontFamily: FONT.display, fontSize: 10, color: '#fff', includeFontPadding: false },
   floating: { position: 'absolute' },
   floatBanner: { position: 'absolute', left: 12, right: 12 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
   overlay: { position: 'absolute', left: 12, right: 12 },
+  panel: { borderRadius: ST.radius, backgroundColor: ST.panelStrong, borderWidth: 1, borderColor: ST.line, padding: 14, marginBottom: 12 },
   chatWrap: { position: 'absolute', left: 12, right: 12, height: 340 },
   msg: { marginVertical: 4 },
+  msgName: { fontFamily: FONT.ui, fontSize: 11, letterSpacing: 1.4, textTransform: 'uppercase' },
   chatInputRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8 },
-  chatInput: { flex: 1, ...type.body, paddingHorizontal: 12, paddingVertical: 8, borderRadius: radii.sm, borderWidth: 1, borderColor: colors.hairline },
+  chatInput: { flex: 1, fontFamily: FONT.uiSemi, fontSize: 15, color: ST.text, paddingHorizontal: 12, paddingVertical: 8, minHeight: 40, borderRadius: ST.radius, borderWidth: 1, borderColor: ST.line, backgroundColor: ST.cell },
 })

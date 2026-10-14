@@ -2,14 +2,13 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Animated, Easing, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { useFocusEffect } from '@react-navigation/native'
 import { Ionicons } from '@expo/vector-icons'
-import { LinearGradient } from 'expo-linear-gradient'
 import { ChessGame } from '../games/ChessGame'
 import {
   AC, ArcadeBackground, Chip, GhostButton, IconCircle, PlayButton, SectionHeader, StatTile,
   useArcadeInsets, useArcadeStatusBar,
 } from '../games/arcadeUI'
 import { PlayerAvatar } from '../components/OpponentCard'
-import { font } from '../theme'
+import { FONT, ST, stType, withAlpha } from '../games/studio'
 import { DIFFICULTIES, DIFFICULTY_LABELS } from '../lib/chessAI'
 import { loadArcadeStats, CHESS_AI_RATINGS } from '../lib/arcadeStats'
 import { SLOW_SEARCH_MS, useChessMatchmaking } from '../lib/chessMatchmaking'
@@ -86,14 +85,17 @@ export default function ChessScreen({ navigation, route }) {
     setConfig(makeConfig(offlineMode, difficulty, colorChoice))
   }
 
+  // Two separate ratings: vs the computer, and online (kept on this device).
+  const online = stats?.chess?.online
+  const onlineRating = online?.games > 0 ? `${online.rating}${online.games < 5 ? '?' : ''}` : '—'
   const header = (
     <View style={[styles.header, { paddingTop: insets.top + 6 }]}>
       <IconCircle icon="chevron-back" label="Back" onPress={() => navigation.goBack()} size={40} />
       <Text style={styles.headerTitle} numberOfLines={1}>{config ? (config.mode === 'ai' ? `vs ${DIFFICULTY_LABELS[config.difficulty]} AI` : 'Pass & Play') : 'Chess'}</Text>
       {stats ? (
-        <View style={styles.headerRating}>
-          <Ionicons name="trophy" size={12} color={AC.gold} />
-          <Text style={styles.headerRatingText}>{stats.chess.rating}</Text>
+        <View style={styles.headerRating} accessibilityLabel={config ? `Rating vs AI ${stats.chess.rating}` : `Online rating ${onlineRating}`}>
+          <Ionicons name={config ? 'hardware-chip' : 'globe-outline'} size={12} color={AC.gold} />
+          <Text style={styles.headerRatingText}>{config ? stats.chess.rating : onlineRating}</Text>
         </View>
       ) : <View style={{ width: 40 }} />}
     </View>
@@ -116,8 +118,6 @@ export default function ChessScreen({ navigation, route }) {
         <ScrollView contentContainerStyle={[styles.setup, { paddingBottom: insets.bottom + 40 }]} showsVerticalScrollIndicator={false}>
           {/* Online: random opponent */}
           <View style={styles.hero}>
-            <LinearGradient colors={['rgba(124,140,255,0.28)', 'rgba(255,46,99,0.12)']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
-            <Text style={styles.heroGlyph} allowFontScaling={false}>♞</Text>
             <View style={styles.liveRow}>
               <View style={styles.liveDot} />
               <Text style={styles.liveText}>ONLINE</Text>
@@ -126,10 +126,10 @@ export default function ChessScreen({ navigation, route }) {
             <Text style={styles.heroBody}>We’ll match you with a player near your rating. See their profile, chat and video call during the game.</Text>
 
             {searching ? (
-              <SearchPanel mm={mm} rating={stats?.chess?.rating} onCancel={mm.cancel} onInvite={inviteFriends} />
+              <SearchPanel mm={mm} rating={online?.games > 0 ? onlineRating : null} onCancel={mm.cancel} onInvite={inviteFriends} />
             ) : mm.status === 'matched' && mm.match ? (
               <View style={styles.found}>
-                <PlayerAvatar uri={mm.match.opponent?.avatar} name={mm.match.opponent?.name} size={52} ring={AC.live} />
+                <PlayerAvatar uri={mm.match.opponent?.avatar} name={mm.match.opponent?.name} size={52} ring={ST.health} />
                 <View style={{ flex: 1 }}>
                   <Text style={styles.foundLabel}>OPPONENT FOUND</Text>
                   <Text style={styles.foundName} numberOfLines={1}>{mm.match.opponent?.name || 'Opponent'}</Text>
@@ -138,7 +138,7 @@ export default function ChessScreen({ navigation, route }) {
               </View>
             ) : (
               <>
-                <PlayButton title="Play online — Find opponent" icon="flash" onPress={findOpponent} style={{ marginTop: 18 }} />
+                <PlayButton title="Find opponent" icon="flash" onPress={findOpponent} style={{ marginTop: 18 }} />
                 {mm.status === 'error' && mm.error ? <Text style={styles.error}>{mm.error}</Text> : null}
                 {mm.notice ? <Text style={styles.notice}>{mm.notice}</Text> : null}
               </>
@@ -151,11 +151,16 @@ export default function ChessScreen({ navigation, route }) {
           </View>
 
           {stats && (
-            <View style={styles.statsRow}>
-              <StatTile label="Rating" value={stats.chess.rating} accent={AC.gold} />
-              <StatTile label="Peak" value={stats.chess.peakRating} />
-              <StatTile label="Rated games" value={stats.chess.ratedGames} />
-            </View>
+            <>
+              <View style={styles.statsRow}>
+                <StatTile label="Online" value={onlineRating} accent={AC.gold} />
+                <StatTile label="vs AI" value={stats.chess.rating} />
+                <StatTile label="Online games" value={online?.games || 0} />
+              </View>
+              <Text style={[styles.caption, { marginTop: 6 }]}>
+                Online (this device){online?.games > 0 ? `: ${online.w}W ${online.l}L ${online.d}D · peak ${online.peakRating}` : ': play an online game to get one'}. vs AI: peak {stats.chess.peakRating} over {stats.chess.ratedGames} games.
+              </Text>
+            </>
           )}
 
           <SectionHeader title="Play offline" />
@@ -219,14 +224,14 @@ function SearchPanel({ mm, rating, onCancel, onInvite }) {
       <View style={styles.searchTop}>
         <View style={styles.radar}>
           <Animated.View style={[styles.radarRing, { transform: [{ scale }], opacity }]} />
-          <View style={styles.radarCore}><Ionicons name="search" size={18} color="#fff" /></View>
+          <View style={styles.radarCore}><Ionicons name="search" size={18} color={ST.ink} /></View>
         </View>
         <View style={{ flex: 1 }}>
           <Text style={styles.searchTitle}>{label}</Text>
           <Text style={styles.caption}>
             {clock}
             {mm.waitingCount > 0 ? ` · ${mm.waitingCount} other${mm.waitingCount === 1 ? '' : 's'} searching` : ''}
-            {rating ? ` · your rating ${rating}` : ''}
+            {rating ? ` · online rating ${rating}` : ''}
           </Text>
         </View>
       </View>
@@ -252,9 +257,8 @@ function ModeCard({ active, onPress, title, body, icon }) {
   return (
     <Pressable onPress={onPress} accessibilityRole="button" accessibilityState={{ selected: active }} style={({ pressed }) => [{ flex: 1 }, pressed && { transform: [{ scale: 0.98 }] }]}>
       <View style={[styles.modeCard, active && styles.modeCardActive]}>
-        {active ? <LinearGradient colors={['rgba(143,123,255,0.30)', 'rgba(91,108,240,0.12)']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} /> : null}
-        <View style={[styles.modeIcon, active && { backgroundColor: AC.accent }]}>
-          <Ionicons name={icon} size={18} color="#fff" />
+        <View style={[styles.modeIcon, active && { backgroundColor: ST.friendly }]}>
+          <Ionicons name={icon} size={18} color={active ? ST.ink : ST.text} />
         </View>
         <Text style={styles.modeTitle}>{title}</Text>
         <Text style={styles.caption} numberOfLines={2}>{body}</Text>
@@ -267,10 +271,10 @@ function Segment({ on, onPress, label, sub }) {
   return (
     <Pressable onPress={onPress} style={({ pressed }) => [{ flex: 1 }, pressed && { opacity: 0.8 }]} accessibilityRole="button" accessibilityState={{ selected: on }}>
       {on ? (
-        <LinearGradient colors={AC.play} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.segBtn}>
-          <Text style={[styles.segText, { color: '#fff' }]}>{label}</Text>
-          {sub ? <Text style={[styles.segSub, { color: 'rgba(255,255,255,0.8)' }]}>{sub}</Text> : null}
-        </LinearGradient>
+        <View style={[styles.segBtn, styles.segOn]}>
+          <Text style={[styles.segText, { color: ST.ink }]}>{label}</Text>
+          {sub ? <Text style={[styles.segSub, { color: 'rgba(7,9,12,0.7)' }]}>{sub}</Text> : null}
+        </View>
       ) : (
         <View style={[styles.segBtn, styles.segIdle]}>
           <Text style={styles.segText}>{label}</Text>
@@ -281,49 +285,51 @@ function Segment({ on, onPress, label, sub }) {
   )
 }
 
+const LABEL = { fontFamily: FONT.ui, fontSize: 10, letterSpacing: 1.8, textTransform: 'uppercase' }
+
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: AC.bg[0] },
+  screen: { flex: 1, backgroundColor: ST.ground },
   header: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingBottom: 8 },
-  headerTitle: { flex: 1, fontSize: 22, ...font.heavy, color: AC.text, letterSpacing: -0.4 },
-  headerRating: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 12, paddingVertical: 7, borderRadius: 999, backgroundColor: 'rgba(255,201,77,0.14)', borderWidth: 1, borderColor: 'rgba(255,201,77,0.3)' },
-  headerRatingText: { fontSize: 14, ...font.heavy, color: AC.gold },
+  headerTitle: { flex: 1, fontFamily: FONT.display, fontSize: 20, letterSpacing: 1, color: ST.text, textTransform: 'uppercase', includeFontPadding: false },
+  headerRating: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, height: 32, borderRadius: ST.radius, backgroundColor: ST.panelStrong, borderWidth: 1, borderColor: ST.line, borderTopWidth: 2, borderTopColor: ST.objective },
+  headerRatingText: { fontFamily: FONT.display, fontSize: 14, color: ST.objective, fontVariant: ['tabular-nums'], includeFontPadding: false },
   setup: { paddingHorizontal: 16, paddingTop: 8 },
-  hero: { borderRadius: 28, padding: 20, overflow: 'hidden', backgroundColor: AC.card, borderWidth: 1, borderColor: AC.border },
-  heroGlyph: { position: 'absolute', right: -6, top: -18, fontSize: 150, color: 'rgba(255,255,255,0.07)' },
-  liveRow: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', gap: 6, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999, backgroundColor: 'rgba(0,0,0,0.35)' },
-  liveDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: AC.live },
-  liveText: { fontSize: 11, ...font.heavy, color: '#fff', letterSpacing: 1 },
-  heroTitle: { fontSize: 26, ...font.heavy, color: AC.text, letterSpacing: -0.6, marginTop: 12 },
-  heroBody: { fontSize: 14, ...font.regular, color: AC.muted, marginTop: 6, lineHeight: 20 },
+  hero: { borderRadius: ST.radius, padding: 18, overflow: 'hidden', backgroundColor: ST.panelStrong, borderWidth: 1, borderColor: ST.line, borderTopWidth: 2, borderTopColor: ST.friendly },
+  liveRow: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', gap: 6, paddingHorizontal: 8, height: 22, borderRadius: 2, borderWidth: 1, borderColor: withAlpha(ST.health, 0.5) },
+  liveDot: { width: 6, height: 6, backgroundColor: ST.health },
+  liveText: { ...LABEL, color: ST.health },
+  heroTitle: { fontFamily: FONT.display, fontSize: 24, letterSpacing: 0.8, color: ST.text, textTransform: 'uppercase', marginTop: 12, includeFontPadding: false },
+  heroBody: { ...stType.body, color: ST.muted, marginTop: 6 },
   heroLinks: { flexDirection: 'row', gap: 10, marginTop: 12 },
-  error: { fontSize: 13, ...font.semibold, color: AC.danger, marginTop: 10, textAlign: 'center' },
-  notice: { fontSize: 13, ...font.medium, color: AC.muted, marginTop: 10, textAlign: 'center' },
-  search: { marginTop: 18, padding: 14, borderRadius: 20, backgroundColor: 'rgba(0,0,0,0.28)', borderWidth: 1, borderColor: AC.border },
+  error: { fontFamily: FONT.uiSemi, fontSize: 13, color: ST.enemy, marginTop: 10, textAlign: 'center' },
+  notice: { fontFamily: FONT.uiMedium, fontSize: 13, color: ST.muted, marginTop: 10, textAlign: 'center' },
+  search: { marginTop: 18, padding: 14, borderRadius: ST.radius, backgroundColor: ST.cell, borderWidth: 1, borderColor: ST.line },
   searchTop: { flexDirection: 'row', alignItems: 'center', gap: 14 },
   radar: { width: 48, height: 48, alignItems: 'center', justifyContent: 'center' },
-  radarRing: { position: 'absolute', width: 48, height: 48, borderRadius: 24, backgroundColor: AC.accent },
-  radarCore: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#5b6cf0', alignItems: 'center', justifyContent: 'center' },
-  searchTitle: { fontSize: 17, ...font.bold, color: AC.text },
-  slow: { marginTop: 12, paddingTop: 12, borderTopWidth: 1, borderTopColor: AC.border },
-  slowText: { fontSize: 13, ...font.regular, color: AC.muted, lineHeight: 18 },
-  cancel: { alignSelf: 'center', marginTop: 12, paddingVertical: 6, paddingHorizontal: 12 },
-  cancelText: { fontSize: 14, ...font.semibold, color: AC.muted },
-  found: { flexDirection: 'row', alignItems: 'center', gap: 14, marginTop: 18, padding: 14, borderRadius: 20, backgroundColor: 'rgba(47,220,143,0.10)', borderWidth: 1, borderColor: 'rgba(47,220,143,0.35)' },
-  foundLabel: { fontSize: 11, ...font.heavy, color: AC.live, letterSpacing: 1.2 },
-  foundName: { fontSize: 19, ...font.bold, color: AC.text, marginTop: 2 },
-  statsRow: { flexDirection: 'row', gap: 10, marginTop: 14 },
+  radarRing: { position: 'absolute', width: 48, height: 48, borderRadius: ST.radius, borderWidth: 2, borderColor: ST.friendly },
+  radarCore: { width: 40, height: 40, borderRadius: ST.radius, backgroundColor: ST.friendly, alignItems: 'center', justifyContent: 'center' },
+  searchTitle: { fontFamily: FONT.display, fontSize: 16, letterSpacing: 0.6, color: ST.text, textTransform: 'uppercase', includeFontPadding: false },
+  slow: { marginTop: 12, paddingTop: 12, borderTopWidth: 1, borderTopColor: ST.line },
+  slowText: { ...stType.small },
+  cancel: { alignSelf: 'center', marginTop: 12, paddingVertical: 8, paddingHorizontal: 12 },
+  cancelText: { ...LABEL, fontSize: 12, color: ST.muted },
+  found: { flexDirection: 'row', alignItems: 'center', gap: 14, marginTop: 18, padding: 14, borderRadius: ST.radius, backgroundColor: withAlpha(ST.health, 0.08), borderWidth: 1, borderColor: withAlpha(ST.health, 0.4) },
+  foundLabel: { ...LABEL, color: ST.health },
+  foundName: { fontFamily: FONT.display, fontSize: 19, color: ST.text, marginTop: 2, includeFontPadding: false },
+  statsRow: { flexDirection: 'row', gap: 8, marginTop: 14 },
   modeRow: { flexDirection: 'row', gap: 10 },
-  modeCard: { padding: 14, borderRadius: 20, overflow: 'hidden', backgroundColor: AC.card, borderWidth: 1, borderColor: AC.border, minHeight: 118 },
-  modeCardActive: { borderColor: AC.accent },
-  modeIcon: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center', backgroundColor: AC.cardStrong, marginBottom: 10 },
-  modeTitle: { fontSize: 16, ...font.bold, color: AC.text, marginBottom: 2 },
-  caption: { fontSize: 13, ...font.regular, color: AC.muted },
-  label: { fontSize: 11, ...font.bold, color: AC.muted, letterSpacing: 1.2, textTransform: 'uppercase', marginBottom: 8 },
-  options: { marginTop: 12, padding: 16, borderRadius: 20, backgroundColor: AC.card, borderWidth: 1, borderColor: AC.border },
+  modeCard: { padding: 14, borderRadius: ST.radius, overflow: 'hidden', backgroundColor: ST.panelStrong, borderWidth: 1, borderColor: ST.line, minHeight: 118 },
+  modeCardActive: { borderColor: ST.friendly, backgroundColor: withAlpha(ST.friendly, 0.08) },
+  modeIcon: { width: 34, height: 34, borderRadius: ST.radius, alignItems: 'center', justifyContent: 'center', backgroundColor: ST.cell, marginBottom: 10 },
+  modeTitle: { fontFamily: FONT.display, fontSize: 15, letterSpacing: 0.6, color: ST.text, textTransform: 'uppercase', marginBottom: 2, includeFontPadding: false },
+  caption: { fontFamily: FONT.uiMedium, fontSize: 13, lineHeight: 17, color: ST.muted },
+  label: { ...LABEL, color: ST.muted, marginBottom: 8 },
+  options: { marginTop: 12, padding: 16, borderRadius: ST.radius, backgroundColor: ST.panelStrong, borderWidth: 1, borderColor: ST.line },
   segment: { flexDirection: 'row', gap: 8 },
-  segBtn: { paddingVertical: 10, borderRadius: 14, alignItems: 'center' },
-  segIdle: { backgroundColor: AC.card, borderWidth: 1, borderColor: AC.border },
-  segText: { fontSize: 15, ...font.bold, color: AC.text },
-  segSub: { fontSize: 11, ...font.medium, color: AC.faint, marginTop: 1 },
+  segBtn: { paddingVertical: 9, borderRadius: ST.radius, alignItems: 'center', borderWidth: 1 },
+  segOn: { backgroundColor: ST.friendly, borderColor: ST.friendly },
+  segIdle: { backgroundColor: ST.cell, borderColor: ST.line },
+  segText: { fontFamily: FONT.display, fontSize: 14, letterSpacing: 0.8, textTransform: 'uppercase', color: ST.text, includeFontPadding: false },
+  segSub: { fontFamily: FONT.uiSemi, fontSize: 11, color: ST.faint, marginTop: 1, fontVariant: ['tabular-nums'] },
   chips: { flexDirection: 'row', gap: 8, flexWrap: 'wrap' },
 })

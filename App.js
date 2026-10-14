@@ -45,7 +45,7 @@ import LocationConsentScreen from './src/screens/LocationConsentScreen'
 import PublicProfileScreen from './src/screens/PublicProfileScreen'
 import HistoryScreen from './src/screens/HistoryScreen'
 const AirdropScreen = lazyScreen(() => import('./src/screens/AirdropScreen'))
-import RecommendedScreen from './src/screens/RecommendedScreen'
+import RecommendedScreen, { RecommendedRedirect } from './src/screens/RecommendedScreen'
 import FollowListScreen from './src/screens/FollowListScreen'
 import ContentFeedScreen from './src/screens/ContentFeedScreen'
 import SavedContentScreen from './src/screens/SavedContentScreen'
@@ -59,6 +59,8 @@ const CameraScreen = lazyScreen(() => import('./src/screens/CameraScreen'))
 import TaggedScreen from './src/screens/TaggedScreen'
 import TopProfilesScreen from './src/screens/TopProfilesScreen'
 import ImportLinksScreen from './src/screens/ImportLinksScreen'
+import OnboardingIntentScreen, { loadSavedIntent } from './src/screens/OnboardingIntentScreen'
+import OnboardingNametagScreen, { needsNametag } from './src/screens/OnboardingNametagScreen'
 import PlatformFollowsScreen from './src/screens/PlatformFollowsScreen'
 import EventsScreen from './src/screens/EventsScreen'
 const CreateEventScreen = lazyScreen(() => import('./src/screens/CreateEventScreen'))
@@ -100,6 +102,10 @@ const locationConsentKey = (uid) => `iyiyi_location_consent_seen_${uid}`
 const launchesKey = (uid) => `iyiyi_member_launches_${uid}`
 const paywallSeenKey = (uid) => `iyiyi_paywall_seen_${uid}`
 const importSeenKey = (userId) => `iyiyi_import_prompt_seen_${userId}`
+const intentSeenKey = (uid) => `iyiyi_onboarding_intent_seen_${uid}`
+const nametagSeenKey = (uid) => `iyiyi_onboarding_nametag_seen_${uid}`
+const OnboardingIntent = withAura(OnboardingIntentScreen)
+const OnboardingNametag = withAura(OnboardingNametagScreen)
 
 const Tab = createBottomTabNavigator()
 // Every screen renders inside its own error boundary: a bug on one screen shows a
@@ -169,17 +175,23 @@ const Aura = {
   BusinessTeamScreen: withAura(BusinessTeamScreen),
 }
 
+// Five labelled tabs: Here · Feed · Camera · Arcade · Me (see TabBar). "Here" is the Nearby
+// route with a List / Map switch: Map stays a tab route of its own (kept mounted, so flipping
+// back and forth is instant) and Recommended (the old Discover tab) redirects to Here's
+// Recommended sort - both names stay registered so existing navigate() calls and links work.
+// Camera is not a tab route: the centre button opens the Camera stack screen.
+// The single aura behind the navigator serves every tab, so tab screens aren't wrapped again.
 function Tabs() {
   return (
     <View style={{ flex: 1 }}>
     <AuraBackground />
     <Tab.Navigator screenLayout={screenLayout} screenOptions={tabScreenOptions} tabBar={(props) => <TabBar {...props} />}>
-      <Tab.Screen name="Nearby" component={Aura.NearbyScreen} />
-      <Tab.Screen name="Recommended" component={Aura.RecommendedScreen} />
-      <Tab.Screen name="MyProfile" component={Aura.MyProfileScreen} />
-      <Tab.Screen name="Map" component={Aura.MapScreen} />
-      <Tab.Screen name="Feed" component={Aura.ContentFeedScreen} />
-      <Tab.Screen name="Games" component={Aura.GamesScreen} />
+      <Tab.Screen name="Nearby" component={NearbyScreen} />
+      <Tab.Screen name="Feed" component={ContentFeedScreen} />
+      <Tab.Screen name="Games" component={GamesScreen} />
+      <Tab.Screen name="MyProfile" component={MyProfileScreen} />
+      <Tab.Screen name="Map" component={MapScreen} />
+      <Tab.Screen name="Recommended" component={RecommendedRedirect} />
     </Tab.Navigator>
     </View>
   )
@@ -269,24 +281,71 @@ export default function App() {
     if (navRef.isReady() && navRef.getCurrentRoute()?.name !== 'Camera') navRef.navigate('Camera')
   }, [navRef])
   useFlipToCamera(openCamera, !!userId && flipOn)
-  // Onboarding order after sign-up: import social links -> location (explainer, then the
-  // phone's prompt from its Continue button) -> the app. The Pro offer is not part of
-  // onboarding; it shows once, from the second time the app is opened.
+  // Onboarding order after sign-up: "What brings you here?" (intent) -> "Your nametag" (photo,
+  // name, @handle) -> social handles / Linktree import -> location (explainer, then the phone's
+  // prompt from its Continue button) -> the app. Each step shows once per account (AsyncStorage
+  // keyed by user id) and only when it's needed: intent until answered or skipped, nametag when
+  // the photo or a self-chosen username is missing, socials when the profile has no links.
+  // Members who already finished the old onboarding (location step done) aren't shown the new
+  // intent / nametag steps. The Pro offer is not part of onboarding; it shows once, from the
+  // second time the app is opened (defaulting to Business Pro for businesses).
   const [importChecked, setImportChecked] = useState(false)
+  const [showIntent, setShowIntent] = useState(false)
+  const [showNametag, setShowNametag] = useState(false)
+  const [onboardProfile, setOnboardProfile] = useState(null)
+  const [intent, setIntent] = useState(null)
+  const [planned, setPlanned] = useState({}) // steps in this run, for the progress bars
+  const sessionUser = session?.user ?? null
   useEffect(() => {
     setImportChecked(false)
+    setShowIntent(false)
+    setShowNametag(false)
+    setShowImport(false)
+    setOnboardProfile(null)
+    setIntent(null)
+    setPlanned({})
     if (!userId) return
     let cancelled = false
-    // Never hold the app on a slow network: after 4 s carry on without the import step.
+    // Never hold the app on a slow network: after 4 s carry on without the optional steps.
     let timedOut = false
     const giveUp = setTimeout(() => { timedOut = true; if (!cancelled) setImportChecked(true) }, 4000)
+    const live = () => !cancelled && !timedOut
     ;(async () => {
       try {
-        if (await AsyncStorage.getItem(importSeenKey(userId))) return
+        const [importSeen, intentSeen, nametagSeen, consentMine, consentLegacy] = await Promise.all([
+          AsyncStorage.getItem(importSeenKey(userId)),
+          AsyncStorage.getItem(intentSeenKey(userId)),
+          AsyncStorage.getItem(nametagSeenKey(userId)),
+          AsyncStorage.getItem(locationConsentKey(userId)),
+          AsyncStorage.getItem(LOCATION_CONSENT_KEY),
+        ])
+        const savedIntent = await loadSavedIntent(sessionUser)
+        if (!cancelled && savedIntent) setIntent(savedIntent)
+        const veteran = consentMine === 'true' || consentLegacy === 'true'
+        const wantIntent = !intentSeen && !veteran && !savedIntent
+        const checkNametag = !nametagSeen && !veteran
+        if (wantIntent && live()) {
+          setShowIntent(true)
+          setPlanned((p) => ({ ...p, intent: true }))
+        }
+        if (importSeen && !checkNametag) return
         const profile = await apiJson('/api/profiles/me')
-        const hasLinks = (profile.social_links?.length ?? 0) > 0 || (profile.websites?.length ?? 0) > 0
-        if (hasLinks) await AsyncStorage.setItem(importSeenKey(userId), 'true')
-        else if (!cancelled && !timedOut) setShowImport(true)
+        if (!live()) return
+        setOnboardProfile(profile)
+        if (checkNametag) {
+          if (needsNametag(profile, sessionUser)) {
+            setShowNametag(true)
+            setPlanned((p) => ({ ...p, nametag: true }))
+          } else AsyncStorage.setItem(nametagSeenKey(userId), 'true').catch(() => {})
+        }
+        if (!importSeen) {
+          const hasLinks = (profile.social_links?.length ?? 0) > 0 || (profile.websites?.length ?? 0) > 0
+          if (hasLinks) await AsyncStorage.setItem(importSeenKey(userId), 'true')
+          else if (live()) {
+            setShowImport(true)
+            setPlanned((p) => ({ ...p, import: true }))
+          }
+        }
       } catch {
         // If we can't tell, don't block the app with an optional step.
       } finally {
@@ -294,14 +353,20 @@ export default function App() {
       }
     })()
     return () => { cancelled = true; clearTimeout(giveUp) }
-  }, [userId])
+    // sessionUser is read for this user id only; token refreshes mustn't re-run onboarding.
+  }, [userId]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (locationConsent === false) setPlanned((p) => (p.location ? p : { ...p, location: true }))
+  }, [locationConsent])
+  const flowSteps = ['intent', 'nametag', 'import', 'location'].filter((s) => planned[s])
+  const stepProps = (name) => ({ step: flowSteps.indexOf(name) + 1, total: flowSteps.length })
 
   // One-time Pro offer, after people have used the app: shown on app open from the second
   // launch as a member (never during first-run onboarding). Dismissible with "Not now" or
   // the close button, and skipped for people who are already Pro.
   const launchCounted = useRef(null)
   useEffect(() => {
-    if (!userId || !locationConsent || showImport || !importChecked) return
+    if (!userId || !locationConsent || showImport || showIntent || showNametag || !importChecked) return
     let cancelled = false
     ;(async () => {
       try {
@@ -316,7 +381,7 @@ export default function App() {
       } catch {}
     })()
     return () => { cancelled = true }
-  }, [userId, locationConsent, showImport, importChecked])
+  }, [userId, locationConsent, showImport, showIntent, showNametag, importChecked])
 
   const finishPaywall = () => {
     if (userId) AsyncStorage.setItem(paywallSeenKey(userId), 'true').catch(() => {})
@@ -324,8 +389,20 @@ export default function App() {
   }
 
   const finishImport = () => {
-    if (userId) AsyncStorage.setItem(importSeenKey(userId), 'true')
+    if (userId) AsyncStorage.setItem(importSeenKey(userId), 'true').catch(() => {})
     setShowImport(false)
+  }
+
+  // picked: 'business' | 'creator' | 'player', or null when skipped (saved by the screen).
+  const finishIntent = (picked) => {
+    if (userId) AsyncStorage.setItem(intentSeenKey(userId), 'true').catch(() => {})
+    if (picked) setIntent(picked)
+    setShowIntent(false)
+  }
+
+  const finishNametag = () => {
+    if (userId) AsyncStorage.setItem(nametagSeenKey(userId), 'true').catch(() => {})
+    setShowNametag(false)
   }
 
   const acceptLocationConsent = () => {
@@ -350,12 +427,16 @@ export default function App() {
             <Stack.Screen name="SignIn" component={Aura.AuthScreen} />
             <Stack.Screen name="PublicProfile" component={Aura.PublicProfileScreen} />
           </Stack.Navigator>
+        ) : showIntent ? (
+          <OnboardingIntent user={sessionUser} profile={onboardProfile} onDone={finishIntent} {...stepProps('intent')} />
+        ) : showNametag ? (
+          <OnboardingNametag user={sessionUser} profile={onboardProfile} intent={intent} onDone={finishNametag} {...stepProps('nametag')} />
         ) : showImport ? (
-          <Aura.ImportLinksScreen onDone={finishImport} />
+          <Aura.ImportLinksScreen onDone={finishImport} intent={intent} {...stepProps('import')} />
         ) : !locationConsent ? (
-          <Aura.LocationConsentScreen onContinue={acceptLocationConsent} />
+          <Aura.LocationConsentScreen onContinue={acceptLocationConsent} intent={intent} {...stepProps('location')} />
         ) : showPaywall ? (
-          <Aura.SubscriptionScreen onClose={finishPaywall} />
+          <Aura.SubscriptionScreen onClose={finishPaywall} route={intent === 'business' ? { params: { tier: 'business' } } : undefined} />
         ) : (
           <Stack.Navigator key="member" screenLayout={screenLayout} screenOptions={screenOptions}>
             <Stack.Screen name="Tabs" component={Tabs} />
@@ -398,7 +479,7 @@ export default function App() {
           </Stack.Navigator>
         )}
         {/* Game challenges from other users (inbox:<myId>), only once fully signed in. */}
-        {session && locationConsent && !showImport && !showPaywall ? <InviteListener key={userId} navRef={navRef} /> : null}
+        {session && locationConsent && !showIntent && !showNametag && !showImport && !showPaywall ?<InviteListener key={userId} navRef={navRef} /> : null}
       </NavigationContainer>
     </SafeAreaProvider>
   )

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { View, FlatList, StyleSheet, Pressable, Text, TextInput } from 'react-native'
 import { useFocusEffect } from '@react-navigation/native'
 import * as Location from 'expo-location'
@@ -20,12 +20,41 @@ import { matchesTags, matchesSearch } from '../lib/tags'
 import { fetchMyProfileCard } from '../lib/myContent'
 import { getPositionFast } from '../lib/location'
 import { getCached, setCached } from '../lib/cache'
+import { useT } from '../i18n'
+import strings from '../i18n/strings/recommended'
+
+// Ranked people at a scope around a point. Shared with the Here tab (its "Recommended" sort).
+// Resolves to a list (possibly empty); throws only when signed out or the request fails.
+export async function fetchRecommended(scope, coords) {
+  const session = (await supabase.auth.getSession()).data?.session
+  if (!session?.access_token) throw new Error('Please sign in again')
+  const res = await fetch(
+    `${API_URL}/api/profiles/discover/recommended?scope=${scope}&lat=${coords.latitude}&lng=${coords.longitude}`,
+    { headers: { Authorization: `Bearer ${session.access_token}` } }
+  )
+  if (!res.ok) throw new Error('Could not load recommended profiles')
+  const json = await res.json().catch(() => ({}))
+  return Array.isArray(json?.users) ? json.users.filter(Boolean) : []
+}
+
+// The "Recommended" tab route is kept so older links and navigate('Recommended') calls still
+// land somewhere sensible: Discover is now the Recommended sort on the Here tab.
+export function RecommendedRedirect({ navigation, route }) {
+  useFocusEffect(useCallback(() => {
+    navigation.navigate('Nearby', { sort: 'recommended', scope: route?.params?.scope, at: Date.now() })
+  }, [navigation, route?.params?.scope]))
+  return <View style={styles.screen} />
+}
 
 export default function RecommendedScreen({ navigation }) {
+  const t = useT(strings)
   const [scope, setScope] = useState('local')
   const [layout, setLayout] = useState('grid')
-  const [users, setUsersState] = useState(() => getCached('recommended') ?? [])
-  const setUsers = useCallback((list) => { setCached('recommended', list); setUsersState(list) }, [])
+  const [users, setUsersState] = useState(() => getCached('recommended:local') ?? [])
+  const scopeRef = useRef(scope)
+  scopeRef.current = scope
+  const seqRef = useRef(0)
+  const setUsers = useCallback((list, forScope = scopeRef.current) => { setCached(`recommended:${forScope}`, list); setUsersState(list) }, [])
   const [me, setMe] = useState(null)
   const [loading, setLoading] = useState(false)
   const [permissionDenied, setPermissionDenied] = useState(false)
@@ -42,23 +71,25 @@ export default function RecommendedScreen({ navigation }) {
     return () => { alive = false }
   }, [])
 
-  const loadAt = useCallback(async (currentScope, coords) => {
+  // Any of the fast fix / fresh fix / place lookups can land last: only the newest applies,
+  // and only while its scope is still the one on screen.
+  const loadAt = useCallback(async (currentScope, coords, viewScope = currentScope) => {
+    const my = ++seqRef.current
     setLoading(true)
     try {
-      const session = (await supabase.auth.getSession()).data?.session
-      if (!session?.access_token) throw new Error('Please sign in again')
-      const res = await fetch(
-        `${API_URL}/api/profiles/discover/recommended?scope=${currentScope}&lat=${coords.latitude}&lng=${coords.longitude}`,
-        { headers: { Authorization: `Bearer ${session.access_token}` } }
-      )
-      const json = await res.json().catch(() => ({}))
-      setUsers(Array.isArray(json?.users) ? json.users : [])
+      const list = await fetchRecommended(currentScope, coords)
+      if (my === seqRef.current && viewScope === scopeRef.current) setUsers(list, viewScope)
     } catch (e) {
       console.warn('Recommended load failed', e)
     } finally {
-      setLoading(false)
+      if (my === seqRef.current) setLoading(false)
     }
-  }, [])
+  }, [setUsers])
+
+  useEffect(() => {
+    const cached = getCached(`recommended:${scope}`)
+    setUsersState(cached ?? [])
+  }, [scope])
 
   const load = useCallback(async (currentScope) => {
     setLoading(true)
@@ -85,12 +116,12 @@ export default function RecommendedScreen({ navigation }) {
     try {
       const results = await Location.geocodeAsync(place.trim())
       if (!results?.length) {
-        setPlaceError('Could not find that place')
+        setPlaceError('notFound')
         return
       }
-      await loadAt(scope === 'local' || scope === 'regional' ? 'state' : scope, results[0])
+      await loadAt(scope === 'local' || scope === 'regional' ? 'state' : scope, results[0], scope)
     } catch (e) {
-      setPlaceError('Could not find that place')
+      setPlaceError('notFound')
     } finally {
       setLoading(false)
     }
@@ -109,33 +140,36 @@ export default function RecommendedScreen({ navigation }) {
     <View style={styles.screen}>
       <GlowBackdrop preset="social" />
       <BrandHeader
-        title="Recommended"
-        subtitle={users.length ? `${users.length} ${users.length === 1 ? 'profile' : 'profiles'} · ${scopeLabel(scope)}` : scopeLabel(scope)}
+        title={t('title')}
+        subtitle={users.length ? t(users.length === 1 ? 'countOne' : 'countMany', { n: users.length, scope: scopeLabel(scope) }) : scopeLabel(scope)}
         right={
           <Pressable
             onPress={() => navigation.navigate('TopProfiles')}
             hitSlop={8}
             accessibilityRole="button"
+            accessibilityLabel={t('topA11y')}
             style={({ pressed }) => [styles.topButton, pressed && { transform: [{ scale: 0.96 }] }]}
           >
             <Ionicons name="trophy-outline" size={15} color={colors.ink} />
-            <Text style={styles.topButtonText}>Top</Text>
+            <Text style={styles.topButtonText}>{t('top')}</Text>
           </Pressable>
         }
       />
-      <SearchField style={styles.search} value={search} onChangeText={setSearch} placeholder="Search people or tags" />
+      <SearchField style={styles.search} value={search} onChangeText={setSearch} placeholder={t('searchPlaceholder')} />
 
       <View style={styles.toolbar}>
         <TagDropdown selected={activeTags} onApply={setActiveTags} />
         <Pressable
           onPress={() => { Haptics.selectionAsync().catch(() => {}); setLayout((l) => (l === 'grid' ? 'list' : 'grid')) }}
           accessibilityRole="button"
+          accessibilityLabel={layout === 'grid' ? t('showAsList') : t('showAsGrid')}
+          hitSlop={6}
           style={({ pressed }) => [pressed && { transform: [{ scale: 0.96 }] }]}
         >
           <GlassPanel radius={radii.pill} animateIn={false}>
             <View style={styles.pill}>
               <Ionicons name={layout === 'grid' ? 'list-outline' : 'grid-outline'} size={16} color={colors.text} />
-              <Text style={styles.pillText}>{layout === 'grid' ? 'List' : 'Grid'}</Text>
+              <Text style={styles.pillText}>{layout === 'grid' ? t('list') : t('grid')}</Text>
             </View>
           </GlassPanel>
         </Pressable>
@@ -144,7 +178,8 @@ export default function RecommendedScreen({ navigation }) {
             <Ionicons name="location-outline" size={16} color={colors.textFaint} />
             <TextInput
               style={styles.placeInput}
-              placeholder="City or state"
+              placeholder={t('placePlaceholder')}
+              accessibilityLabel={t('placePlaceholder')}
               placeholderTextColor={colors.textFaint}
               value={place}
               onChangeText={(t) => { setPlace(t); if (placeError) setPlaceError('') }}
@@ -152,25 +187,25 @@ export default function RecommendedScreen({ navigation }) {
               returnKeyType="go"
             />
             {place.trim() ? (
-              <Pressable onPress={searchPlace} hitSlop={8} style={styles.goButton} accessibilityRole="button" accessibilityLabel="Browse this place">
+              <Pressable onPress={searchPlace} hitSlop={8} style={styles.goButton} accessibilityRole="button" accessibilityLabel={t('browsePlace')}>
                 <Ionicons name="arrow-forward" size={14} color={colors.ink} />
               </Pressable>
             ) : null}
           </View>
         </GlassPanel>
       </View>
-      {placeError ? <Text style={styles.placeError}>{placeError}</Text> : null}
+      {placeError ? <Text style={styles.placeError} accessibilityLiveRegion="polite">{t('placeNotFound')}</Text> : null}
 
       <ScopeChips value={scope} onChange={setScope} />
 
       {filtering ? (
         <View style={styles.filterLine}>
           <Text style={styles.filterText} numberOfLines={1}>
-            {data.length} {data.length === 1 ? 'match' : 'matches'}
+            {t(data.length === 1 ? 'matchOne' : 'matchMany', { n: data.length })}
             {activeTags.length ? ` · ${activeTags.join(', ')}` : ''}
           </Text>
-          <Pressable onPress={() => { setSearch(''); setActiveTags([]) }} hitSlop={8} accessibilityRole="button">
-            <Text style={styles.filterClear}>Clear</Text>
+          <Pressable onPress={() => { setSearch(''); setActiveTags([]) }} hitSlop={12} accessibilityRole="button" accessibilityLabel={t('clearFilters')}>
+            <Text style={styles.filterClear}>{t('clear')}</Text>
           </Pressable>
         </View>
       ) : null}
@@ -207,10 +242,10 @@ export default function RecommendedScreen({ navigation }) {
         ListEmptyComponent={
           <Text style={styles.empty}>
             {permissionDenied
-              ? 'Location access is off. Enable it in Settings.'
+              ? t('locationOff')
               : filtering
-                ? 'No profiles match that search or those tags.'
-                : loading ? 'Loading…' : 'No recommended profiles yet at this range.'}
+                ? t('noMatch')
+                : loading ? t('loading') : t('empty')}
           </Text>
         }
       />

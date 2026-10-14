@@ -5,6 +5,8 @@ import { Ionicons } from '@expo/vector-icons'
 import * as Haptics from 'expo-haptics'
 import { colors, usePageInk } from '../theme'
 import Glass from './Glass'
+import { useT } from '../i18n'
+import strings from '../i18n/strings/social'
 
 // Horizontal ScrollView that shows a soft edge fade + a tappable chevron on whichever side
 // still has content offscreen, so a chip row visibly "continues" (e.g. Nationwide ->
@@ -17,6 +19,7 @@ import Glass from './Glass'
 //   scrollRef                optional ref object; receives the inner ScrollView
 //   onContentLayout          optional (contentWidth) => void
 export default function ScrollArrows({ children, contentContainerStyle, style, scrollRef, onContentLayout }) {
+  const t = useT(strings)
   const { ink } = usePageInk()
   const innerRef = useRef(null)
   const x = useRef(0)
@@ -62,13 +65,13 @@ export default function ScrollArrows({ children, contentContainerStyle, style, s
       {edges.left ? (
         <View style={[styles.edge, styles.edgeLeft]} pointerEvents="box-none">
           <LinearGradient colors={[fadeSolid, fadeClear]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={StyleSheet.absoluteFill} pointerEvents="none" />
-          <Arrow icon="chevron-back" onPress={() => page(-1)} label="Scroll left" />
+          <Arrow icon="chevron-back" onPress={() => page(-1)} label={t('scrollLeft')} />
         </View>
       ) : null}
       {edges.right ? (
         <View style={[styles.edge, styles.edgeRight]} pointerEvents="box-none">
           <LinearGradient colors={[fadeClear, fadeSolid]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={StyleSheet.absoluteFill} pointerEvents="none" />
-          <Arrow icon="chevron-forward" onPress={() => page(1)} label="Scroll right" />
+          <Arrow icon="chevron-forward" onPress={() => page(1)} label={t('scrollRight')} />
         </View>
       ) : null}
     </View>

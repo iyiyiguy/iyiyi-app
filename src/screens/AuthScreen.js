@@ -3,7 +3,7 @@ import { View, Text, TextInput, Pressable, StyleSheet, Image, ScrollView, Alert,
 import { LinearGradient } from 'expo-linear-gradient'
 import { Ionicons } from '@expo/vector-icons'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { colors, radii, type, useIsDark } from '../theme'
+import { colors, type, useIsDark } from '../theme'
 import { FadeIn, Press, SPRING } from '../lib/motion'
 import Surface from '../components/Surface'
 import { HeaderButton } from '../components/BrandHeader'
@@ -12,6 +12,7 @@ import * as AppleAuthentication from 'expo-apple-authentication'
 import { ensureProfile, neutralUsername, signInWithApple, signInWithProvider } from '../lib/oauth'
 import SocialIcon from '../components/SocialIcon'
 import { logSignup } from '../lib/attribution'
+import { requestPasswordReset } from '../lib/passwordRecovery'
 import GlassPanel from '../components/GlassPanel'
 import { useT } from '../i18n'
 import strings from '../i18n/strings/auth'
@@ -41,11 +42,8 @@ export default function AuthScreen({ navigation, route }) {
   const [otpSent, setOtpSent] = useState(false)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
-  const [qrMode, setQrMode] = useState(false)
-  const [qrToken, setQrToken] = useState(null)
-  const [qrExpired, setQrExpired] = useState(false)
   const [totalUsers, setTotalUsers] = useState(null)
-  const pollRef = useRef(null)
+  const [resetting, setResetting] = useState(false)
   const [appleAvailable, setAppleAvailable] = useState(false)
   const [agreed, setAgreed] = useState(false)
 
@@ -58,56 +56,9 @@ export default function AuthScreen({ navigation, route }) {
     fetch(`${API_URL}/api/public/total-users`).then((r) => r.json()).then((d) => setTotalUsers(d.total_users)).catch(() => {})
   }, [])
 
-  useEffect(() => {
-    if (!qrMode) {
-      clearInterval(pollRef.current)
-      return
-    }
-    setQrExpired(false)
-    let cancelled = false
-    const start = async () => {
-      try {
-        const res = await fetch(`${API_URL}/api/login-sessions`, { method: 'POST' })
-        if (!res.ok) throw new Error(t('qrCreateError'))
-        const data = await res.json()
-        if (cancelled) return
-        const token = data.token
-        if (!token) throw new Error(t('qrCreateError'))
-        setQrToken(token)
-        clearInterval(pollRef.current)
-        pollRef.current = setInterval(async () => {
-          try {
-            const pollRes = await fetch(`${API_URL}/api/login-sessions/${token}`)
-            const pollData = await pollRes.json()
-            if (cancelled) return
-            if (pollData.status === 'approved') {
-              clearInterval(pollRef.current)
-              const { error: verifyError } = await supabase.auth.verifyOtp({
-                token_hash: pollData.token_hash, type: 'magiclink',
-              })
-              if (verifyError && !cancelled) setError(verifyError.message)
-            } else if (pollData.status === 'expired') {
-              clearInterval(pollRef.current)
-              setQrExpired(true)
-            }
-          } catch {
-            // Transient network error: keep polling until the code expires.
-          }
-        }, 2000)
-      } catch (e) {
-        if (!cancelled) setError(e?.message ?? t('qrCreateErrorShort'))
-      }
-    }
-    start()
-    return () => {
-      cancelled = true
-      clearInterval(pollRef.current)
-    }
-  }, [qrMode])
-
-  const qrImageUrl = qrToken
-    ? `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(qrToken)}`
-    : null
+  // QR sign-in was removed: no code approves a login session, and the old version sent the
+  // session token to a third-party QR image service. Bring it back only together with an
+  // approval flow in Settings, and draw the code on the device (src/lib/qr.js).
 
   const withGuard = async (fn) => {
     setError('')
@@ -171,6 +122,25 @@ export default function AuthScreen({ navigation, route }) {
     if (created) logSignup(data.user.id)
   })
 
+  // "Forgot password?": emails a recovery link (see lib/passwordRecovery.js). Doesn't need the
+  // Terms checkbox, since it doesn't sign anyone in.
+  const forgotPassword = async () => {
+    setError('')
+    if (!email.trim()) {
+      setError(t('resetNeedEmail'))
+      return
+    }
+    setResetting(true)
+    try {
+      await requestPasswordReset(email)
+      Alert.alert(t('resetSentTitle'), t('resetSentMsg', { email: email.trim() }))
+    } catch (e) {
+      setError(e?.message || t('resetFailed'))
+    } finally {
+      setResetting(false)
+    }
+  }
+
   const socialSignIn = (provider) => withGuard(() => signInWithProvider(provider))
   const appleSignIn = () => {
     if (loading) return
@@ -210,24 +180,6 @@ export default function AuthScreen({ navigation, route }) {
         <FadeIn index={2} style={{ alignSelf: 'center', width: formW }}>
           <GlassPanel radius={30} strong animateIn={false}>
             <View style={styles.form}>
-              {qrMode ? (
-                <View style={styles.qrWrap}>
-                  <Text style={styles.formTitle}>{t('qrTitle')}</Text>
-                  {qrImageUrl && !qrExpired ? (
-                    <Image source={{ uri: qrImageUrl }} style={styles.qrImage} />
-                  ) : (
-                    <Text style={type.body}>{qrExpired ? t('qrExpired') : t('qrLoading')}</Text>
-                  )}
-                  <Text style={[type.caption, styles.qrHint]}>
-                    {t('qrHint')}
-                  </Text>
-                  {qrExpired && (
-                    <TextLink onPress={() => { setQrToken(null); setQrExpired(false); setQrMode(false); setTimeout(() => setQrMode(true), 0) }}>{t('qrNewCode')}</TextLink>
-                  )}
-                  {error ? <Text style={styles.error}>{error}</Text> : null}
-                  <TextLink onPress={() => setQrMode(false)}>{t('qrUseOther')}</TextLink>
-                </View>
-              ) : (
                 <>
                   <Text style={styles.formTitle}>{signup ? t('createTitle') : t('welcomeBack')}</Text>
                   <Segmented
@@ -247,6 +199,11 @@ export default function AuthScreen({ navigation, route }) {
                       <TermsRow agreed={agreed} onToggle={() => { setAgreed((a) => !a); setError('') }} />
                       {error ? <Text style={styles.error}>{error}</Text> : null}
                       <PrimaryButton onPress={submitEmail} loading={loading} label={signup ? t('createAccount') : t('logIn')} />
+                      {!signup ? (
+                        <TextLink onPress={resetting ? undefined : forgotPassword} muted>
+                          {resetting ? t('oneMoment') : t('forgotPassword')}
+                        </TextLink>
+                      ) : null}
                       <TextLink onPress={() => { setMode((m) => (m === 'signup' ? 'login' : 'signup')); setError('') }}>
                         {signup ? t('haveAccount') : t('newHere')}
                       </TextLink>
@@ -288,9 +245,7 @@ export default function AuthScreen({ navigation, route }) {
                     </Press>
                   ))}
 
-                  <TextLink onPress={() => setQrMode(true)} muted>{t('qrSignIn')}</TextLink>
                 </>
-              )}
             </View>
           </GlassPanel>
         </FadeIn>
@@ -425,7 +380,4 @@ const styles = StyleSheet.create({
   socialButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, height: 50 },
   socialText: { ...type.headline },
   appBrief: { ...type.caption, textAlign: 'center', marginTop: 22, paddingHorizontal: 20, maxWidth: 420, alignSelf: 'center' },
-  qrWrap: { alignItems: 'center', gap: 14, paddingVertical: 6 },
-  qrImage: { width: 220, height: 220, borderRadius: radii.md, backgroundColor: '#ffffff' },
-  qrHint: { textAlign: 'center', maxWidth: 260 },
 })

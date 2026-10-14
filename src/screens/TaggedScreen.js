@@ -7,15 +7,19 @@ import ContentViewer from '../components/ContentViewer'
 import { colors } from '../theme'
 import { apiJson } from '../lib/api'
 import { openProfile } from '../lib/profileNav'
+import { useT } from '../i18n'
+import strings from '../i18n/strings/people'
 
+// Labels are keys in i18n/strings/people.
 const TABS = [
-  { key: 'tagged', label: 'Tagged in' },
-  { key: 'nearby', label: 'Nearby' },
+  { key: 'tagged', label: 'taggedIn' },
+  { key: 'nearby', label: 'nearby' },
 ]
 
 // Camera posts other people took while you were around. "Tagged in" is where the
 // photographer picked you; "Nearby" is everything shot within 150ft of you.
 export default function TaggedScreen({ navigation, route }) {
+  const t = useT(strings)
   const { userId, title } = route?.params ?? {}
   const [tab, setTab] = useState(route?.params?.tab ?? 'tagged')
   const [items, setItems] = useState([])
@@ -39,11 +43,17 @@ export default function TaggedScreen({ navigation, route }) {
 
   return (
     <View style={styles.screen}>
-      <BrandHeader title={title ? `${title}'s tags` : 'Tagged & nearby'} onBack={() => navigation.goBack()} />
+      <BrandHeader title={title ? t('nameTags', { name: title }) : t('taggedNearby')} onBack={() => navigation.goBack()} />
       <View style={styles.tabs}>
-        {TABS.map((t) => (
-          <Pressable key={t.key} onPress={() => setTab(t.key)} style={[styles.tab, tab === t.key && styles.tabActive]}>
-            <Text style={[styles.tabText, tab === t.key && styles.tabTextActive]}>{t.label}</Text>
+        {TABS.map((tb) => (
+          <Pressable
+            key={tb.key}
+            onPress={() => setTab(tb.key)}
+            style={[styles.tab, tab === tb.key && styles.tabActive]}
+            accessibilityRole="tab"
+            accessibilityState={{ selected: tab === tb.key }}
+          >
+            <Text style={[styles.tabText, tab === tb.key && styles.tabTextActive]}>{t(tb.label)}</Text>
           </Pressable>
         ))}
       </View>
@@ -53,10 +63,10 @@ export default function TaggedScreen({ navigation, route }) {
         ) : (
           <Text style={styles.empty}>
             {loading
-              ? 'Loading…'
+              ? t('loading')
               : tab === 'tagged'
-                ? "Photos and videos where someone tagged you will show up here."
-                : "Photos and videos shot within 150ft of you will show up here."}
+                ? t('emptyTagged')
+                : t('emptyNearby')}
           </Text>
         )}
       </ScrollView>

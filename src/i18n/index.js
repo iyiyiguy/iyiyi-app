@@ -12,6 +12,7 @@
 // translation never shows a blank. The chosen language is stored on the device; until the user
 // picks one, the phone's own language is used when we support it.
 import { useEffect, useState } from 'react'
+import { I18nManager } from 'react-native'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 
 export const LANGUAGES = [
@@ -52,7 +53,23 @@ export const deviceLanguageSupported = () => {
   return !!base && CODES.has(base)
 }
 
+// Right-to-left languages. React Native only applies a layout-direction change after the app
+// is reloaded, so picking Arabic flips the layout on the next launch (the strings switch
+// right away). Called on startup and whenever the language changes.
+const RTL = new Set(['ar'])
+function applyDirection(code) {
+  const rtl = RTL.has(code)
+  try {
+    I18nManager.allowRTL(rtl)
+    I18nManager.forceRTL(rtl)
+  } catch {
+    // Not available (e.g. tests); the layout simply stays left-to-right.
+  }
+}
+export const isRTL = (code = lang) => RTL.has(code)
+
 let lang = deviceLanguage()
+applyDirection(lang)
 let chosen = false // true once the user has picked a language (onboarding or Settings)
 let loaded = false
 const listeners = new Set()
@@ -65,6 +82,7 @@ export async function loadLanguage() {
     if (v && CODES.has(v)) {
       lang = v
       chosen = true
+      applyDirection(lang)
     }
   } catch {
     // Device language is fine.
@@ -80,6 +98,7 @@ export function setLanguage(code) {
   if (!CODES.has(code)) return
   lang = code
   chosen = true
+  applyDirection(code) // takes effect after the next app reload
   AsyncStorage.setItem(KEY, code).catch(() => {})
   listeners.forEach((l) => l(code))
 }

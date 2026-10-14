@@ -25,6 +25,16 @@ import {
   offsetEast, releaseSafeZoneHide, saveSafeZone, subscribeSafeZone, updateSafeZonePresence,
 } from '../lib/safeZone'
 import { avatarSource } from '../lib/avatarSource'
+import SocialIcon from '../components/SocialIcon'
+import FollowEverywhereButton from '../components/FollowEverywhereButton'
+import { formatDistance, platformsOf, useFollowEverywhere } from '../components/FollowEverywhereSheet'
+import { useFollowStatuses } from '../lib/useFollowStatuses'
+import { HereModeToggle } from './NearbyScreen'
+import { useT } from '../i18n'
+import hereStrings from '../i18n/strings/here'
+import feStrings from '../i18n/strings/followEverywhere'
+import mapStrings from '../i18n/strings/map'
+import scopeStrings from '../i18n/strings/scope'
 
 // Fabric (React Native's new architecture, on by default since SDK 52) is far
 // stricter than the old bridge about native view prop types — a marker or
@@ -70,6 +80,9 @@ const PRESETS = [
   { key: 'national', label: 'Nation', meters: 1250000 },
   { key: 'global', label: 'Worldwide', meters: null },
 ]
+
+// Word presets use the shared range labels (distances are shown as-is in every language).
+const PRESET_SCOPE_KEY = { city: 'city', state: 'state', national: 'nation', global: 'world' }
 
 const MAX_ANIMATED_PENGUINS = 40
 
@@ -171,6 +184,9 @@ async function lookupProfileCountries(ids) {
 const MAP_LOOK_KEY = 'iyiyi_map_look_v1'
 
 export default function MapScreen({ navigation, route }) {
+  const th = useT(hereStrings)
+  const t = useT(mapStrings)
+  const tsc = useT(scopeStrings)
   const scheme = useColorScheme()
   const mapRef = useRef(null)
   const currentRegionRef = useRef(null)
@@ -258,7 +274,7 @@ export default function MapScreen({ navigation, route }) {
       if (!res.ok) throw new Error('save failed')
     } catch {
       setVisible(!next)
-      Alert.alert("Couldn't save", 'Check your connection and try again.')
+      Alert.alert(t('couldntSave'), t('checkConnection'))
     } finally {
       setVisibilityBusy(false)
     }
@@ -483,11 +499,11 @@ export default function MapScreen({ navigation, route }) {
 
   const refreshLocation = () => {
     Alert.alert(
-      'Refresh Location',
-      "iYiYi refreshes your location every 10 seconds... Would you like to refresh your location?",
+      t('refreshTitle'),
+      t('refreshMsg'),
       [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Refresh', onPress: doRefreshLocation },
+        { text: t('cancel'), style: 'cancel' },
+        { text: t('refresh'), onPress: doRefreshLocation },
       ]
     )
   }
@@ -514,7 +530,7 @@ export default function MapScreen({ navigation, route }) {
   const choosePreset = (p) => {
     const c = userCoordsRef.current
     if (!c) {
-      Alert.alert('Location needed', 'Turn on location to jump around the map.')
+      Alert.alert(t('locationNeeded'), t('locationNeededMsg'))
       return
     }
     Haptics.selectionAsync().catch(() => {})
@@ -583,7 +599,7 @@ export default function MapScreen({ navigation, route }) {
     if (pick !== pickSeqRef.current) return
     const target = regionForCountry(cr)
     if (!target) {
-      Alert.alert('Couldn’t find that country', 'Try again in a moment.')
+      Alert.alert(t('countryNotFound'), t('tryAgainMoment'))
       return
     }
     animateTo(target, 700)
@@ -657,6 +673,10 @@ export default function MapScreen({ navigation, route }) {
     if (selected && !shownUsers.some((u) => u.user_id === selected.user_id)) setSelected(null)
   }, [shownUsers, selected])
 
+  // Follow state only for the person whose card is open (not every pin on the map).
+  const { statuses: followStatuses, setStatus: setFollowStatus } = useFollowStatuses(selected ? [selected] : [])
+  const fe = useFollowEverywhere({ onStatus: setFollowStatus, people: shownUsers, getStatus: (id) => followStatuses[id] })
+
   const fitZone = (z) => {
     if (!z) return
     animateTo(regionForRadius(z, Math.max(z.radiusM * 1.6, 150)), 700)
@@ -667,7 +687,7 @@ export default function MapScreen({ navigation, route }) {
     const draft = safeZone
       ? { latitude: safeZone.latitude, longitude: safeZone.longitude, radiusM: safeZone.radiusM }
       : me ? { latitude: me.latitude, longitude: me.longitude, radiusM: DEFAULT_RADIUS_M } : null
-    if (!draft) { Alert.alert('Finding your spot', 'Wait a moment for your location, then try again.'); return }
+    if (!draft) { Alert.alert(t('findingSpotTitle'), t('findingSpotMsg')); return }
     setSelected(null)
     setZoneDraft(draft)
     fitZone(draft)
@@ -688,9 +708,9 @@ export default function MapScreen({ navigation, route }) {
     setZoneDraft(null)
   }
   const removeZone = () => {
-    Alert.alert('Remove safe zone?', 'Your profile will show on the map again when you are home (if "visible on the map" is on).', [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Remove', style: 'destructive', onPress: async () => { setZoneDraft(null); await clearSafeZone(); releaseSafeZoneHide() } },
+    Alert.alert(t('removeZoneTitle'), t('removeZoneMsg'), [
+      { text: t('cancel'), style: 'cancel' },
+      { text: t('remove'), style: 'destructive', onPress: async () => { setZoneDraft(null); await clearSafeZone(); releaseSafeZoneHide() } },
     ])
   }
   const zoneShown = zoneDraft || (safeZone?.enabled ? safeZone : null)
@@ -702,18 +722,14 @@ export default function MapScreen({ navigation, route }) {
 
   return (
     <View style={styles.screen}>
+      {/* Map half of the Here tab: same title and List / Map switch as the list (NearbyScreen). */}
       <BrandHeader
-        title="Map"
+        title={th('here')}
         right={
           <>
-            <GlassButton
-              size="sm"
-              onPress={() => navigation.navigate('Events')}
-              icon={<Ionicons name="calendar-outline" size={16} color={colors.text} />}
-            >
-              Events
-            </GlassButton>
-            <HeaderButton icon={tagSet.size ? 'funnel' : 'funnel-outline'} label="Filter by tag" badge={tagSet.size > 0} onPress={() => setTagMenuOpen((v) => !v)} />
+            <HereModeToggle compact mode="map" onChange={(m) => { if (m === 'list') navigation.navigate('Nearby') }} />
+            <HeaderButton icon="calendar-outline" label={th('events')} onPress={() => navigation.navigate('Events')} />
+            <HeaderButton icon={tagSet.size ? 'funnel' : 'funnel-outline'} label={t('filterByTag')} badge={tagSet.size > 0} onPress={() => setTagMenuOpen((v) => !v)} />
           </>
         }
       />
@@ -769,7 +785,7 @@ export default function MapScreen({ navigation, route }) {
                 key={`ev-${ev.id}`}
                 coordinate={{ latitude: ev.latitude, longitude: ev.longitude }}
                 title={ev.name}
-                description="Tap for event details"
+                description={t('eventPinDesc')}
                 tracksViewChanges={false}
                 onCalloutPress={() => navigation.navigate('EventDetails', { eventId: ev.id })}
               >
@@ -837,12 +853,12 @@ export default function MapScreen({ navigation, route }) {
             {locState === 'denied' ? (
               <>
                 <Ionicons name="location-outline" size={36} color={colors.textMuted} />
-                <Text style={[type.body, styles.centerText]}>Location access is off. Turn it on in Settings to see the map.</Text>
+                <Text style={[type.body, styles.centerText]}>{t('locationOff')}</Text>
               </>
             ) : (
               <>
                 <ActivityIndicator color={colors.textMuted} />
-                <Text style={[type.caption, styles.centerText]}>Finding your spot…</Text>
+                <Text style={[type.caption, styles.centerText]}>{t('findingSpot')}</Text>
               </>
             )}
           </View>
@@ -853,13 +869,14 @@ export default function MapScreen({ navigation, route }) {
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.presetRow}>
             {PRESETS.map((p) => {
               const active = preset === p.key
+              const label = PRESET_SCOPE_KEY[p.key] ? tsc(PRESET_SCOPE_KEY[p.key]) : p.label
               return (
-                <Pressable key={p.key} onPress={() => choosePreset(p)} accessibilityRole="button" accessibilityState={{ selected: active }}>
+                <Pressable key={p.key} onPress={() => choosePreset(p)} accessibilityRole="button" accessibilityLabel={label} accessibilityState={{ selected: active }}>
                   {active ? (
-                    <View style={styles.presetActive}><Text style={styles.presetTextActive}>{p.label}</Text></View>
+                    <View style={styles.presetActive}><Text style={styles.presetTextActive}>{label}</Text></View>
                   ) : (
                     <Glass radius={16} shadow={false} interactive>
-                      <View style={styles.preset}><Text style={styles.presetText}>{p.label}</Text></View>
+                      <View style={styles.preset}><Text style={styles.presetText}>{label}</Text></View>
                     </Glass>
                   )}
                 </Pressable>
@@ -867,12 +884,12 @@ export default function MapScreen({ navigation, route }) {
             })}
           </ScrollView>
           {country ? (
-            <Pressable onPress={() => setCountryOpen(true)} style={styles.filterSummaryWrap} accessibilityLabel={`Country: ${country.name}`}>
+            <Pressable onPress={() => setCountryOpen(true)} style={styles.filterSummaryWrap} accessibilityRole="button" accessibilityLabel={t('countryA11y', { name: country.name })}>
               <Glass radius={14} shadow={false}>
                 <View style={styles.filterSummary}>
                   <Text style={styles.flag}>{country.flag || '🌐'}</Text>
                   <Text style={styles.filterSummaryText} numberOfLines={1}>{country.name}</Text>
-                  <Pressable onPress={clearCountry} hitSlop={10} accessibilityLabel="Clear country">
+                  <Pressable onPress={clearCountry} hitSlop={14} accessibilityRole="button" accessibilityLabel={t('clearCountry')}>
                     <Ionicons name="close-circle" size={16} color={colors.textMuted} />
                   </Pressable>
                 </View>
@@ -880,14 +897,14 @@ export default function MapScreen({ navigation, route }) {
             </Pressable>
           ) : null}
           {tagSet.size > 0 ? (
-            <Pressable onPress={() => setTagMenuOpen(true)} style={styles.filterSummaryWrap}>
+            <Pressable onPress={() => setTagMenuOpen(true)} style={styles.filterSummaryWrap} accessibilityRole="button" accessibilityLabel={t('tagsA11y', { tags: selectedTags.join(', ') })}>
               <Glass radius={14} shadow={false}>
                 <View style={styles.filterSummary}>
                   <Ionicons name="pricetags-outline" size={13} color={colors.text} />
                   <Text style={styles.filterSummaryText} numberOfLines={1}>
                     {selectedTags.slice(0, 3).join(', ')}{selectedTags.length > 3 ? ` +${selectedTags.length - 3}` : ''} · {shownUsers.length}
                   </Text>
-                  <Pressable onPress={() => setSelectedTags([])} hitSlop={10} accessibilityLabel="Clear tag filter">
+                  <Pressable onPress={() => setSelectedTags([])} hitSlop={14} accessibilityRole="button" accessibilityLabel={t('clearTagFilter')}>
                     <Ionicons name="close-circle" size={16} color={colors.textMuted} />
                   </Pressable>
                 </View>
@@ -903,12 +920,12 @@ export default function MapScreen({ navigation, route }) {
               <Pressable
                 onPress={searchThisArea}
                 accessibilityRole="button"
-                accessibilityLabel="Search this area"
+                accessibilityLabel={t('searchArea')}
                 style={({ pressed }) => [pressed && { transform: [{ scale: 0.95 }] }]}
               >
                 <Glass radius={radii.pill} strong interactive style={styles.searchArea}>
                   <Ionicons name="search" size={15} color={colors.text} />
-                  <Text style={styles.searchAreaText}>Search this area</Text>
+                  <Text style={styles.searchAreaText}>{t('searchArea')}</Text>
                 </Glass>
               </Pressable>
             ) : null}
@@ -917,8 +934,10 @@ export default function MapScreen({ navigation, route }) {
                 {areaLoading ? <ActivityIndicator size="small" color={colors.textMuted} style={{ transform: [{ scale: 0.7 }] }} /> : <Ionicons name="people" size={13} color={colors.textMuted} />}
                 <Text style={styles.areaCountText}>
                   {areaLoading && !areaLoaded
-                    ? 'Searching…'
-                    : `${shownUsers.length} ${shownUsers.length === 1 ? 'person' : 'people'} ${country ? `in ${country.name}` : 'in this area'}`}
+                    ? t('searching')
+                    : country
+                      ? t(shownUsers.length === 1 ? 'countryCountOne' : 'countryCountMany', { n: shownUsers.length, country: country.name })
+                      : t(shownUsers.length === 1 ? 'areaCountOne' : 'areaCountMany', { n: shownUsers.length })}
                 </Text>
               </Glass>
             ) : null}
@@ -927,19 +946,19 @@ export default function MapScreen({ navigation, route }) {
 
         {/* Map controls */}
         <View style={styles.controls} pointerEvents="box-none">
-          <MapCircleButton onPress={refreshLocation} disabled={refreshing} label="Refresh location">
+          <MapCircleButton onPress={refreshLocation} disabled={refreshing} label={t('refreshLocation')}>
             {refreshing ? <ActivityIndicator size="small" color={colors.text} /> : <Ionicons name="refresh" size={20} color={colors.text} />}
           </MapCircleButton>
-          <MapCircleButton onPress={recenter} label="Center on me">
+          <MapCircleButton onPress={recenter} label={t('centerOnMe')}>
             <Ionicons name="navigate" size={18} color={colors.text} />
           </MapCircleButton>
-          <MapCircleButton onPress={() => setCountryOpen(true)} label="Choose a country">
+          <MapCircleButton onPress={() => setCountryOpen(true)} label={t('chooseCountry')}>
             <Ionicons name={country ? 'globe' : 'globe-outline'} size={20} color={country ? colors.magenta : colors.text} />
           </MapCircleButton>
-          <MapCircleButton onPress={openZoneEditor} label={safeZone ? 'Edit safe zone' : 'Set a safe zone'}>
+          <MapCircleButton onPress={openZoneEditor} label={safeZone ? t('editZone') : t('setZone')}>
             <Ionicons name={safeZone?.enabled ? 'shield-checkmark' : 'shield-outline'} size={20} color={safeZone?.enabled ? '#3ef08b' : colors.text} />
           </MapCircleButton>
-          <MapCircleButton onPress={cycleMapLook} label={`Map style: ${mapLook === '3d' ? '3D' : mapLook === 'real' ? 'Realistic' : 'Flat'}. Tap to change`}>
+          <MapCircleButton onPress={cycleMapLook} label={t('mapStyleA11y', { style: mapLook === '3d' ? t('style3d') : mapLook === 'real' ? t('styleReal') : t('styleFlat') })}>
             {mapLook === 'flat' ? (
               <Text style={styles.lookText}>2D</Text>
             ) : (
@@ -947,11 +966,11 @@ export default function MapScreen({ navigation, route }) {
             )}
           </MapCircleButton>
           <Glass radius={22} style={styles.zoomGroup} shadow={false}>
-            <Pressable onPress={() => zoom(0.5)} style={styles.zoomBtn} accessibilityRole="button" accessibilityLabel="Zoom in" hitSlop={4}>
+            <Pressable onPress={() => zoom(0.5)} style={styles.zoomBtn} accessibilityRole="button" accessibilityLabel={t('zoomIn')} hitSlop={4}>
               <Ionicons name="add" size={22} color={colors.text} />
             </Pressable>
             <View style={styles.zoomDivider} />
-            <Pressable onPress={() => zoom(2)} style={styles.zoomBtn} accessibilityRole="button" accessibilityLabel="Zoom out" hitSlop={4}>
+            <Pressable onPress={() => zoom(2)} style={styles.zoomBtn} accessibilityRole="button" accessibilityLabel={t('zoomOut')} hitSlop={4}>
               <Ionicons name="remove" size={22} color={colors.text} />
             </Pressable>
           </Glass>
@@ -962,6 +981,9 @@ export default function MapScreen({ navigation, route }) {
           {selected ? (
             <SelectedCard
               user={selected}
+              status={followStatuses[selected.user_id]}
+              onStatus={setFollowStatus}
+              onFollowEverywhere={fe.open}
               onClose={() => setSelected(null)}
               onOpen={() => openProfile(navigation, selected.user_id, selected.avatar_url ?? null)}
             />
@@ -970,11 +992,11 @@ export default function MapScreen({ navigation, route }) {
             <Glass radius={radii.lg} strong style={styles.zoneCard}>
               <View style={styles.zoneHead}>
                 <Ionicons name="shield-checkmark" size={18} color="#3ef08b" />
-                <Text style={[type.headline, { flex: 1 }]}>Safe zone</Text>
+                <Text style={[type.headline, { flex: 1 }]}>{t('safeZone')}</Text>
                 <Text style={styles.zoneSize}>{formatRadius(zoneDraft.radiusM)}</Text>
               </View>
               <Text style={styles.zoneHelp}>
-                Drag the house to move it and the round handle to resize. Inside this area your location isn't shared and your profile is hidden from the map and Nearby. It stays on this phone.
+                {t('zoneHelp')}
               </Text>
               <View style={styles.zoneChips}>
                 {[0.1, 0.2, 0.5, 1].map((mi) => {
@@ -984,6 +1006,9 @@ export default function MapScreen({ navigation, route }) {
                       key={mi}
                       onPress={() => { const d = { ...zoneDraft, radiusM: clampRadius(mi * MILE_M), handle: null }; setZoneDraft(d); fitZone(d) }}
                       style={[styles.zoneChip, on && styles.zoneChipOn]}
+                      accessibilityRole="button"
+                      accessibilityLabel={t('zoneRadiusA11y', { n: mi })}
+                      accessibilityState={{ selected: on }}
                     >
                       <Text style={[styles.zoneChipText, on && styles.zoneChipTextOn]}>{mi} mi</Text>
                     </Pressable>
@@ -998,40 +1023,48 @@ export default function MapScreen({ navigation, route }) {
                     fitZone(d)
                   }}
                   style={styles.zoneChip}
+                  accessibilityRole="button"
                 >
-                  <Text style={styles.zoneChipText}>Center on me</Text>
+                  <Text style={styles.zoneChipText}>{t('centerOnMe')}</Text>
                 </Pressable>
               </View>
               <View style={styles.zoneButtons}>
                 {safeZone ? (
-                  <GlassButton size="sm" onPress={removeZone} style={{ flex: 1 }}>Remove</GlassButton>
+                  <GlassButton size="sm" onPress={removeZone} style={{ flex: 1 }}>{t('remove')}</GlassButton>
                 ) : null}
-                <GlassButton size="sm" onPress={() => setZoneDraft(null)} style={{ flex: 1 }}>Cancel</GlassButton>
-                <GlassButton size="sm" variant="primary" onPress={saveZone} style={{ flex: 1.3 }}>Save zone</GlassButton>
+                <GlassButton size="sm" onPress={() => setZoneDraft(null)} style={{ flex: 1 }}>{t('cancel')}</GlassButton>
+                <GlassButton size="sm" variant="primary" onPress={saveZone} style={{ flex: 1.3 }}>{t('saveZone')}</GlassButton>
               </View>
             </Glass>
           ) : inZone ? (
-            <Pressable onPress={openZoneEditor}>
+            <Pressable onPress={openZoneEditor} accessibilityRole="button" accessibilityLabel={t('inZone')} accessibilityHint={t('editZone')}>
               <Glass radius={radii.lg} style={[styles.visibilityPill, styles.safePill]} shadow={false}>
                 <Ionicons name="shield-checkmark" size={16} color="#3ef08b" />
                 <Text style={styles.visibilityText}>
-                  You're in your safe zone. Your profile is hidden from the map and Nearby.
+                  {t('inZone')}
                 </Text>
               </Glass>
             </Pressable>
           ) : visible !== null && (
-            <Pressable onPress={toggleVisibility} disabled={visibilityBusy || isGhost}>
+            <Pressable
+              onPress={toggleVisibility}
+              disabled={visibilityBusy || isGhost}
+              accessibilityRole="button"
+              accessibilityLabel={isGhost ? t('ghostNote') : visible ? t('visibleOn') : t('hiddenOn')}
+              accessibilityHint={isGhost ? undefined : t('toggleVisibilityHint')}
+              accessibilityState={{ disabled: !!(visibilityBusy || isGhost), busy: !!visibilityBusy }}
+            >
               <Glass radius={radii.lg} style={[styles.visibilityPill, visible && !isGhost && styles.visibilityPillActive]} shadow={false}>
                 {visibilityBusy ? (
                   <ActivityIndicator size="small" color={colors.text} />
                 ) : isGhost ? (
                   <Text style={styles.visibilityText}>
-                    Your profile cannot be shown because you have a ghost account, switch to public or private to display your account on the nearby users and map tabs.
+                    {t('ghostNote')}
                   </Text>
                 ) : (
                   <>
                     <View style={[styles.visibilityDot, visible ? styles.visibilityDotOn : styles.visibilityDotOff]} />
-                    <Text style={styles.visibilityText}>{visible ? "You're visible on the map" : "You're hidden from the map"}</Text>
+                    <Text style={styles.visibilityText}>{visible ? t('visibleOn') : t('hiddenOn')}</Text>
                   </>
                 )}
               </Glass>
@@ -1043,7 +1076,7 @@ export default function MapScreen({ navigation, route }) {
           visible={countryOpen}
           value={country?.code ?? null}
           allowAll
-          title="Show people in"
+          title={t('showPeopleIn')}
           onSelect={(c) => selectCountry(c && c.code ? c : null)}
           onClose={() => setCountryOpen(false)}
         />
@@ -1059,6 +1092,7 @@ export default function MapScreen({ navigation, route }) {
           />
         ) : null}
       </View>
+      {fe.element}
     </View>
   )
 }
@@ -1105,34 +1139,39 @@ function MapCircleButton({ children, onPress, disabled, label }) {
   )
 }
 
-function SelectedCard({ user, onClose, onOpen }) {
+// The tapped person: distance + platforms, Follow everywhere (primary) and View.
+function SelectedCard({ user, status, onStatus, onFollowEverywhere, onClose, onOpen }) {
+  const tf = useT(feStrings)
+  const t = useT(mapStrings)
   const tags = Array.isArray(user.tags) ? user.tags.slice(0, 3) : []
-  const initial = (String(user.username || '?').trim()[0] || '?').toUpperCase()
+  const distance = formatDistance(user)
+  const platforms = platformsOf(user) ?? []
   return (
     <Glass radius={radii.lg} strong style={styles.selectedCard}>
       <View style={styles.selectedRow}>
-        {true ? (
-          <Image source={avatarSource(user?.avatar_url)} style={styles.selectedAvatar} />
-        ) : (
-          <View style={[styles.selectedAvatar, styles.selectedAvatarEmpty]}><Text style={styles.selectedInitial}>{initial}</Text></View>
-        )}
-        <View style={{ flex: 1 }}>
-          <Text style={type.headline} numberOfLines={1}>{user.username || 'iYiYi user'}</Text>
+        <Image source={avatarSource(user?.avatar_url)} style={styles.selectedAvatar} />
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <Text style={type.headline} numberOfLines={1}>{user.username || t('iyiyiUser')}</Text>
+          <View style={styles.selectedMeta}>
+            {platforms.slice(0, 5).map((p) => <SocialIcon key={p} platform={p} size={12} color={colors.textMuted} />)}
+            <Text style={[type.caption, { flexShrink: 1 }]} numberOfLines={1}>{distance ?? tf('nearbyNow')}</Text>
+          </View>
           {tags.length ? (
             <View style={styles.selectedTags}>
               {tags.map((t) => (
                 <View key={t} style={styles.selectedTag}><Text style={styles.selectedTagText}>{t}</Text></View>
               ))}
             </View>
-          ) : (
-            <Text style={type.caption}>Nearby on iYiYi</Text>
-          )}
+          ) : null}
         </View>
-        <Pressable onPress={onClose} hitSlop={10} accessibilityLabel="Close">
+        <Pressable onPress={onClose} hitSlop={10} style={styles.selectedClose} accessibilityRole="button" accessibilityLabel={tf('close')}>
           <Ionicons name="close" size={20} color={colors.textMuted} />
         </Pressable>
       </View>
-      <GlassButton variant="primary" size="sm" onPress={onOpen} style={{ marginTop: 12 }}>View profile</GlassButton>
+      <View style={styles.selectedActions}>
+        <FollowEverywhereButton user={user} status={status} onStatus={onStatus} onOpen={onFollowEverywhere} size="md" style={{ flex: 1 }} />
+        <GlassButton size="sm" onPress={onOpen} accessibilityLabel={t('viewProfileA11y', { name: user.username || t('iyiyiUser') })}>{t('view')}</GlassButton>
+      </View>
     </Glass>
   )
 }
@@ -1174,6 +1213,9 @@ const styles = StyleSheet.create({
   selectedAvatarEmpty: { alignItems: 'center', justifyContent: 'center', backgroundColor: '#8fa2ff' },
   selectedInitial: { color: '#ffffff', fontSize: 20, fontWeight: '800' },
   selectedTags: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 4 },
+  selectedMeta: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 },
+  selectedClose: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center', marginRight: -10, marginTop: -10, alignSelf: 'flex-start' },
+  selectedActions: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 12 },
   selectedTag: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: radii.pill, borderWidth: 1, borderColor: colors.hairline },
   selectedTagText: { fontSize: 11, fontWeight: '600', color: colors.textMuted },
 

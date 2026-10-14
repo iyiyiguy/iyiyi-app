@@ -38,7 +38,7 @@ const TUTORIAL_STEPS = [
   { icon: '♟︎', title: 'Tap to move', description: 'Tap one of your pieces to see its legal moves (dots), then tap a highlighted square to move there.' },
   { icon: '♚', title: 'Checkmate wins', description: "Put the enemy king in check with no way out. The king's square turns red when it is in check." },
   { icon: '♜', title: 'Special moves', description: 'Castling, en passant and pawn promotion all work. When a pawn reaches the last rank you choose its new piece.' },
-  { icon: '♞', title: 'Play the computer', description: 'Pick Easy, Medium or Hard. Wins against the computer raise your chess rating and earn arcade points.' },
+  { icon: '♞', title: 'Play the computer', description: 'Pick Easy, Medium or Hard. Wins raise your rating vs AI (separate from your online rating) and earn arcade points.' },
   { icon: '♝', title: 'Pass & play', description: 'Play a friend on this device. White moves first, then hand over the phone.' },
 ]
 
@@ -631,7 +631,7 @@ export function ChessGame({ mode: modeProp, difficulty: difficultyProp, playerCo
         stats={[
           { label: 'Moves', value: String(Math.ceil(history.length / 2)) },
           ...(award && typeof award.ratingAfter === 'number'
-            ? [{ label: 'Rating', value: String(award.ratingAfter) }, { label: 'Change', value: `${award.ratingDelta >= 0 ? '+' : ''}${award.ratingDelta}`, color: award.ratingDelta >= 0 ? ST.health : ST.enemy }]
+            ? [{ label: 'Rating vs AI', value: String(award.ratingAfter) }, { label: 'Change', value: `${award.ratingDelta >= 0 ? '+' : ''}${award.ratingDelta}`, color: award.ratingDelta >= 0 ? ST.health : ST.enemy }]
             : []),
           ...(award ? [{ label: 'Points', value: `+${award.pointsEarned}`, color: ST.objective }] : []),
         ]}

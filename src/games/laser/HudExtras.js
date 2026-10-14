@@ -15,6 +15,7 @@ import { PlayerTap } from '../MultiplayerUI'
 import GameFollowButton from '../../components/GameFollowButton'
 import { FONT, ST, stShadow, stType, withAlpha } from '../studio'
 import { LASER_MODES, TEAMS } from '../../lib/multiplayer'
+import { pickAimTarget } from './aimAssist'
 
 const W = '#fff'
 const MUTED = ST.muted
@@ -404,6 +405,56 @@ export const TargetBrackets = memo(function TargetBrackets({ rects }) {
       })}
     </View>
   )
+})
+
+/**
+ * Brackets that follow the live tracker (laser/liveBodies.js) at its own update rate
+ * (~10-15/s) without re-rendering the game screen. The body the crosshair would hit (aim
+ * assist, aimAssist.js) is the red, locked one.
+ *   store: useLiveBodies(), view: { width, height } of the preview, zoom + zoomRect(r, view)
+ *   from useScopeZoom (identity when omitted), onLock(id | null) when the locked body changes.
+ */
+export const LiveTargetBrackets = memo(function LiveTargetBrackets({ store, view, zoom = 1, zoomRect, max = 6, onLock }) {
+  const [, setTick] = useState(0)
+  const lockRef = useRef(null)
+  useEffect(() => {
+    if (!store?.subscribe) return undefined
+    return store.subscribe(() => setTick((n) => (n + 1) % 1000000))
+  }, [store])
+  const W = view?.width || 0
+  const H = view?.height || 0
+  let rects = []
+  let lockedId = null
+  if (store?.running?.() && W > 0 && H > 0) {
+    try {
+      const bodies = (store.get() || []).slice(0, max)
+      const pick = pickAimTarget(bodies, { aspect: W / H, zoom })
+      lockedId = pick ? pick.body.id : null
+      const toScreen = (r) => {
+        const sr = { left: r.x * W, top: r.y * H, width: r.w * W, height: r.h * H }
+        return zoomRect ? zoomRect(sr, view) : sr
+      }
+      rects = bodies.map((b) => {
+        const r = toScreen(b.box)
+        if (!Number.isFinite(r.left) || !Number.isFinite(r.top)) return null
+        const locked = b.id === lockedId
+        let head = null
+        if (locked && b.head) {
+          const hr = toScreen(b.head)
+          if (Number.isFinite(hr.left) && Number.isFinite(hr.top)) head = hr
+        }
+        return { key: `live-${b.id}`, left: r.left, top: r.top, width: Math.max(0, r.width), height: Math.max(0, r.height), locked, head }
+      }).filter(Boolean)
+    } catch {
+      rects = []
+    }
+  }
+  useEffect(() => {
+    if (lockRef.current === lockedId) return
+    lockRef.current = lockedId
+    try { onLock?.(lockedId) } catch {}
+  })
+  return <TargetBrackets rects={rects} />
 })
 
 // ---------------------------------------------------------------------------

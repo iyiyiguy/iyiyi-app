@@ -8,18 +8,25 @@
 //   z[N+1]          the final collapse (r → ~0), so a match always ends
 // Each entry also carries d = gas damage per second while that phase is active.
 import {
-  COLLAPSE_MS, FINAL_HOLD_MS, FINAL_RADIUS_M, GAS_DPS, GAS_SPEED, PACE, WALK_MPS, ZONE_PHASES,
+  COLLAPSE_MS, FINAL_HOLD_MS, FINAL_RADIUS_M, FOOT_RADIUS_M, GAS_DPS, PACE, PASSENGER_MPS, WALK_MPS, ZONE_PHASES, gasSpeedFor, isBigArea,
 } from './constants'
 import { dist, lerpCircle, randomPointInCircle, validPos } from './geo'
 
 const round6 = (v) => Math.round(v * 1e6) / 1e6
 
-export function generateZoneSchedule({ center, r0, areaId, pace = 'normal', startsAt, phases = ZONE_PHASES, rand = Math.random }) {
+/**
+ * The speed (m/s) a player on the far edge of a circle of radius `prevR` is guaranteed to have
+ * enough with, in a match that started at radius R0: walking, except for the big (> 1 mi)
+ * circles of a 5+ mile game, which assume passengers (never drivers).
+ */
+export function guaranteeSpeed(prevR, R0) {
+  return isBigArea(R0) && prevR > FOOT_RADIUS_M + 1 ? PASSENGER_MPS : WALK_MPS
+}
+
+// (Callers may still pass areaId; the speeds now scale with the radius itself.)
+export function generateZoneSchedule({ center, r0, pace = 'normal', startsAt, phases = ZONE_PHASES, rand = Math.random }) {
   const R0 = Math.max(FINAL_RADIUS_M * 2, Number(r0) || 1609)
   const p = PACE[pace] || PACE.normal
-  const baseSpeed = GAS_SPEED[areaId] || 1.2
-  const speed = Math.max(0.5, baseSpeed * p.speed)
-  const onFoot = baseSpeed <= WALK_MPS
   const out = [{ lat: round6(center.lat), lng: round6(center.lng), r: Math.round(R0), w: startsAt, s: startsAt, e: startsAt, d: GAS_DPS[0] }]
   let t = startsAt
   let prev = out[0]
@@ -28,15 +35,18 @@ export function generateZoneSchedule({ center, r0, areaId, pace = 'normal', star
     const c = randomPointInCircle(prev, Math.max(0, prev.r - r) * 0.95, rand)
     const offset = dist(prev, c)
     const travel = Math.max(0, prev.r - r) + (Number.isFinite(offset) ? offset : 0)
+    // The gas moves faster off a big circle (scales with its size), slower on a small one.
+    const speed = Math.max(0.5, gasSpeedFor(prev.r) * p.speed)
     let shrinkMs = Math.max(30000, (travel / speed) * 1000)
     // Drop-in time before the first shrink scales with the area; later waits with the shrink.
     const waitMs = i === 1
       ? Math.min(600000, (90 + R0 / 20) * 1000) * p.wait
       : Math.max(40000, Math.min(240000, shrinkMs * 0.6)) * p.wait
-    // On-foot areas: someone on the far edge of the current circle who starts walking when
-    // the next circle is announced must always make it in before the gas does, even on the
-    // Fast pace (the gas edge would otherwise outrun a walker).
-    if (onFoot) shrinkMs = Math.max(shrinkMs, (travel / WALK_MPS) * 1000 - waitMs)
+    // Nobody should ever need to drive: someone on the far edge of the current circle who
+    // starts walking when the next circle is announced always makes it in before the gas does,
+    // even on the Fast pace. Only the big (> 1 mi) circles of a 5+ mile game allow for
+    // passenger travel instead (guaranteeSpeed).
+    shrinkMs = Math.max(shrinkMs, (travel / guaranteeSpeed(prev.r, R0)) * 1000 - waitMs)
     const entry = {
       lat: round6(c.lat),
       lng: round6(c.lng),
@@ -111,4 +121,24 @@ export function outsideBy(pos, circle) {
   if (!validPos(pos) || !circle) return -Infinity
   const d = dist(pos, circle)
   return Number.isFinite(d) ? d - circle.r : -Infinity
+}
+
+/**
+ * Rough match length and walking for the lobby: the schedule's total time (averaged over a
+ * few random layouts) and the gas edge's travel, i.e. what a player on the edge walks.
+ * @returns {{ minutes: number, walkKm: number }}
+ */
+export function estimateMatch({ r0, areaId, pace = 'normal', samples = 8 } = {}) {
+  let seed = 11
+  const rand = () => { seed = (seed * 16807) % 2147483647; return (seed - 1) / 2147483646 }
+  const center = { lat: 36.2, lng: -115.98 }
+  let ms = 0
+  let walk = 0
+  const n = Math.max(1, samples)
+  for (let k = 0; k < n; k++) {
+    const z = generateZoneSchedule({ center, r0, areaId, pace, startsAt: 0, rand })
+    ms += z[z.length - 1].e
+    for (let i = 1; i < z.length - 1; i++) walk += Math.max(0, z[i - 1].r - z[i].r) + dist(z[i - 1], z[i])
+  }
+  return { minutes: Math.round(ms / n / 60000), walkKm: Math.round((walk / n / 1000) * 10) / 10 }
 }

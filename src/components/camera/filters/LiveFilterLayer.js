@@ -6,10 +6,11 @@ import {
   isLiveFacesAvailable, startLiveFaces, stopLiveFaces,
 } from '../../../../modules/body-hit'
 import {
-  MAX_HEADS, OVERLAY_BOX, fallbackHead, headPose, headsFromBodies, headsFromFaces, landmarkDown, nameTagText, placeOverlay,
+  MAX_HEADS, OVERLAY_BOX, fallbackHead, headPose, headsFromBodies, headsFromFaces, landmarkDown, nameTagText,
   selectTargets,
 } from '../../../lib/cameraFilters'
-import { FilterArt } from './FilterArt'
+import { LensArt } from './LensArt'
+import { lensEveryone, lensNeedsFace, lensYaws, placeLens } from './lenses'
 
 // Live AR filter over the camera preview (photo AND video mode).
 //
@@ -41,8 +42,14 @@ const POSE_SAMPLE_MS = 380 // with live tracking, stills are only for head angle
 const LIVE_STALE_MS = 900 // no live event for this long -> live tracking counts as off
 const LIVE_LOST_MS = 300 // live says no face for this long -> hold faded
 const POSE_MAX_AGE_MS = 1500
-const FOLLOW = 0.7 // per live frame: how far the overlay moves toward the face (0..1)
-const FOLLOW_SCALE = 0.45
+// Live frames (~30/s) are smoothed with an adaptive EMA (one-euro style): tiny moves - box
+// jitter while the head is still - get a low weight so the art sits rock steady, real moves a
+// high one so it keeps up without lag.
+const FOLLOW_MIN = 0.22
+const FOLLOW_MAX = 0.88
+const FOLLOW_SCALE_MIN = 0.15
+const FOLLOW_SCALE_MAX = 0.6
+const emaWeight = (delta, ref, lo, hi) => Math.max(lo, Math.min(hi, lo + (hi - lo) * (delta / Math.max(1e-3, ref))))
 const MISSES_BEFORE_FALLBACK = 3
 const SIZE_SMOOTH = 0.6 // weight of a new head size (the springs smooth the rest)
 const LOST_OPACITY = 0.6 // face lost: hold the last spot / pose, slightly faded
@@ -156,7 +163,7 @@ function useHeadingRef() {
 }
 
 export default function LiveFilterLayer({
-  filter, cameraRef, cameraReadyRef, facing, paused, recording, holdRef, controlRef, view, nearby, me, coordsRef,
+  filter, cameraRef, cameraReadyRef, facing, paused, recording, holdRef, controlRef, view, nearby, me, coordsRef, platforms,
 }) {
   const slots = useRef(null)
   if (!slots.current) slots.current = Array.from({ length: MAX_HEADS }, makeSlot)
@@ -180,8 +187,10 @@ export default function LiveFilterLayer({
 
   const targetsFor = (heads) => {
     const { facing: fc, nearby: nb, me: m, view: v } = latest.current
-    const t = selectTargets({ heads, facing: fc, nearby: nb, me: m, myPos: coordsRef?.current, headingDeg: heading.current, everyone: latest.current.filter === 'logo' })
+    const t = selectTargets({ heads, facing: fc, nearby: nb, me: m, myPos: coordsRef?.current, headingDeg: heading.current, everyone: lensEveryone(latest.current.filter) })
     if (t.length) return t
+    // Lenses that sit on a face (shades, crown, sparkles) wait for one instead of floating.
+    if (lensNeedsFace(latest.current.filter) && visionAvailable) return []
     return [{ ...fallbackHead(v, fc), pose: null, name: nameTagText({ facing: fc, headCount: 0, nearby: nb, me: m }), key: 'fallback' }]
   }
 
@@ -225,7 +234,7 @@ export default function LiveFilterLayer({
           // only folded in once (the pitch baseline must not speed up with the frame rate).
           let pose = slot.pose
           if (t.pose && t.pose !== slot.rawPose) { slot.rawPose = t.pose; pose = stablePose(slot, t.pose) }
-          const placed = placeOverlay(f, { ...t, size, pose }, TOP_LIMIT)
+          const placed = placeLens(f, { ...t, size, pose }, TOP_LIMIT)
           const s = placed.s
           const ax = placed.anchorX - OVERLAY_BOX / 2
           const ay = placed.anchorY - OVERLAY_BOX // box bottom sits on the anchor (transformOrigin bottom)
@@ -241,11 +250,14 @@ export default function LiveFilterLayer({
             slot.yaw.setValue(yaw)
             slot.ax = ax; slot.ay = ay; slot.as = s; slot.lastRoll = roll; slot.lastYaw = yaw
           } else if (fast && samePerson && slot.ax != null) {
-            // Live frames (~30/s): move most of the way to the face every frame - follows
-            // closely, with just enough smoothing to hide box jitter.
-            slot.ax += (ax - slot.ax) * FOLLOW
-            slot.ay += (ay - slot.ay) * FOLLOW
-            slot.as += (s - slot.as) * FOLLOW_SCALE
+            // Live frames (~30/s): adaptive EMA toward the face - steady when still, quick
+            // when the head really moves.
+            const ref = Math.max(14, (Number.isFinite(t.size) ? t.size : 100) * 0.16)
+            const k = emaWeight(Math.hypot(ax - slot.ax, ay - slot.ay), ref, FOLLOW_MIN, FOLLOW_MAX)
+            const ks = emaWeight(Math.abs(s - slot.as) / Math.max(0.05, slot.as), 0.12, FOLLOW_SCALE_MIN, FOLLOW_SCALE_MAX)
+            slot.ax += (ax - slot.ax) * k
+            slot.ay += (ay - slot.ay) * k
+            slot.as += (s - slot.as) * ks
             slot.x.stopAnimation(); slot.y.stopAnimation(); slot.s.stopAnimation()
             slot.x.setValue(slot.ax)
             slot.y.setValue(slot.ay)
@@ -298,7 +310,15 @@ export default function LiveFilterLayer({
     lastHeads.current = []
     apply(targetsFor([]), true)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [view?.width, view?.height, facing, filter])
+  }, [view?.width, view?.height, facing])
+  // Switching lenses keeps tracking running (no remount, no re-attach delay): the new art
+  // jumps straight onto the faces already being followed.
+  const firstLens = useRef(true)
+  useEffect(() => {
+    if (firstLens.current) { firstLens.current = false; return }
+    apply(targetsFor(lastHeads.current), true)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filter])
 
   // Names can change without a new sample (nearby list refreshed).
   useEffect(() => {
@@ -533,7 +553,8 @@ export default function LiveFilterLayer({
   }, [paused, cameraRef, cameraReadyRef, holdRef])
 
   const vw = view?.width > 0 ? view.width : 360
-  const yawing = filter === 'nametag' || filter === 'love'
+  const yawing = lensYaws(filter)
+  const myHandle = typeof me?.username === 'string' && me.username ? `@${me.username.replace(/^@+/, '').slice(0, 24)}` : null
   const rollDeg = (v) => v.interpolate({ inputRange: [-Math.PI, Math.PI], outputRange: ['180deg', '-180deg'] })
 
   return (
@@ -570,9 +591,10 @@ export default function LiveFilterLayer({
               },
             ]}
           >
-            <FilterArt
-              filter={filter}
+            <LensArt
+              lens={filter}
               name={names[i] || '@iyiyi'}
+              platforms={myHandle && names[i] === myHandle ? platforms : null}
               live
               use3D={is3D}
               registerPose={is3D ? slot.register : undefined}

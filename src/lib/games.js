@@ -43,7 +43,7 @@ export const GAMES = [
     minPlayers: 2,
     maxPlayers: 100,
     tagline: 'The gas is closing in. Last one standing wins.',
-    description: 'Real-world battle royale for up to 100 players with a shrinking zone and weapon pickups',
+    description: 'Real-world battle royale on foot for up to 100 players: a shrinking zone up to 1 mile across, weapon pickups, about 20-25 minutes',
     color: '#ff8a00',
     accent: ['#ff8a00', '#7a1cff'],
     cover: require('../../assets/game-covers/battle-royale.png'),
@@ -80,7 +80,7 @@ export const GAMES = [
     minPlayers: 4,
     maxPlayers: 10,
     tagline: 'One of you is lying. Find them.',
-    description: 'Find the imposter walking among you',
+    description: 'Find the imposter walking among you. Auto GPS stations, QR markers indoors or photo stations',
     color: '#ff1493',
     accent: ['#ff1493', '#5b6cf0'],
     cover: require('../../assets/game-covers/beside-them-penguins.png'),
@@ -132,10 +132,10 @@ export const GAMES = [
     kind: 'multiplayer',
     categories: ['party'],
     icon: '👆',
-    minPlayers: 8,
+    minPlayers: 4,
     maxPlayers: 30,
     tagline: 'Heads down, thumbs up. Guess who tapped you.',
-    description: 'The classic game — 7 pickers, everyone guesses',
+    description: 'The classic game from 4 players — up to 7 pickers, everyone guesses',
     color: '#8b5cf6',
     accent: ['#8b5cf6', '#3b82f6'],
     cover: require('../../assets/game-covers/heads-up-7-up.png'),
@@ -151,8 +151,9 @@ export const GAMES = [
     icon: '📝',
     minPlayers: 1,
     maxPlayers: 1,
-    tagline: 'Beat the clock. Crack the word.',
-    description: 'Crack as many words as you can before time runs out',
+    tagline: 'One shared word a day, or race the clock.',
+    description: 'Daily word with streaks and a share grid, plus a timed run: crack as many words as you can before time runs out',
+    dailyRoute: { name: 'WordRace', params: { mode: 'daily' } },
     color: '#00c878',
     accent: ['#00c878', '#0a7b8c'],
     cover: require('../../assets/game-covers/whats-the-word.jpg'),
@@ -171,10 +172,14 @@ export const playersLabel = (game) =>
 /**
  * Real local stats for one game (from arcadeStats). `userId` is accepted for
  * backwards compatibility; stats are always the signed-in player's.
- * @returns {Promise<{ played, wins, losses, draws, bestScore, lastPlayed, rating? }>}
+ * Chess: `rating` is the vs-computer rating, `onlineRating` the online one (null until a
+ * rated online game has been played on this device).
+ * @returns {Promise<{ played, wins, losses, draws, bestScore, lastPlayed, rating?, onlineRating? }>}
  */
 export async function getUserGameStats(_userId, gameId) {
   const s = await loadArcadeStats()
   const g = s.games[gameId] || { played: 0, wins: 0, losses: 0, draws: 0, bestScore: null, lastPlayed: null }
-  return gameId === 'chess' ? { ...g, rating: s.chess.rating } : { ...g }
+  return gameId === 'chess'
+    ? { ...g, rating: s.chess.rating, onlineRating: s.chess.online?.games > 0 ? s.chess.online.rating : null }
+    : { ...g }
 }

@@ -1,56 +1,58 @@
-// Small shared building blocks for the multiplayer arcade screens.
+// Small shared building blocks for the multiplayer arcade screens, in the studio look
+// (./studio.js): always dark, black glass, square corners, caps labels, role colours.
 import React, { createContext, useContext } from 'react'
 import { ActivityIndicator, Image, Linking, Pressable, StyleSheet, Text, View, useColorScheme } from 'react-native'
-import { GlassButton } from '../components/GlassButton'
-import { GlassCard } from '../components/GlassCard'
-import { colors, radii, type } from '../theme'
+import { Ionicons } from '@expo/vector-icons'
 import GameFollowButton from '../components/GameFollowButton'
 import { useMyUserId } from '../lib/profileNav'
+import { FONT, ST, stType, withAlpha } from './studio'
 
+// Kept for callers that still pass a tint; game surfaces are dark whatever the system theme.
 export function useTint() {
   return useColorScheme() === 'light' ? 'light' : 'dark'
 }
 
 export function Btn({ title, onPress, disabled, variant = 'glass', size = 'md', style, busy }) {
-  const tint = useTint()
-  if (variant === 'primary' || variant === 'danger') {
-    return (
-      <Pressable
-        onPress={onPress}
-        disabled={disabled || busy}
-        accessibilityRole="button"
-        style={({ pressed }) => [
-          s.primary,
-          size === 'sm' && s.primarySm,
-          { backgroundColor: variant === 'danger' ? colors.danger : colors.magenta, opacity: disabled ? 0.45 : pressed ? 0.8 : 1 },
-          style,
-        ]}
-      >
-        {busy ? <ActivityIndicator color={colors.onBrand} /> : <Text style={[s.primaryText, size === 'sm' && s.smText]}>{title}</Text>}
-      </Pressable>
-    )
-  }
+  const small = size === 'sm'
+  const filled = variant === 'primary' || variant === 'danger'
+  const fill = variant === 'danger' ? ST.enemy : ST.friendly
+  const fg = variant === 'danger' ? '#ffffff' : filled ? ST.ink : ST.text
   return (
-    <GlassButton onPress={onPress} disabled={disabled || busy} tint={tint} size={size} style={style}>
-      {busy ? <ActivityIndicator color={colors.text} /> : <Text style={[s.glassText, size === 'sm' && s.smText]}>{title}</Text>}
-    </GlassButton>
+    <Pressable
+      onPress={onPress}
+      disabled={disabled || busy}
+      accessibilityRole="button"
+      accessibilityLabel={typeof title === 'string' ? title : undefined}
+      accessibilityState={{ disabled: !!(disabled || busy), busy: !!busy }}
+      style={({ pressed }) => [
+        s.btn,
+        small && s.btnSm,
+        filled ? { backgroundColor: fill, borderColor: fill } : s.btnGhost,
+        { opacity: disabled ? 0.45 : pressed ? 0.85 : 1 },
+        pressed && { transform: [{ scale: 0.98 }] },
+        style,
+      ]}
+    >
+      {busy ? <ActivityIndicator color={fg} /> : <Text style={[s.btnText, small && s.smText, { color: fg }]} numberOfLines={1}>{title}</Text>}
+    </Pressable>
   )
 }
 
 export function Card({ children, style, padding = 14 }) {
-  const tint = useTint()
   return (
-    <GlassCard tint={tint} intensity={70} radius={radii.md} padding={padding} style={[{ marginBottom: 12 }, style]}>
+    <View style={[s.card, { padding }, style]}>
       {children}
-    </GlassCard>
+    </View>
   )
 }
 
-export function Avatar({ uri, name, size = 36 }) {
-  if (uri) return <Image source={{ uri }} style={{ width: size, height: size, borderRadius: size / 2 }} />
+// Square avatar (3 px corners). teamColor (optional) draws the team-colour bar underneath.
+export function Avatar({ uri, name, size = 36, teamColor }) {
+  const bar = teamColor ? { borderBottomWidth: Math.max(2, Math.round(size / 20)), borderBottomColor: teamColor } : null
+  if (uri) return <Image source={{ uri }} style={[{ width: size, height: size, borderRadius: ST.radius, backgroundColor: '#2a3038' }, bar]} />
   return (
-    <View style={[s.avatarFallback, { width: size, height: size, borderRadius: size / 2 }]}>
-      <Text style={[type.body, { color: colors.onBrand, fontSize: size * 0.42 }]}>{(name || '?').slice(0, 1).toUpperCase()}</Text>
+    <View style={[s.avatarFallback, { width: size, height: size }, bar]}>
+      <Text style={{ fontFamily: FONT.display, color: ST.text, fontSize: size * 0.42, includeFontPadding: false }} allowFontScaling={false}>{(name || '?').slice(0, 1).toUpperCase()}</Text>
     </View>
   )
 }
@@ -88,8 +90,8 @@ export function PlayerRow({ player, right, subtitle, dim, follow = true }) {
       <PlayerTap player={player} style={s.rowTap}>
         <Avatar uri={player.avatar} name={player.username} />
         <View style={{ flex: 1, marginLeft: 10 }}>
-          <Text style={type.body} numberOfLines={1}>{player.username}</Text>
-          {!!subtitle && <Text style={type.caption} numberOfLines={1}>{subtitle}</Text>}
+          <Text style={s.rowName} numberOfLines={1}>{player.username}</Text>
+          {!!subtitle && <Text style={s.rowSub} numberOfLines={1}>{subtitle}</Text>}
         </View>
       </PlayerTap>
       {right}
@@ -101,25 +103,38 @@ export function PlayerRow({ player, right, subtitle, dim, follow = true }) {
 // Connection status banner; renders nothing when connected.
 export function ConnectionBanner({ status, error }) {
   if (status === 'connected' || status === 'closed') return null
-  const text = status === 'error'
+  const isErr = status === 'error'
+  const text = isErr
     ? (error || 'Connection failed.')
     : status === 'reconnecting'
       ? 'Connection lost — reconnecting…'
       : 'Connecting…'
+  const tone = isErr ? ST.enemy : ST.objective
   return (
-    <View style={[s.banner, { backgroundColor: status === 'error' ? colors.danger : colors.violet }]}>
-      {status !== 'error' && <ActivityIndicator color={colors.onBrand} size="small" style={{ marginRight: 8 }} />}
+    <View style={[s.banner, { borderLeftColor: tone }]} accessibilityLiveRegion="polite">
+      {isErr
+        ? <Ionicons name="alert-circle" size={16} color={tone} style={{ marginRight: 8 }} />
+        : <ActivityIndicator color={tone} size="small" style={{ marginRight: 8 }} />}
       <Text style={s.bannerText}>{text}</Text>
     </View>
   )
 }
 
-export function Pill({ text, color = colors.violet }) {
+// Small caps tag. color is the role colour (fill); text picks ink or white to stay legible.
+export function Pill({ text, color = ST.friendly }) {
   return (
     <View style={[s.pill, { backgroundColor: color }]}>
-      <Text style={s.pillText}>{text}</Text>
+      <Text style={[s.pillText, { color: pillInk(color) }]} numberOfLines={1}>{text}</Text>
     </View>
   )
+}
+
+function pillInk(c) {
+  const h = String(c || '').replace('#', '')
+  if (h.length !== 6) return '#ffffff'
+  const n = parseInt(h, 16)
+  const lum = (0.299 * ((n >> 16) & 255) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) / 255
+  return lum > 0.55 ? ST.ink : '#ffffff'
 }
 
 // Shown while a location-based game can't get the player's position.
@@ -128,20 +143,24 @@ export function LocationGate({ status, onExit, what = 'This game' }) {
   if (status === 'pending') {
     return (
       <View style={s.gate}>
-        <ActivityIndicator color={colors.textMuted} />
-        <Text style={[type.caption, { marginTop: 10 }]}>Getting your location…</Text>
+        <ActivityIndicator color={ST.friendly} />
+        <Text style={[stType.label, { marginTop: 12 }]}>Getting your location…</Text>
       </View>
     )
   }
   return (
     <View style={s.gate}>
-      <Text style={[type.title, { textAlign: 'center' }]}>Location needed</Text>
-      <Text style={[type.body, { textAlign: 'center', marginVertical: 12 }]}>
-        {what} is played in the real world, so it needs your location to know how close other players are. Your exact location is only shared with players in this match while you play.
-      </Text>
-      {status === 'denied' && <Btn title="Open Settings" variant="primary" onPress={() => Linking.openSettings().catch(() => {})} />}
-      {status === 'error' && <Text style={[type.caption, { textAlign: 'center' }]}>Couldn’t read your location. Make sure Location Services are on.</Text>}
-      <Btn title="Leave game" onPress={onExit} style={{ marginTop: 12 }} />
+      <View style={s.gatePanel}>
+        <View style={s.gateIcon}><Ionicons name="location" size={22} color={ST.objective} /></View>
+        <Text style={[stType.kicker, { color: ST.objective, textAlign: 'center' }]}>GPS required</Text>
+        <Text style={[stType.title, { textAlign: 'center', marginTop: 2 }]}>Location needed</Text>
+        <Text style={[stType.body, { textAlign: 'center', marginVertical: 12 }]}>
+          {what} is played in the real world, so it needs your location to know how close other players are. Your exact location is only shared with players in this match while you play.
+        </Text>
+        {status === 'denied' && <Btn title="Open Settings" variant="primary" onPress={() => Linking.openSettings().catch(() => {})} />}
+        {status === 'error' && <Text style={[stType.small, { textAlign: 'center' }]}>Couldn’t read your location. Make sure Location Services are on.</Text>}
+        <Btn title="Leave game" onPress={onExit} style={{ marginTop: 10 }} />
+      </View>
     </View>
   )
 }
@@ -150,15 +169,19 @@ export function LocationGate({ status, onExit, what = 'This game' }) {
 export function Spectating({ text = 'A round is in progress. You’ll be in the next one.' }) {
   return (
     <View style={s.gate}>
-      <Text style={[type.title, { textAlign: 'center' }]}>Round in progress</Text>
-      <Text style={[type.body, { textAlign: 'center', marginTop: 10 }]}>{text}</Text>
+      <View style={s.gatePanel}>
+        <View style={s.gateIcon}><Ionicons name="eye" size={22} color={ST.friendly} /></View>
+        <Text style={[stType.kicker, { textAlign: 'center' }]}>Spectating</Text>
+        <Text style={[stType.title, { textAlign: 'center', marginTop: 2 }]}>Round in progress</Text>
+        <Text style={[stType.body, { textAlign: 'center', marginTop: 10 }]}>{text}</Text>
+      </View>
     </View>
   )
 }
 
 // Segmented progress ring (no SVG dependency): `segments` ticks around a
 // circle, filled clockwise from the top as progress goes 0 → 1.
-export function ProgressRing({ size = 80, progress = 0, color = colors.magenta, trackColor = colors.hairline, segments = 36, thickness = 6, children }) {
+export function ProgressRing({ size = 80, progress = 0, color = ST.friendly, trackColor = 'rgba(255,255,255,0.14)', segments = 36, thickness = 6, children }) {
   const p = Math.max(0, Math.min(1, progress))
   const filled = Math.round(p * segments)
   const r = size / 2 - thickness / 2
@@ -178,7 +201,7 @@ export function ProgressRing({ size = 80, progress = 0, color = colors.magenta, 
               top: cy - segLen / 2,
               width: thickness,
               height: segLen,
-              borderRadius: thickness / 2,
+              borderRadius: 1,
               backgroundColor: i < filled ? color : trackColor,
               transform: [{ rotate: `${(i / segments) * 360}deg` }],
             }}
@@ -198,17 +221,22 @@ export function formatClock(ms) {
 }
 
 const s = StyleSheet.create({
-  gate: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
-  primary: { paddingVertical: 14, paddingHorizontal: 20, borderRadius: radii.md, alignItems: 'center', justifyContent: 'center' },
-  primarySm: { paddingVertical: 8, paddingHorizontal: 14, borderRadius: radii.sm },
-  primaryText: { ...type.body, fontWeight: '700', color: colors.onBrand },
-  glassText: { ...type.body, fontWeight: '700' },
-  smText: { fontSize: 13 },
-  avatarFallback: { backgroundColor: colors.violet, alignItems: 'center', justifyContent: 'center' },
-  row: { flexDirection: 'row', alignItems: 'center', paddingVertical: 8 },
+  gate: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 20, backgroundColor: ST.ground },
+  gatePanel: { width: '100%', maxWidth: 420, padding: 18, borderRadius: ST.radius, backgroundColor: ST.panelStrong, borderWidth: 1, borderColor: ST.line },
+  gateIcon: { alignSelf: 'center', width: 44, height: 44, borderRadius: ST.radius, alignItems: 'center', justifyContent: 'center', backgroundColor: ST.cell, marginBottom: 10 },
+  btn: { minHeight: 48, paddingHorizontal: 18, borderRadius: ST.radius, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+  btnSm: { minHeight: 32, paddingHorizontal: 12 },
+  btnGhost: { backgroundColor: 'rgba(8,10,14,0.4)', borderColor: ST.lineStrong },
+  btnText: { fontFamily: FONT.display, fontSize: 14, letterSpacing: 1.8, textTransform: 'uppercase', includeFontPadding: false },
+  smText: { fontSize: 11, letterSpacing: 1.2 },
+  card: { borderRadius: ST.radius, backgroundColor: ST.panelStrong, borderWidth: 1, borderColor: ST.line, marginBottom: 12 },
+  avatarFallback: { borderRadius: ST.radius, backgroundColor: '#3c434c', alignItems: 'center', justifyContent: 'center' },
+  row: { flexDirection: 'row', alignItems: 'center', paddingVertical: 8, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: 'rgba(255,255,255,0.08)' },
   rowTap: { flex: 1, flexDirection: 'row', alignItems: 'center' },
-  banner: { flexDirection: 'row', alignItems: 'center', paddingVertical: 8, paddingHorizontal: 12, borderRadius: radii.sm, marginBottom: 10 },
-  bannerText: { ...type.caption, color: colors.onBrand, flex: 1 },
-  pill: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: radii.pill, marginLeft: 6 },
-  pillText: { fontSize: 11, fontWeight: '700', color: colors.onBrand },
+  rowName: { fontFamily: FONT.display, fontSize: 15, color: ST.text, includeFontPadding: false },
+  rowSub: { fontFamily: FONT.ui, fontSize: 10, letterSpacing: 1.6, textTransform: 'uppercase', color: ST.muted, marginTop: 2 },
+  banner: { flexDirection: 'row', alignItems: 'center', paddingVertical: 9, paddingHorizontal: 12, borderRadius: ST.radius, marginBottom: 10, backgroundColor: ST.panelStrong, borderLeftWidth: 3 },
+  bannerText: { fontFamily: FONT.uiSemi, fontSize: 13, color: ST.text, flex: 1 },
+  pill: { paddingHorizontal: 6, height: 18, justifyContent: 'center', borderRadius: 2, marginLeft: 6, backgroundColor: withAlpha(ST.friendly, 1) },
+  pillText: { fontFamily: FONT.ui, fontSize: 10, letterSpacing: 1.4, textTransform: 'uppercase' },
 })
