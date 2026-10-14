@@ -4,6 +4,8 @@ import { ActivityIndicator, Image, Linking, Pressable, StyleSheet, Text, View, u
 import { GlassButton } from '../components/GlassButton'
 import { GlassCard } from '../components/GlassCard'
 import { colors, radii, type } from '../theme'
+import GameFollowButton from '../components/GameFollowButton'
+import { useMyUserId } from '../lib/profileNav'
 
 export function useTint() {
   return useColorScheme() === 'light' ? 'light' : 'dark'
@@ -74,7 +76,13 @@ export function PlayerTap({ player, children, style }) {
   )
 }
 
-export function PlayerRow({ player, right, subtitle, dim }) {
+// Every player row in every game gets a compact Follow button (teammates and opponents
+// alike) when the screen hosts players (PlayerTapContext) and the row isn't you.
+// Pass follow={false} to hide it.
+export function PlayerRow({ player, right, subtitle, dim, follow = true }) {
+  const onTap = useContext(PlayerTapContext)
+  const myId = useMyUserId()
+  const showFollow = follow && !!onTap && !!player?.id && !!myId && player.id !== myId
   return (
     <View style={[s.row, dim && { opacity: 0.5 }]}>
       <PlayerTap player={player} style={s.rowTap}>
@@ -85,6 +93,7 @@ export function PlayerRow({ player, right, subtitle, dim }) {
         </View>
       </PlayerTap>
       {right}
+      {showFollow ? <GameFollowButton userId={player.id} name={player.username} size="sm" style={{ marginLeft: 8 }} /> : null}
     </View>
   )
 }

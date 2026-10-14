@@ -11,17 +11,22 @@ export const SPAWN_PROTECT_MS = 2000
 export const VISION_MAX_M = 55 // 30 m effective + GPS slack
 export const COUNTDOWN_MS = 5000
 export const ROUND_BREAK_MS = 9000
-// Plant / defuse are a tap mini-game on the player's phone: hit TAPS_NEEDED targets
-// within the time limit. The host only accepts a completion from the player who started
-// it, still alive and inside the zone, within the window.
-export const PLANT_MS = 5000
-export const DEFUSE_MS = 7000
-export const PLANT_TAPS = 6
-export const DEFUSE_TAPS = 7
-export const MIN_ACT_MS = 1200 // nobody can legitimately finish faster
-export const ACT_GRACE_MS = 2500 // network slack after the mini-game's time limit
+// Plant / defuse: hold the button on your phone (CoD / CS style). The phone sends *_start
+// on press and *_done when the bar fills; the host only accepts a completion from the
+// player who started it, still alive and inside the zone, after (about) the full hold
+// time. A hit, leaving the zone or letting go cancels it.
+// Reference: CS plant 3.2 s / defuse 10 s (5 s kit) / C4 40 s; CoD plant 5 s / defuse
+// 7.5 s / bomb 45 s. Real-world play is a bit shorter on the hold (you're exposed).
+export const PLANT_MS = 4000
+export const DEFUSE_MS = 6000
+export const HOLD_SLACK_MS = 600 // network jitter between the start and done messages
+export const ACT_GRACE_MS = 2500 // a *_done may arrive this late before the host drops the act
 export const BOMB_MS = 45000
+// Site radius before GPS slack (gpsSlack adds 2-8 m from the player's reported accuracy),
+// so a player standing on the marker counts as inside with 5-15 m GPS error.
 export const SITE_RADIUS_M = 12
+// Two sites closer than this overlap once GPS slack is added.
+export const MIN_SITE_GAP_M = 30
 export const PICKUP_RANGE_M = 5
 export const MAX_RANGE_M = 150
 // Grenades: thrown along the compass heading up to GRENADE_MAX_THROW_M, explode after the fuse
@@ -106,7 +111,9 @@ export function initialState(roster, info, now) {
     roundMs,
     sides: { A: 'attack', B: 'defend' },
     wins: { A: 0, B: 0 },
-    sites: (s.sites || []).map((x) => ({ id: x.id, lat: x.lat, lng: x.lng, r: x.r || SITE_RADIUS_M })),
+    sites: (s.sites || [])
+      .filter((x) => x && (x.id === 'A' || x.id === 'B') && Number.isFinite(x.lat) && Number.isFinite(x.lng))
+      .map((x) => ({ id: x.id, lat: x.lat, lng: x.lng, r: x.r > 0 ? x.r : SITE_RADIUS_M })),
     bomb: null,
     act: null,
     lastResult: null,
@@ -295,10 +302,17 @@ function tickSnd(state, now, presentIds, posOf) {
     const a = snd.act
     const p = next.players[a.by]
     const pos = posOf(a.by)
-    const center = actCenter(snd, a)
     const limit = (a.kind === 'plant' ? PLANT_MS : DEFUSE_MS) + ACT_GRACE_MS
-    const ok = p?.alive && presentIds.has(a.by) && center && (pos ? insideRadius(pos, center, center.r || SITE_RADIUS_M) : true) && now - a.startedAt <= limit
+    const zoneOk = a.kind === 'plant' ? !!actCenter(snd, a) : snd.bomb?.state === 'planted'
+    const ok = p?.alive && presentIds.has(a.by) && zoneOk && (pos ? inActZone(snd, a, pos) : true) && now - a.startedAt <= limit
     if (!ok) next = { ...next, snd: { ...snd, act: null } }
+  }
+  // Nobody has the bomb (no attacker was around at round start, or it was dropped where
+  // nobody knows): give it to an attacker who is here now.
+  const b0 = next.snd.bomb
+  if (!b0 || b0.state === 'none' || (b0.state === 'dropped' && b0.lat == null)) {
+    const bomb = newBomb(next, presentIds)
+    if (bomb.carrier) next = { ...next, snd: { ...next.snd, bomb } }
   }
   const s2 = next.snd
   if (s2.bomb?.state === 'planted' && now >= s2.bomb.explodesAt) {
@@ -324,6 +338,23 @@ function tickSnd(state, now, presentIds, posOf) {
 function actCenter(snd, a) {
   if (a.kind === 'plant') return snd.sites.find((x) => x.id === a.site) || null
   return snd.bomb?.lat != null ? { lat: snd.bomb.lat, lng: snd.bomb.lng, r: snd.bomb.r } : null
+}
+
+// Close enough to the planted bomb to defuse it: within the site radius of where the
+// planter stood, or anywhere inside the site it was planted at (both positions carry GPS
+// error, so either one counts).
+export function atBomb(snd, pos) {
+  const b = snd?.bomb
+  if (!pos || !b || b.state !== 'planted' || b.lat == null) return false
+  if (insideRadius(pos, b, b.r || SITE_RADIUS_M)) return true
+  const site = (snd.sites || []).find((x) => x.id === b.site)
+  return !!site && insideRadius(pos, site, site.r || SITE_RADIUS_M)
+}
+
+function inActZone(snd, a, pos) {
+  if (a.kind === 'defuse') return atBomb(snd, pos)
+  const site = actCenter(snd, a)
+  return !!site && insideRadius(pos, site, site.r || SITE_RADIUS_M)
 }
 
 function completePlant(state, from, now, pos) {
@@ -355,7 +386,7 @@ function dropBomb(bomb, pos) {
 function endSndRound(state, winner, reason, now) {
   const snd = state.snd
   const wins = { ...snd.wins, [winner]: snd.wins[winner] + 1 }
-  const needed = Math.ceil(snd.totalRounds / 2)
+  const needed = Math.floor(snd.totalRounds / 2) + 1 // a strict majority (best of N)
   const history = [...snd.history, { roundNo: snd.roundNo, winner, reason, sides: snd.sides }]
   const done = wins[winner] >= needed || snd.roundNo >= snd.totalRounds
   const next = { ...state, snd: { ...snd, wins, act: null, lastResult: { winner, reason, roundNo: snd.roundNo }, history } }
@@ -401,21 +432,28 @@ export function applyAction(state, action, from, { now, posOf }) {
     case 'grenade': return applyGrenade(state, action, from, now, posOf)
     case 'sticky_bomb': return applyStickyBomb(state, action, from, now, posOf)
     case 'land_mine': return applyLandMine(state, action, from, now, posOf)
+    // A new press by the same player restarts their hold (a lost act_cancel must not let
+    // the next press finish early).
     case 'plant_start': {
       if (state.mode !== 'snd' || !me.alive) return { state }
-      if (state.snd.act) return { state, reply: state.snd.act.by === from ? undefined : notice('Someone else is already at the bomb.') }
+      if (state.snd.act && state.snd.act.by !== from) return { state, reply: notice('Someone else is already at the bomb.') }
       const b = state.snd.bomb
       if (b?.state !== 'carried' || b.carrier !== from) return { state, reply: notice('You don’t have the bomb.') }
-      const site = state.snd.sites.find((x) => x.id === action.site)
-      if (!site || !insideRadius(posOf(from), site, site.r)) return { state, reply: notice('Get inside a bomb site to plant.') }
+      const pos = posOf(from)
+      if (!pos) return { state, reply: notice('Waiting for your GPS — hold still a moment.') }
+      // The site the player asked for, else whichever site they are actually in.
+      const site = [state.snd.sites.find((x) => x.id === action.site), ...state.snd.sites].find((x) => x && insideRadius(pos, x, x.r || SITE_RADIUS_M))
+      if (!site) return { state, reply: notice('Get inside a bomb site to plant.') }
       return { state: { ...state, snd: { ...state.snd, act: { kind: 'plant', by: from, startedAt: now, site: site.id } } } }
     }
     case 'defuse_start': {
       if (state.mode !== 'snd' || !me.alive) return { state }
-      if (state.snd.act) return { state, reply: state.snd.act.by === from ? undefined : notice('Someone else is already at the bomb.') }
+      if (state.snd.act && state.snd.act.by !== from) return { state, reply: notice('A teammate is already defusing.') }
       const b = state.snd.bomb
       if (b?.state !== 'planted' || me.team !== defendingTeam(state)) return { state }
-      if (!insideRadius(posOf(from), b, b.r || SITE_RADIUS_M)) return { state, reply: notice('Get closer to the bomb to defuse.') }
+      const pos = posOf(from)
+      if (!pos) return { state, reply: notice('Waiting for your GPS — hold still a moment.') }
+      if (!atBomb(state.snd, pos)) return { state, reply: notice('Get closer to the bomb to defuse.') }
       return { state: { ...state, snd: { ...state.snd, act: { kind: 'defuse', by: from, startedAt: now } } } }
     }
     case 'plant_done':
@@ -423,20 +461,19 @@ export function applyAction(state, action, from, { now, posOf }) {
       if (state.mode !== 'snd' || !me.alive) return { state }
       const a = state.snd.act
       const kind = action.type === 'plant_done' ? 'plant' : 'defuse'
-      if (!a || a.by !== from || a.kind !== kind) return { state, reply: notice('Too slow — try again.') }
+      if (!a || a.by !== from || a.kind !== kind) return { state, reply: notice(kind === 'plant' ? 'Plant interrupted — hold again.' : 'Defuse interrupted — hold again.') }
       const elapsed = now - a.startedAt
-      const limit = (kind === 'plant' ? PLANT_MS : DEFUSE_MS) + ACT_GRACE_MS
-      if (elapsed < MIN_ACT_MS || elapsed > limit) return { state: { ...state, snd: { ...state.snd, act: null } }, reply: notice('That didn’t count — try again.') }
+      const holdMs = kind === 'plant' ? PLANT_MS : DEFUSE_MS
+      const drop = (text) => ({ state: { ...state, snd: { ...state.snd, act: null } }, reply: notice(text) })
+      if (elapsed < holdMs - HOLD_SLACK_MS || elapsed > holdMs + ACT_GRACE_MS) return drop('That didn’t count — hold until the bar fills.')
       const pos = posOf(from)
-      const center = actCenter(state.snd, a)
-      if (!center || !insideRadius(pos, center, center.r || SITE_RADIUS_M)) {
-        return { state: { ...state, snd: { ...state.snd, act: null } }, reply: notice(kind === 'plant' ? 'Stay inside the site to plant.' : 'Stay at the bomb to defuse.') }
-      }
+      if (!pos || !inActZone(state.snd, a, pos)) return drop(kind === 'plant' ? 'Stay inside the site to plant.' : 'Stay at the bomb to defuse.')
       if (kind === 'plant') {
         if (state.snd.bomb?.state !== 'carried' || state.snd.bomb.carrier !== from) return { state }
         return { state: completePlant(state, from, now, pos) }
       }
       if (state.snd.bomb?.state !== 'planted' || me.team !== defendingTeam(state)) return { state }
+      if (now >= state.snd.bomb.explodesAt) return { state } // too late: the tick detonates it
       return { state: completeDefuse(state, from, now) }
     }
     case 'act_cancel':
@@ -456,6 +493,34 @@ export function applyAction(state, action, from, { now, posOf }) {
 }
 
 const notice = (text) => ({ type: 'notice', data: { text } })
+
+// Host migration: every timestamp in the state is on the previous host's clock. Shift
+// them onto the new host's clock (deltaMs = newClock - oldClock) so the round timer, a
+// planted bomb's fuse and a plant/defuse in progress carry on where they were.
+export function rebaseClock(state, deltaMs) {
+  if (!state || !Number.isFinite(deltaMs) || !deltaMs) return state
+  const sh = (t) => (Number.isFinite(t) && t > 0 ? t + deltaMs : t)
+  const players = {}
+  for (const [id, p] of Object.entries(state.players || {})) players[id] = { ...p, respawnAt: sh(p.respawnAt), protectedUntil: sh(p.protectedUntil) }
+  const next = {
+    ...state,
+    startedAt: sh(state.startedAt),
+    startsAt: sh(state.startsAt),
+    endsAt: sh(state.endsAt),
+    tooFewSince: sh(state.tooFewSince),
+    players,
+  }
+  if (state.blasts) next.blasts = state.blasts.map((b) => ({ ...b, at: sh(b.at) }))
+  if (state.snd) {
+    const { bomb, act } = state.snd
+    next.snd = {
+      ...state.snd,
+      bomb: bomb ? { ...bomb, plantedAt: sh(bomb.plantedAt), explodesAt: sh(bomb.explodesAt) } : bomb,
+      act: act ? { ...act, startedAt: sh(act.startedAt) } : act,
+    }
+  }
+  return next
+}
 
 // Bystander tags: an opted-in iYiYi user who is NOT in this match was hit on camera.
 // Fewer points than a tag-out, at most one per bystander per shooter per minute.

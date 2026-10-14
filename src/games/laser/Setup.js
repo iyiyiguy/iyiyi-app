@@ -1,15 +1,16 @@
 // Lobby setup for Laser Tag: the play area (boundary presets on a map), teams
 // (auto-balance, switch, lock) for team modes, and Search & Destroy bomb sites, which
-// are generated automatically on a street or sidewalk inside the play area.
+// are generated automatically on a street or sidewalk inside the play area. The host can
+// also walk to a spot and tap "Set A here" (GPS), or tap the map in Place A / Place B.
 import React, { useEffect, useRef, useState } from 'react'
 import { ActivityIndicator, Pressable, StyleSheet, Switch, Text, View } from 'react-native'
 import * as Location from 'expo-location'
 import { Avatar } from '../MultiplayerUI'
 import { AC, ArcadeBox as Card, ArcadeBtn as Btn, arcadeType } from '../arcadeUI'
 import { GameMap, isValidCoord } from '../GameMap'
-import { AREA_PRESETS, TEAMS, formatDistance } from '../../lib/multiplayer'
+import { AREA_PRESETS, TEAMS, distanceMeters, formatDistance } from '../../lib/multiplayer'
 import { buzz } from '../../lib/gamePrefs'
-import { SITE_RADIUS_M, balanceTeams } from './engine'
+import { MIN_SITE_GAP_M, SITE_RADIUS_M, balanceTeams } from './engine'
 import { generateBombSites } from './bombSites'
 import { colors as themeColors, radii } from '../../theme'
 import { HUD, hudGlow } from './HudPro'
@@ -30,7 +31,9 @@ export function laserCanStart(info, roster) {
   const count = { A: 0, B: 0 }
   for (const p of roster) if (teams[p.id]) count[teams[p.id]] += 1
   if (roster.length >= 2 && (count.A === 0 || count.B === 0)) return { ok: false, reason: 'Both teams need at least one player.' }
-  if (mode === 'snd' && !(info.settings?.sites || []).length) return { ok: false, reason: 'Waiting for a bomb site — set the play area or tap the map to drop one.' }
+  const sites = (info.settings?.sites || []).filter((x) => x && isValidCoord(x.lat, x.lng))
+  if (mode === 'snd' && !sites.length) return { ok: false, reason: 'Waiting for a bomb site — set the play area, tap "Set A here", or tap the map to drop one.' }
+  if (mode === 'snd' && sites.length >= 2 && distanceMeters(sites[0], sites[1]) < MIN_SITE_GAP_M) return { ok: false, reason: `Bomb sites A and B overlap — move one at least ${formatDistance(MIN_SITE_GAP_M)} away.` }
   return { ok: true }
 }
 
@@ -48,6 +51,8 @@ export function LaserTagSetup({ room, snap }) {
   const [generating, setGenerating] = useState(false)
   const [siteSource, setSiteSource] = useState(null)
   const [locError, setLocError] = useState(false)
+  const [placing, setPlacing] = useState(null) // 'A' | 'B' while reading GPS for "Set here"
+  const [siteMsg, setSiteMsg] = useState(null) // { text, bad }
   const genToken = useRef(0)
 
   // Always write on top of the latest room settings (several async writers).
@@ -140,11 +145,62 @@ export function LaserTagSetup({ room, snap }) {
       patchSettings({ area: { preset, lat: coord.lat, lng: coord.lng, r: AREA_PRESETS[preset]?.r || area?.r || 45.72 } })
       return
     }
-    const rest = sites.filter((x) => x.id !== tapMode)
-    const next = [...rest, { id: tapMode, lat: coord.lat, lng: coord.lng, r: SITE_RADIUS_M }].sort((a, b) => a.id.localeCompare(b.id))
+    if (placeSite(tapMode, coord) && tapMode === 'A' && !sites.some((x) => x.id === 'B')) setTapMode('B')
+  }
+
+  // Put site `id` at `coord` (map tap or the host's GPS). Refuses a spot that would overlap
+  // the other site; warns when it's outside the play area.
+  const placeSite = (id, coord, acc) => {
+    const cur = (room.info.settings?.sites || []).filter((x) => x && isValidCoord(x.lat, x.lng))
+    const other = cur.find((x) => x.id !== id)
+    const gap = other ? distanceMeters(other, coord) : Infinity
+    if (gap < MIN_SITE_GAP_M) {
+      buzz('error')
+      setSiteMsg({ text: `Too close to site ${other.id} (${formatDistance(gap)}). Sites must be at least ${formatDistance(MIN_SITE_GAP_M)} apart.`, bad: true })
+      return false
+    }
+    genToken.current += 1 // a street lookup still running must not overwrite this
+    setGenerating(false)
+    const next = [...cur.filter((x) => x.id !== id), { id, lat: coord.lat, lng: coord.lng, r: SITE_RADIUS_M }].sort((a, b) => a.id.localeCompare(b.id))
     patchSettings({ sites: next })
     setSiteSource('manual')
-    if (tapMode === 'A' && !sites.some((x) => x.id === 'B')) setTapMode('B')
+    const outside = area && distanceMeters(area, coord) > area.r
+    const weak = Number.isFinite(acc) && acc > 25
+    setSiteMsg({
+      text: `Site ${id} set${Number.isFinite(acc) ? ` (GPS ±${formatDistance(acc)})` : ''}.${outside ? ' It’s outside the play area.' : ''}${weak ? ' GPS is weak here — the marker may be off; check it on the map.' : ''}`,
+      bad: !!(outside || weak),
+    })
+    buzz('success')
+    return true
+  }
+
+  // "Set A here": the host stands on the spot and uses a fresh GPS fix.
+  const setHere = async (id) => {
+    if (!isHost || placing) return
+    setPlacing(id)
+    setSiteMsg(null)
+    buzz('medium')
+    try {
+      const perm = await Location.requestForegroundPermissionsAsync()
+      if (perm.status !== 'granted') { setSiteMsg({ text: 'Turn on location to set a site where you stand, or tap the map.', bad: true }); return }
+      let timer = null
+      const pos = await Promise.race([
+        Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Highest }),
+        new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('timeout')), 12000) }),
+      ])
+        .catch(() => Location.getLastKnownPositionAsync({ maxAge: 30000, requiredAccuracy: 40 }).catch(() => null))
+        .finally(() => clearTimeout(timer))
+      const lat = pos?.coords?.latitude
+      const lng = pos?.coords?.longitude
+      if (!isValidCoord(lat, lng)) {
+        buzz('error')
+        setSiteMsg({ text: 'No GPS fix yet — step into the open, wait a few seconds and try again, or tap the map.', bad: true })
+        return
+      }
+      placeSite(id, { lat, lng }, pos.coords.accuracy)
+    } finally {
+      setPlacing(null)
+    }
   }
 
   const move = (id, team) => {
@@ -158,6 +214,9 @@ export function LaserTagSetup({ room, snap }) {
   const markers = mode === 'snd' ? sites.map((x) => ({ id: x.id, lat: x.lat, lng: x.lng, label: `SITE ${x.id}`, color: HUD.red })) : []
   const mapCenter = area || sites[0] || null
   const hint = !isHost ? null : tapMode === 'area' ? 'Tap the map to move the play area' : `Tap the map to place site ${tapMode}`
+  const siteA = sites.find((x) => x.id === 'A')
+  const siteB = sites.find((x) => x.id === 'B')
+  const siteGap = siteA && siteB ? distanceMeters(siteA, siteB) : null
 
   return (
     <>
@@ -185,7 +244,7 @@ export function LaserTagSetup({ room, snap }) {
         </View>
         {isHost && mode === 'snd' && (
           <View style={[styles.chipRow, { marginTop: 0 }]}>
-            {[['area', 'Move area'], ['A', 'Place A'], ['B', 'Place B']].map(([id, label]) => (
+            {[['area', 'Move area'], ['A', 'Tap map: A'], ['B', 'Tap map: B']].map(([id, label]) => (
               <Pressable key={id} onPress={() => setTapMode(id)} style={[styles.chipSm, tapMode === id && styles.chipOn]} accessibilityRole="button" accessibilityState={{ selected: tapMode === id }}>
                 <Text style={[styles.chipText, tapMode === id && { color: HUD.bg }]}>{label}</Text>
               </Pressable>
@@ -221,15 +280,30 @@ export function LaserTagSetup({ room, snap }) {
               {generating
                 ? 'Finding a spot on a street or sidewalk…'
                 : sites.length
-                  ? `${sites.map((x) => x.id).join(' & ')} · ${Math.round(SITE_RADIUS_M * 3.28)} ft radius${siteSource === 'fallback' ? ' · placed at the area centre (map data unavailable)' : siteSource === 'streets' ? ' · on a street or sidewalk' : ''}. Both teams see sites on the minimap.`
+                  ? `${sites.map((x) => x.id).join(' & ')} · ${formatDistance(SITE_RADIUS_M)} radius${siteGap != null ? ` · ${formatDistance(siteGap)} apart` : ''}${siteSource === 'fallback' ? ' · placed at the area centre (map data unavailable)' : siteSource === 'streets' ? ' · on a street or sidewalk' : ''}. Everyone sees the sites on the map and compass.`
                   : isHost ? 'Sites are generated when the play area is set.' : 'The host is placing the bomb sites.'}
             </Text>
-            {area && area.r > 600 && <Text style={[type.caption, { marginTop: 4 }]}>For big areas, sites are placed within walking distance of the area’s centre.</Text>}
+            {isHost && !generating && (
+              <Text style={[type.caption, { marginTop: 4 }]}>
+                To choose them yourself: stand at the spot and tap “Set A here” (then walk to B), or pick “Tap map: A/B” and tap the map. Keep sites at least {formatDistance(MIN_SITE_GAP_M)} apart, outdoors, somewhere safe to stand.
+              </Text>
+            )}
+            {siteGap != null && siteGap < MIN_SITE_GAP_M && (
+              <Text style={[type.caption, { marginTop: 4, color: HUD.red }]}>Sites A and B overlap — move one at least {formatDistance(MIN_SITE_GAP_M)} away.</Text>
+            )}
+            {!!siteMsg && <Text style={[type.caption, { marginTop: 4, color: siteMsg.bad ? HUD.gold : HUD.green }]}>{siteMsg.text}</Text>}
+            {area && area.r > 150 && <Text style={[type.caption, { marginTop: 4 }]}>For big areas, generated sites go within about 500 ft of the area’s centre so both are in walking distance.</Text>}
             {isHost && (
-              <View style={{ flexDirection: 'row', gap: 8, marginTop: 10 }}>
-                <Btn title={generating ? 'Rolling…' : 'Re-roll site'} size="sm" disabled={generating || !area} onPress={() => { buzz('medium'); regenerate() }} style={{ flex: 1 }} />
-                {sites.some((x) => x.id === 'B') && <Btn title="Remove B" size="sm" onPress={() => patchSettings({ sites: sites.filter((x) => x.id !== 'B') })} />}
-              </View>
+              <>
+                <View style={{ flexDirection: 'row', gap: 8, marginTop: 10 }}>
+                  <Btn title={placing === 'A' ? 'Locating…' : 'Set A here'} size="sm" disabled={!!placing} onPress={() => setHere('A')} style={{ flex: 1 }} />
+                  <Btn title={placing === 'B' ? 'Locating…' : 'Set B here'} size="sm" disabled={!!placing} onPress={() => setHere('B')} style={{ flex: 1 }} />
+                </View>
+                <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
+                  <Btn title={generating ? 'Rolling…' : 'Re-roll sites'} size="sm" disabled={generating || !area} onPress={() => { buzz('medium'); setSiteMsg(null); regenerate() }} style={{ flex: 1 }} />
+                  {sites.some((x) => x.id === 'B') && <Btn title="Remove B" size="sm" onPress={() => { setSiteMsg(null); patchSettings({ sites: sites.filter((x) => x.id !== 'B') }) }} />}
+                </View>
+              </>
             )}
           </View>
         )}

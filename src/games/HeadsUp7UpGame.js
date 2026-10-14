@@ -284,8 +284,8 @@ export function HeadsUp7UpGame({ room, onExit }) {
             <Card>
               <Text style={[type.label, { marginBottom: 6 }]}>Sitters (tap one)</Text>
               {sitters.map(([id, p]) => (
-                <PlayerRow key={id} player={{ username: p.name, avatar: avatarOf(id) }}
-                  right={<Btn title="Tap" size="sm" variant="primary" onPress={() => { buzz('select'); room.sendAction({ type: 'pick', target: id }) }} />}
+                <PlayerRow key={id} player={{ id, username: p.name, avatar: avatarOf(id) }}
+                  follow={false} right={<Btn title="Tap" size="sm" variant="primary" onPress={() => { buzz('select'); room.sendAction({ type: 'pick', target: id }) }} />}
                 />
               ))}
             </Card>
@@ -328,8 +328,8 @@ export function HeadsUp7UpGame({ room, onExit }) {
           <Card>
             <Text style={[type.label, { marginBottom: 6 }]}>Who tapped you?</Text>
             {pickers.map(([id, p]) => (
-              <PlayerRow key={id} player={{ username: p.name, avatar: avatarOf(id) }}
-                right={<Btn title="Guess" size="sm" variant="primary" onPress={() => { buzz('select'); room.sendAction({ type: 'guess', target: id }) }} />}
+              <PlayerRow key={id} player={{ id, username: p.name, avatar: avatarOf(id) }}
+                follow={false} right={<Btn title="Guess" size="sm" variant="primary" onPress={() => { buzz('select'); room.sendAction({ type: 'guess', target: id }) }} />}
               />
             ))}
           </Card>
@@ -372,7 +372,7 @@ export function HeadsUp7UpGame({ room, onExit }) {
             <Text style={[type.label, { marginBottom: 6 }]}>Scoreboard</Text>
             {sortedScores.map((s, i) => (
               <PlayerRow key={s.id}
-                player={{ username: s.id === meId ? `${s.name} (you)` : s.name, avatar: avatarOf(s.id) }}
+                player={{ id: s.id, username: s.id === meId ? `${s.name} (you)` : s.name, avatar: avatarOf(s.id) }}
                 right={<View style={styles.scoreBadge}>
                   <Text style={styles.scoreText}>{s.score}</Text>
                 </View>}

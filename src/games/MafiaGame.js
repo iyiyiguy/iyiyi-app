@@ -354,8 +354,8 @@ export function MafiaGame({ room, onExit }) {
               <Text style={[type.label, { color: ROLES.mafia.color, flex: 1 }]}>Choose a target to eliminate</Text>
             </View>
             {alive.filter(([id]) => id !== meId && roleKnown !== 'mafia').map(([id, p]) => (
-              <PlayerRow key={id} player={{ username: p.name, avatar: avatarOf(id) }}
-                right={<Btn title="Target" size="sm" variant="danger" onPress={() => { buzz('select'); room.sendAction({ type: 'mafia_target', target: id }) }} />}
+              <PlayerRow key={id} player={{ id, username: p.name, avatar: avatarOf(id) }}
+                follow={false} right={<Btn title="Target" size="sm" variant="danger" onPress={() => { buzz('select'); room.sendAction({ type: 'mafia_target', target: id }) }} />}
               />
             ))}
             <Text style={[type.caption, { marginTop: 6 }]}>If multiple Mafia, majority picks the target.</Text>
@@ -369,8 +369,8 @@ export function MafiaGame({ room, onExit }) {
               <Text style={[type.label, { color: ROLES.doctor.color, flex: 1 }]}>Choose someone to protect</Text>
             </View>
             {alive.map(([id, p]) => (
-              <PlayerRow key={id} player={{ username: id === meId ? `${p.name} (you)` : p.name, avatar: avatarOf(id) }}
-                right={<Btn title="Protect" size="sm" variant="primary" onPress={() => { buzz('select'); room.sendAction({ type: 'doctor_save', target: id }) }} />}
+              <PlayerRow key={id} player={{ id, username: id === meId ? `${p.name} (you)` : p.name, avatar: avatarOf(id) }}
+                follow={false} right={<Btn title="Protect" size="sm" variant="primary" onPress={() => { buzz('select'); room.sendAction({ type: 'doctor_save', target: id }) }} />}
               />
             ))}
           </Card>
@@ -383,8 +383,8 @@ export function MafiaGame({ room, onExit }) {
               <Text style={[type.label, { color: ROLES.detective.color, flex: 1 }]}>Investigate a player</Text>
             </View>
             {alive.filter(([id]) => id !== meId).map(([id, p]) => (
-              <PlayerRow key={id} player={{ username: p.name, avatar: avatarOf(id) }}
-                right={<Btn title="Investigate" size="sm" variant="primary" onPress={() => { buzz('select'); room.sendAction({ type: 'detective_investigate', target: id }) }} />}
+              <PlayerRow key={id} player={{ id, username: p.name, avatar: avatarOf(id) }}
+                follow={false} right={<Btn title="Investigate" size="sm" variant="primary" onPress={() => { buzz('select'); room.sendAction({ type: 'detective_investigate', target: id }) }} />}
               />
             ))}
           </Card>
@@ -441,7 +441,7 @@ export function MafiaGame({ room, onExit }) {
         <Text style={[type.label, { marginBottom: 6 }]}>Alive ({alive.length})</Text>
         {alive.map(([id, p]) => (
           <PlayerRow key={id}
-            player={{ username: id === meId ? `${p.name} (you)` : p.name, avatar: avatarOf(id) }}
+            player={{ id, username: id === meId ? `${p.name} (you)` : p.name, avatar: avatarOf(id) }}
             subtitle={state.votes[id] !== undefined ? 'Voted ✓' : voting && me.alive ? '' : ''}
             right={voting && me.alive && myVote === undefined && id !== meId
               ? <Btn title="Vote" size="sm" variant="danger" onPress={() => { buzz('select'); room.sendAction({ type: 'vote', target: id }) }} />
@@ -461,7 +461,7 @@ export function MafiaGame({ room, onExit }) {
         <Card>
           <Text style={[type.label, { marginBottom: 6 }]}>Eliminated</Text>
           {dead.map(([id, p]) => (
-            <PlayerRow key={id} player={{ username: p.name, avatar: avatarOf(id) }} dim />
+            <PlayerRow key={id} player={{ id, username: p.name, avatar: avatarOf(id) }} dim />
           ))}
         </Card>
       )}
@@ -496,7 +496,7 @@ function Summary({ state, meId, roleKnown, avatarOf, isHost, room, snap, onExit 
           const r = ROLES[roleKnown && id === meId ? roleKnown : 'town'] // Only host knows all roles; in practice secret ref is lost
           return (
             <PlayerRow key={id}
-              player={{ username: id === meId ? `${p.name} (you)` : p.name, avatar: avatarOf(id) }}
+              player={{ id, username: id === meId ? `${p.name} (you)` : p.name, avatar: avatarOf(id) }}
               subtitle={`${p.alive ? 'Survived' : 'Eliminated'}`}
               dim={!p.alive}
             />

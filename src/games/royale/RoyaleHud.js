@@ -4,7 +4,8 @@ import React, { memo, useMemo, useState } from 'react'
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { LinearGradient } from 'expo-linear-gradient'
 import { Ionicons } from '@expo/vector-icons'
-import { formatClock } from '../MultiplayerUI'
+import { PlayerTap, formatClock } from '../MultiplayerUI'
+import GameFollowButton from '../../components/GameFollowButton'
 import { AC, ArcadeBackground, GhostButton, PlayButton, StatTile } from '../arcadeUI'
 import { font } from '../../theme'
 import { ROYALE_COLORS, TRANSIT_TEXT } from './constants'
@@ -287,8 +288,11 @@ export function ResultsView({ insets, state, meId, isHost, onLobby, onLeave }) {
           {ranking.map((r) => (
             <View key={r.id} style={[s.rankRow, r.pl >= 1 && r.pl <= 3 && s.rankTop, r.id === meId && s.rankMe]}>
               <Text style={[s.rankPos, r.pl === 1 && { color: AC.gold }]}>{r.pl === 1 ? '🥇' : r.pl === 2 ? '🥈' : r.pl === 3 ? '🥉' : `#${r.pl || '—'}`}</Text>
-              <Text style={s.rankName} numberOfLines={1}>{r.n}{r.id === meId ? ' (you)' : ''}</Text>
+              <PlayerTap player={{ id: r.id, username: r.n }} style={{ flex: 1, minWidth: 0 }}>
+                <Text style={s.rankName} numberOfLines={1}>{r.n}{r.id === meId ? ' (you)' : ''}</Text>
+              </PlayerTap>
               <Text style={s.rankKills}>{r.k || 0} K</Text>
+              {r.id !== meId ? <GameFollowButton userId={r.id} name={r.n} size="sm" style={{ marginLeft: 8 }} /> : null}
             </View>
           ))}
           <View style={{ height: 16 }} />

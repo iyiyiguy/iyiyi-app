@@ -1,16 +1,19 @@
-// Laser Tag HUD extras: weapon switcher (+ wheel), scoreboard, the S&D tap mini-game,
+// Laser Tag HUD extras: weapon switcher (+ wheel), scoreboard, the S&D hold-to-plant button,
 // bomb alerts / countdown, and floating enemy markers. All overlays here are in-tree
 // Views (never native Modals) so they can't get stuck, and every one of them swallows
 // touches so a tap on the HUD never fires the gun.
 import React, { memo, useEffect, useRef, useState } from 'react'
 import { Animated, Easing, Pressable, ScrollView, StyleSheet, Text, View, Image, useWindowDimensions } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
+import Svg, { Circle } from 'react-native-svg'
 import { TEAMS } from '../../lib/multiplayer'
 import { buzz } from '../../lib/gamePrefs'
 import { playSfx } from '../../lib/gunAudio'
 import { WeaponSpinWheel } from './WeaponSpinWheel'
 import { gunArt } from '../../lib/gunArt'
 import { HUD, hudSheet, hudType } from './HudPro'
+import { PlayerTap } from '../MultiplayerUI'
+import GameFollowButton from '../../components/GameFollowButton'
 
 const hudShadow = { textShadowColor: 'rgba(0,0,0,0.85)', textShadowRadius: 4, textShadowOffset: { width: 0, height: 1 } }
 const W = '#fff'
@@ -90,19 +93,21 @@ export function ScoreTable({ state, meId, shotsBy }) {
               {showBt && <Text style={[s.th, s.c]}>BT</Text>}
               {shotsBy && <Text style={[s.th, s.cw]}>ACC</Text>}
               <Text style={[s.th, s.cw]}>SCORE</Text>
+              <View style={s.fcol} />
             </View>
             {g.rows.map((r, i) => (
               <View key={r.id} style={[s.tRow, r.id === meId && s.tRowMe]}>
                 <Text style={[s.td, { width: 22, color: MUTED }]}>{i + 1}</Text>
-                <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center' }}>
+                <PlayerTap player={{ id: r.id, username: r.name }} style={{ flex: 1, flexDirection: 'row', alignItems: 'center' }}>
                   {!r.alive && state.phase === 'playing' && <Text style={s.deadTag}>✕ </Text>}
                   <Text style={[s.td, { flexShrink: 1 }, r.id === meId && { fontWeight: '800' }]} numberOfLines={1}>{r.name}{r.id === meId ? ' (you)' : ''}</Text>
-                </View>
+                </PlayerTap>
                 <Text style={[s.td, s.c]}>{r.kills || 0}</Text>
                 <Text style={[s.td, s.c]}>{r.deaths || 0}</Text>
                 {showBt && <Text style={[s.td, s.c]}>{r.bystanderTags || 0}</Text>}
                 {shotsBy && <Text style={[s.td, s.cw]}>{acc(r)}</Text>}
                 <Text style={[s.td, s.cw, { fontWeight: '800' }]}>{r.score || 0}</Text>
+                <View style={s.fcol}>{r.id !== meId ? <GameFollowButton userId={r.id} name={r.name} size="sm" /> : null}</View>
               </View>
             ))}
           </View>
@@ -142,145 +147,159 @@ export function ScoreboardOverlay({ visible, state, meId, onClose, insets }) {
 }
 
 // ---------------------------------------------------------------------------
-// Search & Destroy: tap mini-game (plant / defuse)
+// Search & Destroy: hold to plant / defuse
 // ---------------------------------------------------------------------------
 
+const RING = 46
+const RING_W = 5
+const RING_C = Math.PI * (RING - RING_W)
+
 /**
- * Whack-a-mole: targets pop up at random spots; hit `needed` of them within `durationMs`.
- * Calls onStart() when a run begins, onSuccess() when completed, onFail() when time runs
- * out. The player can retry after a fail, or close (onClose).
+ * CoD-style hold button: press and hold until the ring fills (holdMs). Calls onStart()
+ * on press, onDone() when full and onCancel() when let go early. `activeKey` identifies the
+ * plant/defuse the host is running for me (its start time; null when none). If the host
+ * drops it (I was hit, walked out of the zone) or never confirms it, the hold stops and
+ * must be pressed again.
  */
-export function TapMiniGame({ kind, durationMs, needed, onStart, onSuccess, onFail, onClose, insets, interruptedAt }) {
-  const [phase, setPhase] = useState('running') // running | failed | done | interrupted
-  const [hits, setHits] = useState(0)
-  const [target, setTarget] = useState(null)
-  const [left, setLeft] = useState(durationMs)
-  const [box, setBox] = useState(null)
-  const runRef = useRef(0)
-  const deadline = useRef(0)
-  const hitsRef = useRef(0)
-  const pop = useRef(new Animated.Value(1)).current
-  const label = kind === 'plant' ? 'PLANT' : 'DEFUSE'
+export function HoldActionButton({ kind, site, holdMs, activeKey = null, color = GOLD, onStart, onDone, onCancel }) {
+  const [phase, setPhase] = useState('idle') // idle | holding | done | lost
+  const [pct, setPct] = useState(0)
+  const [lostText, setLostText] = useState('')
+  const startAt = useRef(0)
+  const sawActive = useRef(false)
+  const ackKey = useRef(null) // the host's act for this press
+  const staleKey = useRef(null) // an act still showing from an earlier press
+  const phaseRef = useRef('idle')
+  phaseRef.current = phase
+  const cb = useRef({})
+  cb.current = { onStart, onDone, onCancel }
+  const scale = useRef(new Animated.Value(0.5)).current
+  const plant = kind === 'plant'
 
-  const spawn = (b = box) => {
-    if (!b) return
-    const size = 74
-    const x = 16 + Math.random() * Math.max(10, b.width - size - 32)
-    const y = 16 + Math.random() * Math.max(10, b.height - size - 32)
-    setTarget({ x, y, key: Math.random().toString(36).slice(2) })
-    pop.setValue(0.3)
-    Animated.spring(pop, { toValue: 1, useNativeDriver: true, damping: 10, stiffness: 260 }).start()
-  }
-
-  const start = () => {
-    const run = ++runRef.current
-    hitsRef.current = 0
-    setHits(0)
-    setPhase('running')
-    deadline.current = Date.now() + durationMs
-    setLeft(durationMs)
-    spawn()
-    try { onStart?.() } catch { /* ignore */ }
-    return run
-  }
-
-  // First run once the play box is measured.
-  useEffect(() => { if (box && runRef.current === 0) start() }, [box]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Timer + targets hop if not hit in time.
   useEffect(() => {
-    if (phase !== 'running' || !box) return undefined
-    const tick = setInterval(() => {
-      const ms = deadline.current - Date.now()
-      setLeft(Math.max(0, ms))
-      if (ms <= 0) {
-        clearInterval(tick)
-        setPhase('failed')
-        setTarget(null)
-        buzz('error')
-        try { onFail?.() } catch { /* ignore */ }
+    Animated.spring(scale, { toValue: 1, useNativeDriver: true, damping: 9, stiffness: 200 }).start()
+    buzz('warning')
+  }, [scale])
+
+  const lose = (text) => {
+    setPhase('lost')
+    setPct(0)
+    setLostText(text)
+    buzz('error')
+    try { cb.current.onCancel?.() } catch { /* ignore */ }
+  }
+
+  // Progress while holding (+ a tick of haptics every second).
+  useEffect(() => {
+    if (phase !== 'holding') return undefined
+    let lastSec = 0
+    const t = setInterval(() => {
+      const el = Date.now() - startAt.current
+      const p = Math.min(1, el / holdMs)
+      setPct(p)
+      const sec = Math.floor(el / 1000)
+      if (sec > lastSec && p < 1) { lastSec = sec; buzz('light') }
+      if (!sawActive.current && el > 1800) { clearInterval(t); lose('Didn’t start — check the message and hold again'); return }
+      if (p >= 1) {
+        clearInterval(t)
+        setPhase('done')
+        buzz('success')
+        try { cb.current.onDone?.() } catch { /* ignore */ }
       }
-    }, 100)
-    const hop = setInterval(() => spawn(), kind === 'plant' ? 900 : 1050)
-    return () => { clearInterval(tick); clearInterval(hop) }
-  }, [phase, box]) // eslint-disable-line react-hooks/exhaustive-deps
+    }, 60)
+    return () => clearInterval(t)
+  }, [phase, holdMs]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Finished, but the host never confirmed (moved out of the zone, lag): let them retry.
+  // The host started / dropped my action.
   useEffect(() => {
-    if (phase !== 'done') return undefined
-    const t = setTimeout(() => setPhase('rejected'), 4000)
+    if (phaseRef.current !== 'holding') return
+    if (!sawActive.current) {
+      if (activeKey != null && activeKey !== staleKey.current) { sawActive.current = true; ackKey.current = activeKey }
+    } else if (activeKey !== ackKey.current) {
+      lose(plant ? 'Plant interrupted — hold again' : 'Defuse interrupted — hold again')
+    }
+  }, [activeKey]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Finished but nothing happened (lag, or the host said no): let them try again.
+  useEffect(() => {
+    if (phase !== 'done' && phase !== 'lost') return undefined
+    const t = setTimeout(() => { setPhase('idle'); setPct(0) }, phase === 'done' ? 3500 : 1800)
     return () => clearTimeout(t)
   }, [phase])
 
-  // The host cancelled the action (e.g. we were hit).
-  useEffect(() => {
-    if (interruptedAt && phase === 'running') {
-      setPhase('interrupted')
-      setTarget(null)
-      buzz('error')
-    }
-  }, [interruptedAt]) // eslint-disable-line react-hooks/exhaustive-deps
+  // Unmounted mid-hold (walked out of the zone, died, round over): stop on the host too.
+  useEffect(() => () => { if (phaseRef.current === 'holding') { try { cb.current.onCancel?.() } catch { /* ignore */ } } }, [])
 
-  const hit = () => {
-    if (phase !== 'running') return
-    hitsRef.current += 1
-    setHits(hitsRef.current)
+  const pressIn = () => {
+    if (phaseRef.current === 'holding' || phaseRef.current === 'done') return
+    startAt.current = Date.now()
+    sawActive.current = false
+    ackKey.current = null
+    staleKey.current = activeKey
+    setPct(0)
+    setPhase('holding')
     playSfx('tap')
-    buzz('light')
-    if (hitsRef.current >= needed) {
-      setPhase('done')
-      setTarget(null)
-      buzz('success')
-      try { onSuccess?.() } catch { /* ignore */ }
-    } else {
-      spawn()
-    }
+    buzz('medium')
+    try { cb.current.onStart?.() } catch { /* ignore */ }
+  }
+  const pressOut = () => {
+    if (phaseRef.current !== 'holding') return
+    setPhase('idle')
+    setPct(0)
+    buzz('select')
+    try { cb.current.onCancel?.() } catch { /* ignore */ }
   }
 
-  const pct = Math.max(0, Math.min(1, left / durationMs))
+  const verb = plant ? 'PLANT' : 'DEFUSE'
+  const title = phase === 'holding'
+    ? `${plant ? 'PLANTING' : 'DEFUSING'}… ${Math.round(pct * 100)}%`
+    : phase === 'done'
+      ? (plant ? 'ARMING…' : 'DISARMING…')
+      : phase === 'lost' ? lostText : `HOLD TO ${verb}${plant && site ? ` · ${site}` : ''}`
+  const sub = phase === 'holding' ? 'Keep holding · stay in the zone' : phase === 'idle' ? `Hold ${Math.round(holdMs / 1000)} s — a hit or leaving cancels it` : null
   return (
-    <View style={[StyleSheet.absoluteFill, s.overlayRoot, s.gameRoot, { paddingTop: (insets?.top || 0) + 14, paddingBottom: (insets?.bottom || 0) + 14 }]}>
-      <View style={s.gameHead}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-          <Ionicons name={kind === 'plant' ? 'flame' : 'build'} size={20} color={GOLD} />
-          <Text style={s.gameTitle}>{kind === 'plant' ? 'PLANTING' : 'DEFUSING'}</Text>
-        </View>
-        <Pressable onPress={onClose} hitSlop={12} style={s.close} accessibilityRole="button" accessibilityLabel="Cancel">
-          <Ionicons name="close" size={20} color={W} />
-        </Pressable>
-      </View>
-      <Text style={s.gameSub}>TAP THE TARGETS  ·  {hits}/{needed}</Text>
-      <View style={s.timeTrack}><View style={[s.timeFill, { width: `${pct * 100}%`, backgroundColor: pct < 0.3 ? RED : GOLD }]} /></View>
-      {/* The play box swallows every touch (no accidental shots). */}
-      <Pressable style={s.playBox} onLayout={(e) => setBox(e.nativeEvent.layout)} onPress={() => { if (phase === 'running') buzz('select') }}>
-        {target && phase === 'running' && (
-          <Animated.View key={target.key} style={[s.targetWrap, { left: target.x, top: target.y, transform: [{ scale: pop }] }]}>
-            <Pressable onPressIn={hit} hitSlop={10} style={s.target} accessibilityRole="button" accessibilityLabel="Target">
-              <View style={s.targetInner} />
-            </Pressable>
-          </Animated.View>
-        )}
-        {phase !== 'running' && (
-          <View style={s.gameResult}>
-            {phase === 'done' ? (
-              <>
-                <Text style={s.resultBig}>{kind === 'plant' ? 'Arming…' : 'Disarming…'}</Text>
-                <Text style={s.resultSub}>Hold your position</Text>
-              </>
-            ) : (
-              <>
-                <Text style={[s.resultBig, { color: RED }]}>{phase === 'interrupted' ? 'Interrupted!' : phase === 'rejected' ? 'Didn’t go through' : 'Too slow!'}</Text>
-                <Text style={s.resultSub}>{phase === 'interrupted' ? 'You took a hit.' : phase === 'rejected' ? 'Stay inside the zone and try again.' : `You hit ${hits} of ${needed}.`}</Text>
-                <Pressable onPress={start} style={s.retry} accessibilityRole="button">
-                  <Text style={s.retryText}>Retry {label}</Text>
-                </Pressable>
-              </>
-            )}
+    <Animated.View style={{ transform: [{ scale }] }}>
+      <Pressable
+        onPressIn={pressIn}
+        onPressOut={pressOut}
+        pressRetentionOffset={{ top: 80, bottom: 80, left: 80, right: 80 }}
+        style={[s.holdBtn, { borderColor: phase === 'lost' ? RED : color, backgroundColor: phase === 'holding' ? withA(color, 0.32) : 'rgba(0,0,0,0.72)' }]}
+        accessibilityRole="button"
+        accessibilityLabel={`Hold to ${verb.toLowerCase()}${plant && site ? ` at site ${site}` : ''}`}
+      >
+        <View style={{ width: RING, height: RING }}>
+          <Svg width={RING} height={RING}>
+            <Circle cx={RING / 2} cy={RING / 2} r={(RING - RING_W) / 2} stroke="rgba(255,255,255,0.22)" strokeWidth={RING_W} fill="none" />
+            <Circle
+              cx={RING / 2}
+              cy={RING / 2}
+              r={(RING - RING_W) / 2}
+              stroke={color}
+              strokeWidth={RING_W}
+              fill="none"
+              strokeLinecap="round"
+              strokeDasharray={`${RING_C} ${RING_C}`}
+              strokeDashoffset={RING_C * (1 - (phase === 'done' ? 1 : pct))}
+              transform={`rotate(-90 ${RING / 2} ${RING / 2})`}
+            />
+          </Svg>
+          <View style={[StyleSheet.absoluteFill, { alignItems: 'center', justifyContent: 'center' }]}>
+            <Ionicons name={plant ? 'flame' : 'build'} size={20} color={color} />
           </View>
-        )}
+        </View>
+        <View style={{ flexShrink: 1 }}>
+          <Text style={[s.holdTitle, phase === 'lost' && { color: RED, fontSize: 15 }]} numberOfLines={2}>{title}</Text>
+          {!!sub && <Text style={s.holdSub} numberOfLines={1}>{sub}</Text>}
+        </View>
       </Pressable>
-    </View>
+    </Animated.View>
   )
+}
+
+function withA(hex, a) {
+  const h = String(hex).replace('#', '')
+  if (h.length !== 6) return hex
+  return `rgba(${parseInt(h.slice(0, 2), 16)},${parseInt(h.slice(2, 4), 16)},${parseInt(h.slice(4, 6), 16)},${a})`
 }
 
 /** Big pop-in action button (Plant bomb / Defuse). */
@@ -378,6 +397,7 @@ export const EnemyMarkers = memo(function EnemyMarkers({ markers }) {
 })
 
 const s = StyleSheet.create({
+  fcol: { width: 36, alignItems: 'flex-end' },
   overlayRoot: { zIndex: 60, elevation: 60 },
   backdrop: { ...StyleSheet.absoluteFill, backgroundColor: 'rgba(0,0,0,0.55)' },
   centerWrap: { flex: 1, justifyContent: 'center', paddingHorizontal: 12 },
@@ -407,21 +427,9 @@ const s = StyleSheet.create({
   c: { width: 30, textAlign: 'center' },
   cw: { width: 52, textAlign: 'right' },
   deadTag: { fontSize: 12, color: RED, fontWeight: '900' },
-  gameRoot: { backgroundColor: 'rgba(6,8,16,0.82)', paddingHorizontal: 16 },
-  gameHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  gameTitle: { ...hudType.title, fontSize: 22 },
-  gameSub: { ...hudType.label, color: GOLD, fontSize: 12, marginTop: 6 },
-  timeTrack: { height: 8, borderRadius: 4, backgroundColor: 'rgba(255,255,255,0.15)', marginTop: 10, overflow: 'hidden' },
-  timeFill: { height: 8, borderRadius: 4 },
-  playBox: { flex: 1, marginTop: 14, borderRadius: 22, borderWidth: 1, borderColor: BORDER, backgroundColor: 'rgba(255,255,255,0.04)' },
-  targetWrap: { position: 'absolute', width: 74, height: 74 },
-  target: { width: 74, height: 74, borderRadius: 37, backgroundColor: RED, borderWidth: 4, borderColor: W, alignItems: 'center', justifyContent: 'center' },
-  targetInner: { width: 26, height: 26, borderRadius: 13, backgroundColor: W },
-  gameResult: { ...StyleSheet.absoluteFill, alignItems: 'center', justifyContent: 'center', padding: 24 },
-  resultBig: { fontSize: 32, fontWeight: '900', color: GOLD },
-  resultSub: { fontSize: 15, color: MUTED, marginTop: 6 },
-  retry: { marginTop: 20, backgroundColor: GOLD, paddingHorizontal: 26, paddingVertical: 14, borderRadius: 18 },
-  retryText: { fontSize: 16, fontWeight: '900', color: '#2a1a00' },
+  holdBtn: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingLeft: 10, paddingRight: 20, paddingVertical: 10, borderRadius: 30, borderWidth: 3, minWidth: 260, maxWidth: 360 },
+  holdTitle: { fontSize: 19, fontWeight: '900', color: W, letterSpacing: 0.8, ...hudShadow },
+  holdSub: { fontSize: 11, fontWeight: '700', color: 'rgba(255,255,255,0.8)', marginTop: 1 },
   bigBtn: { paddingHorizontal: 34, paddingVertical: 18, borderRadius: 24, borderWidth: 3, borderColor: W, minWidth: 240, alignItems: 'center' },
   bigBtnText: { fontSize: 22, fontWeight: '900', color: '#1a1000', letterSpacing: 1 },
   alert: { position: 'absolute', left: 16, right: 16, borderRadius: 18, paddingVertical: 12, paddingHorizontal: 16, alignItems: 'center' },

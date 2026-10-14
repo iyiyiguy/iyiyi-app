@@ -5,6 +5,7 @@ import { Image, Pressable, StyleSheet, Text, View } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { AC } from '../games/arcadeUI'
 import { font } from '../theme'
+import GameFollowButton from './GameFollowButton'
 
 export function PlayerAvatar({ uri, name, size = 44, ring }) {
   const inner = uri
@@ -42,6 +43,7 @@ export default function OpponentCard({
         </View>
       </Pressable>
       <View style={styles.actions}>
+        {player?.id ? <GameFollowButton userId={player.id} name={name} size="sm" style={{ width: 36, height: 36 }} /> : null}
         {onViewProfile ? (
           <Pressable onPress={onViewProfile} style={({ pressed }) => [styles.action, pressed && styles.pressed]} accessibilityRole="button" accessibilityLabel="View profile">
             <Ionicons name="person" size={17} color={AC.text} />

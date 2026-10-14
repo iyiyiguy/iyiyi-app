@@ -109,6 +109,14 @@ export const CompassTape = memo(function CompassTape({ heading, pips, width = 26
           const x = width / 2 + clamped * pxPerDeg
           const edge = Math.abs(off) > half
           const color = p.color || HUD.red
+          // Objectives (S&D bomb sites, the bomb) get a lettered badge instead of a diamond.
+          if (p.label) {
+            return (
+              <View key={p.id} style={[s.pipBadge, { left: x - 8, borderColor: color, backgroundColor: edge ? 'rgba(0,0,0,0.6)' : color }]}>
+                <Text style={[s.pipBadgeText, edge && { color }]} numberOfLines={1}>{p.label}</Text>
+              </View>
+            )
+          }
           return (
             <View key={p.id} style={[s.pip, { left: x - 5, backgroundColor: edge ? 'transparent' : color, borderColor: color, ...(edge ? {} : glow(color, 6)) }]} />
           )
@@ -362,6 +370,8 @@ const s = StyleSheet.create({
   tick: { position: 'absolute', bottom: 0, width: 1, backgroundColor: 'rgba(255,255,255,0.75)' },
   tickLabel: { position: 'absolute', top: 0, width: 28, textAlign: 'center', fontSize: 10, fontWeight: '900', color: '#fff', letterSpacing: 0.5, ...hudShadow },
   pip: { position: 'absolute', bottom: -2, width: 10, height: 10, borderRadius: 2, borderWidth: 1.5, transform: [{ rotate: '45deg' }] },
+  pipBadge: { position: 'absolute', bottom: -4, width: 16, height: 16, borderRadius: 4, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center' },
+  pipBadgeText: { fontSize: 9, fontWeight: '900', color: '#000' },
   caret: { position: 'absolute', top: -1, alignSelf: 'center', width: 0, height: 0, borderLeftWidth: 5, borderRightWidth: 5, borderTopWidth: 7, borderLeftColor: 'transparent', borderRightColor: 'transparent', borderTopColor: HUD.accent },
   tapeDeg: { position: 'absolute', bottom: 1, alignSelf: 'center', fontSize: 10, fontWeight: '900', color: HUD.accent, fontVariant: ['tabular-nums'], letterSpacing: 1 },
   // panel

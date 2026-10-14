@@ -19,10 +19,11 @@ import { Camera, CameraView } from 'expo-camera'
 import { useKeepAwake } from 'expo-keep-awake'
 import { CameraOff, useCameraGate } from '../components/CameraGate'
 import { setAudioModeAsync } from 'expo-audio'
-import { Btn, LocationGate, Spectating, formatClock } from './MultiplayerUI'
+import { Btn, LocationGate, PlayerTap, Spectating, formatClock } from './MultiplayerUI'
+import GameFollowButton from '../components/GameFollowButton'
 import { CountdownOverlay, MatchSummary, RoundBreak, hudShadow } from './laser/Hud'
 import {
-  AlertBanner, BigActionButton, BombCountdown, EnemyMarkers, ScoreboardOverlay, TapMiniGame, WeaponWheel,
+  AlertBanner, BombCountdown, EnemyMarkers, HoldActionButton, ScoreboardOverlay, WeaponWheel,
 } from './laser/HudExtras'
 import { CompassTape, FireButton, HUD, HudButton, KillFeed, MatchBar, Nameplates, ScorePops, StatusPanel, WeaponCard } from './laser/HudPro'
 import { mapsAvailable } from '../components/SafeMapView'
@@ -63,7 +64,7 @@ import { spendStickyBomb, useStickyBombInventory } from '../lib/stickyBombs'
 import { spendLandMine, useLandMineInventory } from '../lib/landMines'
 
 // Animated death screen: red flash, skull, respawn countdown.
-function DeathOverlay({ respawnSecs, snd }) {
+function DeathOverlay({ respawnSecs, snd, killer }) {
   const flash = useRef(new Animated.Value(0)).current
   const skull = useRef(new Animated.Value(0)).current
   const pulse = useRef(new Animated.Value(1)).current
@@ -83,8 +84,8 @@ function DeathOverlay({ respawnSecs, snd }) {
   }, [flash, skull, pulse])
 
   return (
-    <Animated.View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(120,0,20,0.65)', opacity: flash.interpolate({ inputRange: [0.55, 1], outputRange: [1, 1] }) }]} pointerEvents="none">
-      <Animated.View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', opacity: skull }}>
+    <Animated.View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(120,0,20,0.65)', opacity: flash.interpolate({ inputRange: [0.55, 1], outputRange: [1, 1] }) }]} pointerEvents="box-none">
+      <Animated.View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', opacity: skull }} pointerEvents="box-none">
         <Animated.View style={{ transform: [{ scale: pulse }] }}>
           <Ionicons name="skull" size={72} color="#fff" style={{ textShadowColor: HUD.red, textShadowRadius: 24, textShadowOffset: { width: 0, height: 0 } }} />
         </Animated.View>
@@ -97,6 +98,16 @@ function DeathOverlay({ respawnSecs, snd }) {
             <View style={{ width: `${Math.max(0, Math.min(100, 100 - (respawnSecs / 8) * 100))}%`, height: '100%', backgroundColor: HUD.red, borderRadius: 3 }} />
           </View>
         )}
+        {killer?.name ? (
+          <View style={styles.killerCard}>
+            <Text style={styles.killerKicker}>TAGGED OUT BY</Text>
+            <PlayerTap player={killer.id ? { id: killer.id, username: killer.name } : null} style={styles.killerRow}>
+              <Text style={styles.killerName} numberOfLines={1}>{killer.name}</Text>
+              {killer.how ? <Text style={styles.killerHow} numberOfLines={1}>{killer.how}</Text> : null}
+            </PlayerTap>
+            {killer.id ? <GameFollowButton userId={killer.id} name={killer.name} style={{ marginTop: 10 }} /> : null}
+          </View>
+        ) : null}
       </Animated.View>
     </Animated.View>
   )
@@ -214,8 +225,7 @@ export function LaserTagGame({ room, onExit }) {
   const [shotsBy, setShotsBy] = useState({})
   const [wheelOpen, setWheelOpen] = useState(false)
   const [scoresOpen, setScoresOpen] = useState(false)
-  const [miniGame, setMiniGame] = useState(null) // { kind: 'plant'|'defuse', site?, key }
-  const [actLost, setActLost] = useState(0)
+  const [holding, setHolding] = useState(null) // 'plant' | 'defuse' while I hold the S&D button
   const [alert, setAlert] = useState(null)
   const markerTimer = useRef(null)
   const alertTimer = useRef(null)
@@ -324,6 +334,7 @@ export function LaserTagGame({ room, onExit }) {
   }, [])
   const removePop = useCallback((id) => setPops((a) => a.filter((p) => p.id !== id)), [])
   const [blastKey, setBlastKey] = useState(0)
+  const [killer, setKiller] = useState(null) // who tagged me out last (shown on the death screen with Follow)
   const grenadeTimers = useRef([])
   useEffect(() => () => grenadeTimers.current.forEach(clearTimeout), [])
 
@@ -360,7 +371,7 @@ export function LaserTagGame({ room, onExit }) {
     },
   })
   const uavActive = uav.uavActive
-  const overlayOpen = wheelOpen || scoresOpen || !!miniGame || uav.sheetOpen
+  const overlayOpen = wheelOpen || scoresOpen || !!holding || uav.sheetOpen
 
   // Coaching line under the crosshair: how to fire in the current hold, for the first seconds
   // of a match and for a moment whenever the hold changes.
@@ -373,7 +384,7 @@ export function LaserTagGame({ room, onExit }) {
   const roundKey = `${state?.round}:${state?.snd?.roundNo ?? 0}`
   useEffect(() => {
     if (state?.snd?.roundNo == null || state.snd.roundNo === 1) shotsRef.current = 0
-    setMiniGame(null)
+    setHolding(null)
   }, [roundKey]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
@@ -443,7 +454,11 @@ export function LaserTagGame({ room, onExit }) {
         } catch {}
         const zoneLabel = d?.zone === 'grenade' ? 'Grenade' : d?.zone === 'sticky_bomb' ? 'Sticky bomb' : d?.zone === 'land_mine' ? 'Land mine' : d?.zone === 'head' ? 'Headshot' : d?.zone === 'rocket' ? 'Rocket' : 'Hit'
         const suffix = d?.zone === 'grenade' ? "'s grenade" : d?.zone === 'sticky_bomb' ? "'s sticky bomb" : d?.zone === 'land_mine' ? "'s land mine" : ''
-        if (d?.killed) flash(`💀 Tagged out by ${by}${suffix}`, false)
+        if (d?.killed) {
+          flash(`💀 Tagged out by ${by}${suffix}`, false)
+          const kid = typeof d?.byId === 'string' ? d.byId : null
+          setKiller({ id: kid, name: by, how: zoneLabel === 'Hit' ? null : zoneLabel })
+        }
         else flash(`${isExplosive ? '💥' : d?.zone === 'head' ? '🎯' : ''} ${zoneLabel} by ${by}${dmg}`, false)
       }),
       room.onMessage('bystander_ok', (d) => {
@@ -567,20 +582,34 @@ export function LaserTagGame({ room, onExit }) {
     if (bombState === 'planted') {
       playSfx('planted')
       buzz('warning')
-      showAlert({ title: `Bomb planted at site ${snd.bomb.site}`, sub: attacker ? 'Bomb is active — defend the bomb' : 'Find the bomb and defuse it!', color: '#d4202f' }, 4500)
-      setMiniGame((g) => (g?.kind === 'plant' ? null : g))
+      showAlert({ title: `💣 Bomb planted at site ${snd.bomb.site}`, sub: attacker ? `Defend the bomb for ${Math.round(engine.BOMB_MS / 1000)} s` : `Get to site ${snd.bomb.site} and hold DEFUSE!`, color: '#d4202f' }, 4500)
     } else if (bombState === 'defused') {
       playSfx('defused')
       buzz('success')
       showAlert({ title: 'Bomb defused', sub: attacker ? 'They stopped the bomb' : 'Nice work!', color: '#1f9d6b' })
-      setMiniGame(null)
     } else if (bombState === 'exploded') {
       playSfx('explosion')
       buzz('heavy')
       showAlert({ title: '💥 The bomb exploded', color: '#d4202f' })
-      setMiniGame(null)
+    } else if (bombState === 'dropped' && attacker) {
+      showAlert({ title: 'Bomb dropped', sub: 'Walk over to it and pick it up', color: '#b8860b' })
     }
   }, [bombEventKey]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Announcer: you're the bomb carrier / someone is planting or defusing.
+  const carrierIsMe = snd?.bomb?.state === 'carried' && snd.bomb.carrier === meId && state?.phase !== 'roundEnd'
+  useEffect(() => {
+    if (!carrierIsMe) return
+    buzz('warning')
+    showAlert({ title: '💣 You have the bomb', sub: `Get to ${snd.sites.map((x) => `site ${x.id}`).join(' or ')} and hold PLANT`, color: '#b8860b' }, 4500)
+  }, [carrierIsMe, state?.round, snd?.roundNo]) // eslint-disable-line react-hooks/exhaustive-deps
+  const actAlertKey = snd?.act && snd.act.by !== meId ? `${snd.act.kind}:${snd.act.startedAt}` : null
+  useEffect(() => {
+    if (!actAlertKey || !snd?.act) return
+    const mine = myTeam && state.players[snd.act.by]?.team === myTeam
+    if (snd.act.kind === 'plant' && !mine) { buzz('warning'); showAlert({ title: `⚠️ They’re planting at ${snd.act.site}!`, sub: 'Stop them', color: '#d4202f' }, 2500) }
+    else if (snd.act.kind === 'defuse' && !mine) { buzz('warning'); showAlert({ title: '⚠️ They’re defusing!', sub: `Get back to site ${snd.bomb?.site || ''}`, color: '#d4202f' }, 2500) }
+  }, [actAlertKey]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const bombSecs = bombState === 'planted' ? Math.max(0, Math.ceil(((snd?.bomb?.explodesAt || now) - now) / 1000)) : null
   useEffect(() => {
@@ -588,20 +617,14 @@ export function LaserTagGame({ room, onExit }) {
     if (bombSecs <= 10 || bombSecs % 5 === 0) playSfx('beep', { volume: bombSecs <= 10 ? 1 : 0.6 })
   }, [bombSecs])
 
-  // The host dropped my plant/defuse (e.g. I was hit) while the mini-game is running.
-  const myActive = snd?.act?.by === meId
-  const sawAct = useRef(false)
-  useEffect(() => {
-    if (!miniGame) { sawAct.current = false; return }
-    if (myActive) sawAct.current = true
-    else if (sawAct.current) { sawAct.current = false; setActLost(Date.now()) }
-  }, [myActive, miniGame])
+  // The plant/defuse the host is running for me (the hold button watches it).
+  const myActKey = snd?.act?.by === meId ? snd.act.startedAt : null
 
   // ---- host ----
   const posOf = (id) => room.freshPosition(id)
   useHostLoop(room, isHost, {
     onTick: () => {
-      const s = room.getState()
+      let s = room.getState()
       const t = room.now()
       const roundNo = room.info.round || 0
       if (roundNo > 0 && (!s || s.game !== 'lasertag' || s.round !== roundNo)) {
@@ -609,6 +632,12 @@ export function LaserTagGame({ room, onExit }) {
         return
       }
       if (!s) return
+      // Just took over from another host mid-match: the state's timestamps (round clock,
+      // bomb fuse, a plant/defuse in progress) are on their clock, so move them onto mine.
+      if (room.lastStateFrom && room.lastStateFrom !== room.me?.id && Math.abs(room.clockOffset || 0) > 750) {
+        s = engine.rebaseClock(s, -room.clockOffset)
+        room.publishState(s)
+      }
       const presentIds = room.presentIds(s.endless ? ENDLESS_PRESENCE_GRACE_MS : undefined)
       const synced = engine.syncEndlessPlayers(s, room.roster, presentIds, t)
       const next = engine.tick(synced, { now: t, presentIds, posOf })
@@ -736,7 +765,7 @@ export function LaserTagGame({ room, onExit }) {
   inSightsRef.current = inSights
 
   // Live target lock: detect people in the camera view ~2.5×/s (setting).
-  const lockOn = visionAim && prefs.targetLock && playing && !dead && !miniGame && !bino
+  const lockOn = visionAim && prefs.targetLock && playing && !dead && !holding && !bino
   useEffect(() => {
     if (!lockOn) { setBodies(null); return undefined }
     let cancelled = false
@@ -1117,7 +1146,22 @@ export function LaserTagGame({ room, onExit }) {
     } catch { return [] }
   }, [enemies, enemyMarkers, revealedMarkers, myPos, heading?.deg, scope.zoom, view, state?.mode, topMode])
   // Compass tape pips: the same enemies, by bearing.
-  const compassPips = useMemo(() => plateMarkers.filter((m) => !m.close).map((m) => ({ id: m.id, bearing: m.bearing, color: m.color })), [plateMarkers])
+  const enemyPips = useMemo(() => plateMarkers.filter((m) => !m.close).map((m) => ({ id: m.id, bearing: m.bearing, color: m.color })), [plateMarkers])
+  // S&D objectives on the compass: both bomb sites, and the bomb once it's planted (or
+  // dropped, for attackers). Skipped when you're standing on it (the bearing is noise).
+  const sndForPips = state?.mode === 'snd' ? state.snd : null
+  const compassPips = useMemo(() => {
+    if (!sndForPips || !myPos) return enemyPips
+    const out = []
+    for (const x of sndForPips.sites || []) {
+      if (distanceMeters(myPos, x) > (x.r || engine.SITE_RADIUS_M)) out.push({ id: `site-${x.id}`, bearing: bearingDeg(myPos, x), color: colors.gold, label: x.id })
+    }
+    const b = sndForPips.bomb
+    if (b?.lat != null && (b.state === 'planted' || (b.state === 'dropped' && myTeam === engine.attackingTeam(state))) && distanceMeters(myPos, b) > 6) {
+      out.push({ id: 'bomb', bearing: bearingDeg(myPos, b), color: colors.danger, label: '!' })
+    }
+    return [...out, ...enemyPips]
+  }, [sndForPips, myPos, myTeam, enemyPips]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // What you're aiming at: the tagged enemy (camera lock or nameplate) nearest the
   // crosshair, if it's reasonably close. The gun swings toward it and shots fly to it.
@@ -1178,11 +1222,6 @@ export function LaserTagGame({ room, onExit }) {
   // iOS reports heading accuracy 0–3; Android's SensorManager sits at 1 on most phones.
   const compassLow = !!heading && heading.accuracy < (Platform.OS === 'android' ? 1 : 2)
 
-  const startMiniGame = (action) => {
-    trigger.stop()
-    buzz('medium')
-    setMiniGame({ kind: action.kind, site: action.site, key: Date.now() })
-  }
 
   return (
     <View style={styles.fill} {...scope.panHandlers}>
@@ -1373,15 +1412,24 @@ export function LaserTagGame({ room, onExit }) {
         {objective && (
           <View style={styles.objective} pointerEvents="box-none">
             <Text style={styles.objectiveText} pointerEvents="none" numberOfLines={2}>{objective.text}</Text>
-            {objective.action && !dead && playing && !miniGame && (
+            {objective.action && !dead && playing && (
               objective.action.kind === 'pickup' ? (
                 <Btn title="Pick up bomb" variant="primary" onPress={() => { buzz('medium'); room.sendAction({ type: 'pickup' }) }} />
               ) : (
-                <BigActionButton
-                  key={`${objective.action.kind}-${objective.action.site || ''}`}
-                  title={objective.action.kind === 'plant' ? `💣 PLANT BOMB${objective.action.site ? ` · ${objective.action.site}` : ''}` : '🛠 DEFUSE'}
+                <HoldActionButton
+                  key={`${state.round}:${snd.roundNo}:${objective.action.kind}-${objective.action.site || ''}`}
+                  kind={objective.action.kind}
+                  site={objective.action.site}
+                  holdMs={objective.action.kind === 'plant' ? engine.PLANT_MS : engine.DEFUSE_MS}
+                  activeKey={myActKey}
                   color={objective.action.kind === 'plant' ? colors.gold : '#3ad1ff'}
-                  onPress={() => startMiniGame(objective.action)}
+                  onStart={() => {
+                    trigger.stop()
+                    setHolding(objective.action.kind)
+                    room.sendAction(objective.action.kind === 'plant' ? { type: 'plant_start', site: objective.action.site } : { type: 'defuse_start' })
+                  }}
+                  onDone={() => { setHolding(null); room.sendAction({ type: objective.action.kind === 'plant' ? 'plant_done' : 'defuse_done' }) }}
+                  onCancel={() => { setHolding(null); room.sendAction({ type: 'act_cancel' }) }}
                 />
               )
             )}
@@ -1486,26 +1534,13 @@ export function LaserTagGame({ room, onExit }) {
         <DeathOverlay
           respawnSecs={snd ? null : Math.max(0, Math.ceil(((myState.respawnAt || now) - now) / 1000))}
           snd={snd}
+          killer={killer}
         />
       )}
       <AlertBanner alert={alert} top={(topH ? hud.top + topH : hud.top + 120) + 6} />
       {state.phase === 'countdown' && <CountdownOverlay state={state} now={now} meTeam={myTeam} />}
       {state.phase === 'roundEnd' && snd && <RoundBreak state={state} now={now} />}
 
-      {miniGame && (
-        <TapMiniGame
-          key={miniGame.key}
-          kind={miniGame.kind}
-          durationMs={miniGame.kind === 'plant' ? engine.PLANT_MS : engine.DEFUSE_MS}
-          needed={miniGame.kind === 'plant' ? engine.PLANT_TAPS : engine.DEFUSE_TAPS}
-          insets={insets}
-          interruptedAt={actLost}
-          onStart={() => room.sendAction(miniGame.kind === 'plant' ? { type: 'plant_start', site: miniGame.site } : { type: 'defuse_start' })}
-          onSuccess={() => room.sendAction({ type: miniGame.kind === 'plant' ? 'plant_done' : 'defuse_done' })}
-          onFail={() => room.sendAction({ type: 'act_cancel' })}
-          onClose={() => { room.sendAction({ type: 'act_cancel' }); setMiniGame(null) }}
-        />
-      )}
       <WeaponWheel visible={wheelOpen} loadout={loadout} currentId={weaponId} onPick={pickWeapon} onClose={() => setWheelOpen(false)} insets={insets} />
       <ScoreboardOverlay visible={scoresOpen} state={state} meId={meId} insets={insets} onClose={() => setScoresOpen(false)} />
       <MapOverlay
@@ -1549,19 +1584,20 @@ function sndObjective(state, meId, myPos, now) {
   const nearest = myPos ? [...snd.sites].sort((a, b) => distanceMeters(myPos, a) - distanceMeters(myPos, b))[0] : snd.sites[0]
   if (!me.alive) return { text: 'Spectating until the next round' }
   if (bomb.state === 'planted') {
-    if (attacker) return { text: `Bomb is active at ${bomb.site} — defend the bomb!` }
-    const inside = engine.insideRadius(myPos, bomb, bomb.r || engine.SITE_RADIUS_M)
+    if (attacker) return { text: act?.kind === 'defuse' ? `They’re defusing at ${bomb.site}! Stop them` : `Bomb is active at ${bomb.site} — defend the bomb!` }
+    const inside = engine.atBomb(snd, myPos)
     return {
-      text: inside ? (act?.kind === 'defuse' && !myAct ? 'A teammate is defusing — cover them' : 'You’re at the bomb') : `Defuse the bomb at ${bomb.site}: ${where(bomb)}`,
+      text: inside ? (act?.kind === 'defuse' && !myAct ? 'A teammate is defusing — cover them' : 'You’re at the bomb — hold DEFUSE') : `Defuse the bomb at ${bomb.site}: ${where(bomb)}`,
       action: inside && (!act || myAct) ? { kind: 'defuse' } : null,
     }
   }
   if (attacker) {
     if (bomb.state === 'carried' && bomb.carrier === meId) {
-      const site = snd.sites.find((x) => engine.insideRadius(myPos, x, x.r))
-      if (site) return { text: `Inside site ${site.id}`, action: !act || myAct ? { kind: 'plant', site: site.id } : null }
-      return { text: `You have the bomb 💣 — site ${nearest?.id}: ${where(nearest)}` }
+      const site = myPos ? snd.sites.find((x) => engine.insideRadius(myPos, x, x.r || engine.SITE_RADIUS_M)) : null
+      if (site) return { text: `Inside site ${site.id} — hold PLANT`, action: !act || myAct ? { kind: 'plant', site: site.id } : null }
+      return { text: myPos ? `You have the bomb 💣 — site ${nearest?.id}: ${where(nearest)}` : 'You have the bomb 💣 — waiting for GPS…' }
     }
+    if (act?.kind === 'plant') return { text: `${state.players[act.by]?.name || 'A teammate'} is planting at ${act.site} — cover them` }
     if (bomb.state === 'dropped') {
       const close = myPos && bomb.lat != null && distanceMeters(myPos, bomb) <= engine.PICKUP_RANGE_M + engine.gpsSlack(myPos.acc)
       return { text: close ? 'The bomb is here' : `Bomb dropped: ${where(bomb)}`, action: close ? { kind: 'pickup' } : null }
@@ -1574,6 +1610,11 @@ function sndObjective(state, meId, myPos, now) {
 }
 
 const styles = StyleSheet.create({
+  killerCard: { marginTop: 22, alignItems: 'center', paddingHorizontal: 18, paddingVertical: 12, backgroundColor: 'rgba(8,10,14,0.8)', borderRadius: 4, minWidth: 220 },
+  killerKicker: { color: 'rgba(255,255,255,0.75)', fontSize: 10, fontWeight: '900', letterSpacing: 2.4 },
+  killerRow: { alignItems: 'center', marginTop: 4 },
+  killerName: { color: HUD.red, fontSize: 22, fontWeight: '900', letterSpacing: 0.8 },
+  killerHow: { color: 'rgba(255,255,255,0.8)', fontSize: 12, fontWeight: '700', marginTop: 2 },
   fill: { flex: 1, backgroundColor: '#000', overflow: 'hidden' },
   noCam: { alignItems: 'center', justifyContent: 'center', padding: 24, backgroundColor: '#111' },
   topCol: { position: 'absolute', gap: 6 },

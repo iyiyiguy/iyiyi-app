@@ -5,13 +5,15 @@
 // segment and a random point along it. If Overpass fails or takes longer than 8 s, we
 // fall back to the centre of the play area (the host's location).
 import { distanceMeters } from '../../lib/multiplayer'
-import { SITE_RADIUS_M } from './engine'
+import { MIN_SITE_GAP_M, SITE_RADIUS_M } from './engine'
 
 const OVERPASS_URL = 'https://overpass-api.de/api/interpreter'
 const TIMEOUT_MS = 8000
 // Bomb sites must be walkable, so for big areas (5 miles, a city, a state) they are placed
-// within this distance of the area's centre.
-const MAX_SEARCH_M = 600
+// within this distance of the area's centre: on foot, defenders have to be able to get from
+// one site to the other inside the 45 s bomb timer (≤ ~250 m apart).
+const MAX_SEARCH_M = 150
+const MAX_GAP_M = 120 // preferred spacing cap for big areas
 
 // Highway types and how much we prefer them (pedestrian ways first, quiet streets next).
 const HIGHWAY_WEIGHTS = {
@@ -78,7 +80,14 @@ function segmentsOf(ways) {
       if (![a.lat, a.lng, b.lat, b.lng].every(Number.isFinite)) continue
       const len = distanceMeters(a, b)
       if (!(len > 0.5)) continue
-      out.push({ a, b, len, w: weight * len })
+      // Long straight roads (few nodes, common outside towns) can cross the play area with
+      // both ends far outside it: cut them into ~10 m pieces so the part inside still counts.
+      const n = Math.min(400, Math.ceil(len / 10))
+      for (let j = 0; j < n; j++) {
+        const p = { lat: a.lat + ((b.lat - a.lat) * j) / n, lng: a.lng + ((b.lng - a.lng) * j) / n }
+        const q = { lat: a.lat + ((b.lat - a.lat) * (j + 1)) / n, lng: a.lng + ((b.lng - a.lng) * (j + 1)) / n }
+        out.push({ a: p, b: q, len: len / n, w: (weight * len) / n })
+      }
     }
   }
   return out
@@ -114,17 +123,18 @@ export async function generateBombSites(area, { count = 2 } = {}) {
   // Keep the whole site circle inside the boundary when there's room for it.
   const maxFromCenter = Math.max(5, searchR - Math.min(SITE_RADIUS_M, searchR / 3))
   const want = radius < 40 ? 1 : count
-  const minGap = Math.min(250, Math.max(28, searchR * 0.35))
+  // Far enough apart that the circles (+ GPS slack) never overlap.
+  const minGap = Math.min(MAX_GAP_M, Math.max(MIN_SITE_GAP_M, searchR * 0.5))
 
   try {
     const ways = await fetchWays(center, searchR)
-    const segs = segmentsOf(ways).filter((s) => distanceMeters(center, s.a) <= searchR + 50 || distanceMeters(center, s.b) <= searchR + 50)
+    const segs = segmentsOf(ways).filter((s) => distanceMeters(center, s.a) <= maxFromCenter + 10 || distanceMeters(center, s.b) <= maxFromCenter + 10)
     if (segs.length) {
       const picks = []
       for (let i = 0; i < 80 && picks.length < want; i++) {
         const p = pointOn(pickWeighted(segs))
         if (distanceMeters(center, p) > maxFromCenter) continue
-        const gap = i < 50 ? minGap : 15
+        const gap = i < 50 ? minGap : MIN_SITE_GAP_M
         if (picks.some((q) => distanceMeters(q, p) < gap)) continue
         picks.push(p)
       }

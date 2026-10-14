@@ -6,6 +6,7 @@ import { Ionicons } from '@expo/vector-icons'
 import { LinearGradient } from 'expo-linear-gradient'
 import GlassPanel from '../../components/GlassPanel'
 import { Avatar, Pill, PlayerTap } from '../MultiplayerUI'
+import GameFollowButton from '../../components/GameFollowButton'
 import { ScoreTable } from './HudExtras'
 import { HUD, HudCta, hudGlow, hudPanel, hudSheet, hudType } from './HudPro'
 import { ROUND_BREAK_MS } from './engine'
@@ -184,8 +185,10 @@ export function MatchSummary({ state, meId, roster, shotsBy, isHost, onPlayAgain
               <Text style={styles.mvpStats} numberOfLines={2}>{mvpStats}</Text>
             </View>
           </PlayerTap>
+          {state.mvp !== meId ? <GameFollowButton userId={state.mvp} name={mvp.name} style={{ alignSelf: 'flex-start', marginTop: 10 }} /> : null}
         </View>
       )}
+      <Text style={[hudType.label, { marginBottom: 6 }]}>PLAYED WITH · TAP A NAME FOR THEIR PROFILE, + TO FOLLOW</Text>
       <View style={styles.tableCard}>
         <ScoreTable state={state} meId={meId} shotsBy={shotsBy} />
       </View>

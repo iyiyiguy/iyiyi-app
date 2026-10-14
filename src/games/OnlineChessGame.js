@@ -14,6 +14,7 @@ import { useHostLoop, useRoomSnapshot } from '../lib/multiplayer'
 import { loadArcadeStats, recordGameResult } from '../lib/arcadeStats'
 import { buzz } from '../lib/gamePrefs'
 import { useOpenProfile } from '../lib/profileNav'
+import GameFollowButton from '../components/GameFollowButton'
 import OpponentCard, { PlayerAvatar } from '../components/OpponentCard'
 import MatchChat, { useUnreadChat } from '../components/MatchChat'
 import { VideoCallButton, VideoCallLayer, useVideoCall } from '../components/VideoCall'
@@ -541,6 +542,7 @@ export function OnlineChessGame({ room, onExit }) {
                 <Ionicons name="chevron-forward" size={16} color={AC.muted} />
               </Pressable>
             ) : null}
+            {myColor && opponent?.id ? <GameFollowButton userId={opponent.id} name={opponent.name} style={{ alignSelf: 'center', marginBottom: 12 }} /> : null}
             {myColor && (
               opponentHere ? (
                 <PlayButton

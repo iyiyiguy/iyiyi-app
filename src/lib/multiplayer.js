@@ -241,9 +241,9 @@ export function howToPlay(gameId, settings = {}) {
       ffa: ['Every hit scores 10 points (+10 for a headshot) and a tag-out scores 100.', 'Tagged-out players are back in after 8 seconds, with 2 seconds of spawn protection.', 'Most points when time runs out wins.'],
       tdm: ['You are on Red or Blue. You can\'t hit your own team.', 'Tagged-out players are back in after 8 seconds, with 2 seconds of spawn protection.', 'The team with the most tag-outs when time runs out wins.'],
       snd: [
-        'Attackers: one of you carries the bomb. Inside a bomb site, tap PLANT BOMB and hit 6 targets within 5 seconds. Miss and you can retry.',
+        'Attackers: one of you carries the bomb. Walk into bomb site A or B (gold circles on the map and compass) and press and HOLD PLANT for 4 seconds. Getting hit, leaving the site or letting go cancels it — hold again.',
         'If the carrier is tagged out, the bomb drops where they were. A teammate can walk over and pick it up.',
-        'Once planted, everyone is alerted and a 45-second countdown starts. Defenders go to the bomb, tap DEFUSE and hit 7 targets within 7 seconds.',
+        'Once planted, everyone is alerted and a 45-second countdown starts. Defenders go to the bomb and HOLD DEFUSE for 6 seconds (a hit or leaving cancels it).',
         'No respawns: tagged-out players sit out the rest of the round.',
         'A round ends when the bomb explodes or is defused, a team is wiped out, or time runs out (defenders win if nothing was planted).',
         'Sides swap at half time. First team to win the majority of rounds wins the match.',
