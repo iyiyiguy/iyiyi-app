@@ -193,12 +193,80 @@ class BodyHitModule : Module() {
       }
     }
 
+    // Surface scanner (Laser Tag cover): see DepthEstimator.kt. prepareDepthModel starts the
+    // one-time background download (Wi-Fi only until `cellularAfter` sessions have waited for
+    // it) and resolves the current status at once:
+    //   { state: "unsupported" | "idle" | "waiting-wifi" | "downloading" | "ready" | "failed",
+    //     progress 0..1, bytes, total, model, lidar, lidarUsed, error? }
+    AsyncFunction("prepareDepthModel") { cellularAfter: Int, promise: Promise ->
+      val depth = depthOrNull()
+      if (depth == null) {
+        promise.resolve(mapOf("state" to "unsupported"))
+      } else {
+        depth.prepare(cellularAfter)
+        promise.resolve(depth.status())
+      }
+    }
+
+    AsyncFunction("depthModelStatus") { promise: Promise ->
+      val depth = depthOrNull()
+      promise.resolve(depth?.status() ?: mapOf("state" to "unsupported"))
+    }
+
+    // estimateDepth(uri, deleteAfter) -> { w, h, data, imageWidth, imageHeight, source, space,
+    // kind, ms } | null. An empty uri uses what the on-screen camera preview shows right now
+    // (space "view"); otherwise the photo file (space "photo"). Off the main thread; null when
+    // the model isn't ready, a frame is already running, or anything fails.
+    AsyncFunction("estimateDepth") { uri: String, deleteAfter: Boolean, promise: Promise ->
+      estimateDepthAsync(uri, deleteAfter, promise)
+    }
+
     OnDestroy {
       running = false
       main.removeCallbacks(tick)
       bodiesRunning = false
       main.removeCallbacks(bodiesTick)
     }
+  }
+
+  private fun estimateDepthAsync(uri: String, deleteAfter: Boolean, promise: Promise) {
+    val depth = depthOrNull()
+    if (depth == null || !depth.isReady() || depth.isBusy()) {
+      if (deleteAfter && uri.isNotEmpty()) {
+        try { fileFor(uri)?.delete() } catch (_: Throwable) {}
+      }
+      promise.resolve(null)
+    } else if (uri.isEmpty()) {
+      main.post {
+        val view = try { findPreview() } catch (_: Throwable) { null }
+        val bmp = if (view != null && view.width > 0 && view.height > 0) previewBitmap(view) else null
+        if (bmp == null) {
+          promise.resolve(null)
+        } else {
+          depth.estimate(bmp, "view", true) { out -> promise.resolve(out) }
+        }
+      }
+    } else {
+      val queued = depth.post {
+        val file = fileFor(uri)
+        val bmp = try { if (file != null) loadUpright(file) else null } catch (_: Throwable) { null }
+        if (deleteAfter) {
+          try { file?.delete() } catch (_: Throwable) {}
+        }
+        if (bmp == null) {
+          promise.resolve(null)
+        } else {
+          depth.estimate(bmp, "photo", true) { out -> promise.resolve(out) }
+        }
+      }
+      if (!queued) promise.resolve(null)
+    }
+  }
+
+  private fun depthOrNull(): DepthEstimator? = try {
+    appContext.reactContext?.let { DepthEstimator.get(it) }
+  } catch (_: Throwable) {
+    null
   }
 
   // --- live ------------------------------------------------------------------------------

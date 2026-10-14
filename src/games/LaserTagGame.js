@@ -14,7 +14,9 @@
 // laser/aimRules.minShotGapMs), on this phone and on the host. Your phone picks who is in
 // your sights; the host re-checks the bearing, rolls compass hits, rate-limits and runs the
 // rules (laser/engine.js). Rockets are a visible projectile that always explodes where it
-// lands. Placed explosives show on the ground in the camera (laser/GroundExplosives.js) in
+// lands — at a wall in front of you too, once the surface scanner (laser/useSceneDepth.js,
+// a depth model downloaded on first open) sees one; laser shots into cover show a COVER
+// spark (visual only). Placed explosives show on the ground in the camera (laser/GroundExplosives.js) in
 // AIM and HIP FIRE. Safety: firing / placing is off above ~15 km/h (laser/useSpeedLock.js).
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Animated, BackHandler, Easing, Platform, Pressable, StyleSheet, Text, View } from 'react-native'
@@ -64,7 +66,9 @@ import * as MediaLibrary from 'expo-media-library/legacy'
 import { GRENADE_FUSE_MS, GrenadeBlast, GrenadeButton, destinationPoint } from './laser/Grenade'
 import { DetonateAllButton, StickyBombButton, LandMineButton } from './laser/Consumables'
 import { COMPASS_MAX_RANGE_M, compassTolerance, gpsErr, hitChance, minShotGapMs, visionTolerance } from './laser/aimRules'
-import { rocketImpactDistance } from './laser/arGround'
+import { laserCover, rocketImpactWithCover } from './laser/sceneDepth'
+import { useSceneDepth } from './laser/useSceneDepth'
+import { CoverEffects } from './laser/CoverEffects'
 import { round6 } from './laser/geo'
 import { SPEED_LOCK_TEXT, useSpeedLock } from './laser/useSpeedLock'
 import { useBattleEffects, directionToAngle } from './laser/BattleEffects'
@@ -356,6 +360,26 @@ export function LaserTagGame({ room, onExit }) {
   const live = useLiveBodies({ enabled: liveOn, restartKey: dualOk && selfieOn ? 'dual' : 'single' })
   const [liveRunning, setLiveRunning] = useState(false)
   useEffect(() => live.subscribe(() => setLiveRunning(live.running())), [live])
+
+  // Surface scanner: walls / buildings / cover under the crosshair (laser/useSceneDepth.js).
+  // The model downloads in the background the first time Laser Tag opens.
+  const camAimRef = useRef({})
+  camAimRef.current = { pitch: aim.pitch, heading: aim.cameraHeading ?? aim.heading?.deg }
+  const depth = useSceneDepth({
+    active: true,
+    scanning: visionAim && playing && !dead && !bino && !tooFast,
+    fast: gun?.id === 'rocket',
+    vision,
+    getAim: () => camAimRef.current,
+  })
+  const [coverMarks, setCoverMarks] = useState([]) // scorch marks / COVER sparks on walls (laser/CoverEffects.js)
+  const coverMarkId = useRef(0)
+  const lastSparkAt = useRef(0)
+  const addCoverMark = useCallback((m) => {
+    if (!Number.isFinite(m?.bearing) || !Number.isFinite(m?.range)) return
+    setCoverMarks((a) => [...a, { ...m, id: ++coverMarkId.current }].slice(-6))
+  }, [])
+  const removeCoverMark = useCallback((id) => setCoverMarks((a) => a.filter((m) => m.id !== id)), [])
   const [liveLocked, setLiveLocked] = useState(false)
   const onLiveLock = useCallback((id) => setLiveLocked(id != null), [])
   useEffect(() => { if (!liveRunning) setLiveLocked(false) }, [liveRunning])
@@ -1116,7 +1140,18 @@ export function LaserTagGame({ room, onExit }) {
         const from = aim.mode === 'camera'
           ? muzzlePoint({ gun, width: view.width || 0, height: view.height || 0, bottom: dockH || 0, leftHanded })
           : { x: (view.width || 0) / 2, y: (view.height || 0) * 0.94 }
-        battle.addOutgoing(leftHanded, aimPointRef.current, from, gun.id)
+        // Cover: the surface scanner sees a wall clearly nearer than the target in your sights
+        // (and no person under the crosshair): the bolt stops on the wall with a COVER spark.
+        // Visual only; the shot still goes to the host, which decides the hit.
+        const cover = coverForShot()
+        battle.addOutgoing(leftHanded, cover ? { x: (view.width || 0) / 2, y: (view.height || 0) / 2 } : aimPointRef.current, from, gun.id)
+        if (cover) {
+          const t0s = Date.now()
+          if (t0s - lastSparkAt.current >= 250) {
+            lastSparkAt.current = t0s
+            setTimeout(() => addCoverMark({ kind: 'spark', bearing: cover.bearing, elev: cover.elev, range: cover.range }), 300)
+          }
+        }
       }
     } catch {}
     playShot(gun)
@@ -1129,10 +1164,35 @@ export function LaserTagGame({ room, onExit }) {
     fireCompass(shots, false, firedAt)
   }
 
+  // Laser shot into cover (visual only): { bearing, elev, range } or null.
+  const coverForShot = () => {
+    try {
+      const target = inSightsRef.current
+      if (!target || !(target.d > 0)) return null
+      const camAim = camAimRef.current || {}
+      const surface = depth.surface(camAim)
+      if (!surface) return null
+      let seen = false
+      try {
+        const vb = live.running() ? viewBodiesFromLive(live.get()) : (bodiesRef.current || [])
+        seen = !!pickShot(vb, tapAimRef.current)
+      } catch { seen = false }
+      const c = laserCover({ targetDist: target.d, surface, lineOfSight: seen })
+      if (!c) return null
+      return { bearing: camAim.heading, elev: Number.isFinite(camAim.pitch) ? camAim.pitch : 0, range: c.range }
+    } catch {
+      return null
+    }
+  }
+
   // Rocket: a visible projectile that ALWAYS explodes where it lands — at the target on a
-  // hit, otherwise at the impact distance (there's no depth sensor: the locked target's
-  // distance, else where the camera's centre ray meets the ground when pitched down, else a
-  // 25 m "wall"). Every rocket goes to the host so misses splash too.
+  // hit, otherwise at the impact distance: the locked target's distance, else where the
+  // camera's centre ray meets the ground when pitched down, else a 25 m "wall". With the
+  // surface scanner, a wall / building / cover under the crosshair that is nearer than the
+  // target (or any wall when there's no target) stops it there: it explodes on the wall
+  // (+ a scorch mark) and goes to the host as a plain 'rocket' at that distance, so the
+  // splash is worked out at the wall. A person the camera sees is in line of sight (no cover).
+  // Every rocket goes to the host so misses splash too.
   const fireRocket = (firedAt) => {
     shotsRef.current += 1
     setShotTick((n) => n + 1)
@@ -1157,10 +1217,20 @@ export function LaserTagGame({ room, onExit }) {
     } catch { lock = null }
     const compass = inSightsRef.current
     if (!lock && compass) lock = { id: compass.id, d: compass.d, method: 'compass', zone: 'body', chance: compass.chance }
-    const impact = rocketImpactDistance({ targetDist: lock?.d, pitchDeg: aim.pitch, hipFire, range: gun.range })
+    const camAim = camAimRef.current || {}
+    let surface = null
+    try { surface = hipFire ? null : depth.surface(camAim) } catch { surface = null }
+    const impact = rocketImpactWithCover({ targetDist: lock?.d, pitchDeg: aim.pitch, hipFire, range: gun.range, surface, lineOfSight: lock?.method === 'vision' })
+    const covered = impact.why === 'cover' && !hipFire
     // The projectile.
     try {
-      const onImpact = () => { playSfx('explosion'); buzz('heavy'); setTimeout(() => buzz('heavy'), 140) }
+      const onImpact = () => {
+        playSfx('explosion'); buzz('heavy'); setTimeout(() => buzz('heavy'), 140)
+        if (covered) {
+          addCoverMark({ kind: 'scorch', bearing: camAim.heading, elev: Number.isFinite(camAim.pitch) ? camAim.pitch : 0, range: surface?.range ?? impact.dist })
+          flash(`Rocket hit cover · ${Math.round(impact.dist)} m`, false)
+        }
+      }
       if (hipFire) {
         const g = radarGeoRef.current
         if (g) {
@@ -1172,7 +1242,9 @@ export function LaserTagGame({ room, onExit }) {
           ? muzzlePoint({ gun, width: view.width || 0, height: view.height || 0, bottom: dockH || 0, leftHanded })
           : { x: (view.width || 0) / 2, y: (view.height || 0) * 0.94 }
         const ap = aimPointRef.current
-        const to = screen || (lock && ap ? ap : { x: (view.width || 0) / 2, y: (view.height || 0) / 2 })
+        const centre = { x: (view.width || 0) / 2, y: (view.height || 0) / 2 }
+        // Into cover: it explodes on the wall under the crosshair.
+        const to = covered ? centre : screen || (lock && ap ? ap : centre)
         battle.addRocket({ from, to, dist: impact.dist, onImpact })
       }
     } catch {}
@@ -1181,7 +1253,7 @@ export function LaserTagGame({ room, onExit }) {
     broadcastShot(h.pos)
     if (!h.pos || !h.heading) { flash('No GPS/compass fix yet — rocket wasted', false); return }
     try {
-      if (lock) {
+      if (lock && !covered) {
         let hits = 1
         if (lock.method === 'compass') hits = Math.random() < (lock.chance ?? 0.5) ? 1 : 0
         room.sendAction({ type: hits ? 'hit' : 'shot', target: lock.id, hits, shots: 1, zone: lock.zone || 'body', method: lock.method, weapon: 'rocket', dist: Math.round(impact.dist * 10) / 10, firedAt, ...aimFields() })
@@ -1793,6 +1865,16 @@ export function LaserTagGame({ room, onExit }) {
         />
       ) : null}
       {tagOuts.map((m) => <TagOutMark key={m.id} x={m.x} y={m.y} />)}
+      {camPerm?.granted && !topMode && coverMarks.length ? (
+        <CoverEffects
+          marks={coverMarks}
+          headingDeg={aim.cameraHeading ?? heading?.deg}
+          pitchDeg={aim.pitch ?? 0}
+          view={view}
+          zoom={scope.zoom}
+          onDone={removeCoverMark}
+        />
+      ) : null}
 
       {camPerm?.granted && !topMode && !bino && aim.mode === 'camera' ? (
         <GunViewModel gun={gun} shotTick={shotTick} bottom={dockH || 0} hidden={dead} leftHanded={leftHanded} aim={aimPoint} />
@@ -1904,6 +1986,12 @@ export function LaserTagGame({ room, onExit }) {
 
       {/* Above the dock: S&D objective, warnings, enemy UAV, the fire hint. */}
       <View style={[styles.aboveDock, { bottom: aboveBottom, left: midLeft, right: midRight }]} pointerEvents="box-none" onLayout={onAboveLayout}>
+        {depth.notice ? (
+          <View style={styles.scanPill} pointerEvents="none" accessibilityLiveRegion="polite">
+            <Ionicons name="scan-outline" size={14} color={ST.friendly} />
+            <Text style={styles.scanPillText} numberOfLines={1}>{depth.notice.toUpperCase()}</Text>
+          </View>
+        ) : null}
         {tooFast ? (
           <View style={[styles.pillWarn, styles.speedPill]} pointerEvents="none" accessibilityLiveRegion="polite">
             <Ionicons name="speedometer-outline" size={16} color="#fff" />
@@ -2180,6 +2268,8 @@ const styles = StyleSheet.create({
   pillWarn: { flexDirection: 'row', alignItems: 'center', gap: 7, paddingHorizontal: 12, paddingVertical: 6, borderRadius: ST.radius, backgroundColor: 'rgba(8,10,14,0.8)', borderLeftWidth: 3, borderLeftColor: ST.enemy, maxWidth: '100%' },
   speedPill: { backgroundColor: 'rgba(255,61,82,0.9)', borderLeftColor: '#fff', paddingVertical: 8 },
   pillWarnText: { flexShrink: 1, fontFamily: FONT.ui, fontSize: 11, letterSpacing: 1.3, color: '#fff' },
+  scanPill: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 10, paddingVertical: 4, borderRadius: ST.radius, backgroundColor: 'rgba(8,10,14,0.66)', borderLeftWidth: 3, borderLeftColor: ST.friendly, maxWidth: '100%' },
+  scanPillText: { flexShrink: 1, fontFamily: FONT.ui, fontSize: 10, letterSpacing: 1.2, color: 'rgba(242,244,247,0.9)' },
   // dock
   dock: { position: 'absolute', alignItems: 'flex-end', justifyContent: 'space-between' },
   leftCol: { gap: 8 },

@@ -20,4 +20,7 @@ dependencies {
   // On-device body pose (Laser Tag hit detection), model bundled in the app.
   implementation 'com.google.mlkit:pose-detection:18.0.0-beta5'
   implementation 'androidx.exifinterface:exifinterface:1.3.7'
+  // Surface scanner (Laser Tag cover): LiteRT, the TensorFlow Lite runtime (org.tensorflow.lite.Interpreter;
+  // 16 KB page-aligned native libs). The depth model itself is downloaded on demand (DepthEstimator.kt).
+  implementation 'com.google.ai.edge.litert:litert:1.4.2'
 }

@@ -42,6 +42,38 @@ type NativeBodyHit = {
   addListener?: (event: string, fn: (e: any) => void) => { remove: () => void }
   // Missing in binaries built before video branding was added (and on Android).
   brandVideo?: (uri: string, opts: BrandVideoOptions) => Promise<string | null>
+  // Missing in binaries built before the surface scanner (depth model) was added.
+  prepareDepthModel?: (cellularAfter: number) => Promise<DepthModelStatus>
+  depthModelStatus?: () => Promise<DepthModelStatus>
+  estimateDepth?: (uri: string, deleteAfter: boolean) => Promise<DepthGrid | null>
+}
+
+// Surface scanner (Laser Tag cover): monocular depth model, downloaded once on demand.
+//   iOS 17+: Apple's Core ML Depth Anything V2 Small (F16).  Android: MiDaS v2.1 small (LiteRT).
+export type DepthModelState = 'unsupported' | 'idle' | 'waiting-wifi' | 'downloading' | 'compiling' | 'ready' | 'failed'
+export type DepthModelStatus = {
+  state: DepthModelState
+  progress?: number // 0..1 of the download
+  bytes?: number
+  total?: number
+  model?: string
+  lidar?: boolean // the phone has a LiDAR camera (not used: expo-camera's session uses the wide camera)
+  lidarUsed?: boolean
+  error?: string | null
+}
+// Relative INVERSE depth (bigger = nearer; arbitrary scale + offset) averaged over a w x h grid
+// (24 x 32 portrait / 32 x 24 landscape) of the upright frame, row-major, top row first.
+// space: 'photo' = the full captured photo, 'view' = what the on-screen preview showed (Android).
+export type DepthGrid = {
+  w: number
+  h: number
+  data: number[]
+  imageWidth: number
+  imageHeight: number
+  source?: string
+  space?: 'photo' | 'view'
+  kind?: 'inverse'
+  ms?: number
 }
 
 export type BrandVideoOptions = {
@@ -169,6 +201,44 @@ export async function brandVideo(uri: string, opts: BrandVideoOptions): Promise<
   try {
     const out = await Native!.brandVideo!(uri, opts)
     return typeof out === 'string' && out ? out : null
+  } catch {
+    return null
+  }
+}
+
+// ---- Surface scanner --------------------------------------------------------------------------
+export const isDepthAvailable = !!(Native && typeof Native.estimateDepth === 'function' && typeof Native.prepareDepthModel === 'function')
+
+// Starts the one-time background download (Wi-Fi only until `cellularAfter` Laser Tag sessions
+// have waited for Wi-Fi). Resolves the status at once; null when this binary has no scanner.
+export async function prepareDepthModel(cellularAfter = 3): Promise<DepthModelStatus | null> {
+  if (!isDepthAvailable) return null
+  try {
+    const s = await Native!.prepareDepthModel!(Math.max(0, Math.round(cellularAfter)))
+    return s && typeof s.state === 'string' ? s : null
+  } catch {
+    return null
+  }
+}
+
+export async function depthModelStatus(): Promise<DepthModelStatus | null> {
+  if (!isDepthAvailable || typeof Native!.depthModelStatus !== 'function') return null
+  try {
+    const s = await Native!.depthModelStatus!()
+    return s && typeof s.state === 'string' ? s : null
+  } catch {
+    return null
+  }
+}
+
+// One frame's depth grid, or null (model not ready, busy, failed). uri null: Android uses the
+// on-screen preview; iOS needs a photo file. deleteAfter removes the photo in every case.
+export async function estimateDepth(uri: string | null, deleteAfter = true): Promise<DepthGrid | null> {
+  if (!isDepthAvailable) return null
+  try {
+    const g = await Native!.estimateDepth!(uri || '', deleteAfter)
+    if (!g || !Array.isArray(g.data) || !(g.w > 0) || !(g.h > 0) || g.data.length !== g.w * g.h) return null
+    return g
   } catch {
     return null
   }

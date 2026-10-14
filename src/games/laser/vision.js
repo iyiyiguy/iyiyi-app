@@ -83,6 +83,14 @@ export function pickVisionTarget({ opponents, myPos, headingDeg, headingAcc, bod
   return fallback ? { target: fallback.o, distance: fallback.d } : null
 }
 
+// The surface scanner (useSceneDepth.js) can borrow captured frames: when a tap is set and
+// wants() says yes, the photo is kept after person detection and handed to take(uri, at),
+// which must delete it (estimateDepth(uri, true) does, in every case).
+let frameTap = null
+export function setFrameTap(tap) {
+  frameTap = tap && typeof tap.take === 'function' ? tap : null
+}
+
 // One camera frame at a time: target-lock frames are skipped while a capture
 // is in flight, and a shot reuses an in-flight frame instead of queueing.
 export function useVisionCapture(cameraRef) {
@@ -98,7 +106,12 @@ export function useVisionCapture(cameraRef) {
       try {
         const pic = await cam.takePictureAsync({ quality: 0.3, skipProcessing: true, shutterSound: false, exif: false })
         if (!pic?.uri) return null
-        const bodies = await detectBodies(pic.uri, true)
+        let tap = null
+        try { tap = frameTap && frameTap.wants?.() ? frameTap : null } catch { tap = null }
+        const bodies = await detectBodies(pic.uri, !tap)
+        if (tap) {
+          try { tap.take(pic.uri, startedAt) } catch {}
+        }
         if (!bodies) return null
         const res = { bodies, at: startedAt }
         last.current = res

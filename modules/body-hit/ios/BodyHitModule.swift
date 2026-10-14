@@ -81,6 +81,29 @@ public class BodyHitModule: Module {
       }
     }
 
+    // Surface scanner (Laser Tag cover): see DepthEstimator.swift. prepareDepthModel starts the
+    // one-time background download + compile (Wi-Fi only until `cellularAfter` sessions have
+    // waited for it) and resolves the current status at once:
+    //   { state: "unsupported" | "idle" | "waiting-wifi" | "downloading" | "compiling" | "ready"
+    //     | "failed", progress 0..1, bytes, total, model, lidar, lidarUsed, error? }
+    AsyncFunction("prepareDepthModel") { (cellularAfter: Int, promise: Promise) in
+      DepthEstimator.shared.prepare(cellularAfter: cellularAfter)
+      promise.resolve(DepthEstimator.shared.status())
+    }
+
+    AsyncFunction("depthModelStatus") { (promise: Promise) in
+      promise.resolve(DepthEstimator.shared.status())
+    }
+
+    // JS: estimateDepth(uri, deleteAfter) -> { w, h, data, imageWidth, imageHeight, source,
+    // space, kind, ms } | null (relative inverse depth grid of the upright photo). Off the main
+    // thread; null when the model isn't ready, a frame is already running, or anything fails.
+    AsyncFunction("estimateDepth") { (uri: String, deleteAfter: Bool, promise: Promise) in
+      DepthEstimator.shared.estimate(uri: uri, deleteAfter: deleteAfter) { out in
+        promise.resolve(out)
+      }
+    }
+
     OnDestroy {
       DispatchQueue.main.async {
         self.liveFaces.stop()
