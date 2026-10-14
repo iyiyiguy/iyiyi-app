@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Text, StyleSheet, ActivityIndicator } from 'react-native'
 import { colors, radii } from '../theme'
 import { post, del } from '../lib/api'
+import { maybeOfferPushAfterFollow } from '../lib/pushPrompt'
 import Bounce from './Bounce'
 
 // status: 'accepted' | 'pending' | null/undefined. onChange(userId, newStatus).
@@ -20,6 +21,7 @@ export default function FollowButton({ userId, status, onChange, style, overPhot
       } else {
         const res = await post(`/api/profiles/follow/${userId}`)
         onChange?.(userId, res.status ?? 'accepted')
+        maybeOfferPushAfterFollow()
       }
     } catch {
       // leave the button as it was; the next list refresh will show the true state

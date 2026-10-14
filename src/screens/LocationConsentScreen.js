@@ -1,4 +1,6 @@
+import { useState } from 'react'
 import { View, Text, StyleSheet, ScrollView } from 'react-native'
+import * as Location from 'expo-location'
 import { LinearGradient } from 'expo-linear-gradient'
 import { Ionicons } from '@expo/vector-icons'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -8,9 +10,10 @@ import GlassPanel from '../components/GlassPanel'
 import { useT } from '../i18n'
 import strings from '../i18n/strings/locationConsent'
 
-// First screen after sign-up: what location is used for, in plain words, before the system
-// prompt ever appears. Informational only - the OS asks for the actual permission later, when
-// the Nearby tab opens.
+// Onboarding step after sign-up (and the social-links import): what location is used for, in
+// plain words, then the phone's own permission prompt straight from Continue, so the prompt
+// arrives with its reason on screen. Denying is fine - the app continues and Nearby shows
+// its "turn on location" state.
 // title/text are keys into strings/locationConsent, translated at render.
 const POINTS = [
   { icon: 'people', colors: ['#6b7cff', '#9b8cff'], title: 'p1Title', text: 'p1Text' },
@@ -21,6 +24,20 @@ const POINTS = [
 export default function LocationConsentScreen({ onContinue }) {
   const insets = useSafeAreaInsets()
   const t = useT(strings)
+  const [asking, setAsking] = useState(false)
+  const onPress = async () => {
+    if (asking) return
+    setAsking(true)
+    try {
+      const cur = await Location.getForegroundPermissionsAsync()
+      if (cur?.status === 'undetermined' || (cur?.status !== 'granted' && cur?.canAskAgain)) {
+        await Location.requestForegroundPermissionsAsync()
+      }
+    } catch {
+      // No location module or the prompt failed: carry on, Nearby asks again in context.
+    }
+    onContinue()
+  }
   return (
     <View style={styles.screen}>
       <ScrollView contentContainerStyle={[styles.scroll, { paddingTop: insets.top + 40, paddingBottom: insets.bottom + 24 }]} showsVerticalScrollIndicator={false}>
@@ -51,7 +68,7 @@ export default function LocationConsentScreen({ onContinue }) {
         </View>
 
         <FadeIn index={5} style={{ marginTop: 28 }}>
-          <Press onPress={onContinue} scaleTo={0.97} haptic="light" accessibilityLabel={t('continue')}>
+          <Press onPress={onPress} disabled={asking} scaleTo={0.97} haptic="light" accessibilityLabel={t('continue')}>
             <LinearGradient colors={['#6b7cff', '#8f5bff']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.button}>
               <Text style={styles.buttonText}>{t('continue')}</Text>
             </LinearGradient>

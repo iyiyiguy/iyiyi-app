@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { View, FlatList, StyleSheet, Pressable, Text, TextInput } from 'react-native'
 import { useFocusEffect } from '@react-navigation/native'
 import * as Location from 'expo-location'
+import { ensureLocationPermission } from '../lib/locationPermission'
 import * as Haptics from 'expo-haptics'
 import { Ionicons } from '@expo/vector-icons'
 import { colors, type, font, radii } from '../theme'
@@ -62,7 +63,7 @@ export default function RecommendedScreen({ navigation }) {
   const load = useCallback(async (currentScope) => {
     setLoading(true)
     try {
-      const { status } = await Location.requestForegroundPermissionsAsync()
+      const { status } = await ensureLocationPermission()
       if (status !== 'granted') {
         setPermissionDenied(true)
         setLoading(false)

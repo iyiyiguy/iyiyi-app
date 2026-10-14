@@ -3,6 +3,7 @@
 // a toggle in one place updates the rest. Status: 'accepted' | 'pending' | null.
 import { useEffect, useState } from 'react'
 import { apiJson, post, del } from './api'
+import { maybeOfferPushAfterFollow } from './pushPrompt'
 
 const status = new Map() // userId -> 'accepted' | 'pending' | null
 const profiles = new Map() // userId -> profile json
@@ -44,6 +45,7 @@ export async function toggleFollow(userId) {
     } else {
       const res = await post(`/api/profiles/follow/${userId}`)
       status.set(userId, res?.status ?? 'accepted')
+      maybeOfferPushAfterFollow()
     }
   } catch {
     status.set(userId, was)

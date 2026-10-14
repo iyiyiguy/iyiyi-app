@@ -14,6 +14,7 @@ import { Ionicons } from '@expo/vector-icons'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { HeaderButton } from '../components/BrandHeader'
 import { openProfile, useMyUserId } from '../lib/profileNav'
+import { maybeOfferPushAfterFollow } from '../lib/pushPrompt'
 import ContentGrid from '../components/ContentGrid'
 import Avatar from '../components/Avatar'
 import { mediaArrayFrom, sortMediaNewest } from '../lib/myContent'
@@ -119,6 +120,7 @@ export default function UserProfileScreen({ route, navigation }) {
         const res = await authedFetch(`/api/profiles/follow/${userId}`, { method: 'POST' })
         const json = await res.json()
         if (!res.ok) throw new Error(json?.error || 'Could not follow')
+        maybeOfferPushAfterFollow()
         setProfile((p) => ({
           ...p,
           is_following: json.status === 'accepted',

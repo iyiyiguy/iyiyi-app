@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { DarkTheme, DefaultTheme, NavigationContainer, useNavigationContainerRef } from '@react-navigation/native'
 import { createNativeStackNavigator } from '@react-navigation/native-stack'
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs'
@@ -95,7 +95,9 @@ const LINKING = {
   },
 }
 
-const LOCATION_CONSENT_KEY = 'iyiyi_location_consent_seen'
+const LOCATION_CONSENT_KEY = 'iyiyi_location_consent_seen' // legacy, per device
+const locationConsentKey = (uid) => `iyiyi_location_consent_seen_${uid}`
+const launchesKey = (uid) => `iyiyi_member_launches_${uid}`
 const paywallSeenKey = (uid) => `iyiyi_paywall_seen_${uid}`
 const importSeenKey = (userId) => `iyiyi_import_prompt_seen_${userId}`
 
@@ -235,7 +237,7 @@ export default function App() {
 
   useEffect(() => {
     loadThemePref().then(() => setThemeReady(true))
-    loadLanguage().then(({ chosen }) => setLangState({ chosen })).catch(() => setLangState({ chosen: true }))
+    loadLanguage().then(({ chosen, supported }) => setLangState({ chosen: chosen || supported })).catch(() => setLangState({ chosen: true }))
     initAttribution()
     supabase.auth.getSession().then(({ data }) => setSession(data.session))
     const { data: sub } = supabase.auth.onAuthStateChange((event, session) => {
@@ -250,41 +252,71 @@ export default function App() {
           .catch((e) => console.warn('ensureProfile failed', e?.message ?? e))
       }
     })
-    AsyncStorage.getItem(LOCATION_CONSENT_KEY).then((v) => setLocationConsent(v === 'true'))
   }, [])
 
   const userId = session?.user?.id
+  // Location explainer is per account (a second account on the same phone still sees it).
+  // People who saw the old per-device screen aren't shown it again.
+  useEffect(() => {
+    if (!userId) { setLocationConsent(undefined); return }
+    let cancelled = false
+    Promise.all([AsyncStorage.getItem(locationConsentKey(userId)), AsyncStorage.getItem(LOCATION_CONSENT_KEY)])
+      .then(([mine, legacy]) => { if (!cancelled) setLocationConsent(mine === 'true' || legacy === 'true') })
+      .catch(() => { if (!cancelled) setLocationConsent(true) })
+    return () => { cancelled = true }
+  }, [userId])
   const openCamera = useCallback(() => {
     if (navRef.isReady() && navRef.getCurrentRoute()?.name !== 'Camera') navRef.navigate('Camera')
   }, [navRef])
   useFlipToCamera(openCamera, !!userId && flipOn)
+  // Onboarding order after sign-up: import social links -> location (explainer, then the
+  // phone's prompt from its Continue button) -> the app. The Pro offer is not part of
+  // onboarding; it shows once, from the second time the app is opened.
+  const [importChecked, setImportChecked] = useState(false)
   useEffect(() => {
-    if (!userId || !locationConsent) return
+    setImportChecked(false)
+    if (!userId) return
     let cancelled = false
+    // Never hold the app on a slow network: after 4 s carry on without the import step.
+    let timedOut = false
+    const giveUp = setTimeout(() => { timedOut = true; if (!cancelled) setImportChecked(true) }, 4000)
     ;(async () => {
       try {
         if (await AsyncStorage.getItem(importSeenKey(userId))) return
         const profile = await apiJson('/api/profiles/me')
         const hasLinks = (profile.social_links?.length ?? 0) > 0 || (profile.websites?.length ?? 0) > 0
         if (hasLinks) await AsyncStorage.setItem(importSeenKey(userId), 'true')
-        else if (!cancelled) setShowImport(true)
+        else if (!cancelled && !timedOut) setShowImport(true)
       } catch {
         // If we can't tell, don't block the app with an optional step.
+      } finally {
+        if (!cancelled) setImportChecked(true)
       }
     })()
-    return () => { cancelled = true }
-  }, [userId, locationConsent])
+    return () => { cancelled = true; clearTimeout(giveUp) }
+  }, [userId])
 
-  // One-time Pro offer at the end of onboarding (after the social-links step). Dismissible with
-  // "Not now" or the close button, and skipped for people who are already Pro.
+  // One-time Pro offer, after people have used the app: shown on app open from the second
+  // launch as a member (never during first-run onboarding). Dismissible with "Not now" or
+  // the close button, and skipped for people who are already Pro.
+  const launchCounted = useRef(null)
   useEffect(() => {
-    if (!userId || !locationConsent || showImport) return
+    if (!userId || !locationConsent || showImport || !importChecked) return
     let cancelled = false
-    AsyncStorage.getItem(paywallSeenKey(userId))
-      .then((v) => { if (!cancelled && !v) setShowPaywall(true) })
-      .catch(() => {})
+    ;(async () => {
+      try {
+        if (await AsyncStorage.getItem(paywallSeenKey(userId))) return
+        let n = parseInt((await AsyncStorage.getItem(launchesKey(userId))) || '0', 10) || 0
+        if (launchCounted.current !== userId) {
+          launchCounted.current = userId
+          n += 1
+          await AsyncStorage.setItem(launchesKey(userId), String(n))
+        }
+        if (!cancelled && n >= 2) setShowPaywall(true)
+      } catch {}
+    })()
     return () => { cancelled = true }
-  }, [userId, locationConsent, showImport])
+  }, [userId, locationConsent, showImport, importChecked])
 
   const finishPaywall = () => {
     if (userId) AsyncStorage.setItem(paywallSeenKey(userId), 'true').catch(() => {})
@@ -297,12 +329,12 @@ export default function App() {
   }
 
   const acceptLocationConsent = () => {
-    AsyncStorage.setItem(LOCATION_CONSENT_KEY, 'true')
+    if (userId) AsyncStorage.setItem(locationConsentKey(userId), 'true').catch(() => {})
     setLocationConsent(true)
   }
 
   if (!themeReady || session === undefined || !langState) return null
-  if (session && locationConsent === undefined) return null
+  if (session && (locationConsent === undefined || !importChecked)) return null
 
   return (
     <SafeAreaProvider initialMetrics={initialWindowMetrics}>
@@ -318,10 +350,10 @@ export default function App() {
             <Stack.Screen name="SignIn" component={Aura.AuthScreen} />
             <Stack.Screen name="PublicProfile" component={Aura.PublicProfileScreen} />
           </Stack.Navigator>
-        ) : !locationConsent ? (
-          <Aura.LocationConsentScreen onContinue={acceptLocationConsent} />
         ) : showImport ? (
           <Aura.ImportLinksScreen onDone={finishImport} />
+        ) : !locationConsent ? (
+          <Aura.LocationConsentScreen onContinue={acceptLocationConsent} />
         ) : showPaywall ? (
           <Aura.SubscriptionScreen onClose={finishPaywall} />
         ) : (
@@ -366,7 +398,7 @@ export default function App() {
           </Stack.Navigator>
         )}
         {/* Game challenges from other users (inbox:<myId>), only once fully signed in. */}
-        {session && locationConsent && !showImport ? <InviteListener key={userId} navRef={navRef} /> : null}
+        {session && locationConsent && !showImport && !showPaywall ? <InviteListener key={userId} navRef={navRef} /> : null}
       </NavigationContainer>
     </SafeAreaProvider>
   )

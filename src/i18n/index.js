@@ -30,15 +30,26 @@ export const LANGUAGES = [
 const CODES = new Set(LANGUAGES.map((l) => l.code))
 const KEY = 'iyiyi_language_v1'
 
-function deviceLanguage() {
+function deviceBase() {
   try {
     const loc = Intl.DateTimeFormat().resolvedOptions().locale || 'en'
     const base = loc.toLowerCase().split(/[-_]/)[0]
-    if (base === 'fil') return 'tl'
-    return CODES.has(base) ? base : 'en'
+    return base === 'fil' ? 'tl' : base
   } catch {
-    return 'en'
+    return null
   }
+}
+
+function deviceLanguage() {
+  const base = deviceBase()
+  return base && CODES.has(base) ? base : 'en'
+}
+
+// True when the phone's own language is one we ship. First launch then skips the language
+// picker (the app is already in the right language; it can be changed in Settings).
+export const deviceLanguageSupported = () => {
+  const base = deviceBase()
+  return !!base && CODES.has(base)
 }
 
 let lang = deviceLanguage()
@@ -47,7 +58,7 @@ let loaded = false
 const listeners = new Set()
 
 export async function loadLanguage() {
-  if (loaded) return { lang, chosen }
+  if (loaded) return { lang, chosen, supported: deviceLanguageSupported() }
   loaded = true
   try {
     const v = await AsyncStorage.getItem(KEY)
@@ -59,7 +70,7 @@ export async function loadLanguage() {
     // Device language is fine.
   }
   listeners.forEach((l) => l(lang))
-  return { lang, chosen }
+  return { lang, chosen, supported: deviceLanguageSupported() }
 }
 
 export const getLanguage = () => lang

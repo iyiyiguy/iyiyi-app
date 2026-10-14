@@ -4,6 +4,7 @@ import { useFocusEffect } from '@react-navigation/native'
 import MapView from '../components/SafeMapView'
 import { Circle, Marker } from 'react-native-maps'
 import * as Location from 'expo-location'
+import { ensureLocationPermission } from '../lib/locationPermission'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import * as Haptics from 'expo-haptics'
 import { Ionicons } from '@expo/vector-icons'
@@ -349,7 +350,7 @@ export default function MapScreen({ navigation, route }) {
 
       const start = async () => {
         try {
-          const { status } = await Location.requestForegroundPermissionsAsync()
+          const { status } = await ensureLocationPermission()
           if (cancelled) return
           if (status !== 'granted') {
             setLocState('denied')

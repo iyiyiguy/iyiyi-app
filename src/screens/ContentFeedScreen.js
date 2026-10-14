@@ -4,6 +4,7 @@ import { useFocusEffect } from '@react-navigation/native'
 import { getPositionFast } from '../lib/location'
 import { getCached, setCached } from '../lib/cache'
 import * as Location from 'expo-location'
+import { ensureLocationPermission } from '../lib/locationPermission'
 import BrandHeader, { HeaderButton } from '../components/BrandHeader'
 import ScopeChips, { SCOPES, Segmented, scopeLabel } from '../components/ScopeChips'
 import LiveButton from '../components/LiveButton'
@@ -115,7 +116,7 @@ export default function ContentFeedScreen({ navigation }) {
       }
       let coords = null
       try {
-        const { status } = await Location.requestForegroundPermissionsAsync()
+        const { status } = await ensureLocationPermission()
         if (status !== 'granted') {
           if (current()) setPermissionDenied(s !== 'country')
         } else {

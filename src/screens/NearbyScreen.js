@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect, useRef } from 'react'
 import { View, FlatList, StyleSheet, Pressable, Text } from 'react-native'
 import { useFocusEffect } from '@react-navigation/native'
 import * as Location from 'expo-location'
+import { ensureLocationPermission } from '../lib/locationPermission'
 import { Ionicons } from '@expo/vector-icons'
 import * as Haptics from 'expo-haptics'
 import { colors, radii, type, font } from '../theme'
@@ -114,7 +115,7 @@ export default function NearbyScreen({ navigation }) {
 
       const start = async () => {
         try {
-          const { status } = await Location.requestForegroundPermissionsAsync()
+          const { status } = await ensureLocationPermission()
           if (cancelled) return
           if (status !== 'granted') {
             setPermissionDenied(true)

@@ -14,6 +14,7 @@ import { GlassCard } from '../components/GlassCard'
 import { GlassButton } from '../components/GlassButton'
 import { GlassBackground } from '../components/GlassBackground'
 import * as Location from 'expo-location'
+import { ensureLocationPermission } from '../lib/locationPermission'
 // SDK 57's root "expo-media-library" export is the new class-based API; the function-style
 // calls used here (createAssetAsync, getAlbumAsync, ...) only work from the legacy entry.
 import * as MediaLibrary from 'expo-media-library/legacy'
@@ -378,7 +379,7 @@ export default function CameraScreen({ navigation, route }) {
 
   const refreshNearby = useCallback(async () => {
     try {
-      const { status } = await Location.requestForegroundPermissionsAsync()
+      const { status } = await ensureLocationPermission()
       if (status !== 'granted') return
       const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High })
       const c = { lat: loc.coords.latitude, lng: loc.coords.longitude, acc: loc.coords.accuracy ?? null }
@@ -400,12 +401,14 @@ export default function CameraScreen({ navigation, route }) {
   }, [])
 
   // Keeps polling while the camera is open, so a queued post tags whoever is around when it goes out.
+  // Waits until the camera permission is decided so two system prompts never stack.
+  const camDecided = !!camPerm && camPerm.status !== 'undetermined'
   useEffect(() => {
-    if (!isFocused) return undefined
+    if (!isFocused || !camDecided) return undefined
     refreshNearby()
     const t = setInterval(refreshNearby, NEARBY_POLL_MS)
     return () => clearInterval(t)
-  }, [isFocused, refreshNearby])
+  }, [isFocused, camDecided, refreshNearby])
 
   // --- camera readiness ------------------------------------------------------------------
   const onCameraReady = () => {

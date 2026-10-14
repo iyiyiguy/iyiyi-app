@@ -41,8 +41,10 @@ async function startBackgroundLocation() {
   if (Platform.OS === 'android') return
   if (_bgLocationRunning) return
   try {
-    // Need "always" permission for background location on iOS
-    const { status } = await Location.requestBackgroundPermissionsAsync()
+    // Uses "Always" location only if the person already granted it in Settings; never pops
+    // the Always prompt when a lobby opens (App Review 5.1.1). Reconnect handling covers the
+    // rest when the app is backgrounded.
+    const { status } = await Location.getBackgroundPermissionsAsync()
     if (status !== 'granted') {
       console.log('background location permission not granted — lobby may disconnect in background')
       return
