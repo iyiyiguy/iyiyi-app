@@ -53,7 +53,7 @@ export function needsNametag(profile, user) {
   return !profile.avatar_url || autoName
 }
 
-export default function OnboardingNametagScreen({ user, profile, intent, onDone, step, total }) {
+export default function OnboardingNametagScreen({ user, profile, intent, onDone, onSkipAll, step, total }) {
   const insets = useSafeAreaInsets()
   const t = useT(strings)
   const original = profile?.username ?? ''
@@ -164,7 +164,7 @@ export default function OnboardingNametagScreen({ user, profile, intent, onDone,
   return (
     <KeyboardAvoidingView style={styles.screen} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={[styles.scroll, { paddingTop: insets.top + 16, paddingBottom: insets.bottom + 24 }]} showsVerticalScrollIndicator={false}>
-        <OnboardingSteps step={step} total={total} onSkip={onDone} style={{ paddingHorizontal: 0 }} />
+        <OnboardingSteps step={step} total={total} onSkip={onDone} onSkipAll={onSkipAll} style={{ paddingHorizontal: 0 }} />
         <FadeIn style={{ marginTop: 28 }}>
           <Text style={styles.title}>{t('nametagTitle')}</Text>
           <Text style={styles.sub}>{t(SUB[intent] ?? 'nametagSubCreator')}</Text>

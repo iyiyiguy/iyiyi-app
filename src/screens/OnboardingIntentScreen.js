@@ -13,7 +13,8 @@ import { patch } from '../lib/api'
 import { useT } from '../i18n'
 import strings from '../i18n/strings/onboarding'
 
-// First onboarding step after sign-up: "What brings you here?" (Business / Creator / Player).
+// First onboarding step after sign-up: "What brings you here?" (Business / Creator / Player /
+// just looking around). 'explore' skips the nametag and social-links steps.
 // One tap picks and moves on; Skip leaves it unset. The answer tailors the later steps' copy
 // (nametag, socials, location) and the default tier on the Pro offer.
 //
@@ -22,7 +23,7 @@ import strings from '../i18n/strings/onboarding'
 // and Creator set that (only when it isn't already chosen). The raw intent, including
 // 'player', also goes to the auth user's metadata (follows the account to other devices) and
 // to AsyncStorage per user (read back instantly on the next launch).
-export const INTENTS = ['business', 'creator', 'player']
+export const INTENTS = ['business', 'creator', 'player', 'explore']
 export const intentKey = (uid) => `iyiyi_onboarding_intent_${uid}`
 const PROFILE_LABEL = { business: 'business', creator: 'creator' }
 
@@ -30,6 +31,7 @@ const OPTIONS = [
   { key: 'business', icon: 'storefront', colors: ['#e8b04b', '#ff9f6b'], title: 'bizTitle', text: 'bizText' },
   { key: 'creator', icon: 'sparkles', colors: ['#ff6fb5', '#9b8cff'], title: 'creatorTitle', text: 'creatorText' },
   { key: 'player', icon: 'game-controller', colors: ['#4fd1c5', '#6b7cff'], title: 'playerTitle', text: 'playerText' },
+  { key: 'explore', icon: 'eye', colors: ['#7fb3ff', '#b06cff'], title: 'exploreTitle', text: 'exploreText' },
 ]
 
 // The intent saved for this user: this device first, then the account's metadata.
@@ -53,7 +55,7 @@ export function saveIntent(user, intent, profile) {
   if (label && (!current || current === 'standard')) patch('/api/profiles/me', { profile_label: label }).catch(() => {})
 }
 
-export default function OnboardingIntentScreen({ user, profile, onDone, step, total }) {
+export default function OnboardingIntentScreen({ user, profile, onDone, onSkipAll, step, total }) {
   const insets = useSafeAreaInsets()
   const t = useT(strings)
   const [picked, setPicked] = useState(null)
@@ -69,7 +71,7 @@ export default function OnboardingIntentScreen({ user, profile, onDone, step, to
   return (
     <View style={styles.screen}>
       <ScrollView contentContainerStyle={[styles.scroll, { paddingTop: insets.top + 16, paddingBottom: insets.bottom + 24 }]} showsVerticalScrollIndicator={false}>
-        <OnboardingSteps step={step} total={total} onSkip={() => onDone(null)} style={{ paddingHorizontal: 0 }} />
+        <OnboardingSteps step={step} total={total} onSkip={() => onDone(null)} onSkipAll={onSkipAll} style={{ paddingHorizontal: 0 }} />
         <FadeIn style={{ marginTop: 28 }}>
           <Text style={styles.title}>{t('intentTitle')}</Text>
           <Text style={styles.sub}>{t('intentSub')}</Text>

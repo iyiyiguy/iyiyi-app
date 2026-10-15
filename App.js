@@ -393,11 +393,33 @@ export default function App() {
     setShowImport(false)
   }
 
-  // picked: 'business' | 'creator' | 'player', or null when skipped (saved by the screen).
+  // picked: 'business' | 'creator' | 'player' | 'explore', or null when skipped (saved by the
+  // screen). 'explore' (just looking around) skips the nametag and social-links steps too.
   const finishIntent = (picked) => {
     if (userId) AsyncStorage.setItem(intentSeenKey(userId), 'true').catch(() => {})
     if (picked) setIntent(picked)
+    if (picked === 'explore') {
+      if (userId) {
+        AsyncStorage.setItem(nametagSeenKey(userId), 'true').catch(() => {})
+        AsyncStorage.setItem(importSeenKey(userId), 'true').catch(() => {})
+      }
+      setShowNametag(false)
+      setShowImport(false)
+      setPlanned((p) => ({ intent: p.intent, location: p.location }))
+    }
     setShowIntent(false)
+  }
+
+  // "Skip setup" on any onboarding step: straight into the app. Nothing more is asked here;
+  // location is asked in context by Nearby/Map, and the profile can be filled in Edit Profile.
+  const skipOnboarding = () => {
+    if (userId) {
+      for (const k of [intentSeenKey, nametagSeenKey, importSeenKey, locationConsentKey]) AsyncStorage.setItem(k(userId), 'true').catch(() => {})
+    }
+    setShowIntent(false)
+    setShowNametag(false)
+    setShowImport(false)
+    setLocationConsent(true)
   }
 
   const finishNametag = () => {
@@ -428,13 +450,13 @@ export default function App() {
             <Stack.Screen name="PublicProfile" component={Aura.PublicProfileScreen} />
           </Stack.Navigator>
         ) : showIntent ? (
-          <OnboardingIntent user={sessionUser} profile={onboardProfile} onDone={finishIntent} {...stepProps('intent')} />
+          <OnboardingIntent user={sessionUser} profile={onboardProfile} onDone={finishIntent} onSkipAll={skipOnboarding} {...stepProps('intent')} />
         ) : showNametag ? (
-          <OnboardingNametag user={sessionUser} profile={onboardProfile} intent={intent} onDone={finishNametag} {...stepProps('nametag')} />
+          <OnboardingNametag user={sessionUser} profile={onboardProfile} intent={intent} onDone={finishNametag} onSkipAll={skipOnboarding} {...stepProps('nametag')} />
         ) : showImport ? (
-          <Aura.ImportLinksScreen onDone={finishImport} intent={intent} {...stepProps('import')} />
+          <Aura.ImportLinksScreen onDone={finishImport} onSkipAll={skipOnboarding} intent={intent} {...stepProps('import')} />
         ) : !locationConsent ? (
-          <Aura.LocationConsentScreen onContinue={acceptLocationConsent} intent={intent} {...stepProps('location')} />
+          <Aura.LocationConsentScreen onContinue={acceptLocationConsent} onSkipAll={skipOnboarding} intent={intent} {...stepProps('location')} />
         ) : showPaywall ? (
           <Aura.SubscriptionScreen onClose={finishPaywall} route={intent === 'business' ? { params: { tier: 'business' } } : undefined} />
         ) : (

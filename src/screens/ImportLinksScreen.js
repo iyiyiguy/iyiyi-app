@@ -45,7 +45,7 @@ const clean = (v) => {
   return s.replace(/^@+/, '') ? s : ''
 }
 
-export default function ImportLinksScreen({ onDone, intent, step, total }) {
+export default function ImportLinksScreen({ onDone, onSkipAll, intent, step, total }) {
   const t = useT(strings)
   const insets = useSafeAreaInsets()
   const [mode, setMode] = useState('handles') // 'handles' | 'linktree'
@@ -91,7 +91,7 @@ export default function ImportLinksScreen({ onDone, intent, step, total }) {
   if (mode === 'linktree') {
     return (
       <View style={[styles.screen, { paddingTop: insets.top + 16 }]}>
-        <OnboardingSteps step={step} total={total} onSkip={onDone} />
+        <OnboardingSteps step={step} total={total} onSkip={onDone} onSkipAll={onSkipAll} />
         <Text style={[styles.title, { marginHorizontal: 20, marginTop: 24, marginBottom: 12 }]}>{t('title')}</Text>
         <View style={{ flex: 1 }}>
           <ImportLinksPanel intro={t('linktreeIntro')} importLabel={t('linktreeAdd')} onImport={importLinktree} />
@@ -106,7 +106,7 @@ export default function ImportLinksScreen({ onDone, intent, step, total }) {
   return (
     <KeyboardAvoidingView style={styles.screen} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={[styles.scroll, { paddingTop: insets.top + 16, paddingBottom: insets.bottom + 24 }]} showsVerticalScrollIndicator={false}>
-        <OnboardingSteps step={step} total={total} onSkip={onDone} style={{ paddingHorizontal: 0 }} />
+        <OnboardingSteps step={step} total={total} onSkip={onDone} onSkipAll={onSkipAll} style={{ paddingHorizontal: 0 }} />
         <FadeIn style={{ marginTop: 28 }}>
           <Text style={styles.title}>{t('title')}</Text>
           <Text style={styles.sub}>{t(INTRO[intent] ?? 'introCreator')}</Text>

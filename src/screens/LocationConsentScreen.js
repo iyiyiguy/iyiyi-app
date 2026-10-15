@@ -45,7 +45,7 @@ async function readPermission() {
 }
 const isBlocked = (perm) => Platform.OS !== 'web' && perm?.status === 'denied' && perm?.canAskAgain === false
 
-export default function LocationConsentScreen({ onContinue, intent, step, total }) {
+export default function LocationConsentScreen({ onContinue, onSkipAll, intent, step, total }) {
   const insets = useSafeAreaInsets()
   const t = useT(strings)
   const [asking, setAsking] = useState(false)
@@ -100,7 +100,7 @@ export default function LocationConsentScreen({ onContinue, intent, step, total 
   return (
     <View style={styles.screen}>
       <ScrollView contentContainerStyle={[styles.scroll, { paddingTop: insets.top + 16, paddingBottom: insets.bottom + 24 }]} showsVerticalScrollIndicator={false}>
-        <OnboardingSteps step={step} total={total} style={{ paddingHorizontal: 0, marginBottom: 24 }} />
+        <OnboardingSteps step={step} total={total} onSkipAll={onSkipAll} style={{ paddingHorizontal: 0, marginBottom: 24 }} />
         <FadeIn style={{ alignItems: 'center' }}>
           <LinearGradient colors={['#6b7cff', '#8f5bff']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.pin}>
             <Ionicons name={blocked ? 'location-outline' : 'location'} size={34} color="#fff" />
