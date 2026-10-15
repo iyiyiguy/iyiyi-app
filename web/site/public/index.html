@@ -256,6 +256,8 @@
     .game .where { position: absolute; top: 12px; left: 12px; font-size: 11px; font-weight: 700; padding: 5px 10px; border-radius: 999px; }
     .bizgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; align-items: center; margin-top: 34px; }
     .feats { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    .feats3 { grid-template-columns: repeat(3, 1fr); margin-top: 22px; }
+    @media (max-width: 980px) { .feats3 { grid-template-columns: 1fr 1fr; } }
     .feat { padding: 20px; }
     .feat .ico { width: 42px; height: 42px; border-radius: 13px; display: grid; place-items: center; background: var(--glass-strong); border: 1px solid var(--edge); margin-bottom: 12px; font-size: 20px; }
     .feat h3 { font-size: 17px; letter-spacing: -.3px; margin-bottom: 4px; }
@@ -350,7 +352,7 @@
   <main>
     <!-- Hero -->
     <section class="hero wrap">
-      <span class="glass pill"><i></i> Live near you right now</span>
+      <a class="glass pill" href="#new"><i></i> New in 1.4.1: Follow everywhere, AR lenses &amp; a pro Arcade</a>
       <h1>Grow your <span class="grad">social media</span> from the people <span class="grad-a">around you.</span></h1>
       <p class="lead">The social media growth app for small businesses and creators. Get followers on Instagram, TikTok, YouTube and Snapchat from everyone within 150 feet. Plus real-world Laser Tag and Battle Royale games you play with your phone camera.</p>
       <div class="stores">
@@ -373,6 +375,21 @@
       </div>
     </section>
 
+    <!-- What's new in 1.4.1 -->
+    <section id="new" class="wrap" style="padding-top:10px">
+      <span class="kicker">New in iYiYi 1.4.1</span>
+      <h2 class="sec">The biggest update yet.</h2>
+      <p class="sub">A faster way to grow your socials, a new camera and a full upgrade to every game. On iPhone, Android and the web.</p>
+      <div class="feats feats3">
+        <div class="glass lift feat"><div class="ico">⚡</div><h3>Follow everywhere, for real</h3><p>Tap "Follow ×4" on anyone nearby and follow them on Instagram, TikTok, YouTube and Snapchat in a few taps. iYiYi moves you to the next platform automatically when you come back.</p></div>
+        <div class="glass lift feat"><div class="ico">📍</div><h3>The new Here tab</h3><p>Everyone around you, on a list or the map, with search across names, @handles and links, plus events, people you met and your activity one tap away.</p></div>
+        <div class="glass lift feat"><div class="ico">✨</div><h3>AR camera lenses</h3><p>Lenses that follow your face: a Follow-me card with your socials, Shades, Crown, Halo, Sparkle and Doll Glam, plus film-style color looks and an iYiYi frame.</p></div>
+        <div class="glass lift feat"><div class="ico">🎯</div><h3>Pro-level Laser Tag</h3><p>A studio game HUD, live target tracking with aim assist and tap-to-shoot, rockets you can watch explode on walls and cover, and sticky bombs with one Detonate All.</p></div>
+        <div class="glass lift feat"><div class="ico">🪂</div><h3>Battle Royale your way</h3><p>Pick any area, from a quarter mile to 10 miles. Start with your fists, find weapons scattered around the zone and race to supply drops.</p></div>
+        <div class="glass lift feat"><div class="ico">🕵️</div><h3>Beside Them goes indoors</h3><p>Task stations placed for you outdoors, or walk &amp; place them across floors inside, or use QR codes. Then crack the code before the imposter finds you.</p></div>
+      </div>
+    </section>
+
     <!-- Two worlds -->
     <section class="wrap worlds" id="social-media-growth" style="padding-top:10px">
       <a class="glass lift world arc" href="#arcade">
@@ -382,8 +399,8 @@
           <p>Point your camera, tag real people, plant the bomb. A 100-player Battle Royale on the actual map. Chess and party games with whoever is nearby.</p>
           <ul>
             <li>Laser Tag, Search &amp; Destroy and Battle Royale on real GPS</li>
-            <li>10 guns, grenades and UAV scans in the Armory</li>
-            <li>Play Now drops you straight into a worldwide lobby</li>
+            <li>Live target tracking, aim assist and tap-to-shoot</li>
+            <li>11 guns, rockets, sticky bombs, mines and UAV scans</li>
           </ul>
           <div class="cta"><span class="btn btn-arcade">Explore the Arcade</span></div>
         </div>
@@ -396,7 +413,7 @@
           <p>Your next followers are already in the room. Show up for the people around you and get followed on Instagram, TikTok, YouTube and Snapchat in one tap.</p>
           <ul>
             <li>One profile with all your social links, menu and booking page</li>
-            <li>"Follow everywhere" button: every platform at once</li>
+            <li>"Follow ×N" on every person: every platform in a few taps</li>
             <li>Events, tagged photos and live analytics on who is viewing you</li>
           </ul>
           <div class="cta"><span class="btn btn-launch">See how it works</span></div>
@@ -419,22 +436,22 @@
         <a class="glass lift game" href="https://apps.apple.com/app/id6445996160">
           <img src="/img/cover-laser-tag.webp" alt="Real-world Laser Tag game on iPhone" loading="lazy" width="640" height="640" />
           <span class="glass where">Phone · GPS + camera</span>
-          <div class="glass meta"><b>Laser Tag</b><span>Aim with your camera and tag real players. Search &amp; Destroy with a real bomb site.</span></div>
+          <div class="glass meta"><b>Laser Tag</b><span>Aim with your camera, tag real players with aim assist, plant and defuse the bomb in Search &amp; Destroy.</span></div>
         </a>
         <a class="glass lift game" href="https://apps.apple.com/app/id6445996160">
           <img src="/img/cover-battle-royale.webp" alt="Battle Royale game with 100 players on GPS map" loading="lazy" width="640" height="640" />
           <span class="glass where">Phone · up to 100 players</span>
-          <div class="glass meta"><b>Battle Royale</b><span>A shrinking zone on the real map. Loot guns, call out your squad, be the last one standing.</span></div>
+          <div class="glass meta"><b>Battle Royale</b><span>Any area from ¼ to 10 miles. Start with fists, loot weapons and supply drops, be the last one standing.</span></div>
         </a>
         <a class="glass lift game" href="https://app.iyiyi.xyz">
           <img src="/img/cover-chess.webp" alt="Play chess with people nearby" loading="lazy" width="640" height="640" />
           <span class="glass where">Web + phone</span>
-          <div class="glass meta"><b>Chess</b><span>Random matchmaking or invite a friend, with chat and video calls.</span></div>
+          <div class="glass meta"><b>Chess</b><span>Online rating and clocks, random matchmaking or invite a friend, with chat and video calls.</span></div>
         </a>
         <a class="glass lift game" href="https://apps.apple.com/app/id6445996160">
           <img src="/img/cover-beside-them.webp" alt="Beside Them party game" loading="lazy" width="640" height="640" />
           <span class="glass where">Phone · party</span>
-          <div class="glass meta"><b>Beside Them</b><span>Find the imposter hiding among your friends.</span></div>
+          <div class="glass meta"><b>Beside Them</b><span>Do tasks at real stations, indoors or out, and find the imposter before they find you.</span></div>
         </a>
         <a class="glass lift game" href="https://apps.apple.com/app/id6445996160">
           <img src="/img/cover-mafia.webp" alt="Mafia social deduction party game" loading="lazy" width="640" height="640" />
@@ -449,12 +466,12 @@
         <a class="glass lift game" href="https://apps.apple.com/app/id6445996160">
           <img src="/img/cover-spider.webp" alt="Spider Spider 123 real-world party game" loading="lazy" width="640" height="640" />
           <span class="glass where">Phone · party</span>
-          <div class="glass meta"><b>Spider Spider 123</b><span>A real-world party game for your group.</span></div>
+          <div class="glass meta"><b>Spider Spider 123</b><span>Real-world tag: the spider has to stay close for 3 seconds to catch you.</span></div>
         </a>
         <a class="glass lift game" href="https://app.iyiyi.xyz">
           <img src="/img/cover-word.webp" alt="What's The Word game" loading="lazy" width="640" height="640" />
           <span class="glass where">Web + phone</span>
-          <div class="glass meta"><b>What's The Word</b><span>A fast word game to play anywhere.</span></div>
+          <div class="glass meta"><b>What's The Word</b><span>A new daily word for everyone, plus a timed run. Share your grid.</span></div>
         </a>
       </div>
     </section>
@@ -462,8 +479,8 @@
     <!-- Armory -->
     <section id="armory" class="wrap" style="padding-top:10px">
       <span class="kicker" style="color:var(--cyan)">The Armory</span>
-      <h2 class="sec">Ten guns. Pick your loadout.</h2>
-      <p class="sub">Everyone starts with the pistol and the Uzi. Unlock the rest in the Shop, inspect them in 3D, and they show up in your hands in the camera view.</p>
+      <h2 class="sec">Eleven guns. Pick your loadout.</h2>
+      <p class="sub">Everyone starts with the pistol and the Uzi. Every other gun is a trade-off, not just stronger: pick the one that fits how you play, inspect it in 3D, and see it in your hands in the camera view.</p>
       <div class="glass armory">
         <div class="rail">
           <div class="gun free"><em>Free</em><img src="/img/gun-pistol.webp" alt="Pistol" loading="lazy" /><b>Pistol</b><span>Reliable sidearm</span></div>
@@ -476,8 +493,9 @@
           <div class="gun"><em>Shop</em><img src="/img/gun-marksman.webp" alt="Marksman DMR" loading="lazy" /><b>Marksman DMR</b><span>Long-range precision</span></div>
           <div class="gun"><em>Shop</em><img src="/img/gun-minigun.webp" alt="Minigun" loading="lazy" /><b>Minigun</b><span>Maximum fire rate</span></div>
           <div class="gun"><em>Shop</em><img src="/img/gun-railgun.webp" alt="Ion Railgun" loading="lazy" /><b>Ion Railgun</b><span>Heavy charged beams</span></div>
+          <div class="gun"><em>Shop</em><img src="/img/gun-rocket.webp" alt="Rocket Launcher" loading="lazy" /><b>Rocket Launcher</b><span>Explodes on walls and cover</span></div>
         </div>
-        <div class="foot"><span>Plus grenades you throw with a real swing of your phone, and UAV scans that reveal everyone nearby.</span><span style="color:var(--faint)">Swipe to see more →</span></div>
+        <div class="foot"><span>Plus grenades you throw with a real swing of your phone, land mines and sticky bombs you can see on the ground through the camera, and UAV scans that reveal everyone nearby.</span><span style="color:var(--faint)">Swipe to see more →</span></div>
       </div>
     </section>
 
