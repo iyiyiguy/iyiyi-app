@@ -11,6 +11,8 @@ import org.tensorflow.lite.Interpreter
 import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
+import java.nio.MappedByteBuffer
+import java.nio.channels.FileChannel
 import java.net.HttpURLConnection
 import java.net.URL
 import java.nio.ByteBuffer
@@ -23,8 +25,14 @@ import java.util.concurrent.atomic.AtomicBoolean
 // camera frame with the official MiDaS v2.1 small TFLite model (isl-org/MiDaS release v2_1,
 // model_opt.tflite: 256 x 256 RGB float in, 256 x 256 relative inverse depth out).
 //
-// The model is DATA, downloaded once on demand into noBackupFilesDir/bodyhit-depth. The
-// download streams into a .part file and resumes from its length (HTTP Range) after a failure,
+// The model is DATA and SHIPS INSIDE THE APP: android/build.gradle (fetchDepthModel) downloads
+// it at build time, verifies size + SHA-256 and adds it to the app's assets as
+// bodyhit-depth/midas_v21_small_256.tflite (stored uncompressed). It is memory-mapped from the
+// APK (no copy, no network) and the status is "ready" at once. If a build ever compressed it,
+// it is copied out once into noBackupFilesDir/bodyhit-depth instead.
+//
+// Fallback, only for a binary built without it (the build couldn't fetch it): downloaded once
+// on demand, silently, into noBackupFilesDir/bodyhit-depth. The download streams into a .part file and resumes from its length (HTTP Range) after a failure,
 // a kill or the next launch; it only runs on an unmetered network (Wi-Fi) until `cellularAfter`
 // Laser Tag sessions have waited for one. The finished file must match the expected byte size
 // and SHA-256, or it is deleted. Then a LiteRT (TensorFlow Lite) Interpreter runs it on a
@@ -40,6 +48,8 @@ internal class DepthEstimator private constructor(private val context: Context) 
     const val MODEL_SHA256 = "93d871071edff1218973ce25ee27ce95ccd20450c70a55e1b89efa3f5a772cdd"
     const val MODEL_NAME = "midas-v2_1-small-256"
     private const val FILE_NAME = "midas_v21_small_256.tflite"
+    private const val ASSET_DIR = "bodyhit-depth"
+    private const val ASSET_PATH = "$ASSET_DIR/$FILE_NAME"
     private const val INPUT = 256
     private const val GRID_LONG = 32
     private const val GRID_SHORT = 24
@@ -75,28 +85,117 @@ internal class DepthEstimator private constructor(private val context: Context) 
   private var interpreter: Interpreter? = null
   private var inputBuf: ByteBuffer? = null
   private var outputBuf: ByteBuffer? = null
+  // Model shipped in the app's assets (null = not checked yet); false once it failed to load.
+  @Volatile private var bundledFlag: Boolean? = null
 
-  fun isReady(): Boolean = state == "ready"
+  // There is a model in the app's assets that hasn't failed to load.
+  private fun bundled(): Boolean {
+    bundledFlag?.let { return it }
+    val has = try {
+      context.assets.list(ASSET_DIR)?.contains(FILE_NAME) == true
+    } catch (_: Throwable) {
+      false
+    }
+    bundledFlag = has
+    return has
+  }
+
+  private fun hasInterpreter(): Boolean = synchronized(lock) { interpreter != null }
+
+  // Loads the bundled model (any thread; serialised by `lock`). false when there is none or it
+  // doesn't load (then the runtime download takes over).
+  private fun loadBundled(): Boolean {
+    if (!bundled()) return false
+    synchronized(lock) {
+      if (interpreter != null) return true
+      val ok = try {
+        val mapped = mapAsset()
+        if (mapped != null) {
+          loadModel { opts -> Interpreter(mapped, opts) }
+        } else {
+          // Stored compressed: copy it out once (the download path's file name, so it is reused).
+          val file = copyAsset()
+          file != null && loadModel { opts -> Interpreter(file, opts) }
+        }
+      } catch (_: Throwable) {
+        false
+      }
+      if (ok) {
+        bytes = MODEL_SIZE
+        state = "ready"
+        error = null
+      } else {
+        bundledFlag = false
+      }
+      return ok
+    }
+  }
+
+  // The asset memory-mapped straight from the APK, or null when it is stored compressed.
+  private fun mapAsset(): MappedByteBuffer? {
+    val afd = try {
+      context.assets.openFd(ASSET_PATH)
+    } catch (_: Throwable) {
+      return null
+    }
+    return afd.use { fd ->
+      if (fd.declaredLength != MODEL_SIZE) return null
+      FileInputStream(fd.fileDescriptor).use { input ->
+        input.channel.map(FileChannel.MapMode.READ_ONLY, fd.startOffset, fd.declaredLength)
+      }
+    }
+  }
+
+  private fun copyAsset(): File? {
+    val dir = File(context.noBackupFilesDir, "bodyhit-depth")
+    if (!dir.exists()) dir.mkdirs()
+    val model = File(dir, FILE_NAME)
+    if (model.exists() && model.length() == MODEL_SIZE) return model
+    val tmp = File(dir, "$FILE_NAME.asset")
+    context.assets.open(ASSET_PATH).use { input ->
+      FileOutputStream(tmp).use { out -> input.copyTo(out, 256 * 1024) }
+    }
+    if (tmp.length() != MODEL_SIZE) {
+      tmp.delete()
+      return null
+    }
+    model.delete()
+    return if (tmp.renameTo(model)) model else null
+  }
+
+  fun isReady(): Boolean = state == "ready" || bundled()
 
   fun isBusy(): Boolean = busy.get()
 
-  fun status(): Map<String, Any?> = mapOf(
-    "state" to state,
-    "bytes" to bytes.toDouble(),
-    "total" to MODEL_SIZE.toDouble(),
-    "progress" to (bytes.toDouble() / MODEL_SIZE.toDouble()).coerceIn(0.0, 1.0),
-    "model" to MODEL_NAME,
-    "lidar" to false,
-    "lidarUsed" to false,
-    "error" to error,
-  )
+  fun status(): Map<String, Any?> {
+    // Shipped in the app: ready at once (loaded on first use, no network).
+    val inApp = bundled()
+    val s = if (inApp) "ready" else state
+    val b = if (inApp) MODEL_SIZE else bytes
+    return mapOf(
+      "state" to s,
+      "bytes" to b.toDouble(),
+      "total" to MODEL_SIZE.toDouble(),
+      "progress" to (b.toDouble() / MODEL_SIZE.toDouble()).coerceIn(0.0, 1.0),
+      "model" to MODEL_NAME,
+      "lidar" to false,
+      "lidarUsed" to false,
+      "bundled" to inApp,
+      "error" to if (inApp) null else error,
+    )
+  }
 
-  // Starts (or resumes) getting the model ready in the background. Returns at once.
+  // Starts (or resumes) getting the model ready in the background. Returns at once. With the
+  // model shipped in the app this only loads it (no network).
   fun prepare(cellularAfter: Int) {
-    if (state == "ready") return
+    if (state == "ready" && hasInterpreter()) return
     if (!working.compareAndSet(false, true)) return
     io.execute {
       try {
+        if (loadBundled()) {
+          working.set(false)
+          return@execute
+        }
         run(cellularAfter)
       } catch (t: Throwable) {
         finish("failed", t.javaClass.simpleName)
@@ -269,10 +368,12 @@ internal class DepthEstimator private constructor(private val context: Context) 
     return sb.toString()
   }
 
-  private fun loadModel(file: File): Boolean {
+  private fun loadModel(file: File): Boolean = loadModel { opts -> Interpreter(file, opts) }
+
+  private fun loadModel(create: (Interpreter.Options) -> Interpreter): Boolean {
     return try {
       val opts = Interpreter.Options().setNumThreads(4)
-      val interp = Interpreter(file, opts)
+      val interp = create(opts)
       val inT = interp.getInputTensor(0)
       val outT = interp.getOutputTensor(0)
       val inShape = inT.shape()
@@ -312,7 +413,8 @@ internal class DepthEstimator private constructor(private val context: Context) 
       infer.execute {
         var out: Map<String, Any?>? = null
         try {
-          out = runModel(bmp, space)
+          // The bundled model is loaded on first use when prepare() hasn't done it yet.
+          out = if (hasInterpreter() || loadBundled()) runModel(bmp, space) else null
         } catch (_: Throwable) {
           out = null
         } finally {

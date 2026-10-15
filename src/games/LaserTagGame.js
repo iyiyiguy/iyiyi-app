@@ -1986,12 +1986,6 @@ export function LaserTagGame({ room, onExit }) {
 
       {/* Above the dock: S&D objective, warnings, enemy UAV, the fire hint. */}
       <View style={[styles.aboveDock, { bottom: aboveBottom, left: midLeft, right: midRight }]} pointerEvents="box-none" onLayout={onAboveLayout}>
-        {depth.notice ? (
-          <View style={styles.scanPill} pointerEvents="none" accessibilityLiveRegion="polite">
-            <Ionicons name="scan-outline" size={14} color={ST.friendly} />
-            <Text style={styles.scanPillText} numberOfLines={1}>{depth.notice.toUpperCase()}</Text>
-          </View>
-        ) : null}
         {tooFast ? (
           <View style={[styles.pillWarn, styles.speedPill]} pointerEvents="none" accessibilityLiveRegion="polite">
             <Ionicons name="speedometer-outline" size={16} color="#fff" />

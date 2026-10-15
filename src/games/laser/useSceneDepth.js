@@ -4,12 +4,12 @@
 //
 //   const depth = useSceneDepth({ active, scanning, fast, vision, getAim })
 //   depth.surface(aim)   what the crosshair is on (fresh, confident scans only) or null
-//   depth.notice         one-time "Downloading surface scanner… 40%" text, or null
-//   depth.status         native model status ({ state, progress, ... }) or null
+//   depth.status         native model status ({ state, bundled, ... }) or null
 //
-// The model (~50–65 MB) is downloaded once in the background when Laser Tag opens (Wi-Fi only
-// for the first sessions). Until it is ready, or on binaries / systems without it, surface()
-// is always null and the game keeps its old rules. Scans never block a shot: a frame is taken
+// The model ships inside the app (fetched + verified at build time, see modules/body-hit), so it
+// is ready at once, offline, with no UI at all. Only a binary built without it falls back to a
+// silent one-time background download (Wi-Fi only for the first sessions). Until it is ready,
+// or on systems without it (iOS < 17), surface() is always null and the game keeps its old rules. Scans never block a shot: a frame is taken
 // every ~1 s (rocket launcher) / ~2 s (other guns) while aiming with the camera, off the main
 // thread, and the newest one is used only while the phone still points about the same way.
 //   Android: the on-screen preview (no photo).  iOS: a low-quality photo through
@@ -22,47 +22,31 @@ import { setFrameTap } from './vision'
 
 export const depthAvailable = isDepthAvailable
 
-const CELLULAR_AFTER = 3 // Laser Tag sessions waiting for Wi-Fi before the download may use cellular
+const CELLULAR_AFTER = 3 // fallback download only: Laser Tag sessions waiting for Wi-Fi before it may use cellular
 const FAST_MS = 1000
 const SLOW_MS = 2200
 const STUCK_MS = 6000
 const POLL_MS = 1500
 const RETRY_MS = 60000
-const READY_NOTICE_MS = 3500
 
 export function useSceneDepth({ active = true, scanning = false, fast = false, vision = null, getAim = null } = {}) {
   const [status, setStatus] = useState(null)
-  const [notice, setNotice] = useState(null)
   const scanRef = useRef(null)
-  const sawDownload = useRef(false)
   const getAimRef = useRef(getAim)
   getAimRef.current = getAim
   const visionRef = useRef(vision)
   visionRef.current = vision
 
-  // Start / resume the one-time download when Laser Tag opens; follow its progress.
+  // Get the model ready when Laser Tag opens (bundled: loads it; otherwise starts / resumes the
+  // silent fallback download and follows it until it is ready).
   useEffect(() => {
     if (!active || !isDepthAvailable) return undefined
     let cancelled = false
     let timer = null
     let lastPrepare = 0
-    let readyTimer = null
     const apply = (s) => {
       if (cancelled || !s) return
       setStatus((prev) => (prev && prev.state === s.state && Math.round((prev.progress || 0) * 100) === Math.round((s.progress || 0) * 100) ? prev : s))
-      if (s.state === 'downloading' || s.state === 'compiling') {
-        sawDownload.current = true
-        setNotice(s.state === 'compiling'
-          ? 'Setting up surface scanner…'
-          : `Downloading surface scanner… ${Math.max(0, Math.min(99, Math.round((s.progress || 0) * 100)))}%`)
-      } else if (s.state === 'ready' && sawDownload.current) {
-        sawDownload.current = false
-        setNotice('Surface scanner ready · rockets now hit walls')
-        clearTimeout(readyTimer)
-        readyTimer = setTimeout(() => { if (!cancelled) setNotice(null) }, READY_NOTICE_MS)
-      } else if (s.state !== 'ready') {
-        setNotice(null)
-      }
     }
     const tick = async () => {
       if (cancelled) return
@@ -89,7 +73,6 @@ export function useSceneDepth({ active = true, scanning = false, fast = false, v
     return () => {
       cancelled = true
       clearTimeout(timer)
-      clearTimeout(readyTimer)
     }
   }, [active])
 
@@ -173,5 +156,5 @@ export function useSceneDepth({ active = true, scanning = false, fast = false, v
     }
   }, [])
 
-  return { status, ready, notice, surface }
+  return { status, ready, surface }
 }

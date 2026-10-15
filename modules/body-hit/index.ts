@@ -48,7 +48,9 @@ type NativeBodyHit = {
   estimateDepth?: (uri: string, deleteAfter: boolean) => Promise<DepthGrid | null>
 }
 
-// Surface scanner (Laser Tag cover): monocular depth model, downloaded once on demand.
+// Surface scanner (Laser Tag cover): monocular depth model, shipped inside the app (fetched and
+// SHA-256-verified at build time by BodyHit.podspec / android/build.gradle). A binary built
+// without it downloads it once on demand instead (silently).
 //   iOS 17+: Apple's Core ML Depth Anything V2 Small (F16).  Android: MiDaS v2.1 small (LiteRT).
 export type DepthModelState = 'unsupported' | 'idle' | 'waiting-wifi' | 'downloading' | 'compiling' | 'ready' | 'failed'
 export type DepthModelStatus = {
@@ -59,6 +61,7 @@ export type DepthModelStatus = {
   model?: string
   lidar?: boolean // the phone has a LiDAR camera (not used: expo-camera's session uses the wide camera)
   lidarUsed?: boolean
+  bundled?: boolean // the model ships inside this app (ready at once, no download)
   error?: string | null
 }
 // Relative INVERSE depth (bigger = nearer; arbitrary scale + offset) averaged over a w x h grid
@@ -209,7 +212,8 @@ export async function brandVideo(uri: string, opts: BrandVideoOptions): Promise<
 // ---- Surface scanner --------------------------------------------------------------------------
 export const isDepthAvailable = !!(Native && typeof Native.estimateDepth === 'function' && typeof Native.prepareDepthModel === 'function')
 
-// Starts the one-time background download (Wi-Fi only until `cellularAfter` Laser Tag sessions
+// Gets the model ready: loads the bundled one (no network), or, in a binary built without it,
+// starts the one-time background download (Wi-Fi only until `cellularAfter` Laser Tag sessions
 // have waited for Wi-Fi). Resolves the status at once; null when this binary has no scanner.
 export async function prepareDepthModel(cellularAfter = 3): Promise<DepthModelStatus | null> {
   if (!isDepthAvailable) return null

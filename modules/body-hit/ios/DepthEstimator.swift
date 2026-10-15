@@ -10,9 +10,15 @@ import Vision
 // Surface scanner for Laser Tag cover (walls, buildings, objects): monocular depth from one
 // still camera frame with Apple's Core ML release of Depth Anything V2 Small (Float16).
 //
-// The model is DATA (an .mlpackage: spec + weights), downloaded once on demand from Apple's
-// Hugging Face repository, pinned to one commit. Every file is checked against its expected
-// byte size and SHA-256 before it is used; anything that doesn't match is deleted. Download:
+// The model is DATA (spec + weights) and SHIPS INSIDE THE APP: BodyHit.podspec fetches Apple's
+// .mlpackage at `pod install` (pinned commit, size + SHA-256 verified), compiles it with
+// coremlcompiler and declares DepthAnythingV2SmallF16.mlmodelc as a pod resource, so it lands in
+// the .app (bundledModelURL). It is loaded straight from there: no network, status "ready" at once.
+//
+// Fallback, only for a binary built without it (the build couldn't fetch it): the same files are
+// downloaded once on demand, silently, from Apple's Hugging Face repository, pinned to one
+// commit. Every file is checked against its expected byte size and SHA-256 before it is used;
+// anything that doesn't match is deleted. Download:
 // 8 MB HTTP Range chunks appended to a .part file (resumes after a failure, a kill or the next
 // launch), Wi-Fi / unconstrained networks only until `cellularAfter` Laser Tag sessions have
 // waited for Wi-Fi. Then MLModel.compileModel(at:) once; the compiled .mlmodelc is kept in
@@ -52,6 +58,23 @@ final class DepthEstimator {
   static let maxPixelSize = 640
   static let waitsKey = "BodyHitDepthWifiWaits"
 
+  // The compiled model shipped inside the app (see BodyHit.podspec), or nil. Static libraries /
+  // static frameworks: the root of the .app; dynamic frameworks: BodyHit.framework.
+  static let bundledModelURL: URL? = {
+    var bundles: [Bundle] = [Bundle.main, Bundle(for: DepthEstimator.self)]
+    for b in [Bundle.main, Bundle(for: DepthEstimator.self)] {
+      if let u = b.url(forResource: "BodyHit", withExtension: "bundle"), let rb = Bundle(url: u) {
+        bundles.append(rb)
+      }
+    }
+    for b in bundles {
+      if let u = b.url(forResource: modelName, withExtension: "mlmodelc") {
+        return u
+      }
+    }
+    return nil
+  }()
+
   static var totalBytes: Int64 {
     return files.reduce(Int64(0)) { $0 + $1.size }
   }
@@ -72,6 +95,7 @@ final class DepthEstimator {
   private let queue = DispatchQueue(label: "expo.bodyhit.depth", qos: .utility)
   private let inferQueue = DispatchQueue(label: "expo.bodyhit.depth.infer", qos: .userInitiated)
   private let lock = NSLock()
+  private let bundleLock = NSLock() // one load of the bundled model at a time
 
   // Guarded by `lock`.
   private var state = "idle"
@@ -79,6 +103,7 @@ final class DepthEstimator {
   private var bytesDone: Int64 = 0
   private var vnModel: VNCoreMLModel?
   private var busy = false
+  private var bundledFailed = false
 
   // Only touched on `queue`.
   private var working = false
@@ -99,12 +124,19 @@ final class DepthEstimator {
   // MARK: - status
 
   func status() -> [String: Any] {
+    let bundled = bundledUsable()
     lock.lock()
-    let s = state
-    let e = errorText
-    let done = bytesDone
+    var s = state
+    var e = errorText
+    var done = bytesDone
     lock.unlock()
     let total = DepthEstimator.totalBytes
+    if bundled && s != "ready" {
+      // Shipped inside the app: ready at once (it is loaded on first use, no network).
+      s = "ready"
+      e = nil
+      done = total
+    }
     var out: [String: Any] = [
       "state": s,
       "bytes": Double(done),
@@ -113,6 +145,7 @@ final class DepthEstimator {
       "model": DepthEstimator.modelName,
       "lidar": DepthEstimator.lidarHardware,
       "lidarUsed": false,
+      "bundled": bundled,
     ]
     if let e = e {
       out["error"] = e
@@ -147,13 +180,74 @@ final class DepthEstimator {
     return ok
   }
 
+  // MARK: - bundled model
+
+  // There is a model inside the app that hasn't failed to load (iOS 17+ only).
+  private func bundledUsable() -> Bool {
+    guard #available(iOS 17.0, *), DepthEstimator.bundledModelURL != nil else {
+      return false
+    }
+    lock.lock()
+    let failed = bundledFailed
+    lock.unlock()
+    return !failed
+  }
+
+  private func currentModel() -> VNCoreMLModel? {
+    lock.lock()
+    let m = vnModel
+    lock.unlock()
+    return m
+  }
+
+  // Loads the model shipped inside the app (any thread). false when there is none, or it doesn't
+  // load (then the runtime download takes over).
+  @discardableResult
+  private func loadBundled() -> Bool {
+    if hasModel() {
+      return true
+    }
+    guard bundledUsable(), let url = DepthEstimator.bundledModelURL else {
+      return false
+    }
+    bundleLock.lock()
+    defer {
+      bundleLock.unlock()
+    }
+    if hasModel() {
+      return true
+    }
+    do {
+      let config = MLModelConfiguration()
+      config.computeUnits = .all
+      let ml = try MLModel(contentsOf: url, configuration: config)
+      let vn = try VNCoreMLModel(for: ml)
+      lock.lock()
+      vnModel = vn
+      state = "ready"
+      errorText = nil
+      bytesDone = DepthEstimator.totalBytes
+      lock.unlock()
+      return true
+    } catch {
+      lock.lock()
+      bundledFailed = true
+      lock.unlock()
+      return false
+    }
+  }
+
   // MARK: - prepare (download + compile), all on `queue`
 
-  // Starts (or resumes) getting the model ready in the background. Returns at once.
+  // Starts (or resumes) getting the model ready in the background. Returns at once. With the
+  // model shipped inside the app this only loads it (no network).
   func prepare(cellularAfter: Int) {
     queue.async {
       guard #available(iOS 17.0, *) else {
         self.setState("unsupported")
+        return
+      }
+      if self.loadBundled() {
         return
       }
       if self.working || self.currentState() == "ready" {
@@ -514,14 +608,15 @@ final class DepthEstimator {
   // One frame at a time; a request while one runs (or before the model is ready) gets nil.
   func estimate(uri: String, deleteAfter: Bool, done: @escaping ([String: Any]?) -> Void) {
     let url: URL? = uri.isEmpty ? nil : BodyDetector.fileURL(from: uri)
+    let bundled = bundledUsable()
     lock.lock()
     let model = vnModel
-    let canRun = model != nil && url != nil && !busy
+    let canRun = (model != nil || bundled) && url != nil && !busy
     if canRun {
       busy = true
     }
     lock.unlock()
-    guard canRun, let vn = model, let fileUrl = url else {
+    guard canRun, let fileUrl = url else {
       if deleteAfter, let u = url, u.isFileURL {
         try? FileManager.default.removeItem(at: u)
       }
@@ -529,7 +624,9 @@ final class DepthEstimator {
       return
     }
     inferQueue.async {
-      let out = DepthEstimator.infer(model: vn, url: fileUrl)
+      // The bundled model is loaded on first use when prepare() hasn't done it yet.
+      let vn: VNCoreMLModel? = model ?? (self.loadBundled() ? self.currentModel() : nil)
+      let out: [String: Any]? = vn.flatMap { DepthEstimator.infer(model: $0, url: fileUrl) }
       if deleteAfter, fileUrl.isFileURL {
         try? FileManager.default.removeItem(at: fileUrl)
       }
