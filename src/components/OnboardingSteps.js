@@ -25,7 +25,7 @@ export default function OnboardingSteps({ step, total, onSkip, onSkipAll, style 
   )
 }
 
-// "Skip for now" skips this step; "Skip setup" skips the rest of onboarding and opens the app.
+// "Skip for now" skips this step; "Skip setup" skips the rest of onboarding and goes straight into the app.
 function SkipLinks({ onSkip, onSkipAll, t }) {
   return (
     <View style={styles.links}>
