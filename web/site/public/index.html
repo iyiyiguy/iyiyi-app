@@ -58,6 +58,13 @@
         "name": "iYiYi LLC",
         "url": "https://iyiyi.xyz",
         "logo": "https://iyiyi.xyz/img/icon.webp",
+        "sameAs": [
+          "https://instagram.com/iyiyiapp",
+          "https://www.tiktok.com/@iyiyiguy",
+          "https://www.youtube.com/@iYiYiapp",
+          "https://www.youtube.com/@iyiyiguy",
+          "https://www.facebook.com/profile.php?id=100076746220864"
+        ],
         "contactPoint": {
           "@type": "ContactPoint",
           "email": "info@iyiyi.xyz",
@@ -184,6 +191,17 @@
     .brand img { width: 36px; height: 36px; border-radius: 10px; }
     .nav { display: flex; align-items: center; gap: 26px; font-size: 14px; color: var(--muted); font-weight: 500; }
     .nav a:hover { color: var(--text); }
+    .socials { display: flex; align-items: center; gap: 4px; margin-left: auto; }
+    .soc { width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; color: var(--muted);
+      transition: transform .4s var(--spring), color .2s ease, background .2s ease; }
+    .soc svg { width: 18px; height: 18px; }
+    .soc:hover { transform: scale(1.12); color: #fff; background: rgba(255,255,255,.1); }
+    .soc.ig:hover { color: #ff4fa3; } .soc.yt:hover { color: #ff3b3b; } .soc.tt:hover { color: #3fd6ff; } .soc.fb:hover { color: #5b8cff; }
+    .foot-soc { display: flex; flex-wrap: wrap; gap: 10px 18px; width: 100%; margin-top: 4px; }
+    .foot-soc a { display: inline-flex; align-items: center; gap: 7px; }
+    .foot-soc svg { width: 16px; height: 16px; }
+    @media (max-width: 1080px) { .nav { gap: 18px; font-size: 13px; } }
+    @media (max-width: 960px) { .nav { display: none; } }
     .actions { display: flex; align-items: center; gap: 8px; }
     .btn {
       display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 42px; padding: 0 18px;
@@ -305,6 +323,10 @@
     @media (max-width: 640px) {
       .nav { display: none; }
       .brand span { display: none; }
+      .actions .glass.btn { display: none; }
+      .socials { gap: 0; }
+      .soc { width: 30px; height: 30px; }
+      .soc svg { width: 16px; height: 16px; }
       .btn { height: 38px; padding: 0 14px; font-size: 13px; }
       .btn-lg { height: 50px; padding: 0 22px; font-size: 15px; }
       h1 { letter-spacing: -1.8px; }
@@ -341,6 +363,13 @@
           <a href="#small-business">Small Business Tools</a>
           <a href="#faq">FAQ</a>
         </nav>
+        <div class="socials" aria-label="iYiYi on social media">
+          <a class="soc ig" href="https://instagram.com/iyiyiapp" target="_blank" rel="noopener" aria-label="Instagram @iyiyiapp" title="Instagram @iyiyiapp"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1"><rect x="3" y="3" width="18" height="18" rx="5.2"/><circle cx="12" cy="12" r="4.1"/><circle cx="17.4" cy="6.6" r="1.2" fill="currentColor" stroke="none"/></svg></a>
+          <a class="soc tt" href="https://www.tiktok.com/@iyiyiguy" target="_blank" rel="noopener" aria-label="TikTok @iyiyiguy" title="TikTok @iyiyiguy"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12.53.02c1.31-.02 2.61-.01 3.91-.02.08 1.53.63 3.09 1.75 4.17 1.12 1.11 2.7 1.62 4.24 1.79v4.03c-1.44-.05-2.89-.35-4.2-.97-.57-.26-1.1-.59-1.62-.93-.01 2.92.01 5.84-.02 8.75-.08 1.4-.54 2.79-1.35 3.94-1.31 1.92-3.58 3.17-5.91 3.21-1.43.08-2.86-.31-4.08-1.03-2.02-1.19-3.44-3.37-3.65-5.71-.02-.5-.03-1-.01-1.49.18-1.9 1.12-3.72 2.58-4.96 1.66-1.44 3.98-2.13 6.15-1.72.02 1.48-.04 2.96-.04 4.44-.99-.32-2.15-.23-3.02.37-.63.41-1.11 1.04-1.36 1.75-.21.51-.15 1.07-.14 1.61.24 1.64 1.82 3.02 3.5 2.87 1.12-.01 2.19-.66 2.77-1.61.19-.33.4-.67.41-1.06.1-1.79.06-3.57.07-5.36.01-4.03-.01-8.05.02-12.07z"/></svg></a>
+          <a class="soc yt" href="https://www.youtube.com/@iYiYiapp" target="_blank" rel="noopener" aria-label="YouTube @iYiYiapp" title="YouTube @iYiYiapp"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M23 7.2a3 3 0 0 0-2.1-2.1C19 4.6 12 4.6 12 4.6s-7 0-8.9.5A3 3 0 0 0 1 7.2 31 31 0 0 0 .5 12a31 31 0 0 0 .5 4.8 3 3 0 0 0 2.1 2.1c1.9.5 8.9.5 8.9.5s7 0 8.9-.5a3 3 0 0 0 2.1-2.1 31 31 0 0 0 .5-4.8 31 31 0 0 0-.5-4.8zM9.75 15.02V8.98L15.5 12l-5.75 3.02z"/></svg></a>
+          <a class="soc yt" href="https://www.youtube.com/@iyiyiguy" target="_blank" rel="noopener" aria-label="YouTube @iyiyiguy" title="YouTube @iyiyiguy"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M23 7.2a3 3 0 0 0-2.1-2.1C19 4.6 12 4.6 12 4.6s-7 0-8.9.5A3 3 0 0 0 1 7.2 31 31 0 0 0 .5 12a31 31 0 0 0 .5 4.8 3 3 0 0 0 2.1 2.1c1.9.5 8.9.5 8.9.5s7 0 8.9-.5a3 3 0 0 0 2.1-2.1 31 31 0 0 0 .5-4.8 31 31 0 0 0-.5-4.8zM9.75 15.02V8.98L15.5 12l-5.75 3.02z"/></svg></a>
+          <a class="soc fb" href="https://www.facebook.com/profile.php?id=100076746220864" target="_blank" rel="noopener" aria-label="Facebook" title="Facebook"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M24 12.07C24 5.41 18.63 0 12 0S0 5.4 0 12.07C0 18.1 4.39 23.1 10.13 24v-8.44H7.08v-3.49h3.04V9.41c0-3.02 1.8-4.7 4.54-4.7 1.31 0 2.68.24 2.68.24v2.97h-1.5c-1.5 0-1.96.93-1.96 1.89v2.26h3.32l-.53 3.5h-2.8V24C19.62 23.1 24 18.1 24 12.07z"/></svg></a>
+        </div>
         <div class="actions">
           <a class="glass btn" href="https://shop.iyiyi.xyz">Shop</a>
           <a class="btn btn-launch" href="https://app.iyiyi.xyz">Launch App ↗</a>
@@ -621,6 +650,13 @@
         <a href="/child-safety">Child safety</a>
         <a href="/delete-account">Delete account</a>
         <a href="mailto:info@iyiyi.xyz">Contact</a>
+      </nav>
+      <nav class="foot-soc" aria-label="Follow iYiYi">
+        <a href="https://instagram.com/iyiyiapp" target="_blank" rel="noopener"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1"><rect x="3" y="3" width="18" height="18" rx="5.2"/><circle cx="12" cy="12" r="4.1"/><circle cx="17.4" cy="6.6" r="1.2" fill="currentColor" stroke="none"/></svg><span>Instagram @iyiyiapp</span></a>
+        <a href="https://www.tiktok.com/@iyiyiguy" target="_blank" rel="noopener"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12.53.02c1.31-.02 2.61-.01 3.91-.02.08 1.53.63 3.09 1.75 4.17 1.12 1.11 2.7 1.62 4.24 1.79v4.03c-1.44-.05-2.89-.35-4.2-.97-.57-.26-1.1-.59-1.62-.93-.01 2.92.01 5.84-.02 8.75-.08 1.4-.54 2.79-1.35 3.94-1.31 1.92-3.58 3.17-5.91 3.21-1.43.08-2.86-.31-4.08-1.03-2.02-1.19-3.44-3.37-3.65-5.71-.02-.5-.03-1-.01-1.49.18-1.9 1.12-3.72 2.58-4.96 1.66-1.44 3.98-2.13 6.15-1.72.02 1.48-.04 2.96-.04 4.44-.99-.32-2.15-.23-3.02.37-.63.41-1.11 1.04-1.36 1.75-.21.51-.15 1.07-.14 1.61.24 1.64 1.82 3.02 3.5 2.87 1.12-.01 2.19-.66 2.77-1.61.19-.33.4-.67.41-1.06.1-1.79.06-3.57.07-5.36.01-4.03-.01-8.05.02-12.07z"/></svg><span>TikTok @iyiyiguy</span></a>
+        <a href="https://www.youtube.com/@iYiYiapp" target="_blank" rel="noopener"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M23 7.2a3 3 0 0 0-2.1-2.1C19 4.6 12 4.6 12 4.6s-7 0-8.9.5A3 3 0 0 0 1 7.2 31 31 0 0 0 .5 12a31 31 0 0 0 .5 4.8 3 3 0 0 0 2.1 2.1c1.9.5 8.9.5 8.9.5s7 0 8.9-.5a3 3 0 0 0 2.1-2.1 31 31 0 0 0 .5-4.8 31 31 0 0 0-.5-4.8zM9.75 15.02V8.98L15.5 12l-5.75 3.02z"/></svg><span>YouTube @iYiYiapp</span></a>
+        <a href="https://www.youtube.com/@iyiyiguy" target="_blank" rel="noopener"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M23 7.2a3 3 0 0 0-2.1-2.1C19 4.6 12 4.6 12 4.6s-7 0-8.9.5A3 3 0 0 0 1 7.2 31 31 0 0 0 .5 12a31 31 0 0 0 .5 4.8 3 3 0 0 0 2.1 2.1c1.9.5 8.9.5 8.9.5s7 0 8.9-.5a3 3 0 0 0 2.1-2.1 31 31 0 0 0 .5-4.8 31 31 0 0 0-.5-4.8zM9.75 15.02V8.98L15.5 12l-5.75 3.02z"/></svg><span>YouTube @iyiyiguy</span></a>
+        <a href="https://www.facebook.com/profile.php?id=100076746220864" target="_blank" rel="noopener"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M24 12.07C24 5.41 18.63 0 12 0S0 5.4 0 12.07C0 18.1 4.39 23.1 10.13 24v-8.44H7.08v-3.49h3.04V9.41c0-3.02 1.8-4.7 4.54-4.7 1.31 0 2.68.24 2.68.24v2.97h-1.5c-1.5 0-1.96.93-1.96 1.89v2.26h3.32l-.53 3.5h-2.8V24C19.62 23.1 24 18.1 24 12.07z"/></svg><span>Facebook</span></a>
       </nav>
     </div>
   </footer>
