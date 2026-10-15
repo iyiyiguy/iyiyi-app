@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Text, StyleSheet, ActivityIndicator } from 'react-native'
 import { colors, radii } from '../theme'
 import { post, del } from '../lib/api'
@@ -9,9 +9,13 @@ import strings from '../i18n/strings/social'
 
 // status: 'accepted' | 'pending' | null/undefined. onChange(userId, newStatus).
 // name (optional) is read out by screen readers: "Follow {name}" / "Following {name}".
-export default function FollowButton({ userId, status, onChange, style, overPhoto, name }) {
+export default function FollowButton({ userId, status: statusProp, onChange, style, overPhoto, name }) {
   const t = useT(strings)
   const [busy, setBusy] = useState(false)
+  // Flip to "Following" immediately even if the parent doesn't pass the new status back down.
+  const [localStatus, setLocalStatus] = useState(undefined)
+  useEffect(() => { setLocalStatus(undefined) }, [statusProp])
+  const status = localStatus !== undefined ? localStatus : statusProp
   const active = status === 'accepted' || status === 'pending'
   const label = status === 'accepted' ? t('following') : status === 'pending' ? t('requested') : t('follow')
   const a11yLabel = name
@@ -24,10 +28,12 @@ export default function FollowButton({ userId, status, onChange, style, overPhot
     try {
       if (active) {
         await del(`/api/profiles/follow/${userId}`)
+        setLocalStatus(null)
         onChange?.(userId, null)
       } else {
         const res = await post(`/api/profiles/follow/${userId}`)
-        onChange?.(userId, res.status ?? 'accepted')
+        setLocalStatus(res?.status ?? 'accepted')
+        onChange?.(userId, res?.status ?? 'accepted')
         maybeOfferPushAfterFollow()
       }
     } catch {

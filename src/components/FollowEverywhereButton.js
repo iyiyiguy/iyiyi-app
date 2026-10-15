@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { View, Text, StyleSheet, ActivityIndicator, Alert } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import * as Haptics from 'expo-haptics'
@@ -17,9 +17,15 @@ import strings from '../i18n/strings/followEverywhere'
 // N counts iYiYi plus their linked platforms; when the card's data doesn't say which
 // platforms they're on, it reads "Follow" and the sheet looks them up.
 //   size: 'sm' (grid cards, rows) | 'md' (map card, sheets)
-export default function FollowEverywhereButton({ user, status, onStatus, onOpen, size = 'sm', style, showIcons = true }) {
+export default function FollowEverywhereButton({ user, status: statusProp, onStatus, onOpen, size = 'sm', style, showIcons = true }) {
   const t = useT(strings)
   const [busy, setBusy] = useState(false)
+  // Own copy of the follow status so the button flips to "Following" right away, even when the
+  // screen around it doesn't pass the new status back down. A new status from the parent wins.
+  const [localStatus, setLocalStatus] = useState(undefined)
+  useEffect(() => { setLocalStatus(undefined) }, [statusProp])
+  const status = localStatus !== undefined ? localStatus : statusProp
+  const setStatus = (id, s) => { setLocalStatus(s); onStatus?.(id, s) }
   const id = personId(user)
   const platforms = platformsOf(user)
   const active = isActiveStatus(status)
@@ -37,14 +43,14 @@ export default function FollowEverywhereButton({ user, status, onStatus, onOpen,
       return
     }
     setBusy(true)
-    onStatus?.(id, 'accepted') // optimistic
+    setStatus(id, 'accepted') // optimistic
     try {
       const s = await followOnIyiyi(id)
-      onStatus?.(id, s)
+      setStatus(id, s ?? 'accepted')
       if (platforms && platforms.length === 0) maybeOfferPushAfterFollow()
       else onOpen?.(user, { status: s, justFollowed: true })
     } catch (e) {
-      onStatus?.(id, status ?? null)
+      setStatus(id, statusProp ?? null)
       Alert.alert(t('couldntFollow'), e?.message ?? undefined)
     } finally {
       setBusy(false)
