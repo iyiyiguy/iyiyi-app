@@ -137,6 +137,15 @@ export default function TagDropdown({
               <Ionicons name="close" size={18} color={colors.text} />
             </Pressable>
           </View>
+          {/* Apply / Clear sit at the top, right under the button that opened the menu. */}
+          <View style={styles.footer}>
+            <GlassButton size="sm" variant="glass" onPress={() => setDraft([])} disabled={draft.length === 0} style={{ flex: 1 }}>
+              {t('clear')}
+            </GlassButton>
+            <GlassButton size="sm" variant="primary" onPress={apply} style={{ flex: 1 }}>
+              {draft.length ? t('applyN', { n: draft.length }) : t('apply')}
+            </GlassButton>
+          </View>
           <ScrollView style={styles.list} contentContainerStyle={styles.grid} showsVerticalScrollIndicator>
             {tags.map((tag) => {
               const on = draft.includes(tag)
@@ -156,14 +165,6 @@ export default function TagDropdown({
               )
             })}
           </ScrollView>
-          <View style={styles.footer}>
-            <GlassButton size="sm" variant="glass" onPress={() => setDraft([])} disabled={draft.length === 0} style={{ flex: 1 }}>
-              {t('clear')}
-            </GlassButton>
-            <GlassButton size="sm" variant="primary" onPress={apply} style={{ flex: 1 }}>
-              {draft.length ? t('applyN', { n: draft.length }) : t('apply')}
-            </GlassButton>
-          </View>
         </View>
       </Modal>
     </>
@@ -206,7 +207,7 @@ const styles = StyleSheet.create({
   cellText: { fontSize: 14, ...font.medium, color: colors.text, flexShrink: 1, textAlign: 'center' },
   cellTextOn: { color: colors.ink, ...font.semibold },
   footer: {
-    flexDirection: 'row', gap: 10, padding: 12,
-    borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.hairline,
+    flexDirection: 'row', gap: 10, paddingHorizontal: 12, paddingVertical: 10,
+    borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.hairline,
   },
 })

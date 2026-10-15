@@ -199,7 +199,7 @@ export default function EventsScreen({ navigation }) {
           const active = tab === tb.key
           return (
             <Pressable key={tb.key} onPress={() => setTab(tb.key)} style={[styles.tab, active && styles.tabActive]} accessibilityRole="tab" accessibilityState={{ selected: active }}>
-              <Text style={[styles.tabText, active && styles.tabTextActive]}>{t(tb.label)} ({counts[tb.key]})</Text>
+              <Text style={[styles.tabText, active && styles.tabTextActive]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>{t(tb.label)} <Text style={styles.tabCount}>{counts[tb.key]}</Text></Text>
             </Pressable>
           )
         })}
@@ -258,10 +258,11 @@ export default function EventsScreen({ navigation }) {
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: 'transparent' },
   tabs: { flexDirection: 'row', gap: 8, paddingHorizontal: 16, paddingTop: 8 },
-  tab: { flex: 1, paddingVertical: 9, borderRadius: radii.pill, alignItems: 'center', borderWidth: 1, borderColor: colors.hairline },
+  tab: { flex: 1, minWidth: 0, paddingVertical: 9, paddingHorizontal: 8, borderRadius: radii.pill, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: colors.hairline },
   tabActive: { backgroundColor: colors.text, borderColor: colors.text },
   tabText: { fontSize: 13, color: colors.textMuted, fontWeight: '600' },
   tabTextActive: { color: colors.ink },
+  tabCount: { fontWeight: '500', opacity: 0.75 },
   cats: { paddingHorizontal: 16, paddingVertical: 12, gap: 8 },
   cat: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 12, paddingVertical: 7, borderRadius: radii.pill, borderWidth: 1, borderColor: colors.hairline },
   catActive: { backgroundColor: colors.text, borderColor: colors.text },

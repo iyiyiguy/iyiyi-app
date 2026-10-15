@@ -113,6 +113,21 @@ export default function NearbyScreen({ navigation, route }) {
   const [permissionDenied, setPermissionDenied] = useState(false)
   const [inSafeZone, setInSafeZone] = useState(false)
   const [menu, setMenu] = useState(null) // 'range' | 'sort'
+  const [menuAnchor, setMenuAnchor] = useState(null) // the chip's rect, so the menu drops down right under it
+  const rangeChipRef = useRef(null)
+  const sortChipRef = useRef(null)
+  const openMenu = (which, ref) => {
+    const node = ref.current
+    if (node?.measureInWindow) {
+      node.measureInWindow((x, y, w, h) => {
+        setMenuAnchor(Number.isFinite(y) ? { x, y, w, h } : null)
+        setMenu(which)
+      })
+    } else {
+      setMenuAnchor(null)
+      setMenu(which)
+    }
+  }
   const [unread, setUnread] = useState(0)
   const [qrOpen, setQrOpen] = useState(false)
   const { statuses, setStatus } = useFollowStatuses(users)
@@ -363,7 +378,8 @@ export default function NearbyScreen({ navigation, route }) {
           label={scopeText}
           chevron={!narrow}
           a11y={th('rangeA11y', { scope: scopeText })}
-          onPress={() => setMenu('range')}
+          innerRef={rangeChipRef}
+          onPress={() => openMenu('range', rangeChipRef)}
         />
         <Chip
           dense
@@ -371,7 +387,8 @@ export default function NearbyScreen({ navigation, route }) {
           label={sort === 'recommended' ? th('sortRecommended') : th('sortNearby')}
           chevron={!narrow}
           a11y={th('sortA11y', { sort: sort === 'recommended' ? th('sortRecommended') : th('sortNearby') })}
-          onPress={() => setMenu('sort')}
+          innerRef={sortChipRef}
+          onPress={() => openMenu('sort', sortChipRef)}
         />
         <TagDropdown compact noIcon={narrow} selected={activeTags} onApply={setActiveTags} label={th('tags')} title={th('filterTags')} />
         <LayoutButtons value={layout} onChange={setLayout} gridLabel={th('showGrid')} listLabel={th('showList')} />
@@ -435,6 +452,7 @@ export default function NearbyScreen({ navigation, route }) {
         options={SCOPES.map((s) => ({ key: s.key, label: scopeLabel(s.key) }))}
         value={scope}
         onChange={setScope}
+        anchor={menuAnchor}
         onClose={() => setMenu(null)}
       />
       <ChoiceMenu
@@ -447,6 +465,7 @@ export default function NearbyScreen({ navigation, route }) {
         ]}
         value={sort}
         onChange={(k) => (k === 'top' ? navigation.navigate('TopProfiles') : setSort(k))}
+        anchor={menuAnchor}
         onClose={() => setMenu(null)}
       />
       <MyQRSheet visible={qrOpen} onClose={() => setQrOpen(false)} />
@@ -485,9 +504,10 @@ function LayoutButtons({ value, onChange, gridLabel, listLabel }) {
   )
 }
 
-function Chip({ icon, label, chevron, a11y, onPress, active, dense = false }) {
+function Chip({ icon, label, chevron, a11y, onPress, active, dense = false, innerRef }) {
   return (
     <Pressable
+      ref={innerRef}
       onPress={() => { Haptics.selectionAsync().catch(() => {}); onPress?.() }}
       accessibilityRole="button"
       accessibilityLabel={a11y ?? label}
@@ -505,11 +525,18 @@ function Chip({ icon, label, chevron, a11y, onPress, active, dense = false }) {
   )
 }
 
-function ChoiceMenu({ visible, title, options, value, onChange, onClose }) {
+// Drop-down under the chip that opened it (the chips sit near the top of the screen); falls back to
+// a centred panel if the chip couldn't be measured.
+function ChoiceMenu({ visible, title, options, value, onChange, onClose, anchor }) {
+  const { width: screenW, height: screenH } = useWindowDimensions()
+  const panelW = Math.min(280, screenW - 32)
+  const pos = anchor
+    ? { top: anchor.y + anchor.h + 8, left: Math.min(Math.max(16, anchor.x), screenW - panelW - 16), maxHeight: screenH - (anchor.y + anchor.h + 8) - 32 }
+    : { top: Math.max(80, screenH * 0.18), left: (screenW - panelW) / 2, maxHeight: screenH * 0.7 }
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose} statusBarTranslucent>
       <Pressable style={styles.menuBackdrop} onPress={onClose} accessibilityRole="button" accessibilityLabel={title} />
-      <View style={styles.menuWrap} pointerEvents="box-none">
+      <View style={[styles.menuDrop, { width: panelW, ...pos }]}>
         <View style={styles.menu}>
           <Text style={styles.menuTitle}>{title}</Text>
           {options.map((o) => {
@@ -591,8 +618,9 @@ const styles = StyleSheet.create({
   emptyPrimary: { backgroundColor: colors.magenta, borderColor: colors.magenta },
   emptySmall: { flex: 1, minHeight: 44, paddingHorizontal: 8 },
   emptyActionText: { fontSize: 15, ...font.semibold, color: colors.text, flexShrink: 1 },
-  menuBackdrop: { ...StyleSheet.absoluteFill, backgroundColor: 'rgba(0,0,0,0.4)' },
+  menuBackdrop: { ...StyleSheet.absoluteFill, backgroundColor: 'rgba(0,0,0,0.25)' },
   menuWrap: { flex: 1, justifyContent: 'flex-end', padding: 12, paddingBottom: 34 },
+  menuDrop: { position: 'absolute', shadowColor: '#000', shadowOpacity: 0.3, shadowRadius: 18, shadowOffset: { width: 0, height: 8 }, elevation: 12 },
   menu: { borderRadius: radii.lg, backgroundColor: colors.inkSurfaceRaised, paddingVertical: 8, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.hairline },
   menuTitle: { ...type.label, paddingHorizontal: 18, paddingTop: 8, paddingBottom: 6 },
   menuRow: { minHeight: 48, flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 18 },

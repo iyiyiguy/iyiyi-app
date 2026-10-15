@@ -2,7 +2,7 @@ export default {
   en: {
     hello: 'Hello', helloName: 'Hello, {name}', locationOff: 'Location is off',
     countOne150: '{n} person within 150 ft', countMany150: '{n} people within 150 ft', countOneScope: '{n} person · {scope}', countManyScope: '{n} people · {scope}',
-    tagline: "Who's around you today", activity: 'Activity', searchPlaceholder: 'Search people or tags', history: 'History', list: 'List', grid: 'Grid',
+    tagline: "Who's around you today", activity: 'Activity', searchPlaceholder: 'Search names, @handles, links or tags', history: 'History', list: 'List', grid: 'Grid',
     safeZone: "You're in your safe zone. Your profile is hidden from the map and Nearby.",
     matchOne: '{n} match', matchMany: '{n} matches', clear: 'Clear',
     emptyLocationOff: "Location access is off. Enable it in Settings to see who's nearby.", emptyNoMatch: 'No one matches that search or those tags.',
@@ -11,7 +11,7 @@ export default {
   es: {
     hello: 'Hola', helloName: 'Hola, {name}', locationOff: 'Ubicación desactivada',
     countOne150: '{n} persona a menos de 150 ft', countMany150: '{n} personas a menos de 150 ft', countOneScope: '{n} persona · {scope}', countManyScope: '{n} personas · {scope}',
-    tagline: '¿Quién está cerca hoy?', activity: 'Actividad', searchPlaceholder: 'Buscar personas o etiquetas', history: 'Historial', list: 'Lista', grid: 'Cuadrícula',
+    tagline: '¿Quién está cerca hoy?', activity: 'Actividad', searchPlaceholder: 'Buscar nombres, @usuarios, enlaces o etiquetas', history: 'Historial', list: 'Lista', grid: 'Cuadrícula',
     safeZone: 'Estás en tu zona segura. Tu perfil está oculto en el mapa y en Cerca.',
     matchOne: '{n} resultado', matchMany: '{n} resultados', clear: 'Borrar',
     emptyLocationOff: 'El acceso a la ubicación está desactivado. Actívalo en Ajustes para ver quién está cerca.', emptyNoMatch: 'Nadie coincide con esa búsqueda o esas etiquetas.',
@@ -20,7 +20,7 @@ export default {
   zh: {
     hello: '你好', helloName: '你好，{name}', locationOff: '位置已关闭',
     countOne150: '150 ft 内有 {n} 人', countMany150: '150 ft 内有 {n} 人', countOneScope: '{n} 人 · {scope}', countManyScope: '{n} 人 · {scope}',
-    tagline: '今天谁在你附近', activity: '通知', searchPlaceholder: '搜索用户或标签', history: '历史', list: '列表', grid: '网格',
+    tagline: '今天谁在你附近', activity: '通知', searchPlaceholder: '搜索名字、@账号、链接或标签', history: '历史', list: '列表', grid: '网格',
     safeZone: '你在安全区内。你的个人资料已在地图和“附近”中隐藏。',
     matchOne: '{n} 个结果', matchMany: '{n} 个结果', clear: '清除',
     emptyLocationOff: '位置权限已关闭。请在设置中开启，以查看附近的人。', emptyNoMatch: '没有人符合该搜索或标签。',
@@ -29,7 +29,7 @@ export default {
   ja: {
     hello: 'こんにちは', helloName: 'こんにちは、{name}さん', locationOff: '位置情報オフ',
     countOne150: '150 ft 以内に {n} 人', countMany150: '150 ft 以内に {n} 人', countOneScope: '{n} 人 · {scope}', countManyScope: '{n} 人 · {scope}',
-    tagline: '今日、近くにいるのは？', activity: 'アクティビティ', searchPlaceholder: '人やタグを検索', history: '履歴', list: 'リスト', grid: 'グリッド',
+    tagline: '今日、近くにいるのは？', activity: 'アクティビティ', searchPlaceholder: '名前・@ID・リンク・タグを検索', history: '履歴', list: 'リスト', grid: 'グリッド',
     safeZone: '安全ゾーン内です。あなたのプロフィールはマップと「近く」で非表示になっています。',
     matchOne: '{n} 件', matchMany: '{n} 件', clear: 'クリア',
     emptyLocationOff: '位置情報へのアクセスがオフです。近くの人を見るには、設定でオンにしてください。', emptyNoMatch: '検索やタグに一致する人はいません。',
@@ -38,7 +38,7 @@ export default {
   ko: {
     hello: '안녕하세요', helloName: '안녕하세요, {name}님', locationOff: '위치 꺼짐',
     countOne150: '150 ft 이내 {n}명', countMany150: '150 ft 이내 {n}명', countOneScope: '{n}명 · {scope}', countManyScope: '{n}명 · {scope}',
-    tagline: '오늘 주변에 누가 있을까요', activity: '활동', searchPlaceholder: '사람 또는 태그 검색', history: '기록', list: '목록', grid: '그리드',
+    tagline: '오늘 주변에 누가 있을까요', activity: '활동', searchPlaceholder: '이름, @아이디, 링크, 태그 검색', history: '기록', list: '목록', grid: '그리드',
     safeZone: '안전 구역에 있어요. 프로필이 지도와 주변에서 숨겨져 있어요.',
     matchOne: '{n}개 일치', matchMany: '{n}개 일치', clear: '지우기',
     emptyLocationOff: '위치 접근이 꺼져 있어요. 주변 사람을 보려면 설정에서 켜 주세요.', emptyNoMatch: '검색어나 태그와 일치하는 사람이 없어요.',
@@ -47,7 +47,7 @@ export default {
   fr: {
     hello: 'Bonjour', helloName: 'Bonjour, {name}', locationOff: 'Localisation désactivée',
     countOne150: '{n} personne à moins de 150 ft', countMany150: '{n} personnes à moins de 150 ft', countOneScope: '{n} personne · {scope}', countManyScope: '{n} personnes · {scope}',
-    tagline: "Qui est autour de vous aujourd'hui", activity: 'Activité', searchPlaceholder: 'Rechercher des personnes ou des tags', history: 'Historique', list: 'Liste', grid: 'Grille',
+    tagline: "Qui est autour de vous aujourd'hui", activity: 'Activité', searchPlaceholder: 'Rechercher noms, @pseudos, liens ou tags', history: 'Historique', list: 'Liste', grid: 'Grille',
     safeZone: 'Vous êtes dans votre zone sûre. Votre profil est masqué sur la carte et dans À proximité.',
     matchOne: '{n} résultat', matchMany: '{n} résultats', clear: 'Effacer',
     emptyLocationOff: "L'accès à la localisation est désactivé. Activez-le dans les Réglages pour voir qui est à proximité.", emptyNoMatch: 'Personne ne correspond à cette recherche ou à ces tags.',
@@ -56,7 +56,7 @@ export default {
   de: {
     hello: 'Hallo', helloName: 'Hallo, {name}', locationOff: 'Standort ist aus',
     countOne150: '{n} Person im Umkreis von 150 ft', countMany150: '{n} Personen im Umkreis von 150 ft', countOneScope: '{n} Person · {scope}', countManyScope: '{n} Personen · {scope}',
-    tagline: 'Wer ist heute in deiner Nähe?', activity: 'Aktivität', searchPlaceholder: 'Personen oder Tags suchen', history: 'Verlauf', list: 'Liste', grid: 'Raster',
+    tagline: 'Wer ist heute in deiner Nähe?', activity: 'Aktivität', searchPlaceholder: 'Namen, @Handles, Links oder Tags suchen', history: 'Verlauf', list: 'Liste', grid: 'Raster',
     safeZone: 'Du bist in deiner Schutzzone. Dein Profil ist auf der Karte und unter „In der Nähe“ ausgeblendet.',
     matchOne: '{n} Treffer', matchMany: '{n} Treffer', clear: 'Zurücksetzen',
     emptyLocationOff: 'Der Standortzugriff ist aus. Aktiviere ihn in den Einstellungen, um zu sehen, wer in der Nähe ist.', emptyNoMatch: 'Niemand passt zu dieser Suche oder diesen Tags.',
@@ -65,7 +65,7 @@ export default {
   pt: {
     hello: 'Olá', helloName: 'Olá, {name}', locationOff: 'Localização desativada',
     countOne150: '{n} pessoa a até 150 ft', countMany150: '{n} pessoas a até 150 ft', countOneScope: '{n} pessoa · {scope}', countManyScope: '{n} pessoas · {scope}',
-    tagline: 'Quem está perto de você hoje', activity: 'Atividade', searchPlaceholder: 'Buscar pessoas ou tags', history: 'Histórico', list: 'Lista', grid: 'Grade',
+    tagline: 'Quem está perto de você hoje', activity: 'Atividade', searchPlaceholder: 'Buscar nomes, @perfis, links ou tags', history: 'Histórico', list: 'Lista', grid: 'Grade',
     safeZone: 'Você está na sua zona segura. Seu perfil está oculto no mapa e em Por perto.',
     matchOne: '{n} resultado', matchMany: '{n} resultados', clear: 'Limpar',
     emptyLocationOff: 'O acesso à localização está desativado. Ative nos Ajustes para ver quem está por perto.', emptyNoMatch: 'Ninguém corresponde a essa busca ou a essas tags.',
@@ -74,7 +74,7 @@ export default {
   ar: {
     hello: 'مرحبًا', helloName: 'مرحبًا، {name}', locationOff: 'الموقع متوقف',
     countOne150: 'شخص واحد ضمن 150 ft', countMany150: 'عدد الأشخاص ضمن 150 ft: {n}', countOneScope: 'شخص واحد · {scope}', countManyScope: 'عدد الأشخاص: {n} · {scope}',
-    tagline: 'من حولك اليوم؟', activity: 'النشاط', searchPlaceholder: 'ابحث عن أشخاص أو وسوم', history: 'السجل', list: 'قائمة', grid: 'شبكة',
+    tagline: 'من حولك اليوم؟', activity: 'النشاط', searchPlaceholder: 'ابحث بالأسماء أو @المعرفات أو الروابط أو الوسوم', history: 'السجل', list: 'قائمة', grid: 'شبكة',
     safeZone: 'أنت في منطقتك الآمنة. ملفك الشخصي مخفي من الخريطة ومن قسم القريبين.',
     matchOne: 'نتيجة واحدة', matchMany: 'عدد النتائج: {n}', clear: 'مسح',
     emptyLocationOff: 'الوصول إلى الموقع متوقف. فعّله من الإعدادات لترى من بالقرب منك.', emptyNoMatch: 'لا أحد يطابق هذا البحث أو هذه الوسوم.',
@@ -83,7 +83,7 @@ export default {
   hi: {
     hello: 'नमस्ते', helloName: 'नमस्ते, {name}', locationOff: 'लोकेशन बंद है',
     countOne150: '150 ft के अंदर {n} व्यक्ति', countMany150: '150 ft के अंदर {n} लोग', countOneScope: '{n} व्यक्ति · {scope}', countManyScope: '{n} लोग · {scope}',
-    tagline: 'आज आपके आसपास कौन है', activity: 'गतिविधि', searchPlaceholder: 'लोग या टैग खोजें', history: 'इतिहास', list: 'सूची', grid: 'ग्रिड',
+    tagline: 'आज आपके आसपास कौन है', activity: 'गतिविधि', searchPlaceholder: 'नाम, @हैंडल, लिंक या टैग खोजें', history: 'इतिहास', list: 'सूची', grid: 'ग्रिड',
     safeZone: 'आप अपने सेफ़ ज़ोन में हैं। आपकी प्रोफ़ाइल मैप और आसपास से छिपी हुई है।',
     matchOne: '{n} मिलान', matchMany: '{n} मिलान', clear: 'साफ़ करें',
     emptyLocationOff: 'लोकेशन एक्सेस बंद है। आसपास कौन है, यह देखने के लिए इसे सेटिंग्स में चालू करें।', emptyNoMatch: 'इस खोज या इन टैग से कोई मेल नहीं खाता।',
@@ -92,7 +92,7 @@ export default {
   tl: {
     hello: 'Kumusta', helloName: 'Kumusta, {name}', locationOff: 'Naka-off ang lokasyon',
     countOne150: '{n} tao sa loob ng 150 ft', countMany150: '{n} tao sa loob ng 150 ft', countOneScope: '{n} tao · {scope}', countManyScope: '{n} tao · {scope}',
-    tagline: 'Sino ang nasa paligid mo ngayon', activity: 'Aktibidad', searchPlaceholder: 'Maghanap ng tao o tag', history: 'History', list: 'Listahan', grid: 'Grid',
+    tagline: 'Sino ang nasa paligid mo ngayon', activity: 'Aktibidad', searchPlaceholder: 'Maghanap ng pangalan, @handle, link o tag', history: 'History', list: 'Listahan', grid: 'Grid',
     safeZone: 'Nasa safe zone ka. Nakatago ang profile mo sa mapa at sa Nearby.',
     matchOne: '{n} tugma', matchMany: '{n} tugma', clear: 'I-clear',
     emptyLocationOff: 'Naka-off ang access sa lokasyon. I-on ito sa Settings para makita kung sino ang malapit.', emptyNoMatch: 'Walang tumutugma sa paghahanap o sa mga tag na iyon.',
