@@ -16,7 +16,7 @@ import { installWebPhoneFrame } from './src/lib/webPhoneFrame'
 import { loadThemePref } from './src/lib/themePref'
 import { loadLanguage, useLanguage } from './src/i18n'
 import LanguageScreen from './src/screens/LanguageScreen'
-import { useStudioFonts } from './src/games/studio'
+import { useStudioFonts } from './src/games/studio' // 1.4.1
 import { ensureProfile, linkProviderToProfile } from './src/lib/oauth'
 import { initCrashLogger, setupGlobalErrorHandler } from './src/lib/crashLogger'
 import TabBar from './src/components/TabBar'
