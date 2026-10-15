@@ -1,8 +1,8 @@
-iYiYi 1.4 — the biggest update yet:
-• First-person Laser Tag: your hands and gun, recoil, muzzle flash and visible bullets
-• New crosshair, hit markers and kill notifications
-• Huge explosions for grenades, C4, rockets and land mines
-• See your C4 and mines through the camera and on the map
-• Show yourself in a selfie bubble while you play (supported phones)
-• Better body detection, redesigned Pro plans and Gun Shop
-• Fixes and polish throughout
+iYiYi 1.4.1:
+• New tabs: Here · Feed · Camera · Arcade · Me
+• Follow everywhere in a few taps, with Follow ×N on every person
+• New face-tracking camera lenses and color looks
+• Laser Tag: pro HUD, aim assist, rockets that hit walls, multiple sticky bombs
+• Battle Royale: any area size, weapons to find, supply drops
+• Beside Them: auto, floor-aware and QR stations
+• Daily word puzzle, online chess ratings, many fixes

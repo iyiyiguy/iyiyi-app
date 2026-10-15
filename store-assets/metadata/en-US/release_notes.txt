@@ -1,10 +1,10 @@
-iYiYi 1.4 — the biggest update yet:
-• Laser Tag goes first-person: see your hands and gun, with recoil, muzzle flash and bullets you can watch fly to your target
-• New crosshair with hit and kill markers, plus Call of Duty–style kill notifications
-• Huge, colorful explosions for grenades, sticky bombs, rockets and land mines, visible from far away
-• See your C4 and land mines on the ground through the camera and on the map
-• Record your gameplay with your voice, and show yourself in a selfie bubble while you play (on supported phones)
-• Better body detection for camera hits
-• Redesigned Pro plans page and Gun Shop
-• Chess vs. the computer no longer freezes
-• Fixes and polish throughout
+iYiYi 1.4.1 — a big upgrade across the whole app:
+• New tabs: Here · Feed · Camera · Arcade · Me, with search, people you met, events and activity one tap away
+• Follow everywhere: follow someone on all their platforms in a few taps, with a "Follow ×N" button on every person
+• New camera lenses that follow your face: Follow me, Shades, Crown, Halo, Sparkle and Doll Glam, plus color looks and an iYiYi frame
+• Quicker setup: pick what brings you here, set your photo and @handle, and add your socials directly
+• Laser Tag: pro game HUD, live target tracking with aim assist and tap-to-shoot, visible rockets that explode on walls and cover, multiple sticky bombs with one Detonate All, and mines and C4 on the camera
+• Battle Royale: choose any area size, start with fists and find weapons and supply drops around the zone
+• Beside Them: stations placed automatically outdoors, Walk & place with floors or QR codes indoors, and fun code-cracking tasks
+• What's the Word daily puzzle, online chess ratings and clocks, Heads Up 7 Up from 4 players
+• Delete your own posts, Business tools with a real QR code, translations and lots of fixes
