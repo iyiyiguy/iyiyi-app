@@ -2,7 +2,7 @@ iYiYi 1.4.1 — a big upgrade across the whole app:
 • New tabs: Here · Feed · Camera · Arcade · Me, with search, people you met, events and activity one tap away
 • Follow everywhere: follow someone on all their platforms in a few taps, with a "Follow ×N" button on every person
 • New camera lenses that follow your face: Follow me, Shades, Crown, Halo, Sparkle and Doll Glam, plus color looks and an iYiYi frame
-• Quicker setup: pick what brings you here, set your photo and @handle, and add your socials directly
+• Quicker setup: pick what brings you here, set your photo and @handle, and add your socials directly, or skip setup and just look around
 • Laser Tag: pro game HUD, live target tracking with aim assist and tap-to-shoot, visible rockets that explode on walls and cover, multiple sticky bombs with one Detonate All, and mines and C4 on the camera
 • Battle Royale: choose any area size, start with fists and find weapons and supply drops around the zone
 • Beside Them: stations placed automatically outdoors, Walk & place with floors or QR codes indoors, and fun code-cracking tasks

@@ -5,4 +5,5 @@ iYiYi 1.4.1:
 • Laser Tag: pro HUD, aim assist, rockets that hit walls, multiple sticky bombs
 • Battle Royale: any area size, weapons to find, supply drops
 • Beside Them: auto, floor-aware and QR stations
+• Quicker setup, or skip it and just look around
 • Daily word puzzle, online chess ratings, many fixes
