@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
-import { View, FlatList, ScrollView, StyleSheet, Pressable, Text, Modal } from 'react-native'
+import { View, FlatList, StyleSheet, Pressable, Text, Modal, useWindowDimensions } from 'react-native'
 import { useFocusEffect } from '@react-navigation/native'
 import * as Location from 'expo-location'
 import { ensureLocationPermission } from '../lib/locationPermission'
@@ -55,7 +55,8 @@ const cacheKey = (key) => `here:${key}`
 
 // List | Map switch, shared with MapScreen so both halves of the Here tab look the same.
 // compact: icons only (the Map header, where space is tight at 360 dp); labels stay for a11y.
-export function HereModeToggle({ mode, onChange, style, compact = false }) {
+// compact: icons only. tight: smaller padding; noIcon: labels only (fits the Here filter row on narrow phones).
+export function HereModeToggle({ mode, onChange, style, compact = false, tight = false, noIcon = false }) {
   const t = useT(hereStrings)
   const opts = [
     { key: 'list', icon: 'list', label: t('list'), a11y: t('listA11y') },
@@ -74,9 +75,9 @@ export function HereModeToggle({ mode, onChange, style, compact = false }) {
               accessibilityLabel={o.a11y}
               accessibilityState={{ selected: active }}
               hitSlop={4}
-              style={[styles.seg, active && styles.segActive]}
+              style={[styles.seg, tight && styles.segTight, active && styles.segActive]}
             >
-              <Ionicons name={active ? o.icon : `${o.icon}-outline`} size={14} color={active ? colors.ink : colors.textMuted} />
+              {noIcon && !compact ? null : <Ionicons name={active ? o.icon : `${o.icon}-outline`} size={14} color={active ? colors.ink : colors.textMuted} />}
               {compact ? null : <Text style={[styles.segText, active && styles.segTextActive]} numberOfLines={1}>{o.label}</Text>}
             </Pressable>
           )
@@ -91,6 +92,12 @@ export default function NearbyScreen({ navigation, route }) {
   const th = useT(hereStrings)
   const tf = useT(feStrings)
   const [layout, setLayout] = useState('grid')
+  const { width: winW } = useWindowDimensions()
+  // The filter row must fit in one line without scrolling: below Pro Max widths the chips drop their
+  // icons/chevrons, and the Map button shows its label only from 380 pt.
+  const narrow = winW < 430
+  const mapLabel = winW >= 380
+  const headerBtn = winW < 360 ? 36 : 38
   const [scope, setScope] = useState('local')
   const [sort, setSort] = useState('nearby') // nearby | recommended
   const viewKey = `${sort}:${scope}`
@@ -326,45 +333,49 @@ export default function NearbyScreen({ navigation, route }) {
         title={th('here')}
         subtitle={subtitle}
         right={(
-          <HeaderButton
-            icon="notifications-outline"
-            label={unread ? th('activityNew', { n: unread }) : t('activity')}
-            badge={unread > 0}
-            onPress={() => { setUnread(0); navigation.navigate('Activity') }}
-          />
+          <View style={styles.headerBtns}>
+            <HeaderButton
+              size={headerBtn}
+              icon={searchOpen ? 'close' : 'search'}
+              label={searchOpen ? th('closeSearch') : th('search')}
+              badge={!!query && !searchOpen}
+              onPress={() => { Haptics.selectionAsync().catch(() => {}); if (searchOpen) setSearch(''); setSearchOpen((v) => !v) }}
+            />
+            <HeaderButton size={headerBtn} icon="time-outline" label={th('history')} onPress={() => navigation.navigate('History')} />
+            <HeaderButton size={headerBtn} icon="calendar-outline" label={th('events')} onPress={() => navigation.navigate('Events')} />
+            <HeaderButton
+              size={headerBtn}
+              icon="notifications-outline"
+              label={unread ? th('activityNew', { n: unread }) : t('activity')}
+              badge={unread > 0}
+              onPress={() => { setUnread(0); navigation.navigate('Activity') }}
+            />
+          </View>
         )}
       />
 
-      {/* One compact control row: List/Map · range · sort · search · tags · people you met · layout */}
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={styles.controls} style={styles.controlsWrap}>
-        <HereModeToggle mode="list" onChange={(m) => { if (m === 'map') openMap() }} />
+      {/* One filter row that fits without scrolling: Map · range · sort · tags · grid/list buttons.
+          Search, people you met, events and activity live in the header above. */}
+      <View style={styles.controls}>
+        <Chip dense icon="map-outline" label={mapLabel ? th('map') : null} a11y={th('mapA11y')} onPress={openMap} />
         <Chip
+          dense
           label={scopeText}
-          chevron
+          chevron={!narrow}
           a11y={th('rangeA11y', { scope: scopeText })}
           onPress={() => setMenu('range')}
         />
         <Chip
-          icon={sort === 'recommended' ? 'sparkles-outline' : 'navigate-outline'}
+          dense
+          icon={narrow ? null : (sort === 'recommended' ? 'sparkles-outline' : 'navigate-outline')}
           label={sort === 'recommended' ? th('sortRecommended') : th('sortNearby')}
-          chevron
+          chevron={!narrow}
           a11y={th('sortA11y', { sort: sort === 'recommended' ? th('sortRecommended') : th('sortNearby') })}
           onPress={() => setMenu('sort')}
         />
-        <Chip
-          icon={searchOpen ? 'close' : 'search'}
-          a11y={searchOpen ? th('closeSearch') : th('search')}
-          active={!!query}
-          onPress={() => { if (searchOpen) setSearch(''); setSearchOpen((v) => !v) }}
-        />
-        <TagDropdown selected={activeTags} onApply={setActiveTags} label={th('tags')} title={th('filterTags')} />
-        <Chip icon="time-outline" a11y={th('history')} onPress={() => navigation.navigate('History')} />
-        <Chip
-          icon={layout === 'grid' ? 'list-outline' : 'grid-outline'}
-          a11y={layout === 'grid' ? th('showList') : th('showGrid')}
-          onPress={() => setLayout((l) => (l === 'grid' ? 'list' : 'grid'))}
-        />
-      </ScrollView>
+        <TagDropdown compact noIcon={narrow} selected={activeTags} onApply={setActiveTags} label={th('tags')} title={th('filterTags')} />
+        <LayoutButtons value={layout} onChange={setLayout} gridLabel={th('showGrid')} listLabel={th('showList')} />
+      </View>
       {searchOpen ? (
         <SearchField style={styles.search} value={search} onChangeText={setSearch} placeholder={t('searchPlaceholder')} />
       ) : null}
@@ -444,7 +455,37 @@ export default function NearbyScreen({ navigation, route }) {
   )
 }
 
-function Chip({ icon, label, chevron, a11y, onPress, active }) {
+// Grid and list as two separate buttons; the selected one is filled.
+function LayoutButtons({ value, onChange, gridLabel, listLabel }) {
+  const opts = [
+    { key: 'grid', icon: 'grid', label: gridLabel },
+    { key: 'list', icon: 'list', label: listLabel },
+  ]
+  return (
+    <GlassPanel radius={radii.pill} animateIn={false}>
+      <View style={styles.segTrack}>
+        {opts.map((o) => {
+          const active = value === o.key
+          return (
+            <Pressable
+              key={o.key}
+              onPress={() => { if (!active) { Haptics.selectionAsync().catch(() => {}); onChange?.(o.key) } }}
+              accessibilityRole="button"
+              accessibilityLabel={o.label}
+              accessibilityState={{ selected: active }}
+              hitSlop={4}
+              style={[styles.layoutBtn, active && styles.segActive]}
+            >
+              <Ionicons name={active ? o.icon : `${o.icon}-outline`} size={15} color={active ? colors.ink : colors.textMuted} />
+            </Pressable>
+          )
+        })}
+      </View>
+    </GlassPanel>
+  )
+}
+
+function Chip({ icon, label, chevron, a11y, onPress, active, dense = false }) {
   return (
     <Pressable
       onPress={() => { Haptics.selectionAsync().catch(() => {}); onPress?.() }}
@@ -454,10 +495,10 @@ function Chip({ icon, label, chevron, a11y, onPress, active }) {
       style={({ pressed }) => [pressed && { transform: [{ scale: 0.96 }] }]}
     >
       <GlassPanel radius={radii.pill} animateIn={false} style={active ? styles.chipActive : null}>
-        <View style={[styles.chip, !label && styles.chipIcon]}>
+        <View style={[styles.chip, dense && styles.chipDense, !label && styles.chipIcon, !label && dense && styles.chipIconDense]}>
           {icon ? <Ionicons name={icon} size={16} color={colors.text} /> : null}
           {label ? <Text style={styles.chipText} numberOfLines={1}>{label}</Text> : null}
-          {chevron ? <Ionicons name="chevron-down" size={12} color={colors.textMuted} /> : null}
+          {chevron ? <Ionicons name="chevron-down" size={dense ? 11 : 12} color={colors.textMuted} /> : null}
         </View>
       </GlassPanel>
     </Pressable>
@@ -512,14 +553,18 @@ const styles = StyleSheet.create({
   safeBanner: { flexDirection: 'row', alignItems: 'center', gap: 8, marginHorizontal: 16, marginTop: 8, paddingHorizontal: 12, paddingVertical: 9, borderRadius: radii.lg, backgroundColor: 'rgba(62,240,139,0.12)', borderWidth: 1, borderColor: 'rgba(62,240,139,0.45)' },
   safeText: { ...type.caption, color: colors.text, fontWeight: '600', flexShrink: 1 },
   screen: { flex: 1, backgroundColor: 'transparent' },
-  controlsWrap: { flexGrow: 0 },
-  controls: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 16, paddingBottom: 4 },
+  headerBtns: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  controls: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 4, paddingHorizontal: 16, paddingBottom: 4 },
   chip: { height: 36, flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 13 },
   chipIcon: { width: 40, paddingHorizontal: 0, justifyContent: 'center' },
+  chipDense: { paddingHorizontal: 9, gap: 3 },
+  chipIconDense: { width: 36 },
   chipActive: { borderWidth: 1, borderColor: colors.accent },
   chipText: { fontSize: 14, ...font.semibold, color: colors.text, maxWidth: 140 },
   segTrack: { flexDirection: 'row', padding: 3, gap: 2 },
   seg: { height: 30, flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 11, borderRadius: radii.pill },
+  segTight: { paddingHorizontal: 8, gap: 4 },
+  layoutBtn: { width: 32, height: 30, alignItems: 'center', justifyContent: 'center', borderRadius: radii.pill },
   segActive: { backgroundColor: colors.text },
   segText: { fontSize: 13, ...font.semibold, color: colors.textMuted },
   segTextActive: { color: colors.ink },

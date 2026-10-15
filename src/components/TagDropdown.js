@@ -28,6 +28,8 @@ import strings from '../i18n/strings/social'
 //   title      string                 dropdown heading (default 'Filter by tags')
 //   style      ViewStyle              style for the trigger wrapper
 //   disabled   boolean
+//   compact    boolean                tighter trigger, no chevron (fits a one-line filter row)
+//   noIcon     boolean                hide the tag icon on the trigger (very narrow rows)
 export default function TagDropdown({
   selected = [],
   onApply,
@@ -36,6 +38,8 @@ export default function TagDropdown({
   title: titleProp,
   style,
   disabled = false,
+  compact = false,
+  noIcon = false,
 }) {
   const t = useT(strings)
   const label = labelProp ?? t('tags')
@@ -105,17 +109,17 @@ export default function TagDropdown({
         style={({ pressed }) => [style, { opacity: disabled ? 0.5 : 1 }, pressed && { transform: [{ scale: 0.96 }] }]}
       >
         {count > 0 ? (
-          <View style={[styles.trigger, styles.triggerActive]}>
-            <Ionicons name="pricetags" size={15} color={colors.ink} />
+          <View style={[styles.trigger, compact && styles.triggerCompact, styles.triggerActive]}>
+            {noIcon ? null : <Ionicons name="pricetags" size={15} color={colors.ink} />}
             <Text style={[styles.triggerText, { color: colors.ink }]}>{label}</Text>
             <View style={styles.badge}><Text style={styles.badgeText}>{count}</Text></View>
           </View>
         ) : (
           <GlassPanel radius={radii.pill} animateIn={false}>
-            <View style={styles.trigger}>
-              <Ionicons name="pricetags-outline" size={15} color={colors.text} />
-              <Text style={styles.triggerText}>{label}</Text>
-              <Ionicons name="chevron-down" size={13} color={colors.textMuted} />
+            <View style={[styles.trigger, compact && styles.triggerCompact]}>
+              {noIcon ? null : <Ionicons name="pricetags-outline" size={15} color={colors.text} />}
+              <Text style={styles.triggerText} numberOfLines={1}>{label}</Text>
+              {compact ? null : <Ionicons name="chevron-down" size={13} color={colors.textMuted} />}
             </View>
           </GlassPanel>
         )}
@@ -168,6 +172,7 @@ export default function TagDropdown({
 
 const styles = StyleSheet.create({
   trigger: { height: 36, flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 14, borderRadius: radii.pill },
+  triggerCompact: { paddingHorizontal: 10, gap: 4 },
   triggerActive: { backgroundColor: colors.text },
   triggerText: { fontSize: 14, ...font.semibold, color: colors.text },
   badge: {
