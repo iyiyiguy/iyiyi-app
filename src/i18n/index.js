@@ -41,16 +41,37 @@ function deviceBase() {
   }
 }
 
+// Where the phone is: Latin America and Spain default to Spanish, Brazil to Portuguese, even
+// when the phone itself is set to English (region from the locale, e.g. en-MX, else the time
+// zone). Used only until the person picks a language.
+const SPANISH_REGIONS = new Set(['MX', 'GT', 'SV', 'HN', 'NI', 'CR', 'PA', 'CU', 'DO', 'PR', 'CO', 'VE', 'EC', 'PE', 'BO', 'CL', 'AR', 'UY', 'PY', 'ES', 'GQ'])
+const SPANISH_ZONES = /^(America\/(Mexico_City|Cancun|Merida|Monterrey|Matamoros|Chihuahua|Ciudad_Juarez|Ojinaga|Hermosillo|Mazatlan|Bahia_Banderas|Tijuana|Guatemala|El_Salvador|Tegucigalpa|Managua|Costa_Rica|Panama|Havana|Santo_Domingo|Puerto_Rico|Bogota|Caracas|Guayaquil|Lima|La_Paz|Santiago|Punta_Arenas|Montevideo|Asuncion|Buenos_Aires|Cordoba|Argentina\/.+)|Europe\/Madrid|Atlantic\/Canary|Africa\/Ceuta|Pacific\/Galapagos|Pacific\/Easter)$/
+const BRAZIL_ZONES = /^America\/(Sao_Paulo|Fortaleza|Recife|Bahia|Belem|Manaus|Cuiaba|Campo_Grande|Porto_Velho|Boa_Vista|Rio_Branco|Araguaina|Maceio|Santarem|Noronha|Eirunepe)$/
+
+function regionLanguage() {
+  try {
+    const opts = Intl.DateTimeFormat().resolvedOptions()
+    const region = String(opts.locale || '').split(/[-_]/).find((p, i) => i > 0 && /^[A-Za-z]{2}$/.test(p))?.toUpperCase()
+    if (region === 'BR') return 'pt'
+    if (region && SPANISH_REGIONS.has(region)) return 'es'
+    const zone = opts.timeZone || ''
+    if (BRAZIL_ZONES.test(zone)) return 'pt'
+    if (SPANISH_ZONES.test(zone)) return 'es'
+  } catch {}
+  return null
+}
+
 function deviceLanguage() {
   const base = deviceBase()
-  return base && CODES.has(base) ? base : 'en'
+  if (base && CODES.has(base) && base !== 'en') return base
+  return regionLanguage() || (base && CODES.has(base) ? base : 'en')
 }
 
 // True when the phone's own language is one we ship. First launch then skips the language
 // picker (the app is already in the right language; it can be changed in Settings).
 export const deviceLanguageSupported = () => {
   const base = deviceBase()
-  return !!base && CODES.has(base)
+  return (!!base && CODES.has(base)) || !!regionLanguage()
 }
 
 // Right-to-left languages. React Native only applies a layout-direction change after the app

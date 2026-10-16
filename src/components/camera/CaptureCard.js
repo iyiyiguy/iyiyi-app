@@ -23,6 +23,8 @@ function VideoThumb({ uri }) {
 // drains over `durationMs`, then the card flies up and away and onExpire fires (that's when
 // the upload starts). The X cancels just this one.
 export default function CaptureCard({ item, durationMs = 5000, onExpire, onCancel, onEdit }) {
+  // Tap a video to edit it, or a photo to add a description, before it posts.
+  const editable = !!onEdit && (item.type === 'video' || item.type === 'photo')
   const progress = useRef(new Animated.Value(0)).current
   const enter = useRef(new Animated.Value(0)).current
   const leave = useRef(new Animated.Value(0)).current // 0 = here, 1 = flown off
@@ -111,7 +113,7 @@ export default function CaptureCard({ item, durationMs = 5000, onExpire, onCance
           <View style={[styles.stackEdge, { transform: [{ translateX: 2.5 }, { translateY: -2.5 }, { rotate: '2.5deg' }] }]} />
         </>
       )}
-      <Pressable onPress={item.type === 'video' && onEdit ? edit : undefined} disabled={!(item.type === 'video' && onEdit)} style={styles.card} accessibilityRole={item.type === 'video' && onEdit ? 'button' : undefined} accessibilityLabel={item.type === 'video' && onEdit ? 'Edit this video' : undefined}>
+      <Pressable onPress={editable ? edit : undefined} disabled={!editable} style={styles.card} accessibilityRole={editable ? 'button' : undefined} accessibilityLabel={editable ? (item.type === 'video' ? 'Edit this video' : 'Add a description') : undefined}>
         {item.type === 'video'
           ? <VideoThumb key={item.previewUri || item.uri} uri={item.previewUri || item.uri} />
           : <Image source={{ uri: item.previewUri || item.uri }} style={StyleSheet.absoluteFill} resizeMode="cover" />}
@@ -131,7 +133,7 @@ export default function CaptureCard({ item, durationMs = 5000, onExpire, onCance
 
         <Text style={styles.seconds} pointerEvents="none">{secondsLeft}</Text>
 
-        {item.type === 'video' && onEdit ? (
+        {editable ? (
           <View style={styles.editBadge} pointerEvents="none">
             <Ionicons name="color-wand" size={10} color="#fff" />
             <Text style={styles.kindText}>Edit</Text>

@@ -38,6 +38,7 @@ export const DEFAULT_CAMERA_OPTIONS = {
   cutoffCustom: DEFAULT_CUTOFF_CUSTOM, // last custom cut-off length
   mode: 'picture',
   filter: 'none', // AR filter: none | logo | nametag | love (see lib/cameraFilters)
+  autoPost: true, // captures hover 5 s then post; off = edit + description before posting
 }
 
 const pick = (v, choices, fallback) => (choices.includes(v) ? v : fallback)
@@ -57,6 +58,7 @@ export async function loadCameraOptions() {
       cutoffCustom: clampSeconds(o.cutoffCustom, CUTOFF_RANGE, DEFAULT_CUTOFF_CUSTOM) || DEFAULT_CUTOFF_CUSTOM,
       mode: o.mode === 'video' ? 'video' : 'picture',
       filter: normalizeFilter(o.filter),
+      autoPost: o.autoPost !== false,
     }
   } catch {
     return { ...DEFAULT_CAMERA_OPTIONS }

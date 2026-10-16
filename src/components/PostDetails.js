@@ -1,7 +1,7 @@
 // Upload screen after editing a video (TikTok-style "Post" page): a looping preview, the
 // description (#hashtags, @mentions), the sound, then Post.
 import { useEffect, useState } from 'react'
-import { View, Text, Pressable, StyleSheet, Modal, TextInput, ScrollView, KeyboardAvoidingView, Platform, Keyboard } from 'react-native'
+import { View, Text, Pressable, StyleSheet, Modal, TextInput, ScrollView, KeyboardAvoidingView, Platform, Keyboard, Image } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons'
 import EditedVideo from './EditedVideo'
@@ -45,7 +45,7 @@ export default function PostDetails({ visible, item, edit, sound, location, onBa
             <TextInput
               value={text}
               onChangeText={(v) => setText(v.slice(0, MAX))}
-              placeholder="Describe your video… add #hashtags and @mention people"
+              placeholder={item.type === 'photo' ? 'Describe your photo… add #hashtags and @mention people' : 'Describe your video… add #hashtags and @mention people'}
               placeholderTextColor={C.faint}
               style={st.input}
               multiline
@@ -54,7 +54,11 @@ export default function PostDetails({ visible, item, edit, sound, location, onBa
               textAlignVertical="top"
             />
             <View style={[st.thumb, { width: w, height: h }]}>
-              <EditedVideo uri={item.postUri || item.uri} edit={{ ...edit, texts: [] }} sound={null} active={visible} muted style={StyleSheet.absoluteFill} contentFit="cover" />
+              {item.type === 'photo' ? (
+                <Image source={{ uri: item.previewUri || item.uri }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+              ) : (
+                <EditedVideo uri={item.postUri || item.uri} edit={{ ...(edit || {}), texts: [] }} sound={null} active={visible} muted style={StyleSheet.absoluteFill} contentFit="cover" />
+              )}
               {edit?.texts?.length ? <CaptionLayer texts={edit.texts} w={w} h={h} /> : null}
             </View>
           </View>
@@ -68,7 +72,7 @@ export default function PostDetails({ visible, item, edit, sound, location, onBa
 
           <View style={st.info}>
             <Ionicons name="musical-notes" size={18} color={C.gold} />
-            <Text style={st.infoText} numberOfLines={1}>{sound ? sound.title : 'Original sound'}</Text>
+            <Text style={st.infoText} numberOfLines={1}>{sound ? sound.title : item.type === 'photo' ? 'Photo' : 'Original sound'}</Text>
           </View>
           {location ? (
             <View style={st.info}>
@@ -82,7 +86,7 @@ export default function PostDetails({ visible, item, edit, sound, location, onBa
           </View>
         </ScrollView>
         <View style={[st.footer, { paddingBottom: insets.bottom + 12 }]}>
-          <Pressable onPress={onBack} style={[st.btn, st.btnGhost]}><Text style={st.btnGhostText}>Edit</Text></Pressable>
+          <Pressable onPress={onBack} style={[st.btn, st.btnGhost]}><Text style={st.btnGhostText}>{item.type === 'photo' ? 'Discard' : 'Edit'}</Text></Pressable>
           <Pressable onPress={post} disabled={busy} style={[st.btn, st.btnMain, busy && { opacity: 0.6 }]} accessibilityRole="button">
             <Ionicons name="arrow-up-circle" size={20} color="#fff" />
             <Text style={st.btnMainText}>{busy ? 'Posting…' : 'Post'}</Text>

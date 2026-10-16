@@ -12,6 +12,8 @@ import BrandHeader, { HeaderButton } from '../components/BrandHeader'
 import Glass from '../components/Glass'
 import { GlassButton } from '../components/GlassButton'
 import PenguinMarker from '../components/PenguinMarker'
+import PostMarker from '../components/PostMarker'
+import { useTopPosts } from '../lib/mapPosts'
 import MapTagMenu from '../components/MapTagMenu'
 import CountryPicker from '../components/CountryPicker'
 import { colors, radii, type } from '../theme'
@@ -667,6 +669,8 @@ export default function MapScreen({ navigation, route }) {
   )
   const shownBusinesses = tagSet.size && !tagSet.has('Business') ? [] : businesses
   const animatePenguins = shownUsers.length <= MAX_ANIMATED_PENGUINS
+  // Each person's best post shows as their pin (falls back to the penguin + profile picture).
+  const topPosts = useTopPosts(useMemo(() => shownUsers.map((u) => u.user_id).filter(Boolean), [shownUsers]))
 
   useEffect(() => {
     // Drop the selection if that person is filtered out or left the map.
@@ -765,6 +769,7 @@ export default function MapScreen({ navigation, route }) {
               <UserPin
                 key={u.user_id}
                 user={u}
+                post={topPosts[u.user_id] || null}
                 animate={animatePenguins}
                 selected={selected?.user_id === u.user_id}
                 onSelect={onSelectUser}
@@ -1099,26 +1104,40 @@ export default function MapScreen({ navigation, route }) {
 
 // One penguin. On Android (Google snapshots marker views) we stop tracking view changes
 // once the avatar has loaded; on iOS Apple Maps renders the live view, so it can animate.
-const UserPin = memo(function UserPin({ user, animate, selected, onSelect }) {
+const UserPin = memo(function UserPin({ user, post, animate, selected, onSelect }) {
   const [tracks, setTracks] = useState(true)
+  const [postFailed, setPostFailed] = useState(false)
+  const postUrl = !postFailed && post?.media_url ? post.media_url : null
+  useEffect(() => { setTracks(true) }, [postUrl])
   const onReady = useCallback(() => {
     if (Platform.OS === 'android') setTimeout(() => setTracks(false), 250)
   }, [])
   return (
     <Marker
       coordinate={{ latitude: user.latitude, longitude: user.longitude }}
-      anchor={{ x: 0.5, y: 0.78 }}
+      anchor={{ x: 0.5, y: postUrl ? 0.82 : 0.78 }}
       tracksViewChanges={Platform.OS === 'android' ? tracks || selected : true}
-      zIndex={selected ? 999 : 1}
+      zIndex={selected ? 999 : postUrl ? 2 : 1}
       onPress={() => onSelect(user)}
     >
-      <PenguinMarker
-        username={user.username}
-        avatarUrl={typeof user.avatar_url === 'string' ? user.avatar_url : null}
-        animate={animate}
-        selected={selected}
-        onReady={onReady}
-      />
+      {postUrl ? (
+        <PostMarker
+          username={user.username}
+          avatarUrl={typeof user.avatar_url === 'string' ? user.avatar_url : null}
+          postUrl={postUrl}
+          selected={selected}
+          onReady={onReady}
+          onFail={() => setPostFailed(true)}
+        />
+      ) : (
+        <PenguinMarker
+          username={user.username}
+          avatarUrl={typeof user.avatar_url === 'string' ? user.avatar_url : null}
+          animate={animate}
+          selected={selected}
+          onReady={onReady}
+        />
+      )}
     </Marker>
   )
 })

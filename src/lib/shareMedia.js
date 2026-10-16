@@ -4,6 +4,7 @@
 // download fails we fall back to sharing the link.
 import { Alert, Share } from 'react-native'
 import * as Haptics from 'expo-haptics'
+import { recordShare } from './mapPosts'
 
 function extFor(item) {
   const m = String(item?.media_url ?? '').split('?')[0].match(/\.([a-z0-9]{2,5})$/i)
@@ -14,6 +15,7 @@ function extFor(item) {
 export async function shareMedia(item) {
   if (!item?.media_url) return
   Haptics.selectionAsync().catch(() => {})
+  if (item.kind !== 'youtube') recordShare(item.id)
   const isVideo = item.media_type === 'video'
   const message = item.owner_username ? `@${item.owner_username} on iYiYi · iyiyi.xyz` : 'On iYiYi · iyiyi.xyz'
   try {

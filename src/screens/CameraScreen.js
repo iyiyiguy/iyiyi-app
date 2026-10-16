@@ -861,19 +861,22 @@ export default function CameraScreen({ navigation, route }) {
       return
     }
     const id = captureIdRef.current++
-    // Videos open the editor (trim, crop, text, sound) before posting; photos hover and post.
-    if (item.type === 'video') {
-      setEditing({ ...item, id, sound: soundRef.current || null })
-      return
+    // Auto-post on: everything hovers for 5 s and posts (tap the card to edit / add a
+    // description). Off: videos open the editor and photos the post screen first.
+    if (optionsRef.current?.autoPost === false) {
+      if (item.type === 'video') { setEditing({ ...item, id, sound: soundRef.current || null }); return }
+      if (item.type === 'photo') { setComposing({ item: { ...item, id }, edit: null, sound: null }); return }
     }
-    updateQueue((q) => [...q, { ...item, id }])
+    updateQueue((q) => [...q, { ...item, id, sound: item.type === 'video' ? soundRef.current || null : null, soundId: item.type === 'video' ? soundRef.current?.id || null : null }])
   }
 
   const onCardEdit = (captureId) => {
     const item = queueRef.current.find((q) => q.id === captureId)
     if (!item) return
     updateQueue((q) => q.filter((x) => x.id !== captureId))
-    setEditing({ ...item, sound: soundRef.current || null })
+    if (item.type === 'photo') { setComposing({ item, edit: null, sound: null }); return }
+    if (item.type === 'video') { setEditing({ ...item, sound: item.sound || soundRef.current || null }); return }
+    publish(item)
   }
   // Editor "Next" -> the post screen (description), which posts or goes back to the editor.
   const postEdited = ({ edit, sound: s }) => {
@@ -883,6 +886,13 @@ export default function CameraScreen({ navigation, route }) {
   }
   const backToEditor = () => {
     const c = composing
+    if (c?.item?.type === 'photo') {
+      Alert.alert('Discard this photo?', 'It’s still saved in your camera roll.', [
+        { text: 'Keep', style: 'cancel' },
+        { text: 'Discard', style: 'destructive', onPress: () => setComposing(null) },
+      ])
+      return
+    }
     setComposing(null)
     if (c) setTimeout(() => { if (mounted.current) setEditing({ ...c.item, sound: c.sound, edit: c.edit, caption: undefined }) }, 380)
   }
@@ -1648,6 +1658,19 @@ export default function CameraScreen({ navigation, route }) {
           />
           {!barOpen && <HelpButton onPress={() => { setTip(null); setHelpOpen(true) }} disabled={busy} />}
         </View>
+        {!isRecording ? (
+          <Pressable
+            onPress={() => { haptic(); onOptionsChange({ autoPost: options.autoPost === false }) ; flash(options.autoPost === false ? 'Auto-post on: captures post after 5 seconds' : 'Edit first: add text, sound and a description before posting') }}
+            disabled={busy}
+            style={[styles.handsFree, options.autoPost !== false ? styles.handsFreeOn : null]}
+            accessibilityRole="switch"
+            accessibilityState={{ checked: options.autoPost !== false }}
+            accessibilityLabel="Auto-post: captures post after 5 seconds. Off: edit before posting"
+          >
+            <Ionicons name={options.autoPost !== false ? 'flash' : 'create-outline'} size={14} color="#fff" />
+            <Text style={styles.handsFreeText}>{options.autoPost !== false ? 'Auto-post 5s' : 'Edit first'}</Text>
+          </Pressable>
+        ) : null}
         {mode === 'video' && !isRecording ? (
           <Pressable
             onPress={() => onOptionsChange({ timer: options.timer ? 0 : 5 })}
