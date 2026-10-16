@@ -46,7 +46,16 @@ type NativeBodyHit = {
   prepareDepthModel?: (cellularAfter: number) => Promise<DepthModelStatus>
   depthModelStatus?: () => Promise<DepthModelStatus>
   estimateDepth?: (uri: string, deleteAfter: boolean) => Promise<DepthGrid | null>
+  // Live green screen (iOS 15+). Missing in older binaries and on Android.
+  startGreenScreen?: (opts: GreenScreenOptions) => Promise<boolean>
+  updateGreenScreen?: (opts: GreenScreenOptions) => Promise<void>
+  stopGreenScreen?: () => Promise<void>
+  captureGreenScreenPhoto?: () => Promise<string | null>
+  startGreenScreenRecording?: (withAudio: boolean) => Promise<boolean>
+  stopGreenScreenRecording?: () => Promise<string | null>
 }
+
+export type GreenScreenOptions = { mode: 'image' | 'blur' | 'color'; uri?: string | null; color?: string | null }
 
 // Surface scanner (Laser Tag cover): monocular depth model, shipped inside the app (fetched and
 // SHA-256-verified at build time by BodyHit.podspec / android/build.gradle). A binary built
@@ -246,4 +255,25 @@ export async function estimateDepth(uri: string | null, deleteAfter = true): Pro
   } catch {
     return null
   }
+}
+
+// ---- live green screen ----
+export const greenScreenSupported = () => typeof (Native as any)?.startGreenScreen === 'function'
+export async function startGreenScreen(opts: GreenScreenOptions): Promise<boolean> {
+  try { return !!(await (Native as any)?.startGreenScreen?.(opts)) } catch { return false }
+}
+export async function updateGreenScreen(opts: GreenScreenOptions): Promise<void> {
+  try { await (Native as any)?.updateGreenScreen?.(opts) } catch {}
+}
+export async function stopGreenScreen(): Promise<void> {
+  try { await (Native as any)?.stopGreenScreen?.() } catch {}
+}
+export async function captureGreenScreenPhoto(): Promise<string | null> {
+  try { return (await (Native as any)?.captureGreenScreenPhoto?.()) ?? null } catch { return null }
+}
+export async function startGreenScreenRecording(withAudio: boolean): Promise<boolean> {
+  try { return !!(await (Native as any)?.startGreenScreenRecording?.(withAudio)) } catch { return false }
+}
+export async function stopGreenScreenRecording(): Promise<string | null> {
+  try { return (await (Native as any)?.stopGreenScreenRecording?.()) ?? null } catch { return null }
 }

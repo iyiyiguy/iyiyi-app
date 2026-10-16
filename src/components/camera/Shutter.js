@@ -7,7 +7,9 @@ const INNER = 64
 // iOS-style shutter: white disc for photos, red disc for video, which shrinks to a rounded
 // red square while recording. ringOnly (photo mode with a lens on): just the ring, so the lens
 // preview in the carousel shows through the middle, Snapchat-style.
-export default function Shutter({ mode, recording, busy, onPress, disabled, ringOnly = false }) {
+// Hold to record (TikTok/Snapchat): onHoldStart after a short press-and-hold, onHoldEnd on release.
+export default function Shutter({ mode, recording, busy, onPress, onHoldStart, onHoldEnd, disabled, ringOnly = false }) {
+  const held = useRef(false)
   const rec = useRef(new Animated.Value(recording ? 1 : 0)).current
   const press = useRef(new Animated.Value(1)).current
 
@@ -24,11 +26,17 @@ export default function Shutter({ mode, recording, busy, onPress, disabled, ring
   return (
     <Pressable
       onPress={onPress}
+      onLongPress={onHoldStart && !recording ? () => { held.current = true; Animated.spring(press, { toValue: 1.18, useNativeDriver: true, speed: 30 }).start(); onHoldStart() } : undefined}
+      delayLongPress={260}
       disabled={disabled}
       onPressIn={() => Animated.spring(press, { toValue: 0.92, useNativeDriver: true, speed: 40 }).start()}
-      onPressOut={() => Animated.spring(press, { toValue: 1, useNativeDriver: true, speed: 30 }).start()}
+      onPressOut={() => {
+        Animated.spring(press, { toValue: 1, useNativeDriver: true, speed: 30 }).start()
+        if (held.current) { held.current = false; onHoldEnd?.() }
+      }}
       accessibilityRole="button"
       accessibilityLabel={recording ? 'Stop recording' : isVideo ? 'Record video' : 'Take photo'}
+      accessibilityHint={onHoldStart ? 'Hold to record a video, release to stop' : undefined}
       hitSlop={8}
     >
       <Animated.View style={[styles.outer, ringOnly && styles.outerRing, { transform: [{ scale: press }] }, busy && { opacity: 0.6 }]}>

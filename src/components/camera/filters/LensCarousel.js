@@ -14,7 +14,7 @@ const THUMB = 50
 // one in use - tap the ring to shoot. Scaling of the previews runs on the native driver from the
 // scroll position; JS only does work when the centred lens changes.
 export default function LensCarousel({
-  value, onChange, mode, recording, shutterBusy, onShutter, disabled, hidden, note,
+  value, onChange, mode, recording, shutterBusy, onShutter, onHoldStart, onHoldEnd, disabled, hidden, note,
 }) {
   const [width, setWidth] = useState(0)
   const [label, setLabel] = useState(null)
@@ -154,7 +154,7 @@ export default function LensCarousel({
           </Animated.View>
         )}
         <View style={styles.shutterSlot} pointerEvents="box-none">
-          <Shutter mode={mode} recording={recording} busy={shutterBusy} onPress={onShutter} ringOnly={ringOnly} />
+          <Shutter mode={mode} recording={recording} busy={shutterBusy} onPress={onShutter} onHoldStart={onHoldStart} onHoldEnd={onHoldEnd} ringOnly={ringOnly} />
         </View>
       </View>
     </View>

@@ -4,7 +4,7 @@ import { cityLabel, loadShowPhotoLocation } from '../lib/photoLocation'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   View, Text, Image, Pressable, ActivityIndicator, Alert, StyleSheet, useWindowDimensions, Animated,
-  PanResponder, Easing,
+  PanResponder, Easing, ScrollView,
 } from 'react-native'
 import { CameraView, useMicrophonePermissions } from 'expo-camera'
 import { CameraOff, useCameraGate } from '../components/CameraGate'
@@ -38,7 +38,8 @@ import {
 import { DEFAULT_LENS_PREFS, loadLensPrefs, saveLensPrefs } from '../components/camera/filters/lensPrefs'
 import cameraStrings from '../components/camera/cameraStrings'
 import { PLATFORM_LABELS } from '../lib/socialLinks'
-import { brandVideo, detectBodies, detectFaces, isBrandVideoAvailable, isFaceDetectAvailable } from '../../modules/body-hit'
+import { brandVideo, detectBodies, detectFaces, isBrandVideoAvailable, isFaceDetectAvailable, startGreenScreen, updateGreenScreen, stopGreenScreen, captureGreenScreenPhoto, startGreenScreenRecording, stopGreenScreenRecording } from '../../modules/body-hit'
+import { GREEN_BACKGROUNDS, canGreenScreen, greenOptions } from '../lib/greenScreen'
 import {
   OVERLAY_BOX, fallbackHead, headsFromBodies, headsFromFaces, nameTagText, selectTargets,
 } from '../lib/cameraFilters'
@@ -53,6 +54,7 @@ import { supabase } from '../lib/supabase'
 import { loadTrimHandsFreePref } from '../lib/handsFreePref'
 import { pauseMusic } from '../lib/musicPlayer'
 import SoundPicker from '../components/SoundPicker'
+import PostDetails from '../components/PostDetails'
 import VideoEditor from '../components/VideoEditor'
 import { createAudioPlayer } from 'expo-audio'
 import {
@@ -310,6 +312,14 @@ export default function CameraScreen({ navigation, route }) {
   useEffect(() => { if (route?.params?.sound?.audio_url) setSound(route.params.sound) }, [route?.params?.sound?.id])
   useEffect(() => { pauseMusic() }, [])
   const [editing, setEditing] = useState(null)
+  const [composing, setComposing] = useState(null) // { item, edit, sound } on the post screen
+  // Live green screen (iPhone): the background in use (null = off) and the picker strip.
+  const [greenBg, setGreenBg] = useState(null)
+  const greenBgRef = useRef(null)
+  greenBgRef.current = greenBg
+  const [greenOpen, setGreenOpen] = useState(false)
+  const greenOnRef = useRef(false) // native green screen is running on the current preview
+  const greenRecRef = useRef(false)
   const recSoundRef = useRef(null)
   useEffect(() => {
     if (!isRecording || !sound?.audio_url) return undefined
@@ -485,6 +495,78 @@ export default function CameraScreen({ navigation, route }) {
   const onCameraReady = () => {
     cameraReadyRef.current = true
     mountErrors.current = 0
+    // A new preview (flip, restart, refocus): put the green screen back on it.
+    if (greenBgRef.current) setTimeout(() => applyGreen(greenBgRef.current), 250)
+  }
+
+  // --- green screen ------------------------------------------------------------------------
+  const applyGreen = async (bg) => {
+    if (!bg) {
+      greenOnRef.current = false
+      stopGreenScreen()
+      return
+    }
+    const opts = await greenOptions(bg)
+    if (!mounted.current || greenBgRef.current !== bg) return
+    if (greenOnRef.current) { updateGreenScreen(opts); return }
+    const ok = await startGreenScreen(opts)
+    if (!mounted.current) return
+    greenOnRef.current = ok
+    if (!ok) {
+      setGreenBg(null)
+      flash('Green screen needs a moment for the camera to start. Try again.')
+    }
+  }
+  const chooseGreen = async (bg) => {
+    if (recording.current) return
+    if (bg?.id === 'photo') {
+      try {
+        const r = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.9 })
+        if (r.canceled || !r.assets?.[0]?.uri) return
+        bg = { id: 'photo', uri: r.assets[0].uri, label: 'Photo' }
+      } catch { return }
+    }
+    greenBgRef.current = bg
+    setGreenBg(bg)
+    applyGreen(bg)
+  }
+  useEffect(() => () => { stopGreenScreen() }, [])
+  useEffect(() => { if (!isFocused && greenOnRef.current) { greenOnRef.current = false; stopGreenScreen() } }, [isFocused])
+
+  const greenPhoto = async () => {
+    haptic(Haptics.ImpactFeedbackStyle.Medium)
+    flashShutter()
+    const uri = await captureGreenScreenPhoto()
+    if (uri) afterCapture({ type: 'photo', uri, fx: null })
+    else Alert.alert("Couldn't take the photo", 'Please try again.')
+  }
+  const startGreenVideo = async (startLocked) => {
+    const mic = await ensureMic()
+    const ok = await startGreenScreenRecording(!!mic)
+    if (!ok) { Alert.alert("Couldn't start recording", 'Give the green screen a second to start, then try again.'); return }
+    greenRecRef.current = true
+    recording.current = true
+    handsFree.current = startLocked
+    stopRequested.current = false
+    recordStartedAtRef.current = Date.now()
+    setRecordStartedAt(recordStartedAtRef.current)
+    setIsRecording(true)
+    setIsHandsFree(startLocked)
+    haptic(Haptics.ImpactFeedbackStyle.Medium)
+    const cutoffS = cutoffSeconds(optionsRef.current)
+    if (cutoffS) cutoffTimer.current = setTimeout(() => { if (greenRecRef.current) stopGreenVideo() }, cutoffS * 1000)
+  }
+  const stopGreenVideo = async () => {
+    if (!greenRecRef.current || stopRequested.current) return
+    stopRequested.current = true
+    const since = Date.now() - recordStartedAtRef.current
+    if (since < MIN_CLIP_MS) await wait(MIN_CLIP_MS - since)
+    haptic(Haptics.ImpactFeedbackStyle.Medium)
+    const uri = await stopGreenScreenRecording()
+    greenRecRef.current = false
+    resetRecordingState()
+    if (uri) afterCapture({ type: 'video', uri, postUri: uri })
+    else if (mounted.current) Alert.alert("Video didn't save", 'Please try recording again.')
   }
   // A fresh preview mounts whenever the screen regains focus.
   useEffect(() => {
@@ -693,6 +775,7 @@ export default function CameraScreen({ navigation, route }) {
       tagged_ids: nearbyRef.current.filter(allowsTagging).map((u) => u.id),
       edit: size.edit || null,
       sound_id: size.soundId || null,
+      caption: size.caption || null,
     })
   }
 
@@ -792,10 +875,21 @@ export default function CameraScreen({ navigation, route }) {
     updateQueue((q) => q.filter((x) => x.id !== captureId))
     setEditing({ ...item, sound: soundRef.current || null })
   }
+  // Editor "Next" -> the post screen (description), which posts or goes back to the editor.
   const postEdited = ({ edit, sound: s }) => {
     const item = editing
     setEditing(null)
-    if (item) publish({ ...item, edit, soundId: s?.id || null })
+    if (item) setTimeout(() => { if (mounted.current) setComposing({ item, edit, sound: s || null }) }, 380)
+  }
+  const backToEditor = () => {
+    const c = composing
+    setComposing(null)
+    if (c) setTimeout(() => { if (mounted.current) setEditing({ ...c.item, sound: c.sound, edit: c.edit, caption: undefined }) }, 380)
+  }
+  const postComposed = (caption) => {
+    const c = composing
+    setComposing(null)
+    if (c) publish({ ...c.item, edit: c.edit, soundId: c.sound?.id || null, caption })
   }
   const cancelEdit = () => {
     Alert.alert('Discard this video?', 'It’s still saved in your camera roll.', [
@@ -836,6 +930,7 @@ export default function CameraScreen({ navigation, route }) {
 
   // --- photo -------------------------------------------------------------------------------
   const takePhoto = async () => {
+    if (greenBgRef.current && greenOnRef.current) { await greenPhoto(); return }
     const fx = captureFx()
     try {
       await waitForCamera(false)
@@ -982,6 +1077,7 @@ export default function CameraScreen({ navigation, route }) {
   const startVideo = async (startLocked = false) => {
     if (recording.current || !mounted.current) return
     if (modeRef.current !== 'video') return
+    if (greenBgRef.current && greenOnRef.current) { await startGreenVideo(startLocked); return }
     await ensureMic()
     const ready = await waitForCamera(true)
     if (!mounted.current || recording.current || !ready) {
@@ -1073,6 +1169,7 @@ export default function CameraScreen({ navigation, route }) {
   }
 
   const stopVideo = () => {
+    if (greenRecRef.current) { stopGreenVideo(); return }
     if (!recording.current || stopRequested.current) return
     stopRequested.current = true
     const doStop = () => {
@@ -1156,6 +1253,31 @@ export default function CameraScreen({ navigation, route }) {
     }
   }
 
+  // Hold to record: press and hold the shutter (photo or video mode) to film, release to stop.
+  const holdingRef = useRef(false)
+  const holdStartedRef = useRef(false)
+  const onHoldStart = async () => {
+    if (recording.current || phaseRef.current !== 'idle' || busy) return
+    holdingRef.current = true
+    holdStartedRef.current = false
+    haptic(Haptics.ImpactFeedbackStyle.Light)
+    if (modeRef.current !== 'video') {
+      changeModeRef.current?.('video')
+      await wait(MODE_SETTLE_MS)
+    }
+    if (!holdingRef.current || !mounted.current) return
+    holdStartedRef.current = true
+    startVideo(false)
+  }
+  const onHoldEnd = () => {
+    holdingRef.current = false
+    if (holdStartedRef.current) {
+      holdStartedRef.current = false
+      if (recording.current) stopVideo()
+      else setTimeout(() => { if (recording.current) stopVideo() }, 250)
+    }
+  }
+
   // Throws away what's recorded so far, counts "3, 2, 1" back down, then starts the same kind
   // of recording again from scratch.
   const redoRecording = async () => {
@@ -1179,6 +1301,7 @@ export default function CameraScreen({ navigation, route }) {
 
   // --- mode / facing ---------------------------------------------------------------------------
   const busy = phase !== 'idle' || isRecording
+  const greenAvailable = useMemo(() => canGreenScreen(), [])
   const changeMode = (m) => {
     if (m === modeRef.current || recording.current || phaseRef.current !== 'idle') return
     Haptics.selectionAsync().catch(() => {})
@@ -1360,7 +1483,7 @@ export default function CameraScreen({ navigation, route }) {
           ref={cameraRef}
           style={StyleSheet.absoluteFill}
           facing={facing}
-          mode={mode}
+          mode={greenBg ? 'picture' : mode}
           mute={muted}
           videoQuality="720p"
           animateShutter={phase !== 'burst' && !tracking}
@@ -1438,7 +1561,38 @@ export default function CameraScreen({ navigation, route }) {
             <Ionicons name="musical-notes" size={19} color="#fff" />
           </Pressable>
         )}
+        {greenAvailable ? (
+          <Pressable
+            onPress={() => setGreenOpen((o) => !o)}
+            disabled={isRecording}
+            hitSlop={8}
+            style={[styles.round, styles.roundGlass, greenBg && { backgroundColor: 'rgba(0,200,83,0.75)', borderColor: '#00c853' }, isRecording && { opacity: 0.5 }]}
+            accessibilityLabel={greenBg ? `Green screen: ${greenBg.label}. Change background` : 'Green screen'}
+          >
+            <Ionicons name="person-circle-outline" size={20} color="#fff" />
+          </Pressable>
+        ) : null}
       </View>
+      {greenOpen && !isRecording ? (
+        <View style={styles.greenStrip} pointerEvents="box-none">
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.greenRow}>
+            <Pressable onPress={() => { chooseGreen(null); setGreenOpen(false) }} style={[styles.greenItem, !greenBg && styles.greenItemOn]} accessibilityLabel="Green screen off">
+              <Ionicons name="close" size={20} color="#fff" />
+              <Text style={styles.greenLabel}>Off</Text>
+            </Pressable>
+            <Pressable onPress={() => chooseGreen({ id: 'photo' })} style={[styles.greenItem, greenBg?.id === 'photo' && styles.greenItemOn]} accessibilityLabel="Use one of your photos">
+              <Ionicons name="images-outline" size={20} color="#fff" />
+              <Text style={styles.greenLabel}>Photo</Text>
+            </Pressable>
+            {GREEN_BACKGROUNDS.map((bg) => (
+              <Pressable key={bg.id} onPress={() => chooseGreen(bg)} style={[styles.greenItem, greenBg?.id === bg.id && styles.greenItemOn]} accessibilityLabel={`Background ${bg.label}`}>
+                {bg.asset ? <Image source={bg.asset} style={styles.greenThumb} /> : bg.mode === 'blur' ? <Ionicons name="water-outline" size={20} color="#fff" /> : <View style={[styles.greenSwatch, { backgroundColor: bg.color }]} />}
+                <Text style={styles.greenLabel}>{bg.label}</Text>
+              </Pressable>
+            ))}
+          </ScrollView>
+        </View>
+      ) : null}
       {sound && !isRecording ? (
         <Pressable onPress={() => setSoundPickerOpen(true)} style={styles.soundChip} accessibilityRole="button" accessibilityLabel={`Sound ${sound.title}`}>
           <Ionicons name="musical-note" size={12} color="#fff" />
@@ -1546,6 +1700,8 @@ export default function CameraScreen({ navigation, route }) {
           recording={isRecording}
           shutterBusy={phase === 'burst'}
           onShutter={onShutter}
+          onHoldStart={onHoldStart}
+          onHoldEnd={onHoldEnd}
           disabled={busy}
           hidden={isRecording}
           note={videoNote}
@@ -1566,15 +1722,32 @@ export default function CameraScreen({ navigation, route }) {
         visible={!!editing}
         item={editing}
         initialSound={editing?.sound || null}
+        initialEdit={editing?.edit || null}
         onCancel={cancelEdit}
         onPost={postEdited}
         onMakeBeat={() => navigation.navigate('Studio')}
+      />
+      <PostDetails
+        visible={!!composing}
+        item={composing?.item}
+        edit={composing?.edit}
+        sound={composing?.sound}
+        location={showPhotoLocationRef.current ? locationLabelRef.current : null}
+        onBack={backToEditor}
+        onPost={postComposed}
       />
     </Backdrop>
   )
 }
 
 const styles = StyleSheet.create({
+  greenStrip: { position: 'absolute', left: 0, right: 0, bottom: 210, alignItems: 'center' },
+  greenRow: { gap: 8, paddingHorizontal: 14 },
+  greenItem: { width: 58, height: 76, borderRadius: 14, backgroundColor: 'rgba(0,0,0,0.45)', borderWidth: 2, borderColor: 'rgba(255,255,255,0.18)', alignItems: 'center', justifyContent: 'center', gap: 4, overflow: 'hidden' },
+  greenItemOn: { borderColor: '#00c853' },
+  greenThumb: { width: 54, height: 50, borderRadius: 10 },
+  greenSwatch: { width: 34, height: 34, borderRadius: 8 },
+  greenLabel: { color: '#fff', fontSize: 11, fontWeight: '700' },
   // A dimmed scrim over the app, with the camera card floating in the middle so the
   // screen behind it stays visible - this pops open in place instead of taking over.
   backdrop: { flex: 1, backgroundColor: 'rgba(5,2,8,0.72)', alignItems: 'center', justifyContent: 'center' },

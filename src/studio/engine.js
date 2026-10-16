@@ -37,7 +37,8 @@ export function getContext() {
 
 export async function resumeAudio() {
   const c = getContext()
-  try { if (c.state === 'suspended') await c.resume() } catch {}
+  // Browsers keep resume() pending until the user taps something: never block on it.
+  try { if (c.state === 'suspended') await Promise.race([c.resume(), new Promise((r) => setTimeout(r, 600))]) } catch {}
   return c
 }
 

@@ -3,25 +3,32 @@
 import { useEffect, useState } from 'react'
 import { supabase } from './supabase'
 
-const cache = new Map() // id -> { edit, sound } | null
+const cache = new Map() // id -> { edit, sound, caption } | null
 const waiting = new Map() // id -> [resolve]
 let queue = new Set()
 let timer = null
 
 async function flush() {
   timer = null
-  const ids = [...queue]
+  const all = [...queue]
   queue = new Set()
+  // profile_media ids are numbers; anything else (imported / external items) has no row here.
+  const ids = all.filter((id) => /^\d+$/.test(id))
+  all.filter((id) => !/^\d+$/.test(id)).forEach((id) => {
+    cache.set(id, null)
+    ;(waiting.get(id) || []).forEach((fn) => fn(null))
+    waiting.delete(id)
+  })
   if (!ids.length) return
   let rows = []
   try {
     const { data } = await supabase
       .from('profile_media')
-      .select('id, edit, sound:sound_id (id, title, audio_url, status, is_muted, user_id, duration_s)')
+      .select('id, edit, caption, sound:sound_id (id, title, audio_url, status, is_muted, user_id, duration_s)')
       .in('id', ids)
     rows = data || []
   } catch {}
-  const byId = new Map(rows.map((r) => [String(r.id), { edit: r.edit || null, sound: r.sound || null }]))
+  const byId = new Map(rows.map((r) => [String(r.id), { edit: r.edit || null, sound: r.sound || null, caption: r.caption || null }]))
   ids.forEach((id) => {
     const v = byId.get(String(id)) || null
     cache.set(String(id), v)

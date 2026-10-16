@@ -4,6 +4,7 @@ import {
   KeyboardAvoidingView, Platform, ActivityIndicator, ScrollView, Alert,
 } from 'react-native'
 import EditedVideo from './EditedVideo'
+import PostCaption from './PostCaption'
 import { SafeAreaInsetsContext, initialWindowMetrics } from 'react-native-safe-area-context'
 import { colors, radii } from '../theme'
 import { apiJson, apiFetch, post, del } from '../lib/api'
@@ -298,6 +299,7 @@ export default function ContentViewer({ visible, items, startIndex = 0, onClose,
                 </View>
               </Pressable>
             ) : null}
+            <PostCaption item={current} lines={3} style={styles.caption} />
 
             <View style={styles.actions}>
               <ActionButton icon={current.liked_by_me ? '♥' : '♡'} label={current.like_count ?? 0} active={current.liked_by_me} selected={!!current.liked_by_me} onPress={() => toggleLike(current)} accessibilityLabel={t(current.liked_by_me ? 'unlikeA11y' : 'likeA11y', { n: current.like_count ?? 0 })} />
@@ -466,6 +468,7 @@ function CommentsSheet({ media, onClose, onCountChange, onOpenProfile }) {
 }
 
 const styles = StyleSheet.create({
+  caption: { marginTop: 6, marginBottom: 2, paddingRight: 8, textShadowColor: 'rgba(0,0,0,0.6)', textShadowRadius: 4 },
   root: { flex: 1, backgroundColor: '#000' },
   media: { width: '100%', height: '100%' },
   topBar: {

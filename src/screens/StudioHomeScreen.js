@@ -9,9 +9,11 @@ import { useStudioFonts, withAlpha, FONT } from '../games/studio'
 import { SX, sxType, Panel, HwButton, Seg } from '../studio/ui'
 import { listProjects, deleteProject } from '../studio/projects'
 import { STYLES } from '../studio/generator'
-import { KIT_BY_ID } from '../studio/kits'
+import { KIT_BY_ID, KITS } from '../studio/kits'
 import { mySounds, setSoundVisibility, deleteSound } from '../lib/sounds'
 import { useSoundPreview } from '../lib/soundPreview'
+
+const KIT_COLORS = ['#ff4fa3', '#ffb21e', '#39d5ff', '#5cf2a0', '#a879ff', '#ff6a3d', '#7cb7ff', '#f2f4f7']
 
 const STATUS = {
   public: { label: 'Public', color: SX.ok },
@@ -75,13 +77,29 @@ export default function StudioHomeScreen({ navigation, route }) {
         <LinearGradient colors={['#2a1430', '#141a2a']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={st.hero}>
           <Text style={sxType.label}>Drum machine · Sampler</Text>
           <Text style={st.heroTitle}>Make a beat</Text>
-          <Text style={[sxType.small, { color: 'rgba(242,244,247,0.75)' }]}>16 pads, 4 kits, step sequencer, chop any sound. Export it as a sound for your videos.</Text>
+          <Text style={[sxType.small, { color: 'rgba(242,244,247,0.75)' }]}>16 pads, 8 kits, step sequencer, sampler with auto-chop. Export it as a sound for your videos.</Text>
           <View style={{ flexDirection: 'row', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
             <HwButton label="New beat" active onPress={() => open({})} icon={<Ionicons name="add" size={16} color={SX.accent} />} style={{ height: 44 }} />
             <HwButton label="Auto beat" active color={SX.hot} onPress={() => open({ autoStyle: STYLES[Math.floor(Math.random() * STYLES.length)].id })} icon={<Ionicons name="sparkles" size={15} color={SX.hot} />} style={{ height: 44 }} />
           </View>
         </LinearGradient>
 
+        <Text style={[sxType.label, { marginTop: 18, marginBottom: 8 }]}>Kits · tap to start a beat</Text>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 10 }}>
+          {KITS.map((k, i) => {
+            const col = KIT_COLORS[i % KIT_COLORS.length]
+            return (
+              <Pressable key={k.id} onPress={() => open({ kit: k.id })} style={[st.kitCard, { borderColor: withAlpha(col, 0.4) }]} accessibilityRole="button" accessibilityLabel={`New beat with the ${k.name} kit`}>
+                <LinearGradient colors={[withAlpha(col, 0.28), 'rgba(0,0,0,0)']} style={StyleSheet.absoluteFill} />
+                <View style={st.kitPads}>
+                  {[0, 1, 2, 3].map((n) => <View key={n} style={[st.kitPad, { backgroundColor: withAlpha(col, n === 0 ? 0.9 : 0.35) }]} />)}
+                </View>
+                <Text style={sxType.title} numberOfLines={1}>{k.name}</Text>
+                <Text style={sxType.small} numberOfLines={1}>{k.pads.slice(0, 3).map((p) => p.label).join(' · ')}</Text>
+              </Pressable>
+            )
+          })}
+        </ScrollView>
         <Seg options={[{ key: 'beats', label: 'My beats' }, { key: 'sounds', label: 'My sounds' }]} value={tab} onChange={setTab} style={{ marginTop: 16 }} />
 
         {tab === 'beats' ? (
@@ -155,6 +173,9 @@ function timeAgo(ts) {
 }
 
 const st = StyleSheet.create({
+  kitCard: { width: 150, padding: 12, borderRadius: 16, borderWidth: 1, backgroundColor: SX.panel, overflow: 'hidden', gap: 4 },
+  kitPads: { flexDirection: 'row', flexWrap: 'wrap', width: 44, gap: 4, marginBottom: 6 },
+  kitPad: { width: 20, height: 20, borderRadius: 5 },
   screen: { flex: 1, backgroundColor: SX.bg },
   content: { width: '100%', alignSelf: 'center', paddingHorizontal: 16 },
   header: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 },

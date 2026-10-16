@@ -10,6 +10,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons'
 import * as Haptics from 'expo-haptics'
 import { useFocusEffect } from '@react-navigation/native'
+import { LinearGradient } from 'expo-linear-gradient'
 import { FONT, useStudioFonts, withAlpha } from '../games/studio'
 import { SX, sxType, Panel, HwButton, Seg, Fader, Stepper, Waveform } from '../studio/ui'
 import { KITS } from '../studio/kits'
@@ -207,19 +208,50 @@ export default function StudioScreen({ navigation, route }) {
           <HwButton label="Export" active color={SX.accent} onPress={() => { stopRef.current?.(); stopRef.current = null; setPlaying(false); setExportOpen(true) }} icon={<Ionicons name="share-outline" size={15} color={SX.accent} />} />
         </View>
 
-        {/* transport */}
-        <Panel style={st.transport}>
-          <Pressable onPress={togglePlay} style={[st.play, playing && { backgroundColor: SX.accent }]} accessibilityLabel={playing ? 'Stop' : 'Play'}>
-            <Ionicons name={playing ? 'stop' : 'play'} size={26} color={playing ? SX.bg : SX.text} style={!playing && { marginLeft: 3 }} />
-          </Pressable>
-          <Pressable onPress={() => { tap(); setRec((r) => !r) }} style={[st.recBtn, rec && { backgroundColor: withAlpha(SX.rec, 0.2), borderColor: SX.rec }]} accessibilityLabel="Record pads into the pattern">
-            <View style={[st.recDot, rec && { backgroundColor: SX.rec }]} />
-          </Pressable>
-          <Stepper label="BPM" value={project.bpm} min={60} max={190} onChange={(bpm) => setProject((p) => ({ ...p, bpm }))} onPressValue={tapTempo} />
-          <Stepper label="Swing" value={Math.round((project.swing || 0) * 100)} min={0} max={60} step={5} format={(v) => `${v}%`} onChange={(v) => setProject((p) => ({ ...p, swing: v / 100 }))} />
-          <View style={{ gap: 6 }}>
-            <HwButton label={`${project.steps}`} onPress={() => { tap(); setProject((p) => setSteps(p, p.steps === 16 ? 32 : 16)); setBar(0) }} accessibilityLabel="Pattern length" style={st.miniBtn} />
-            <HwButton icon={<Ionicons name="pulse" size={14} color={project.metronome ? SX.cool : SX.muted} />} active={project.metronome} color={SX.cool} onPress={() => setProject((p) => ({ ...p, metronome: !p.metronome }))} accessibilityLabel="Metronome" style={st.miniBtn} />
+        {/* LCD + transport deck (MPC-style): kit, tempo, position, playhead LEDs */}
+        <Panel style={st.deck}>
+          <View style={st.lcd}>
+            <View style={st.lcdRow}>
+              <Text style={st.lcdSmall} numberOfLines={1}>KIT · {(KITS.find((k) => k.id === project.kit)?.name || 'Custom').toUpperCase()}</Text>
+              <Text style={st.lcdSmall}>{playing && playStep >= 0 ? `BAR ${Math.floor(playStep / 16) + 1}/${project.steps / 16} · ${String((playStep % 16) + 1).padStart(2, '0')}` : `${project.steps / 16} BAR${project.steps > 16 ? 'S' : ''} · ${rec ? 'REC ARMED' : 'READY'}`}</Text>
+            </View>
+            <View style={st.lcdMain}>
+              <View style={st.lcdBlock}>
+                <View style={st.lcdBtns}>
+                  <Pressable onPress={() => setProject((p) => ({ ...p, bpm: Math.max(60, p.bpm - 1) }))} onLongPress={() => setProject((p) => ({ ...p, bpm: Math.max(60, p.bpm - 10) }))} style={st.lcdBtn} hitSlop={6} accessibilityLabel="Slower"><Ionicons name="remove" size={16} color={SX.accent} /></Pressable>
+                  <Pressable onPress={tapTempo} accessibilityLabel="Tap tempo" accessibilityHint="Tap in time to set the tempo">
+                    <Text style={st.lcdBig}>{project.bpm}</Text>
+                  </Pressable>
+                  <Pressable onPress={() => setProject((p) => ({ ...p, bpm: Math.min(190, p.bpm + 1) }))} onLongPress={() => setProject((p) => ({ ...p, bpm: Math.min(190, p.bpm + 10) }))} style={st.lcdBtn} hitSlop={6} accessibilityLabel="Faster"><Ionicons name="add" size={16} color={SX.accent} /></Pressable>
+                </View>
+                <Text style={st.lcdLabel}>BPM · TAP NUMBER</Text>
+              </View>
+              <View style={[st.lcdBlock, { alignItems: 'flex-end' }]}>
+                <View style={st.lcdBtns}>
+                  <Pressable onPress={() => setProject((p) => ({ ...p, swing: Math.max(0, Math.round(((p.swing || 0) - 0.05) * 100) / 100) }))} style={st.lcdBtn} hitSlop={6} accessibilityLabel="Less swing"><Ionicons name="remove" size={16} color={SX.accent} /></Pressable>
+                  <Text style={st.lcdMid}>{Math.round((project.swing || 0) * 100)}%</Text>
+                  <Pressable onPress={() => setProject((p) => ({ ...p, swing: Math.min(0.6, Math.round(((p.swing || 0) + 0.05) * 100) / 100) }))} style={st.lcdBtn} hitSlop={6} accessibilityLabel="More swing"><Ionicons name="add" size={16} color={SX.accent} /></Pressable>
+                </View>
+                <Text style={st.lcdLabel}>SWING</Text>
+              </View>
+            </View>
+            <View style={st.leds}>
+              {Array.from({ length: 16 }, (_, i) => {
+                const on = playing && playStep >= 0 && playStep % 16 === i
+                return <View key={i} style={[st.led, i % 4 === 0 && st.ledBeat, on && st.ledOn]} />
+              })}
+            </View>
+          </View>
+          <View style={st.transportRow}>
+            <Pressable onPress={togglePlay} style={[st.play, playing && { backgroundColor: SX.accent, borderColor: SX.accent }]} accessibilityLabel={playing ? 'Stop' : 'Play'}>
+              <Ionicons name={playing ? 'stop' : 'play'} size={24} color={playing ? SX.bg : SX.text} style={!playing && { marginLeft: 3 }} />
+            </Pressable>
+            <Pressable onPress={() => { tap(); setRec((r) => !r) }} style={[st.recBtn, rec && { backgroundColor: withAlpha(SX.rec, 0.2), borderColor: SX.rec }]} accessibilityLabel="Record pads into the pattern">
+              <View style={[st.recDot, rec && { backgroundColor: SX.rec }]} />
+            </Pressable>
+            <View style={{ flex: 1 }} />
+            <HwButton label={`${project.steps} steps`} onPress={() => { tap(); setProject((p) => setSteps(p, p.steps === 16 ? 32 : 16)); setBar(0) }} accessibilityLabel="Pattern length" style={st.miniBtn} />
+            <HwButton label="Click" icon={<Ionicons name="pulse" size={13} color={project.metronome ? SX.cool : SX.muted} />} active={project.metronome} color={SX.cool} onPress={() => setProject((p) => ({ ...p, metronome: !p.metronome }))} accessibilityLabel="Metronome" style={st.miniBtn} />
           </View>
         </Panel>
 
@@ -317,13 +349,21 @@ function Pad({ pad, index, size, selected, flashAt, onPress }) {
   return (
     <Pressable
       onPressIn={onPress}
-      style={[st.pad, { width: size, height: size, borderColor: selected ? c : SX.line }, lit && { backgroundColor: withAlpha(c, 0.55) }, !lit && !empty && { backgroundColor: withAlpha(c, 0.12) }]}
+      style={[
+        st.pad,
+        { width: size, height: size, borderColor: selected ? c : empty ? SX.line : withAlpha(c, 0.35) },
+        lit && { backgroundColor: withAlpha(c, 0.6), shadowColor: c, shadowOpacity: 0.9, shadowRadius: 14, elevation: 8, transform: [{ scale: 0.97 }] },
+        !lit && !empty && { backgroundColor: withAlpha(c, 0.13) },
+      ]}
       accessibilityRole="button"
       accessibilityLabel={empty ? `Empty pad ${index + 1}` : pad.label}
     >
-      <View style={[st.padLed, { backgroundColor: lit ? '#fff' : c, opacity: empty ? 0.4 : 1 }]} />
+      {/* rubber pad shading: light from the top, darker at the bottom edge */}
+      <LinearGradient colors={['rgba(255,255,255,0.10)', 'rgba(255,255,255,0.02)', 'rgba(0,0,0,0.28)']} locations={[0, 0.45, 1]} style={[StyleSheet.absoluteFill, { borderRadius: 13 }]} pointerEvents="none" />
+      <View style={st.padInset} pointerEvents="none" />
+      <View style={[st.padLed, { backgroundColor: lit ? '#fff' : c, opacity: empty ? 0.35 : 1, shadowColor: c, shadowOpacity: empty ? 0 : 0.9, shadowRadius: 4 }]} />
       <Text style={[st.padLabel, empty && { color: SX.faint }]} numberOfLines={2}>{empty ? '+ Sample' : pad.label}</Text>
-      <Text style={st.padNum}>{index + 1}</Text>
+      <Text style={st.padNum}>{String(index + 1).padStart(2, '0')}</Text>
     </Pressable>
   )
 }
@@ -653,6 +693,22 @@ const st = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 },
   iconBtn: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
   transport: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 10, gap: 6 },
+  deck: { padding: 10, gap: 10 },
+  lcd: { backgroundColor: '#0b0d08', borderRadius: 10, borderWidth: 1, borderColor: 'rgba(255,178,30,0.22)', paddingHorizontal: 12, paddingVertical: 10, gap: 6, shadowColor: SX.accent, shadowOpacity: 0.12, shadowRadius: 12 },
+  lcdRow: { flexDirection: 'row', justifyContent: 'space-between', gap: 8 },
+  lcdSmall: { fontFamily: FONT.ui, fontSize: 11, letterSpacing: 1.4, color: withAlpha(SX.accent, 0.75), flexShrink: 1 },
+  lcdMain: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end' },
+  lcdBlock: { gap: 2 },
+  lcdBtns: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  lcdBtn: { width: 26, height: 26, borderRadius: 6, borderWidth: 1, borderColor: 'rgba(255,178,30,0.3)', alignItems: 'center', justifyContent: 'center' },
+  lcdBig: { fontFamily: FONT.display, fontSize: 40, lineHeight: 44, color: SX.accent, fontVariant: ['tabular-nums'], includeFontPadding: false, textShadowColor: 'rgba(255,178,30,0.55)', textShadowRadius: 10, minWidth: 74, textAlign: 'center' },
+  lcdMid: { fontFamily: FONT.display, fontSize: 24, color: SX.accent, fontVariant: ['tabular-nums'], includeFontPadding: false, textShadowColor: 'rgba(255,178,30,0.45)', textShadowRadius: 8, minWidth: 52, textAlign: 'center' },
+  lcdLabel: { fontFamily: FONT.ui, fontSize: 9, letterSpacing: 1.6, color: withAlpha(SX.accent, 0.5) },
+  leds: { flexDirection: 'row', gap: 4, marginTop: 4 },
+  led: { flex: 1, height: 5, borderRadius: 2, backgroundColor: 'rgba(255,178,30,0.12)' },
+  ledBeat: { backgroundColor: 'rgba(255,178,30,0.26)' },
+  ledOn: { backgroundColor: SX.accent, shadowColor: SX.accent, shadowOpacity: 1, shadowRadius: 6 },
+  transportRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   play: { width: 54, height: 54, borderRadius: 27, backgroundColor: SX.panel2, borderWidth: 1, borderColor: SX.lineStrong, alignItems: 'center', justifyContent: 'center' },
   recBtn: { width: 34, height: 34, borderRadius: 17, borderWidth: 1, borderColor: SX.lineStrong, alignItems: 'center', justifyContent: 'center', backgroundColor: SX.panel2 },
   recDot: { width: 12, height: 12, borderRadius: 6, backgroundColor: 'rgba(255,61,82,0.5)' },
@@ -660,8 +716,10 @@ const st = StyleSheet.create({
   kitRow: { gap: 8, paddingTop: 10 },
   padGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   pad: {
-    borderRadius: 14, borderWidth: 1.5, backgroundColor: SX.panel, padding: 8, justifyContent: 'space-between',
+    borderRadius: 14, borderWidth: 1.5, backgroundColor: '#14171e', padding: 9, justifyContent: 'space-between',
+    shadowColor: '#000', shadowOpacity: 0.5, shadowRadius: 6, shadowOffset: { width: 0, height: 3 }, elevation: 3,
   },
+  padInset: { position: 'absolute', left: 5, right: 5, top: 5, bottom: 5, borderRadius: 10, borderWidth: 1, borderColor: 'rgba(255,255,255,0.04)' },
   padLed: { width: 18, height: 4, borderRadius: 2 },
   padLabel: { fontFamily: FONT.ui, fontSize: 12, letterSpacing: 0.6, color: SX.text, textTransform: 'uppercase' },
   padNum: { position: 'absolute', right: 8, top: 6, fontFamily: FONT.display, fontSize: 10, color: SX.faint },

@@ -3,6 +3,7 @@ import { View, Text, Image, Pressable, StyleSheet, FlatList, Platform } from 're
 import { Ionicons } from '@expo/vector-icons'
 import { useIsFocused } from '@react-navigation/native'
 import EditedVideo from './EditedVideo'
+import PostCaption from './PostCaption'
 import { colors, type } from '../theme'
 import { post, del } from '../lib/api'
 import Bounce from './Bounce'
@@ -76,6 +77,7 @@ const FeedCard = memo(function FeedCard({ item, index, active, onOpen, onLike, o
           <Text style={type.caption}>{item.comment_count ?? 0}</Text>
         </Pressable>
       </View>
+      <PostCaption item={item} color={colors.text} accent={colors.magenta} style={styles.caption} />
     </View>
   )
 })
@@ -156,6 +158,7 @@ export default function FeedScroll({
 }
 
 const styles = StyleSheet.create({
+  caption: { paddingHorizontal: 12, paddingBottom: 10 },
   // Capped width so a post isn't a screen-sized 4:5 video on desktop web / tablets.
   card: { marginBottom: 20, width: '100%', maxWidth: 560, alignSelf: 'center' },
   ownerRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 16, paddingBottom: 10 },

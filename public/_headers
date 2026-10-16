@@ -1,0 +1,12 @@
+# app.iyiyi.xyz (Cloudflare static assets). The page itself is always revalidated so a new
+# deploy is picked up right away; hashed bundles never change, so they cache for a year.
+/*
+  Cache-Control: no-cache
+
+/_expo/static/*
+  ! Cache-Control
+  Cache-Control: public, max-age=31536000, immutable
+
+/assets/*
+  ! Cache-Control
+  Cache-Control: public, max-age=31536000, immutable

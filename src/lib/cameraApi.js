@@ -33,7 +33,7 @@ export async function fetchCameraNearby(lat, lng) {
 // Creates the camera post (a profile_media row) and tags whoever was nearby. Returns the row.
 // Throws if the post itself can't be created; tag failures (people who don't allow tagging,
 // or RLS) are logged and skipped.
-export async function createCameraPost({
+export async function createCameraPost({ caption,
   media_url, media_type, watermarked_url, width, height, lat, lng, location_label, tagged_ids, edit, sound_id,
 }) {
   const userId = await authUserId()
@@ -55,10 +55,12 @@ export async function createCameraPost({
   // doesn't have those columns yet, post without them rather than failing.
   if (edit) row.edit = edit
   if (sound_id) row.sound_id = sound_id
+  if (typeof caption === 'string' && caption.trim()) row.caption = caption.trim().slice(0, 2200)
   let { data, error } = await supabase.from('profile_media').insert(row).select().single()
-  if (error && (row.edit || row.sound_id) && /edit|sound_id|column/i.test(error.message || '')) {
+  if (error && (row.edit || row.sound_id || row.caption) && /edit|sound_id|caption|column/i.test(error.message || '')) {
     delete row.edit
     delete row.sound_id
+    delete row.caption
     ;({ data, error } = await supabase.from('profile_media').insert(row).select().single())
   }
   if (error) throw error

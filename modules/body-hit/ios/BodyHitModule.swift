@@ -104,10 +104,42 @@ public class BodyHitModule: Module {
       }
     }
 
+    // Live green screen (GreenScreen.swift). opts: { mode: "image" | "blur" | "color", uri?, color? }
+    AsyncFunction("startGreenScreen") { (opts: [String: Any], promise: Promise) in
+      DispatchQueue.main.async {
+        GreenScreen.shared.start(opts: opts) { ok in promise.resolve(ok) }
+      }
+    }
+
+    AsyncFunction("updateGreenScreen") { (opts: [String: Any], promise: Promise) in
+      GreenScreen.shared.update(opts: opts)
+      promise.resolve(nil)
+    }
+
+    AsyncFunction("stopGreenScreen") { (promise: Promise) in
+      DispatchQueue.main.async {
+        GreenScreen.shared.stop()
+        promise.resolve(nil)
+      }
+    }
+
+    AsyncFunction("captureGreenScreenPhoto") { (promise: Promise) in
+      GreenScreen.shared.capturePhoto { uri in promise.resolve(uri) }
+    }
+
+    AsyncFunction("startGreenScreenRecording") { (withAudio: Bool, promise: Promise) in
+      GreenScreen.shared.startRecording(withAudio: withAudio) { ok in promise.resolve(ok) }
+    }
+
+    AsyncFunction("stopGreenScreenRecording") { (promise: Promise) in
+      GreenScreen.shared.stopRecording { uri in promise.resolve(uri) }
+    }
+
     OnDestroy {
       DispatchQueue.main.async {
         self.liveFaces.stop()
         self.liveBodies.stop()
+        GreenScreen.shared.stop()
       }
     }
 

@@ -21,7 +21,7 @@ const TOOLS = [
 const fmt = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}.${Math.floor((s % 1) * 10)}`
 const newId = () => `t${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`
 
-export default function VideoEditor({ visible, item, initialSound, onCancel, onPost, onMakeBeat }) {
+export default function VideoEditor({ visible, item, initialSound, initialEdit, onCancel, onPost, onMakeBeat }) {
   useCaptionFonts()
   const insets = useSafeAreaInsets()
   const { width, height } = useWindowDimensions()
@@ -36,7 +36,8 @@ export default function VideoEditor({ visible, item, initialSound, onCancel, onP
   useEffect(() => {
     if (!visible) return
     setTool('trim')
-    setEdit({ texts: [], crop: { aspect: null, zoom: 1, x: 0, y: 0 }, originalVolume: initialSound ? 0 : 1, soundVolume: 1 })
+    // Coming back from the post screen keeps the edits made so far.
+    setEdit(initialEdit ? { texts: [], crop: { aspect: null, zoom: 1, x: 0, y: 0 }, originalVolume: 1, soundVolume: 1, ...initialEdit, texts: initialEdit.texts || [], crop: initialEdit.crop || { aspect: null, zoom: 1, x: 0, y: 0 } } : { texts: [], crop: { aspect: null, zoom: 1, x: 0, y: 0 }, originalVolume: initialSound ? 0 : 1, soundVolume: 1 })
     setSound(initialSound || null)
     setSelText(null)
     setPlaying(true)
@@ -94,7 +95,7 @@ export default function VideoEditor({ visible, item, initialSound, onCancel, onP
         <View style={st.top}>
           <Pressable onPress={onCancel} hitSlop={10} style={st.topBtn}><Text style={st.topText}>Cancel</Text></Pressable>
           <Text style={st.topTitle}>Edit video</Text>
-          <Pressable onPress={post} style={st.postBtn} accessibilityRole="button"><Text style={st.postText}>Post</Text></Pressable>
+          <Pressable onPress={post} style={st.postBtn} accessibilityRole="button"><Text style={st.postText}>Next</Text></Pressable>
         </View>
 
         <View style={{ height: areaH, alignItems: 'center', justifyContent: 'center' }}>
