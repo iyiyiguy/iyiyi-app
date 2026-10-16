@@ -87,15 +87,21 @@ export default function GuestExploreScreen({ navigation }) {
     let list = null
     const { data, error } = await supabase.rpc('guest_explore', args)
     if (!error && Array.isArray(data)) list = data
-    else {
-      // Older database without guest_explore: fall back to the public showcase.
+    // Worldwide (no range): guest_explore only returns members with a profile photo, so add
+    // everyone else from the public showcase too (they show with their initial). Ranged views
+    // stay location-based. The showcase is also the fallback for a database without guest_explore.
+    if (!r?.m || !list) {
       try {
         const d = await fetch(`${API_URL}/api/public/showcase`).then((x) => x.json())
-        list = (d.profiles ?? []).map((p) => ({ ...p, range_label: null }))
+        const extra = (d.profiles ?? []).map((p) => ({ ...p, range_label: null }))
+        const seen = new Set((list ?? []).map((p) => String(p.id ?? p.username)))
+        list = [...(list ?? []), ...extra.filter((p) => !seen.has(String(p.id ?? p.username)))]
       } catch {
-        list = []
+        list = list ?? []
       }
     }
+    // App Store review accounts aren't real members.
+    list = list.filter((p) => !/^ap{1,2}review/i.test(p.username || ''))
     if (id !== reqId.current) return
     lastPeople = list
     lastRange = key

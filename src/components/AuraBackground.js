@@ -10,7 +10,7 @@ function AuraBackground({ style }) {
   const scheme = useColorScheme()
   return (
     <View style={[StyleSheet.absoluteFill, style]} pointerEvents="none">
-      <Image source={scheme === 'dark' ? DARK : LIGHT} style={StyleSheet.absoluteFill} resizeMode="cover" fadeDuration={0} />
+      <Image source={scheme === 'dark' ? DARK : LIGHT} style={styles.image} resizeMode="cover" fadeDuration={0} />
     </View>
   )
 }
@@ -31,4 +31,10 @@ export function withAura(Screen) {
   return AuraScreen
 }
 
-const styles = StyleSheet.create({ fill: { flex: 1 } })
+// width/height 100%: on web, react-native-web gives an Image without an explicit size the
+// image's own pixel size (780 x 1690 here), so absoluteFill alone left the right side of wide
+// screens without the backdrop.
+const styles = StyleSheet.create({
+  fill: { flex: 1 },
+  image: { ...StyleSheet.absoluteFill, width: '100%', height: '100%' },
+})

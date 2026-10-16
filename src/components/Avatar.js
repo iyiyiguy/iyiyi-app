@@ -5,6 +5,9 @@ import { Image } from 'expo-image'
 // Profile picture with a proper fallback: when there's no photo (or it fails to load) show the
 // iYiYi default picture instead of a blank dark box.
 const DEFAULT_AVATAR = require('../../assets/default-avatar.jpg')
+// Explicit 100% size: on web an RN Image without a size takes the file's pixel size (512 px),
+// overflowing the avatar box.
+const FILL_IMG = { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, width: '100%', height: '100%' }
 const PALETTES = [
   ['#6b7cff', '#b39bff'],
   ['#ff6fb5', '#ff9fd0'],
@@ -35,10 +38,10 @@ export default function Avatar({ uri, name = '', size = 48, radius, style, fill 
   return (
     <View style={[box, { borderRadius: r, overflow: 'hidden', backgroundColor: 'rgba(127,140,180,0.18)' }, style]}>
       {!showImage ? (
-        <RNImage source={DEFAULT_AVATAR} style={StyleSheet.absoluteFill} resizeMode="cover" accessibilityLabel={letter} />
+        <RNImage source={DEFAULT_AVATAR} style={FILL_IMG} resizeMode="cover" accessibilityLabel={letter} />
       ) : null}
       {showImage && stage === 0 ? (
-        <RNImage source={{ uri }} style={StyleSheet.absoluteFill} resizeMode={contentFit === 'contain' ? 'contain' : 'cover'} onError={() => setStage(1)} />
+        <RNImage source={{ uri }} style={FILL_IMG} resizeMode={contentFit === 'contain' ? 'contain' : 'cover'} onError={() => setStage(1)} />
       ) : null}
       {showImage && stage === 1 ? (
         <Image
