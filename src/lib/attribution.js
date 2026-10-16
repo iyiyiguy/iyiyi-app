@@ -14,6 +14,7 @@
 // af_purchase (arcade items), plus a few app-specific events for funnels.
 import { Platform } from 'react-native'
 import Constants from 'expo-constants'
+import { initMeta, metaSetUser, metaLog, metaRegistration, metaSubscribe, metaPurchase } from './metaEvents'
 
 const DEV_KEY = Constants.expoConfig?.extra?.appsflyerDevKey || process.env.EXPO_PUBLIC_APPSFLYER_DEV_KEY || ''
 const IOS_APP_ID = '6445996160' // App Store id (Android uses the package name automatically)
@@ -52,9 +53,12 @@ function call(name, params) {
   return undefined
 }
 
+// Each public function below reports to AppsFlyer (when a dev key is set) and to Meta (when the
+// build includes the Meta SDK). Both are optional and independent.
 export function initAttribution() {
   if (initialized) return
   initialized = true
+  initMeta()
   const s = getSdk()
   if (!s || typeof s.init !== 'function') return
   try {
@@ -81,6 +85,7 @@ export function initAttribution() {
 
 // Ties installs and events to the signed-in member (the Supabase user id, never email/phone).
 export function setUser(userId) {
+  if (userId) metaSetUser(userId)
   if (!userId || !attributionEnabled) return
   if (!started) {
     pendingUserId = userId
@@ -97,25 +102,31 @@ function logEvent(eventName, eventValues) {
 export function logSignup(userId) {
   setUser(userId)
   logEvent('af_complete_registration', { af_registration_method: 'iyiyi' })
+  metaRegistration()
 }
 
 export function logSubscriptionPurchase(tier, priceUsd) {
   logEvent('af_subscribe', { af_content_id: tier, af_revenue: priceUsd, af_currency: 'USD' })
+  metaSubscribe(tier, priceUsd)
 }
 
 export function logPurchase(productId, priceUsd) {
   logEvent('af_purchase', { af_content_id: productId, af_revenue: priceUsd, af_currency: 'USD', af_quantity: 1 })
+  metaPurchase(productId)
 }
 
 // App-specific funnel events (show up as custom events in AppsFlyer and can be mapped to ads).
 export function logOnboardingDone(intent) {
   logEvent('onboarding_complete', { intent: intent || 'skipped' })
+  metaLog('onboarding_complete', { intent: intent || 'skipped' })
 }
 
 export function logFollowEverywhere(platformCount) {
   logEvent('follow_everywhere', { platforms: platformCount || 0 })
+  metaLog('follow_everywhere', { platforms: platformCount || 0 })
 }
 
 export function logGameStarted(game) {
   logEvent('game_started', { game })
+  metaLog('game_started', { game })
 }

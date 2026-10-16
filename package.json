@@ -53,6 +53,7 @@
     "react-dom": "19.2.3",
     "react-native": "0.86.3",
     "react-native-appsflyer": "^7.0.2-v2",
+    "react-native-fbsdk-next": "13.4.3",
     "react-native-iap": "^16.5.1",
     "react-native-maps": "1.27.2",
     "react-native-nitro-modules": "^0.37.1",
