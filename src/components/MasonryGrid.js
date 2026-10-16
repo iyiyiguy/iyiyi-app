@@ -21,11 +21,13 @@ function VideoFrame({ uri }) {
   return <VideoView player={player} style={StyleSheet.absoluteFill} contentFit="cover" nativeControls={false} pointerEvents="none" />
 }
 
-export default function MasonryGrid({ items, onOpen, showOwner, columns = 2, onOpenProfile }) {
+export default function MasonryGrid({ items, onOpen, showOwner, columns: columnsProp, onOpenProfile }) {
   const t = useT(strings)
   const navOpenProfile = useOpenProfile()
   const openOwner = onOpenProfile ?? navOpenProfile
   const { width } = useWindowDimensions()
+  // More, narrower columns on wide screens (desktop web, tablets) instead of 2 huge tiles.
+  const columns = columnsProp ?? (width >= 1400 ? 5 : width >= 1100 ? 4 : width >= 760 ? 3 : 2)
   const colWidth = (width - 32 - GAP * (columns - 1)) / columns
   // Photos without stored dimensions report their real size once loaded.
   const [measured, setMeasured] = useState({})

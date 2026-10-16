@@ -113,7 +113,7 @@ export function GuestSignupPill({ bottom, onPress }) {
 }
 
 const styles = StyleSheet.create({
-  wrap: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingTop: 6, gap: 10 },
+  wrap: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingTop: 6, gap: 10, width: '100%', maxWidth: 640, alignSelf: 'center' },
   bar: { flex: 1 },
   row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 7, paddingHorizontal: 8 },
   tab: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },

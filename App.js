@@ -3,7 +3,8 @@ import { DarkTheme, DefaultTheme, NavigationContainer, useNavigationContainerRef
 import { createNativeStackNavigator } from '@react-navigation/native-stack'
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs'
 import { ErrorBoundary as ScreenErrorBoundary } from './src/components/ErrorBoundary'
-import { StatusBar, useColorScheme } from 'react-native'
+import { Platform, StatusBar, useColorScheme } from 'react-native'
+import { enableScreens } from 'react-native-screens'
 import { SafeAreaProvider, initialWindowMetrics, useSafeAreaInsets } from 'react-native-safe-area-context'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 
@@ -114,6 +115,10 @@ const screenLayout = ({ children, route, navigation }) => (
   <ScreenErrorBoundary screen={route.name} onBack={() => (navigation.canGoBack() ? navigation.goBack() : null)}>{children}</ScreenErrorBoundary>
 )
 const Stack = createNativeStackNavigator()
+// Web: react-native-screens is off by default, and then bottom tabs only stack inactive tabs
+// behind the active one (zIndex -1) instead of hiding them. Tab scenes are transparent (the aura
+// shows through), so every visited tab showed through the current one and caught scrolls.
+if (Platform.OS === 'web') enableScreens(true)
 
 const screenOptions = { headerShown: false, contentStyle: { backgroundColor: colors.ink } }
 // Tab scenes are transparent so the shared aura behind the tab navigator shows through.

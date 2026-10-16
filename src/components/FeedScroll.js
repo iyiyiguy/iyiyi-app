@@ -161,7 +161,8 @@ export default function FeedScroll({
 }
 
 const styles = StyleSheet.create({
-  card: { marginBottom: 20 },
+  // Capped width so a post isn't a screen-sized 4:5 video on desktop web / tablets.
+  card: { marginBottom: 20, width: '100%', maxWidth: 560, alignSelf: 'center' },
   ownerRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 16, paddingBottom: 10 },
   ownerMain: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 40 },
   avatar: { width: 34, height: 34, borderRadius: 17, backgroundColor: colors.inkSurfaceRaised },

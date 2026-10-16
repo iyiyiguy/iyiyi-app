@@ -93,7 +93,8 @@ export default function TabBar({ state, navigation }) {
 }
 
 const styles = StyleSheet.create({
-  wrap: { paddingHorizontal: 12, paddingTop: 6 },
+  // maxWidth: on desktop web / tablets the bar stays a compact dock instead of spanning the screen.
+  wrap: { paddingHorizontal: 12, paddingTop: 6, width: '100%', maxWidth: 640, alignSelf: 'center' },
   bar: {},
   row: { flexDirection: 'row', alignItems: 'center', paddingVertical: 6, paddingHorizontal: 4 },
   // flex: 1 slots: at 360 dp each gets ~65 dp, enough for the longest labels at 11 pt
