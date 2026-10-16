@@ -96,6 +96,8 @@ export default function NearbyScreen({ navigation, route }) {
   // The filter row must fit in one line without scrolling: below Pro Max widths the chips drop their
   // icons/chevrons, and the Map button shows its label only from 380 pt.
   const narrow = winW < 430
+  // Grid columns: 2 on phones, more on tablets / desktop web so cards don't stretch.
+  const gridCols = winW >= 1300 ? 5 : winW >= 1000 ? 4 : winW >= 700 ? 3 : 2
   const mapLabel = winW >= 380
   const headerBtn = winW < 360 ? 36 : 38
   const [scope, setScope] = useState('local')
@@ -414,12 +416,12 @@ export default function NearbyScreen({ navigation, route }) {
         </View>
       ) : null}
       <FlatList
-        key={layout}
+        key={`${layout}-${gridCols}`}
         data={filtered}
         keyExtractor={(u, i) => String(u.user_id ?? u.id ?? i)}
-        numColumns={layout === 'grid' ? 2 : 1}
+        numColumns={layout === 'grid' ? gridCols : 1}
         columnWrapperStyle={layout === 'grid' ? styles.row : undefined}
-        contentContainerStyle={styles.list}
+        contentContainerStyle={[styles.list, layout !== 'grid' && styles.listNarrow]}
         keyboardDismissMode="on-drag"
         keyboardShouldPersistTaps="handled"
         refreshing={loading}
@@ -437,9 +439,16 @@ export default function NearbyScreen({ navigation, route }) {
               onPress={() => openProfile(navigation, item.user_id, item.avatar_url ?? null)}
             />
           )
-          // Keep a lone last card in an odd-length grid at half width.
-          if (layout === 'grid' && index === filtered.length - 1 && filtered.length % 2 === 1) {
-            return <View style={styles.lastRow}><View style={{ flex: 1 }}>{card}</View><View style={{ flex: 1 }} /></View>
+          // Keep the cards of a short last grid row at normal width (spacers fill the rest).
+          const rem = filtered.length % gridCols
+          if (layout === 'grid' && rem && index === filtered.length - 1) {
+            const empty = gridCols - rem
+            return (
+              <View style={[styles.lastRow, { flex: empty + 1 }]}>
+                <View style={{ flex: 1 }}>{card}</View>
+                {Array.from({ length: empty }, (_, i) => <View key={i} style={{ flex: 1 }} />)}
+              </View>
+            )
           }
           return card
         }}
@@ -600,6 +609,7 @@ const styles = StyleSheet.create({
   filterText: { ...type.caption, color: colors.textMuted, flex: 1 },
   filterClear: { fontSize: 13, ...font.semibold, color: colors.accent },
   list: { paddingHorizontal: 16, paddingTop: 10, paddingBottom: 32, gap: 14 },
+  listNarrow: { width: '100%', maxWidth: 720, alignSelf: 'center' },
   row: { gap: 14 },
   lastRow: { flex: 1, flexDirection: 'row', gap: 14 },
   empty: { ...type.caption, textAlign: 'center', marginTop: 60, paddingHorizontal: 40 },
