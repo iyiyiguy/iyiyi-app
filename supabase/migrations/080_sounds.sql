@@ -28,6 +28,10 @@ create table if not exists public.sounds (
 create index if not exists sounds_user_idx on public.sounds (user_id, created_at desc);
 create index if not exists sounds_public_idx on public.sounds (status, use_count desc);
 create index if not exists sounds_tags_idx on public.sounds using gin (tags);
+-- Lets the API embed the creator (select=...,profiles:user_id(username,avatar_url)).
+do $$ begin
+  alter table public.sounds add constraint sounds_user_profile_fk foreign key (user_id) references public.profiles (id) on delete cascade;
+exception when duplicate_object then null; end $$;
 
 create table if not exists public.saved_sounds (
   user_id uuid not null references auth.users (id) on delete cascade,
