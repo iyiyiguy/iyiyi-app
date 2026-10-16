@@ -3,7 +3,7 @@ import {
   View, Text, Image, Modal, FlatList, Pressable, StyleSheet, useWindowDimensions, TextInput,
   KeyboardAvoidingView, Platform, ActivityIndicator, ScrollView, Alert,
 } from 'react-native'
-import { VideoView, useVideoPlayer } from 'expo-video'
+import EditedVideo from './EditedVideo'
 import { SafeAreaInsetsContext, initialWindowMetrics } from 'react-native-safe-area-context'
 import { colors, radii } from '../theme'
 import { apiJson, apiFetch, post, del } from '../lib/api'
@@ -264,7 +264,7 @@ export default function ContentViewer({ visible, items, startIndex = 0, onClose,
           renderItem={({ item, index: i }) => (
             <View style={{ width, height }}>
               {item.media_type === 'video' ? (
-                <VideoPage uri={item.media_url} active={visible && i === index} />
+                <VideoPage uri={item.media_url} item={item} active={visible && i === index} />
               ) : (
                 <Image source={{ uri: item.media_url }} style={styles.media} resizeMode="contain" />
               )}
@@ -345,13 +345,10 @@ export default function ContentViewer({ visible, items, startIndex = 0, onClose,
   )
 }
 
-function VideoPage({ uri, active }) {
-  const player = useVideoPlayer(uri, (p) => { p.loop = true })
-  useEffect(() => {
-    if (active) player.play()
-    else player.pause()
-  }, [active, player])
-  return <VideoView player={player} style={styles.media} contentFit="contain" nativeControls />
+function VideoPage({ uri, item, active }) {
+  // Plays with the post's edits and sound (EditedVideo); falls back to plain playback controls
+  // when the post has no edits.
+  return <EditedVideo uri={uri} mediaId={item?.kind === 'youtube' ? null : item?.id} edit={item?.edit} sound={item?.sound} active={active} style={styles.media} contentFit="contain" />
 }
 
 // Icon above its label; every button gets an equal share of the row.

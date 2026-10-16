@@ -8,6 +8,7 @@ export const ARCADE_CATEGORIES = [
   { id: 'strategy', name: 'Strategy' },
   { id: 'party', name: 'Party' },
   { id: 'puzzle', name: 'Puzzle' },
+  { id: 'music', name: 'Music' },
 ]
 
 export const GAMES = [
@@ -157,6 +158,23 @@ export const GAMES = [
     color: '#00c878',
     accent: ['#00c878', '#0a7b8c'],
     cover: require('../../assets/game-covers/whats-the-word.jpg'),
+  },
+  {
+    id: 'studio',
+    route: 'Studio',
+    name: 'Studio',
+    type: 'music',
+    kind: 'solo',
+    categories: ['music'],
+    icon: '🥁',
+    minPlayers: 1,
+    maxPlayers: 1,
+    tagline: 'Drum machine & sampler. Make a beat in seconds.',
+    description: '16 pads, 4 original kits, step sequencer, Auto beats and a sampler that chops any sound. Export your beat as a sound for videos.',
+    color: '#ffb21e',
+    accent: ['#ff4fa3', '#ffb21e'],
+    cover: require('../../assets/game-covers/studio.jpg'),
+    featured: true,
   },
 ]
 

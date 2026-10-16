@@ -22,6 +22,7 @@ import { HeaderButton } from '../components/BrandHeader'
 import { openProfile, useMyUserId } from '../lib/profileNav'
 import { maybeOfferPushAfterFollow } from '../lib/pushPrompt'
 import ContentGrid from '../components/ContentGrid'
+import ProfileMusic from '../components/ProfileMusic'
 import Avatar from '../components/Avatar'
 import { mediaArrayFrom, sortMediaNewest } from '../lib/myContent'
 
@@ -380,6 +381,11 @@ export default function UserProfileScreen({ route, navigation }) {
             ))}
           </View>
         )}
+
+        {/* Their public music (sounds, songs, playlists); hidden when they have none. */}
+        {canSeeContent && profile?.id ? (
+          <ProfileMusic userId={profile.id} username={profile.username} navigation={navigation} style={{ marginHorizontal: 16, marginBottom: 14 }} />
+        ) : null}
 
         {/* Posts first, right under the header. */}
         {canSeeContent && (

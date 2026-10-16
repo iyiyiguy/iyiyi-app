@@ -1,0 +1,426 @@
+{
+ "trap": {
+  "name": "Trap",
+  "pads": [
+   {
+    "id": "kick",
+    "label": "808 Kick",
+    "file": "trap_kick.wav",
+    "sec": 1.2
+   },
+   {
+    "id": "snare",
+    "label": "Snare",
+    "file": "trap_snare.wav",
+    "sec": 0.3
+   },
+   {
+    "id": "clap",
+    "label": "Clap",
+    "file": "trap_clap.wav",
+    "sec": 0.4
+   },
+   {
+    "id": "hat",
+    "label": "Hi-Hat",
+    "file": "trap_hat.wav",
+    "sec": 0.07
+   },
+   {
+    "id": "openhat",
+    "label": "Open Hat",
+    "file": "trap_openhat.wav",
+    "sec": 0.45
+   },
+   {
+    "id": "rim",
+    "label": "Rim",
+    "file": "trap_rim.wav",
+    "sec": 0.12
+   },
+   {
+    "id": "perc",
+    "label": "Bell",
+    "file": "trap_perc.wav",
+    "sec": 0.7
+   },
+   {
+    "id": "bass",
+    "label": "808 Long",
+    "file": "trap_bass.wav",
+    "sec": 2.2
+   }
+  ]
+ },
+ "boombap": {
+  "name": "Boom Bap",
+  "pads": [
+   {
+    "id": "kick",
+    "label": "Kick",
+    "file": "boombap_kick.wav",
+    "sec": 0.5
+   },
+   {
+    "id": "snare",
+    "label": "Snare",
+    "file": "boombap_snare.wav",
+    "sec": 0.4
+   },
+   {
+    "id": "hat",
+    "label": "Hi-Hat",
+    "file": "boombap_hat.wav",
+    "sec": 0.1
+   },
+   {
+    "id": "openhat",
+    "label": "Open Hat",
+    "file": "boombap_openhat.wav",
+    "sec": 0.5
+   },
+   {
+    "id": "shaker",
+    "label": "Shaker",
+    "file": "boombap_shaker.wav",
+    "sec": 0.16
+   },
+   {
+    "id": "rim",
+    "label": "Rim",
+    "file": "boombap_rim.wav",
+    "sec": 0.12
+   },
+   {
+    "id": "tom",
+    "label": "Tom",
+    "file": "boombap_tom.wav",
+    "sec": 0.5
+   },
+   {
+    "id": "ride",
+    "label": "Ride",
+    "file": "boombap_ride.wav",
+    "sec": 1.2
+   }
+  ]
+ },
+ "house": {
+  "name": "House",
+  "pads": [
+   {
+    "id": "kick",
+    "label": "Kick",
+    "file": "house_kick.wav",
+    "sec": 0.6
+   },
+   {
+    "id": "clap",
+    "label": "Clap",
+    "file": "house_clap.wav",
+    "sec": 0.45
+   },
+   {
+    "id": "hat",
+    "label": "Closed Hat",
+    "file": "house_hat.wav",
+    "sec": 0.08
+   },
+   {
+    "id": "openhat",
+    "label": "Open Hat",
+    "file": "house_openhat.wav",
+    "sec": 0.4
+   },
+   {
+    "id": "ride",
+    "label": "Ride",
+    "file": "house_ride.wav",
+    "sec": 1.0
+   },
+   {
+    "id": "rim",
+    "label": "Rim",
+    "file": "house_rim.wav",
+    "sec": 0.12
+   },
+   {
+    "id": "conga",
+    "label": "Conga",
+    "file": "house_conga.wav",
+    "sec": 0.35
+   },
+   {
+    "id": "cowbell",
+    "label": "Cowbell",
+    "file": "house_cowbell.wav",
+    "sec": 0.35
+   }
+  ]
+ },
+ "lofi": {
+  "name": "Lo-fi",
+  "pads": [
+   {
+    "id": "kick",
+    "label": "Kick",
+    "file": "lofi_kick.wav",
+    "sec": 0.55
+   },
+   {
+    "id": "snare",
+    "label": "Brush Snare",
+    "file": "lofi_snare.wav",
+    "sec": 0.4
+   },
+   {
+    "id": "hat",
+    "label": "Dusty Hat",
+    "file": "lofi_hat.wav",
+    "sec": 0.1
+   },
+   {
+    "id": "snap",
+    "label": "Snap",
+    "file": "lofi_snap.wav",
+    "sec": 0.15
+   },
+   {
+    "id": "shaker",
+    "label": "Shaker",
+    "file": "lofi_shaker.wav",
+    "sec": 0.16
+   },
+   {
+    "id": "perc",
+    "label": "Vinyl Thump",
+    "file": "lofi_perc.wav",
+    "sec": 0.25
+   },
+   {
+    "id": "tom",
+    "label": "Low Tom",
+    "file": "lofi_tom.wav",
+    "sec": 0.5
+   },
+   {
+    "id": "keys",
+    "label": "Keys Chord",
+    "file": "lofi_keys.wav",
+    "sec": 1.4
+   }
+  ]
+ },
+ "atl": {
+  "name": "ATL 808",
+  "pads": [
+   {
+    "id": "kick",
+    "label": "Hard Kick",
+    "file": "atl_kick.wav",
+    "sec": 0.45
+   },
+   {
+    "id": "snare",
+    "label": "Crisp Snare",
+    "file": "atl_snare.wav",
+    "sec": 0.24
+   },
+   {
+    "id": "clap",
+    "label": "Clap Stack",
+    "file": "atl_clap.wav",
+    "sec": 0.42
+   },
+   {
+    "id": "hat",
+    "label": "Tight Hat",
+    "file": "atl_hat.wav",
+    "sec": 0.045
+   },
+   {
+    "id": "openhat",
+    "label": "Open Hat",
+    "file": "atl_openhat.wav",
+    "sec": 0.38
+   },
+   {
+    "id": "perc",
+    "label": "Pluck Bell",
+    "file": "atl_perc.wav",
+    "sec": 0.9
+   },
+   {
+    "id": "bass",
+    "label": "808 Glide",
+    "file": "atl_bass.wav",
+    "sec": 2.4
+   },
+   {
+    "id": "fx",
+    "label": "Riser",
+    "file": "atl_fx.wav",
+    "sec": 1.6
+   }
+  ]
+ },
+ "church": {
+  "name": "Church Keys",
+  "pads": [
+   {
+    "id": "kick",
+    "label": "Kick",
+    "file": "church_kick.wav",
+    "sec": 0.5
+   },
+   {
+    "id": "snare",
+    "label": "Snare",
+    "file": "church_snare.wav",
+    "sec": 0.3
+   },
+   {
+    "id": "clap",
+    "label": "Big Clap",
+    "file": "church_clap.wav",
+    "sec": 0.5
+   },
+   {
+    "id": "hat",
+    "label": "Hi-Hat",
+    "file": "church_hat.wav",
+    "sec": 0.06
+   },
+   {
+    "id": "openhat",
+    "label": "Open Hat",
+    "file": "church_openhat.wav",
+    "sec": 0.42
+   },
+   {
+    "id": "perc",
+    "label": "Tambourine",
+    "file": "church_perc.wav",
+    "sec": 0.28
+   },
+   {
+    "id": "keys",
+    "label": "Organ Chord",
+    "file": "church_keys.wav",
+    "sec": 1.6
+   },
+   {
+    "id": "bass",
+    "label": "808",
+    "file": "church_bass.wav",
+    "sec": 2.0
+   }
+  ]
+ },
+ "piano": {
+  "name": "Piano Bells",
+  "pads": [
+   {
+    "id": "kick",
+    "label": "Kick",
+    "file": "piano_kick.wav",
+    "sec": 0.9
+   },
+   {
+    "id": "snare",
+    "label": "Snare",
+    "file": "piano_snare.wav",
+    "sec": 0.26
+   },
+   {
+    "id": "clap",
+    "label": "Clap",
+    "file": "piano_clap.wav",
+    "sec": 0.4
+   },
+   {
+    "id": "hat",
+    "label": "Hi-Hat",
+    "file": "piano_hat.wav",
+    "sec": 0.05
+   },
+   {
+    "id": "keys",
+    "label": "Piano C",
+    "file": "piano_keys.wav",
+    "sec": 1.6
+   },
+   {
+    "id": "perc",
+    "label": "Piano E\u266d",
+    "file": "piano_perc.wav",
+    "sec": 1.6
+   },
+   {
+    "id": "bell",
+    "label": "Bell G",
+    "file": "piano_bell.wav",
+    "sec": 0.9
+   },
+   {
+    "id": "bass",
+    "label": "808",
+    "file": "piano_bass.wav",
+    "sec": 2.2
+   }
+  ]
+ },
+ "jersey": {
+  "name": "Jersey Club",
+  "pads": [
+   {
+    "id": "kick",
+    "label": "Club Kick",
+    "file": "jersey_kick.wav",
+    "sec": 0.38
+   },
+   {
+    "id": "clap",
+    "label": "Clap",
+    "file": "jersey_clap.wav",
+    "sec": 0.36
+   },
+   {
+    "id": "snare",
+    "label": "Snare",
+    "file": "jersey_snare.wav",
+    "sec": 0.2
+   },
+   {
+    "id": "squeak",
+    "label": "Squeak",
+    "file": "jersey_squeak.wav",
+    "sec": 0.22
+   },
+   {
+    "id": "hat",
+    "label": "Hi-Hat",
+    "file": "jersey_hat.wav",
+    "sec": 0.05
+   },
+   {
+    "id": "openhat",
+    "label": "Open Hat",
+    "file": "jersey_openhat.wav",
+    "sec": 0.32
+   },
+   {
+    "id": "vox",
+    "label": "Hey!",
+    "file": "jersey_vox.wav",
+    "sec": 0.32
+   },
+   {
+    "id": "bass",
+    "label": "808 Hit",
+    "file": "jersey_bass.wav",
+    "sec": 0.9
+   }
+  ]
+ }
+}

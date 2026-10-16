@@ -2,7 +2,7 @@ import { memo, useCallback, useEffect, useRef, useState } from 'react'
 import { View, Text, Image, Pressable, StyleSheet, FlatList, Platform } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { useIsFocused } from '@react-navigation/native'
-import { VideoView, useVideoPlayer } from 'expo-video'
+import EditedVideo from './EditedVideo'
 import { colors, type } from '../theme'
 import { post, del } from '../lib/api'
 import Bounce from './Bounce'
@@ -22,15 +22,10 @@ import strings from '../i18n/strings/social'
 //
 // It's a windowed FlatList: only rows near the screen are mounted, and only the most visible
 // video plays (the rest are paused; off-window ones aren't mounted at all).
-function FeedVideo({ uri, active }) {
-  const player = useVideoPlayer(uri, (p) => { p.loop = true; p.muted = true })
-  useEffect(() => {
-    try {
-      if (active) player.play()
-      else player.pause()
-    } catch {}
-  }, [active, player])
-  return <VideoView player={player} style={styles.media} contentFit="cover" nativeControls={false} />
+// Edits (trim / crop / captions) and the post's sound play here too (EditedVideo). Muted in the
+// feed like before; the viewer plays sound.
+function FeedVideo({ uri, active, mediaId, edit, sound }) {
+  return <EditedVideo uri={uri} mediaId={mediaId} edit={edit} sound={sound} active={active} muted style={styles.media} contentFit="cover" />
 }
 
 const FeedCard = memo(function FeedCard({ item, index, active, onOpen, onLike, openOwner, followStatus, onStatus, onFollowEverywhere, myId }) {
@@ -59,7 +54,7 @@ const FeedCard = memo(function FeedCard({ item, index, active, onOpen, onLike, o
 
       <Pressable onPress={() => onOpen(index)} accessibilityRole="imagebutton" accessibilityLabel={item.media_type === 'video' ? t('openVideo') : t('openPhoto')}>
         {item.media_type === 'video'
-          ? <FeedVideo uri={item.media_url} active={active} />
+          ? <FeedVideo uri={item.media_url} active={active} mediaId={item.kind === 'youtube' ? null : item.id} edit={item.edit} sound={item.sound} />
           : <Image source={{ uri: item.media_url }} style={styles.media} resizeMode="cover" />}
       </Pressable>
 

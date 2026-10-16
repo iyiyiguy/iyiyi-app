@@ -34,7 +34,7 @@ export async function fetchCameraNearby(lat, lng) {
 // Throws if the post itself can't be created; tag failures (people who don't allow tagging,
 // or RLS) are logged and skipped.
 export async function createCameraPost({
-  media_url, media_type, watermarked_url, width, height, lat, lng, location_label, tagged_ids,
+  media_url, media_type, watermarked_url, width, height, lat, lng, location_label, tagged_ids, edit, sound_id,
 }) {
   const userId = await authUserId()
   if (!media_url) throw new Error('Nothing was uploaded.')
@@ -51,7 +51,16 @@ export async function createCameraPost({
     captured_lng: num(lng),
     location_label: typeof location_label === 'string' && location_label ? location_label.slice(0, 200) : null,
   }
-  const { data, error } = await supabase.from('profile_media').insert(row).select().single()
+  // Video edits (trim / crop / text) and the chosen sound (migration 080). If the database
+  // doesn't have those columns yet, post without them rather than failing.
+  if (edit) row.edit = edit
+  if (sound_id) row.sound_id = sound_id
+  let { data, error } = await supabase.from('profile_media').insert(row).select().single()
+  if (error && (row.edit || row.sound_id) && /edit|sound_id|column/i.test(error.message || '')) {
+    delete row.edit
+    delete row.sound_id
+    ;({ data, error } = await supabase.from('profile_media').insert(row).select().single())
+  }
   if (error) throw error
   const media = data || row
 

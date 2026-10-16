@@ -445,6 +445,8 @@ export default function MyProfileScreen({ navigation }) {
           value={requestCount > 0 ? String(requestCount) : null}
           onPress={() => navigation.navigate('FollowList', { userId: profile.id, mode: 'requests' })}
         />
+        <Row label={t('myMusic')} onPress={() => navigation.navigate('Music')} />
+        <Row label={t('studioBeats')} onPress={() => navigation.navigate('Studio')} />
         <Row label={t('shareMyProfile')} onPress={shareProfile} />
         <Row label={t('settings')} onPress={() => navigation.navigate('Settings')} />
       </View>

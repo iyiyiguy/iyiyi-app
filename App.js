@@ -56,6 +56,11 @@ const RecapScreen = lazyScreen(() => import('./src/screens/RecapScreen'))
 import { useFlipToCamera, useFlipPref } from './src/lib/flipToCamera'
 const StreamScreen = lazyScreen(() => import('./src/screens/StreamScreen'))
 const ArcadeStoreScreen = lazyScreen(() => import('./src/screens/ArcadeStoreScreen'))
+const StudioHomeScreen = lazyScreen(() => import('./src/screens/StudioHomeScreen'))
+const StudioScreen = lazyScreen(() => import('./src/screens/StudioScreen'))
+const SoundScreen = lazyScreen(() => import('./src/screens/SoundScreen'))
+const MusicScreen = lazyScreen(() => import('./src/screens/MusicScreen'))
+const CopyrightReviewScreen = lazyScreen(() => import('./src/screens/CopyrightReviewScreen'))
 const CameraScreen = lazyScreen(() => import('./src/screens/CameraScreen'))
 import TaggedScreen from './src/screens/TaggedScreen'
 import TopProfilesScreen from './src/screens/TopProfilesScreen'
@@ -94,6 +99,8 @@ const LINKING = {
       JoinGame: { path: 'join/:code', alias: ['j/:code'] },
       // Shareable profile links: app.iyiyi.xyz/u/<username> (also works logged out).
       PublicProfile: { path: 'u/:username' },
+      // Shared sound links: app.iyiyi.xyz/sound/<id>.
+      Sound: { path: 'sound/:soundId' },
     },
   },
 }
@@ -456,6 +463,7 @@ export default function App() {
             <Stack.Screen name="Tabs" component={GuestTabs} />
             <Stack.Screen name="SignIn" component={Aura.AuthScreen} />
             <Stack.Screen name="PublicProfile" component={Aura.PublicProfileScreen} />
+            <Stack.Screen name="Sound" component={SoundScreen} />
           </Stack.Navigator>
         ) : showIntent ? (
           <OnboardingIntent user={sessionUser} profile={onboardProfile} onDone={finishIntent} onSkipAll={skipOnboarding} {...stepProps('intent')} />
@@ -493,6 +501,12 @@ export default function App() {
             <Stack.Screen name="Language" component={Aura.LanguageScreen} />
             <Stack.Screen name="Stream" component={Aura.StreamScreen} />
             <Stack.Screen name="ArcadeStore" component={ArcadeStoreScreen} />
+            <Stack.Screen name="Studio" component={StudioHomeScreen} />
+            <Stack.Screen name="StudioEditor" component={StudioScreen} options={{ gestureEnabled: false }} />
+            <Stack.Screen name="MySounds" component={StudioHomeScreen} initialParams={{ tab: 'sounds' }} />
+            <Stack.Screen name="Sound" component={SoundScreen} />
+            <Stack.Screen name="Music" component={MusicScreen} />
+            <Stack.Screen name="CopyrightReview" component={CopyrightReviewScreen} />
             <Stack.Screen name="GamePlayScreen" component={GamePlayScreen} options={{ gestureEnabled: false }} />
             <Stack.Screen name="GameLobby" component={Aura.GameLobbyScreen} />
             <Stack.Screen name="LaserTagLobby" component={Aura.LaserTagLobbyScreen} />

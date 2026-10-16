@@ -51,6 +51,10 @@ import { apiJson } from '../lib/api'
 import { createCameraPost, fetchCameraNearby } from '../lib/cameraApi'
 import { supabase } from '../lib/supabase'
 import { loadTrimHandsFreePref } from '../lib/handsFreePref'
+import { pauseMusic } from '../lib/musicPlayer'
+import SoundPicker from '../components/SoundPicker'
+import VideoEditor from '../components/VideoEditor'
+import { createAudioPlayer } from 'expo-audio'
 import {
   DEFAULT_CAMERA_OPTIONS, DEFAULT_BURST_SHOTS, FIRST_USE_TIPS, claimFirstUseTip, cutoffSeconds, loadCameraOptions, saveCameraOptions,
   timerSeconds,
@@ -297,6 +301,30 @@ export default function CameraScreen({ navigation, route }) {
   modeRef.current = mode
   const [muted, setMuted] = useState(false)
   const [isRecording, setIsRecording] = useState(false)
+  // Sound for the next video (plays while recording, attached when posting) + the editor.
+  const [sound, setSoundState] = useState(null)
+  const soundRef = useRef(null)
+  const setSound = (v) => { soundRef.current = v; setSoundState(v) }
+  const [soundPickerOpen, setSoundPickerOpen] = useState(false)
+  // "Use this sound" from a sound page opens the camera with it picked.
+  useEffect(() => { if (route?.params?.sound?.audio_url) setSound(route.params.sound) }, [route?.params?.sound?.id])
+  useEffect(() => { pauseMusic() }, [])
+  const [editing, setEditing] = useState(null)
+  const recSoundRef = useRef(null)
+  useEffect(() => {
+    if (!isRecording || !sound?.audio_url) return undefined
+    let p = null
+    try {
+      p = createAudioPlayer({ uri: sound.audio_url })
+      p.loop = true
+      p.play()
+      recSoundRef.current = p
+    } catch {}
+    return () => {
+      try { p?.pause(); p?.remove() } catch {}
+      recSoundRef.current = null
+    }
+  }, [isRecording, sound?.audio_url])
   const [recordStartedAt, setRecordStartedAt] = useState(0)
   const [recordCutoffS, setRecordCutoffS] = useState(0) // cut-off of the recording in progress (0 = none)
   const [isHandsFree, setIsHandsFree] = useState(false)
@@ -663,6 +691,8 @@ export default function CameraScreen({ navigation, route }) {
       location_label: showPhotoLocationRef.current ? locationLabelRef.current : null,
       // Everyone nearby right now who allows tagging (see allowsTagging).
       tagged_ids: nearbyRef.current.filter(allowsTagging).map((u) => u.id),
+      edit: size.edit || null,
+      sound_id: size.soundId || null,
     })
   }
 
@@ -748,7 +778,30 @@ export default function CameraScreen({ navigation, route }) {
       return
     }
     const id = captureIdRef.current++
+    // Videos open the editor (trim, crop, text, sound) before posting; photos hover and post.
+    if (item.type === 'video') {
+      setEditing({ ...item, id, sound: soundRef.current || null })
+      return
+    }
     updateQueue((q) => [...q, { ...item, id }])
+  }
+
+  const onCardEdit = (captureId) => {
+    const item = queueRef.current.find((q) => q.id === captureId)
+    if (!item) return
+    updateQueue((q) => q.filter((x) => x.id !== captureId))
+    setEditing({ ...item, sound: soundRef.current || null })
+  }
+  const postEdited = ({ edit, sound: s }) => {
+    const item = editing
+    setEditing(null)
+    if (item) publish({ ...item, edit, soundId: s?.id || null })
+  }
+  const cancelEdit = () => {
+    Alert.alert('Discard this video?', 'It’s still saved in your camera roll.', [
+      { text: 'Keep editing', style: 'cancel' },
+      { text: 'Discard', style: 'destructive', onPress: () => setEditing(null) },
+    ])
   }
 
   // --- AR filter helpers ------------------------------------------------------------------
@@ -1370,10 +1423,29 @@ export default function CameraScreen({ navigation, route }) {
             </GlassCard>
           </Pressable>
         )}
-        <View style={[styles.round, posting ? styles.roundGlass : null]} accessibilityLabel={posting ? 'Posting' : undefined}>
-          {posting ? <ActivityIndicator color="#fff" size="small" /> : null}
-        </View>
+        {posting ? (
+          <View style={[styles.round, styles.roundGlass]} accessibilityLabel="Posting">
+            <ActivityIndicator color="#fff" size="small" />
+          </View>
+        ) : (
+          <Pressable
+            onPress={() => setSoundPickerOpen(true)}
+            disabled={isRecording}
+            hitSlop={8}
+            style={[styles.round, styles.roundGlass, sound && { backgroundColor: 'rgba(255,79,163,0.75)', borderColor: '#ff4fa3' }, isRecording && { opacity: 0.5 }]}
+            accessibilityLabel={sound ? `Sound: ${sound.title}. Change sound` : 'Add sound'}
+          >
+            <Ionicons name="musical-notes" size={19} color="#fff" />
+          </Pressable>
+        )}
       </View>
+      {sound && !isRecording ? (
+        <Pressable onPress={() => setSoundPickerOpen(true)} style={styles.soundChip} accessibilityRole="button" accessibilityLabel={`Sound ${sound.title}`}>
+          <Ionicons name="musical-note" size={12} color="#fff" />
+          <Text style={styles.soundChipText} numberOfLines={1}>{sound.title}</Text>
+          <Pressable onPress={() => setSound(null)} hitSlop={10} accessibilityLabel="Remove sound"><Ionicons name="close" size={13} color="#fff" /></Pressable>
+        </Pressable>
+      ) : null}
 
       {/* Captures hovering before they post */}
       {capturedQueue.length > 0 && (
@@ -1389,6 +1461,7 @@ export default function CameraScreen({ navigation, route }) {
                 durationMs={REVIEW_MS}
                 onExpire={onCardExpire}
                 onCancel={onCardCancel}
+                onEdit={onCardEdit}
               />
             </View>
           ))}
@@ -1421,6 +1494,19 @@ export default function CameraScreen({ navigation, route }) {
           />
           {!barOpen && <HelpButton onPress={() => { setTip(null); setHelpOpen(true) }} disabled={busy} />}
         </View>
+        {mode === 'video' && !isRecording ? (
+          <Pressable
+            onPress={() => onOptionsChange({ timer: options.timer ? 0 : 5 })}
+            disabled={busy}
+            style={[styles.handsFree, options.timer ? styles.handsFreeOn : null]}
+            accessibilityRole="switch"
+            accessibilityState={{ checked: !!options.timer }}
+            accessibilityLabel="Hands-free: countdown, then records until you tap stop"
+          >
+            <Ionicons name="hand-left-outline" size={14} color="#fff" />
+            <Text style={styles.handsFreeText}>{options.timer ? `Hands-free · ${timerSeconds(options)}s` : 'Hands-free'}</Text>
+          </Pressable>
+        ) : null}
         <View style={styles.modeRow} pointerEvents="box-none">
           <Pressable
             onPress={pickFromLibrary}
@@ -1469,6 +1555,21 @@ export default function CameraScreen({ navigation, route }) {
       <CameraHelpSheet visible={helpOpen && !tip} onClose={() => setHelpOpen(false)} onOpenTip={openHelpTip} />
       <FirstUseTip tip={tip} onClose={closeTip} />
       {peopleSheet}
+      <SoundPicker
+        visible={soundPickerOpen}
+        selectedId={sound?.id}
+        onClose={() => setSoundPickerOpen(false)}
+        onPick={(s) => { setSound(s); setSoundPickerOpen(false); if (modeRef.current !== 'video') changeMode('video') }}
+        onMakeBeat={() => { setSoundPickerOpen(false); navigation.navigate('Studio') }}
+      />
+      <VideoEditor
+        visible={!!editing}
+        item={editing}
+        initialSound={editing?.sound || null}
+        onCancel={cancelEdit}
+        onPost={postEdited}
+        onMakeBeat={() => navigation.navigate('Studio')}
+      />
     </Backdrop>
   )
 }
@@ -1511,6 +1612,17 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)',
   },
   sideButtonSmall: { width: 40, height: 40, borderRadius: 20 },
+  soundChip: {
+    position: 'absolute', top: 66, alignSelf: 'center', flexDirection: 'row', alignItems: 'center', gap: 6, maxWidth: '60%',
+    paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999, backgroundColor: 'rgba(255,79,163,0.85)',
+  },
+  soundChipText: { color: '#fff', fontWeight: '700', fontSize: 12, flexShrink: 1 },
+  handsFree: {
+    flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999,
+    backgroundColor: 'rgba(30,30,50,0.45)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.22)',
+  },
+  handsFreeOn: { backgroundColor: 'rgba(57,213,255,0.55)', borderColor: '#39d5ff' },
+  handsFreeText: { color: '#fff', fontWeight: '700', fontSize: 12 },
   sideButtonArmed: { backgroundColor: 'rgba(255, 57, 48, 0.6)', borderColor: 'rgba(255, 100, 80, 0.5)' },
   overlayCenter: {
     ...StyleSheet.absoluteFill, alignItems: 'center', justifyContent: 'center',

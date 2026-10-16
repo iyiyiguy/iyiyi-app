@@ -1,0 +1,88 @@
+// Built-in Studio kits: original sounds synthesized by scripts/gen_studio_kits.py (no
+// third-party samples, so every kit is free to use in public sounds). Kits styled after
+// popular sounds (ATL 808, Church Keys, Jersey Club...) are our own synthesis, not producers' kits.
+// Generated from assets/studio/kits/kits.json; re-run the script and this mapping to change kits.
+export const KITS = [
+  { id: 'trap', name: "Trap", pads: [
+    { id: 'kick', label: "808 Kick", asset: require('../../assets/studio/kits/trap_kick.wav') },
+    { id: 'snare', label: "Snare", asset: require('../../assets/studio/kits/trap_snare.wav') },
+    { id: 'clap', label: "Clap", asset: require('../../assets/studio/kits/trap_clap.wav') },
+    { id: 'hat', label: "Hi-Hat", asset: require('../../assets/studio/kits/trap_hat.wav') },
+    { id: 'openhat', label: "Open Hat", asset: require('../../assets/studio/kits/trap_openhat.wav') },
+    { id: 'rim', label: "Rim", asset: require('../../assets/studio/kits/trap_rim.wav') },
+    { id: 'perc', label: "Bell", asset: require('../../assets/studio/kits/trap_perc.wav') },
+    { id: 'bass', label: "808 Long", asset: require('../../assets/studio/kits/trap_bass.wav') },
+  ] },
+  { id: 'boombap', name: "Boom Bap", pads: [
+    { id: 'kick', label: "Kick", asset: require('../../assets/studio/kits/boombap_kick.wav') },
+    { id: 'snare', label: "Snare", asset: require('../../assets/studio/kits/boombap_snare.wav') },
+    { id: 'hat', label: "Hi-Hat", asset: require('../../assets/studio/kits/boombap_hat.wav') },
+    { id: 'openhat', label: "Open Hat", asset: require('../../assets/studio/kits/boombap_openhat.wav') },
+    { id: 'shaker', label: "Shaker", asset: require('../../assets/studio/kits/boombap_shaker.wav') },
+    { id: 'rim', label: "Rim", asset: require('../../assets/studio/kits/boombap_rim.wav') },
+    { id: 'tom', label: "Tom", asset: require('../../assets/studio/kits/boombap_tom.wav') },
+    { id: 'ride', label: "Ride", asset: require('../../assets/studio/kits/boombap_ride.wav') },
+  ] },
+  { id: 'house', name: "House", pads: [
+    { id: 'kick', label: "Kick", asset: require('../../assets/studio/kits/house_kick.wav') },
+    { id: 'clap', label: "Clap", asset: require('../../assets/studio/kits/house_clap.wav') },
+    { id: 'hat', label: "Closed Hat", asset: require('../../assets/studio/kits/house_hat.wav') },
+    { id: 'openhat', label: "Open Hat", asset: require('../../assets/studio/kits/house_openhat.wav') },
+    { id: 'ride', label: "Ride", asset: require('../../assets/studio/kits/house_ride.wav') },
+    { id: 'rim', label: "Rim", asset: require('../../assets/studio/kits/house_rim.wav') },
+    { id: 'conga', label: "Conga", asset: require('../../assets/studio/kits/house_conga.wav') },
+    { id: 'cowbell', label: "Cowbell", asset: require('../../assets/studio/kits/house_cowbell.wav') },
+  ] },
+  { id: 'lofi', name: "Lo-fi", pads: [
+    { id: 'kick', label: "Kick", asset: require('../../assets/studio/kits/lofi_kick.wav') },
+    { id: 'snare', label: "Brush Snare", asset: require('../../assets/studio/kits/lofi_snare.wav') },
+    { id: 'hat', label: "Dusty Hat", asset: require('../../assets/studio/kits/lofi_hat.wav') },
+    { id: 'snap', label: "Snap", asset: require('../../assets/studio/kits/lofi_snap.wav') },
+    { id: 'shaker', label: "Shaker", asset: require('../../assets/studio/kits/lofi_shaker.wav') },
+    { id: 'perc', label: "Vinyl Thump", asset: require('../../assets/studio/kits/lofi_perc.wav') },
+    { id: 'tom', label: "Low Tom", asset: require('../../assets/studio/kits/lofi_tom.wav') },
+    { id: 'keys', label: "Keys Chord", asset: require('../../assets/studio/kits/lofi_keys.wav') },
+  ] },
+  { id: 'atl', name: "ATL 808", pads: [
+    { id: 'kick', label: "Hard Kick", asset: require('../../assets/studio/kits/atl_kick.wav') },
+    { id: 'snare', label: "Crisp Snare", asset: require('../../assets/studio/kits/atl_snare.wav') },
+    { id: 'clap', label: "Clap Stack", asset: require('../../assets/studio/kits/atl_clap.wav') },
+    { id: 'hat', label: "Tight Hat", asset: require('../../assets/studio/kits/atl_hat.wav') },
+    { id: 'openhat', label: "Open Hat", asset: require('../../assets/studio/kits/atl_openhat.wav') },
+    { id: 'perc', label: "Pluck Bell", asset: require('../../assets/studio/kits/atl_perc.wav') },
+    { id: 'bass', label: "808 Glide", asset: require('../../assets/studio/kits/atl_bass.wav') },
+    { id: 'fx', label: "Riser", asset: require('../../assets/studio/kits/atl_fx.wav') },
+  ] },
+  { id: 'church', name: "Church Keys", pads: [
+    { id: 'kick', label: "Kick", asset: require('../../assets/studio/kits/church_kick.wav') },
+    { id: 'snare', label: "Snare", asset: require('../../assets/studio/kits/church_snare.wav') },
+    { id: 'clap', label: "Big Clap", asset: require('../../assets/studio/kits/church_clap.wav') },
+    { id: 'hat', label: "Hi-Hat", asset: require('../../assets/studio/kits/church_hat.wav') },
+    { id: 'openhat', label: "Open Hat", asset: require('../../assets/studio/kits/church_openhat.wav') },
+    { id: 'perc', label: "Tambourine", asset: require('../../assets/studio/kits/church_perc.wav') },
+    { id: 'keys', label: "Organ Chord", asset: require('../../assets/studio/kits/church_keys.wav') },
+    { id: 'bass', label: "808", asset: require('../../assets/studio/kits/church_bass.wav') },
+  ] },
+  { id: 'piano', name: "Piano Bells", pads: [
+    { id: 'kick', label: "Kick", asset: require('../../assets/studio/kits/piano_kick.wav') },
+    { id: 'snare', label: "Snare", asset: require('../../assets/studio/kits/piano_snare.wav') },
+    { id: 'clap', label: "Clap", asset: require('../../assets/studio/kits/piano_clap.wav') },
+    { id: 'hat', label: "Hi-Hat", asset: require('../../assets/studio/kits/piano_hat.wav') },
+    { id: 'keys', label: "Piano C", asset: require('../../assets/studio/kits/piano_keys.wav') },
+    { id: 'perc', label: "Piano E♭", asset: require('../../assets/studio/kits/piano_perc.wav') },
+    { id: 'bell', label: "Bell G", asset: require('../../assets/studio/kits/piano_bell.wav') },
+    { id: 'bass', label: "808", asset: require('../../assets/studio/kits/piano_bass.wav') },
+  ] },
+  { id: 'jersey', name: "Jersey Club", pads: [
+    { id: 'kick', label: "Club Kick", asset: require('../../assets/studio/kits/jersey_kick.wav') },
+    { id: 'clap', label: "Clap", asset: require('../../assets/studio/kits/jersey_clap.wav') },
+    { id: 'snare', label: "Snare", asset: require('../../assets/studio/kits/jersey_snare.wav') },
+    { id: 'squeak', label: "Squeak", asset: require('../../assets/studio/kits/jersey_squeak.wav') },
+    { id: 'hat', label: "Hi-Hat", asset: require('../../assets/studio/kits/jersey_hat.wav') },
+    { id: 'openhat', label: "Open Hat", asset: require('../../assets/studio/kits/jersey_openhat.wav') },
+    { id: 'vox', label: "Hey!", asset: require('../../assets/studio/kits/jersey_vox.wav') },
+    { id: 'bass', label: "808 Hit", asset: require('../../assets/studio/kits/jersey_bass.wav') },
+  ] },
+]
+export const KIT_BY_ID = Object.fromEntries(KITS.map((k) => [k.id, k]))
+export const DEFAULT_KIT = 'trap'

@@ -22,7 +22,7 @@ function VideoThumb({ uri }) {
 // A just-captured photo / video / burst hovering at the top of the camera: it pops in, a bar
 // drains over `durationMs`, then the card flies up and away and onExpire fires (that's when
 // the upload starts). The X cancels just this one.
-export default function CaptureCard({ item, durationMs = 5000, onExpire, onCancel }) {
+export default function CaptureCard({ item, durationMs = 5000, onExpire, onCancel, onEdit }) {
   const progress = useRef(new Animated.Value(0)).current
   const enter = useRef(new Animated.Value(0)).current
   const leave = useRef(new Animated.Value(0)).current // 0 = here, 1 = flown off
@@ -68,6 +68,14 @@ export default function CaptureCard({ item, durationMs = 5000, onExpire, onCance
     })
   }
 
+  // Videos: tap the card to open the editor instead of posting as-is.
+  const edit = () => {
+    if (done.current || !onEdit) return
+    done.current = true
+    progress.stopAnimation()
+    onEdit(item.id)
+  }
+
   const enterScale = enter.interpolate({ inputRange: [0, 1], outputRange: [0.5, 1] })
   const enterY = enter.interpolate({ inputRange: [0, 1], outputRange: [24, 0] })
   const leaveY = leave.interpolate({ inputRange: [0, 1], outputRange: [0, -150] })
@@ -103,7 +111,7 @@ export default function CaptureCard({ item, durationMs = 5000, onExpire, onCance
           <View style={[styles.stackEdge, { transform: [{ translateX: 2.5 }, { translateY: -2.5 }, { rotate: '2.5deg' }] }]} />
         </>
       )}
-      <View style={styles.card}>
+      <Pressable onPress={item.type === 'video' && onEdit ? edit : undefined} disabled={!(item.type === 'video' && onEdit)} style={styles.card} accessibilityRole={item.type === 'video' && onEdit ? 'button' : undefined} accessibilityLabel={item.type === 'video' && onEdit ? 'Edit this video' : undefined}>
         {item.type === 'video'
           ? <VideoThumb key={item.previewUri || item.uri} uri={item.previewUri || item.uri} />
           : <Image source={{ uri: item.previewUri || item.uri }} style={StyleSheet.absoluteFill} resizeMode="cover" />}
@@ -123,10 +131,17 @@ export default function CaptureCard({ item, durationMs = 5000, onExpire, onCance
 
         <Text style={styles.seconds} pointerEvents="none">{secondsLeft}</Text>
 
+        {item.type === 'video' && onEdit ? (
+          <View style={styles.editBadge} pointerEvents="none">
+            <Ionicons name="color-wand" size={10} color="#fff" />
+            <Text style={styles.kindText}>Edit</Text>
+          </View>
+        ) : null}
+
         <View style={styles.track} pointerEvents="none">
           <Animated.View style={[styles.bar, { transform: [{ translateX: barX }] }]} />
         </View>
-      </View>
+      </Pressable>
 
       <Pressable
         onPress={cancel}
@@ -142,6 +157,7 @@ export default function CaptureCard({ item, durationMs = 5000, onExpire, onCance
 }
 
 const styles = StyleSheet.create({
+  editBadge: { position: 'absolute', left: 6, bottom: 12, flexDirection: 'row', alignItems: 'center', gap: 3, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 8, backgroundColor: 'rgba(255,79,163,0.9)' },
   wrap: { width: CARD_W + 8, height: CARD_H + 10, paddingTop: 8, paddingRight: 8 },
   card: {
     width: CARD_W, height: CARD_H, borderRadius: 14, overflow: 'hidden', backgroundColor: '#111',

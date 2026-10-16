@@ -1,9 +1,22 @@
-// iyiyi.xyz landing page: a static-assets Worker (Cloudflare Workers Builds, root dir web/site).
+// iyiyi.xyz landing page: static assets + a small Worker for /api/* (Cloudflare Workers Builds,
+// root dir web/site). Static files are served first; anything else reaches src/worker.js.
 {
   "name": "iyiyi-site",
+  "main": "src/worker.js",
   "compatibility_date": "2026-09-01",
   "assets": {
     "directory": "./public",
+    "binding": "ASSETS",
     "not_found_handling": "404-page"
-  }
+  },
+  "vars": {
+    "SUPABASE_URL": "https://sqsjwcsrgcgcpxccxedp.supabase.co",
+    "MAIL_FROM": "reports@iyiyi.xyz",
+    "MAIL_TO": "iyiyiguy@gmail.com"
+  },
+  // Copyright report emails go out through Email Routing; the destination must be a verified
+  // address on the iyiyi.xyz zone (it is: forwarding already delivers to it).
+  "send_email": [
+    { "name": "MAIL", "destination_address": "iyiyiguy@gmail.com" }
+  ]
 }
