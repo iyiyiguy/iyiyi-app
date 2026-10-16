@@ -13,6 +13,7 @@ import { loadProfile } from '../lib/followCache'
 import { maybeOfferPushAfterFollow } from '../lib/pushPrompt'
 import { useT, translate } from '../i18n'
 import strings from '../i18n/strings/followEverywhere'
+import { logFollowEverywhere } from '../lib/attribution'
 
 // One place to follow someone on every platform they've linked. Instagram, TikTok, Snapchat
 // and most others don't let apps follow on your behalf, so the sheet steps through them: it
@@ -390,6 +391,14 @@ export default function FollowEverywhereSheet({
   // (A pending request with nothing else to follow isn't "done": the note below explains.)
   const allDone = !linksLoading && iyiyiActive && rows.every((r) => done[r.platform]) && !(rows.length === 0 && known === 'pending')
   const left = total - doneCount
+  // Attribution: one 'follow_everywhere' event per completed sheet (for ad optimisation).
+  const loggedDone = useRef(false)
+  useEffect(() => {
+    if (allDone && !loggedDone.current) {
+      loggedDone.current = true
+      logFollowEverywhere(total)
+    }
+  }, [allDone, total])
   const confirmRow = confirm ? rows.find((r) => r.platform === confirm) : null
   const subtitle = distanceLabel
     ? t('subtitleDist', { dist: distanceLabel, n: total })

@@ -1,6 +1,7 @@
 import { Platform } from 'react-native'
 import * as RNIap from 'react-native-iap'
 import { _creditUavs, _creditGrenades, _creditStickyBombs, _creditLandMines, _grantItems } from './arcadeStats'
+import { logPurchase } from './attribution'
 
 // These must match the product IDs you create in App Store Connect
 // (Subscriptions) and Google Play Console (Monetize > Subscriptions).
@@ -292,6 +293,7 @@ async function handleUavPurchase(purchase) {
     const qty = Math.max(1, Math.min(10, Number(purchase.quantity) || 1))
     const txnId = purchase.id || purchase.purchaseToken || `${purchase.productId}:${purchase.transactionDate}`
     const res = await _creditUavs(pack.count * qty, txnId)
+    logPurchase(purchase.productId)
     try {
       await RNIap.finishTransaction({ purchase, isConsumable: true })
     } catch (e) {
@@ -431,6 +433,7 @@ async function grantGunFromPurchase(purchase) {
   const gunId = GUN_BY_SKU[purchase?.productId]
   if (!gunId) return null
   await _grantItems([gunId])
+  logPurchase(purchase.productId)
   try {
     await RNIap.finishTransaction({ purchase, isConsumable: false })
   } catch (e) {

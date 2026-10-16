@@ -11,7 +11,7 @@ import { colors } from './src/theme'
 import { lazyScreen } from './src/lib/lazyScreen'
 import { supabase } from './src/lib/supabase'
 import { apiJson } from './src/lib/api'
-import { initAttribution, logSignup } from './src/lib/attribution'
+import { initAttribution, logSignup, setUser as setAttributionUser, logOnboardingDone } from './src/lib/attribution'
 import { installWebPhoneFrame } from './src/lib/webPhoneFrame'
 import { loadThemePref } from './src/lib/themePref'
 import { loadLanguage, useLanguage } from './src/i18n'
@@ -254,6 +254,7 @@ export default function App() {
     supabase.auth.getSession().then(({ data }) => setSession(data.session))
     const { data: sub } = supabase.auth.onAuthStateChange((event, session) => {
       setSession(session)
+      if (session?.user?.id) setAttributionUser(session.user.id)
       // On web, sign-in via a social provider redirects the whole page away
       // and back — there's no in-memory callback left to run the
       // link-provider-to-profile step, so do it here instead, keyed off the
@@ -413,6 +414,7 @@ export default function App() {
   // "Skip setup" on any onboarding step: straight into the app. Nothing more is asked here;
   // location is asked in context by Nearby/Map, and the profile can be filled in Edit Profile.
   const skipOnboarding = () => {
+    logOnboardingDone(intent ? `${intent}_skipped` : 'skipped')
     if (userId) {
       for (const k of [intentSeenKey, nametagSeenKey, importSeenKey, locationConsentKey]) AsyncStorage.setItem(k(userId), 'true').catch(() => {})
     }
@@ -428,6 +430,7 @@ export default function App() {
   }
 
   const acceptLocationConsent = () => {
+    logOnboardingDone(intent)
     if (userId) AsyncStorage.setItem(locationConsentKey(userId), 'true').catch(() => {})
     setLocationConsent(true)
   }

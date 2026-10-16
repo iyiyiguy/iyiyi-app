@@ -107,7 +107,8 @@
           "calendarPermission": "iYiYi adds events you RSVP to into your calendar. For example, when you tap Going on a local event, it appears in your Calendar app.",
           "remindersPermission": "iYiYi creates reminders for events you are going to. For example, you can get a reminder an hour before a meetup you RSVP'd to."
         }
-      ]
+      ],
+      "./plugins/withAppsFlyerKotlin.js"
     ],
     "extra": {
       "eas": {
