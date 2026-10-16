@@ -1,10 +1,11 @@
-iYiYi 1.4.1 — a big upgrade across the whole app:
-• New tabs: Here · Feed · Camera · Arcade · Me, with search, people you met, events and activity one tap away
-• Follow everywhere: follow someone on all their platforms in a few taps, with a "Follow ×N" button on every person
-• New camera lenses that follow your face: Follow me, Shades, Crown, Halo, Sparkle and Doll Glam, plus color looks and an iYiYi frame
-• Quicker setup: pick what brings you here, set your photo and @handle, and add your socials directly, or skip setup and just look around
-• Laser Tag: pro game HUD, live target tracking with aim assist and tap-to-shoot, visible rockets that explode on walls and cover, multiple sticky bombs with one Detonate All, and mines and C4 on the camera
-• Battle Royale: choose any area size, start with fists and find weapons and supply drops around the zone
-• Beside Them: stations placed automatically outdoors, Walk & place with floors or QR codes indoors, and fun code-cracking tasks
-• What's the Word daily puzzle, online chess ratings and clocks, Heads Up 7 Up from 4 players
-• Delete your own posts, Business tools with a real QR code, translations and lots of fixes
+iYiYi 1.5.0 — make music and better videos:
+• Studio: a drum machine and sampler with 16 pads, 8 kits (Trap, Boom Bap, House, Lo-fi, ATL 808, Church Keys, Piano Bells, Jersey Club), step sequencer and Auto beats
+• Sample any sound: auto-chop it onto pads, fine-tune every chop, or press Jersey Club flip for an instant beat
+• Export your beats as sounds, private or public, with tags; public sounds are copyright-checked
+• Add a sound while you shoot: search, trending, saved sounds and preview before you add
+• New video editor: trim, crop, captions in different fonts, colors and styles, and sound volume
+• New post screen to add a description with #hashtags and @mentions
+• Hold the shutter to record
+• Live green screen: put yourself on a beach, in Vegas, in space or on your own photo
+• Music: upload songs, make playlists, show them on your profile and send songs to friends
+• Sound pages with plays and the videos that use each sound
