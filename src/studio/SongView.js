@@ -13,8 +13,10 @@ import { getContext, resumeAudio, startSequencer, countIn, playBuffer, triggerPa
 import { ensureMic, startMic } from './mic'
 import {
   getSong, SONG_BARS, songSteps, vocalOffset, DEFAULT_LATENCY, getDeviceNudge, setDeviceNudge, saveWav, rememberVocal, loadVocal,
-  vocalForPlayback, cachedTuned, vocalPeaks,
+  vocalForPlayback, cachedTuned, vocalPeaks, takeSeconds,
 } from './song'
+import { DEFAULT_FX, FX_PRESETS, PRESET_IDS } from './fx'
+import { keepFile } from './projects'
 import { NOTE_NAMES } from './autotune'
 import { newTrackId } from './song'
 import { useT } from '../i18n'
@@ -89,37 +91,64 @@ export default function SongView({ project, setProject, stopRef, onBeforeStart, 
   const stepS = stepDuration(project.bpm)
   const songS = steps * stepS
 
-  // ---- vocal buffers (raw + pitch-corrected), per track
-  const bufSig = vocals.map((x) => `${x.id}|${x.uri}|${x.tune?.on}|${x.tune?.key}|${x.tune?.scale}|${x.tune?.style}`).join(',')
+  // ---- track buffers as heard (pitch correction -> trim -> effects), per track
+  const bpm = project.bpm
+  const bufSig = vocals.map((x) => `${x.id}|${x.uri}|${x.tune?.on}|${x.tune?.key}|${x.tune?.scale}|${x.tune?.style}|${x.trimIn || 0}|${x.trimOut ?? ''}|${x.fx?.on ? JSON.stringify(x.fx) : ''}`).join(',') + `|${bpm}`
   useEffect(() => {
     let alive = true
-    for (const tr of vocals) {
+    const run = () => vocals.forEach((tr) => {
       ;(async () => {
         try {
           const raw = await loadVocal(tr)
           if (!alive || !raw) return
-          if (!tr.tune?.on) { setBufs((b) => ({ ...b, [tr.id]: raw })); return }
-          const hit = cachedTuned(tr)
-          if (hit) { setBufs((b) => ({ ...b, [tr.id]: hit.buf })); return }
-          setBufs((b) => ({ ...b, [tr.id]: raw }))
+          const hit = cachedTuned(tr, bpm)
+          if (hit?.buf) { setBufs((b) => ({ ...b, [tr.id]: hit.buf })); return }
+          setBufs((b) => (b[tr.id] ? b : { ...b, [tr.id]: raw }))
           setTuning((m) => ({ ...m, [tr.id]: 0 }))
-          const res = await vocalForPlayback(tr, (pr) => alive && setTuning((m) => ({ ...m, [tr.id]: pr })))
+          const res = await vocalForPlayback(tr, (pr) => alive && setTuning((m) => ({ ...m, [tr.id]: pr })), bpm)
           if (!alive) return
           setBufs((b) => ({ ...b, [tr.id]: res.buf }))
           setTuning((m) => { const n = { ...m }; delete n[tr.id]; return n })
           const d = res.key
-          if (d && tr.tune.key === 'auto' && (tr.tune.detected?.root !== d.root || tr.tune.detected?.scale !== d.scale)) updateTrack(tr.id, { tune: { ...tr.tune, detected: d } })
+          if (d && tr.tune?.key === 'auto' && (tr.tune.detected?.root !== d.root || tr.tune.detected?.scale !== d.scale)) updateTrack(tr.id, { tune: { ...tr.tune, detected: d } })
         } catch {
           setTuning((m) => { const n = { ...m }; delete n[tr.id]; return n })
         }
       })()
-    }
-    return () => { alive = false }
+    })
+    // faders change effects / trims continuously: wait until they settle
+    const tm = setTimeout(run, 220)
+    return () => { alive = false; clearTimeout(tm) }
   }, [bufSig]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const updateSong = (patch) => setProject((p) => ({ ...p, song: { ...getSong(p), ...(typeof patch === 'function' ? patch(getSong(p)) : patch) } }))
   const updateTrack = (id, patch) => updateSong((s) => ({ vocals: s.vocals.map((x) => (x.id === id ? { ...x, ...patch } : x)) }))
   const updateVocal = (patch) => { if (v) updateTrack(v.id, patch) }
+  // Import an instrumental (or any audio file) as its own track to record over.
+  const [importing, setImporting] = useState(false)
+  const importTrack = async () => {
+    try {
+      const DocumentPicker = require('expo-document-picker')
+      const res = await DocumentPicker.getDocumentAsync({ type: 'audio/*', copyToCacheDirectory: true, multiple: false })
+      if (res.canceled || !res.assets?.[0]) return
+      setImporting(true)
+      const a = res.assets[0]
+      const uri = await keepFile(a.uri, a.name)
+      const tr = { id: newTrackId(), owner: 'import', kind: 'import', name: (a.name || t('importedTrack')).replace(/\.[a-z0-9]+$/i, '').slice(0, 28), uri, base: 0, nudgeMs: 0, shift: 0, vol: 0.85, pan: 0, mute: false, tune: { ...DEFAULT_TUNE } }
+      const buf = await loadVocal(tr)
+      if (!buf) throw new Error(t('importFailedMsg'))
+      tr.duration = buf.duration
+      const barS = stepDuration(projRef.current.bpm) * 16
+      const bars = SONG_BARS.find((n) => n * barS >= buf.duration - 0.05) || SONG_BARS[SONG_BARS.length - 1]
+      updateSong((s) => ({ vocals: [...s.vocals, tr], bars: Math.max(s.bars, bars), beatMute: true }))
+      setSelId(tr.id)
+      setNotice(t('importedNotice'))
+    } catch (e) {
+      Alert.alert(t('importFailed'), e?.message || t('tryAgain'))
+    } finally {
+      setImporting(false)
+    }
+  }
   const deleteTrack = (id) => updateSong((s) => ({ vocals: s.vocals.filter((x) => x.id !== id) }))
 
   // ---- transport
@@ -265,13 +294,13 @@ export default function SongView({ project, setProject, stopRef, onBeforeStart, 
     const baseHits = getSong(p).hits || []
     seqStop.current = startSequencer(() => projRef.current, null, {
       startAt,
-      song: () => ({ hits: baseHits, steps: songSteps(projRef.current), beatMute: getSong(projRef.current).beatMute }),
+      song: () => { const s = getSong(projRef.current); return { hits: baseHits, steps: songSteps(projRef.current), beatMute: s.beatMute, beatVol: s.beatVol } },
       onEnd: () => stopAll(),
     })
     // every unmuted vocal track plays along (yours stays silent while you re-record it)
     vocalStop.current = getSong(p).vocals
       .filter((x) => !x.mute && bufs[x.id] && !(recVoice && x.owner === 'me'))
-      .map((x) => playBuffer(bufs[x.id], startAt, vocalOffset(x), x.vol ?? 0.9))
+      .map((x) => playBuffer(bufs[x.id], startAt, vocalOffset(x), x.vol ?? 0.9, x.pan || 0))
     if (doCount) {
       setModeBoth('count')
       for (let k = 0; k < 4; k++) later(Math.max(0, (startAt - beat * (4 - k) - c.currentTime) * 1000), () => setCountN(4 - k))
@@ -299,7 +328,7 @@ export default function SongView({ project, setProject, stopRef, onBeforeStart, 
   const hitPad = (i) => {
     const p = projRef.current
     if (!p.pads[i]?.src) return
-    triggerPad(p, i)
+    triggerPad(p, i, 0, getSong(p).beatVol ?? 1)
     setFlash((f) => ({ ...f, [i]: Date.now() }))
     if (modeRef.current === 'rec' && armPads) {
       const c = getContext()
@@ -378,6 +407,10 @@ export default function SongView({ project, setProject, stopRef, onBeforeStart, 
   const busy = mode !== 'idle'
   const recording = mode === 'rec' || mode === 'count'
   const tune = { ...DEFAULT_TUNE, ...(v?.tune || {}) }
+  const fx = { ...DEFAULT_FX, ...(v?.fx || {}) }
+  const setFx = (patch) => updateVocal({ fx: { ...fx, ...patch, on: true, preset: 'custom' } })
+  const clipDur = v ? takeSeconds(v) || bufs[v.id]?.duration || 0 : 0
+  const trackName = (x) => (x.owner === 'me' ? t('yourTrack') : x.name || '?')
   const keyLabel = (root, scale) => `${NOTE_NAMES[root]} ${t(scale === 'minor' ? 'minor' : 'major')}`
   const padW = Math.floor((Math.min(width, 720) - 32 - 24 - 7 * 6) / 8)
 
@@ -496,7 +529,7 @@ export default function SongView({ project, setProject, stopRef, onBeforeStart, 
             ))}
             {trackLanes.map(({ tr, color }) => (
               <Pressable key={tr.id} onPress={() => !tr.empty && setSelId(tr.id)} style={[st.laneLabel, { height: VOCAL_H }, v?.id === tr.id && st.laneSel]}>
-                <Ionicons name="mic" size={12} color={tr.mute ? SX.faint : tr.owner === 'me' ? SX.rec : color} />
+                <Ionicons name={tr.kind === 'import' ? 'musical-notes' : 'mic'} size={12} color={tr.mute ? SX.faint : tr.owner === 'me' ? SX.rec : color} />
                 <Text style={[st.laneText, { color: SX.text }]} numberOfLines={2}>{tr.owner === 'me' ? (vocals.length > (mine ? 1 : 0) ? t('yourTrack') : t('laneVocal')) : tr.name}</Text>
               </Pressable>
             ))}
@@ -540,6 +573,9 @@ export default function SongView({ project, setProject, stopRef, onBeforeStart, 
         <View style={{ flexDirection: 'row', gap: 8, paddingHorizontal: 10, marginTop: 8, flexWrap: 'wrap' }}>
           <HwButton label={t('laneLoop')} icon={<Ionicons name="repeat" size={13} color={song.beatMute ? SX.muted : SX.accent} />} active={!song.beatMute} onPress={() => updateSong({ beatMute: !song.beatMute })} style={st.chip} />
           <HwButton label={t('snap')} active={song.snap} color={SX.cool} onPress={() => updateSong({ snap: !song.snap })} style={st.chip} />
+          {!session?.guest ? (
+            <HwButton label={importing ? t('importing') : t('importTrack')} icon={<Ionicons name="download-outline" size={13} color={SX.text} />} onPress={importTrack} disabled={busy || importing} style={st.chip} />
+          ) : null}
           {song.hits?.length ? (
             <HwButton label={t('clearHits')} icon={<Ionicons name="trash-outline" size={12} color={SX.muted} />} onPress={async () => { if (await confirmAsync(t('clearHitsTitle'), '', t('clear'), t('cancel'))) updateSong({ hits: [] }) }} disabled={busy} style={st.chip} />
           ) : null}
@@ -559,75 +595,192 @@ export default function SongView({ project, setProject, stopRef, onBeforeStart, 
         <Text style={sxType.small}>{t('padsHint')}</Text>
       </Panel>
 
-      {/* vocal */}
+      {/* mixer: the beat bus + every track */}
+      <Panel style={{ gap: 10 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <Ionicons name="options" size={16} color={SX.accent} />
+          <Text style={[sxType.title, { flex: 1 }]}>{t('mixerTitle')}</Text>
+        </View>
+        <View style={st.mixRow}>
+          <View style={st.mixName}>
+            <Ionicons name="grid" size={12} color={SX.accent} />
+            <Text style={st.laneText} numberOfLines={1}>{t('beatBus')}</Text>
+          </View>
+          <HwButton label="M" active={!!song.beatMute} color={SX.rec} onPress={() => updateSong({ beatMute: !song.beatMute })} style={st.msBtn} accessibilityLabel={t('muteBeat')} />
+          <Fader value={song.beatVol ?? 1} onChange={(x) => updateSong({ beatVol: Math.round(x * 100) / 100 })} color={SX.accent} height={26} style={{ flex: 1 }} />
+          <Text style={st.mixVal}>{Math.round((song.beatVol ?? 1) * 100)}</Text>
+        </View>
+        {trackLanes.filter(({ tr }) => !tr.empty).map(({ tr, color }) => (
+          <View key={tr.id} style={{ gap: 4 }}>
+            <View style={st.mixRow}>
+              <Pressable onPress={() => setSelId(tr.id)} style={[st.mixName, v?.id === tr.id && st.laneSel]}>
+                <Ionicons name={tr.kind === 'import' ? 'musical-notes' : 'mic'} size={12} color={tr.owner === 'me' ? SX.rec : color} />
+                <Text style={[st.laneText, { color: SX.text }]} numberOfLines={1}>{trackName(tr)}</Text>
+              </Pressable>
+              <HwButton label="M" active={!!tr.mute} color={SX.rec} onPress={() => updateTrack(tr.id, { mute: !tr.mute })} style={st.msBtn} accessibilityLabel={t('mute')} />
+              <Fader value={tr.vol ?? 0.9} onChange={(x) => updateTrack(tr.id, { vol: Math.round(x * 100) / 100 })} color={tr.owner === 'me' ? SX.rec : color} height={26} style={{ flex: 1 }} />
+              <Text style={st.mixVal}>{Math.round((tr.vol ?? 0.9) * 100)}</Text>
+            </View>
+            <View style={st.mixRow}>
+              <Text style={[st.mixName, sxType.label]}>{t('pan')}</Text>
+              <Fader value={tr.pan || 0} min={-1} max={1} onChange={(x) => updateTrack(tr.id, { pan: Math.abs(x) < 0.06 ? 0 : Math.round(x * 100) / 100 })} color={SX.cool} height={20} style={{ flex: 1 }} />
+              <Text style={st.mixVal}>{panLabel(tr.pan)}</Text>
+            </View>
+          </View>
+        ))}
+      </Panel>
+
+      {/* selected track */}
       {v ? (
         <Panel style={{ gap: 12 }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-            <Ionicons name="mic" size={16} color={SX.rec} />
-            <Text style={[sxType.title, { flex: 1 }]} numberOfLines={1}>{v.owner === 'me' ? t('vocalTitle') : v.name}</Text>
-            <HwButton label="Mute" active={!!v.mute} color={SX.rec} onPress={() => updateVocal({ mute: !v.mute })} style={st.chip} />
+            <Ionicons name={v.kind === 'import' ? 'musical-notes' : 'mic'} size={16} color={SX.rec} />
+            <Text style={[sxType.title, { flex: 1 }]} numberOfLines={1}>{v.owner === 'me' ? t('vocalTitle') : trackName(v)}</Text>
+            <HwButton label={t('mute')} active={!!v.mute} color={SX.rec} onPress={() => updateVocal({ mute: !v.mute })} style={st.chip} />
             <HwButton icon={<Ionicons name="trash-outline" size={14} color={SX.muted} />} accessibilityLabel={t('deleteVocalTitle')} disabled={busy} style={st.chip} onPress={async () => { if (await confirmAsync(t('deleteVocalTitle'), t('deleteVocalMsg'), t('delete'), t('cancel'))) { deleteTrack(v.id); setSelId(null) } }} />
           </View>
           {vocals.length > 1 ? (
-            <Seg small options={vocals.map((x) => ({ key: x.id, label: x.owner === 'me' ? t('yourTrack') : x.name || '?' }))} value={v.id} onChange={setSelId} />
+            <Seg small options={vocals.map((x) => ({ key: x.id, label: trackName(x) }))} value={v.id} onChange={setSelId} />
           ) : null}
-          <View>
-            <Text style={sxType.label}>{t('volume')}</Text>
-            <Fader value={v.vol ?? 0.9} onChange={(x) => updateVocal({ vol: x })} color={SX.rec} />
-          </View>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-            <Stepper label={t('sync')} value={v.nudgeMs || 0} step={10} min={-400} max={400} format={(x) => `${x > 0 ? '+' : ''}${x}ms`} onChange={(x) => { updateVocal({ nudgeMs: x }); setDeviceNudge(x) }} />
-            <Text style={[sxType.small, { flex: 1 }]}>{t('syncHint')}</Text>
-          </View>
+          {v.kind !== 'import' ? (
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+              <Stepper label={t('sync')} value={v.nudgeMs || 0} step={10} min={-400} max={400} format={(x) => `${x > 0 ? '+' : ''}${x}ms`} onChange={(x) => { updateVocal({ nudgeMs: x }); setDeviceNudge(x) }} />
+              <Text style={[sxType.small, { flex: 1 }]}>{t('syncHint')}</Text>
+            </View>
+          ) : null}
 
+          {/* move + trim the clip */}
           <View style={st.divider} />
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-            <Ionicons name="musical-note" size={16} color={SX.hot} />
-            <Text style={[sxType.title, { flex: 1 }]}>{t('tuneTitle')}</Text>
-            <HwButton label={tune.on ? t('on') : t('off')} active={tune.on} color={SX.hot} onPress={() => updateVocal({ tune: { ...tune, on: !tune.on } })} style={{ minWidth: 64 }} />
+            <Ionicons name="swap-horizontal" size={16} color={SX.cool} />
+            <Text style={[sxType.title, { flex: 1 }]}>{t('clipTitle')}</Text>
+            {(v.shift || v.trimIn || v.trimOut != null) ? <HwButton label={t('reset')} onPress={() => updateVocal({ shift: 0, trimIn: 0, trimOut: null })} disabled={busy} style={st.chip} /> : null}
           </View>
-          {tune.on ? (
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12 }}>
+            <Stepper
+              label={t('moveClip')}
+              value={Math.round(((v.shift || 0) / (60 / bpm)) * 4) / 4}
+              step={0.25}
+              min={-64}
+              max={128}
+              format={(x) => `${x > 0 ? '+' : ''}${x} ${t('beatsShort')}`}
+              onChange={(x) => !busy && updateVocal({ shift: Math.round(x * 4) / 4 * (60 / bpm) })}
+            />
+            <Stepper
+              label={t('trimStart')}
+              value={Math.round((v.trimIn || 0) * 10) / 10}
+              step={0.1}
+              min={0}
+              max={Math.max(0, Math.floor(clipDur * 10) / 10 - 0.1)}
+              format={(x) => `${x.toFixed(1)}s`}
+              onChange={(x) => !busy && updateVocal({ trimIn: Math.round(x * 10) / 10, ...(v.trimOut != null && v.trimOut <= x + 0.1 ? { trimOut: null } : {}) })}
+            />
+            <Stepper
+              label={t('trimEnd')}
+              value={v.trimOut != null ? Math.round(Math.max(0, clipDur - v.trimOut) * 10) / 10 : 0}
+              step={0.1}
+              min={0}
+              max={Math.max(0, Math.floor((clipDur - (v.trimIn || 0)) * 10) / 10 - 0.1)}
+              format={(x) => `${x.toFixed(1)}s`}
+              onChange={(x) => !busy && updateVocal({ trimOut: x <= 0.001 ? null : Math.round((clipDur - x) * 100) / 100 })}
+            />
+          </View>
+          <Text style={sxType.small}>{t('clipHint')}</Text>
+
+          {/* effects */}
+          <View style={st.divider} />
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <Ionicons name="color-wand" size={16} color={SX.cool} />
+            <Text style={[sxType.title, { flex: 1 }]}>{t('fxTitle')}</Text>
+            <HwButton label={fx.on ? t('on') : t('off')} active={fx.on} color={SX.cool} onPress={() => updateVocal({ fx: { ...fx, on: !fx.on } })} style={{ minWidth: 64 }} />
+          </View>
+          {fx.on ? (
             <>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6 }}>
-                <HwButton label={tune.key === 'auto' && tune.detected ? t('tuneAutoKey', { key: keyLabel(tune.detected.root, tune.detected.scale) }) : t('tuneAuto')} active={tune.key === 'auto'} color={SX.hot} onPress={() => updateVocal({ tune: { ...tune, key: 'auto' } })} style={st.chip} />
-                {NOTE_NAMES.map((n, k) => (
-                  <HwButton key={n} label={n} active={tune.key === k} color={SX.hot} onPress={() => updateVocal({ tune: { ...tune, key: k, scale: tune.key === 'auto' && tune.detected ? tune.detected.scale : tune.scale } })} style={st.keyChip} />
+                {PRESET_IDS.map((id) => (
+                  <HwButton key={id} label={t(`fx_${id}`)} active={fx.preset === id} color={SX.cool} onPress={() => updateVocal({ fx: { ...fx, ...FX_PRESETS[id], on: true, preset: id } })} style={st.chip} />
                 ))}
+                {fx.preset === 'custom' ? <HwButton label={t('fx_custom')} active color={SX.cool} onPress={() => {}} style={st.chip} /> : null}
               </ScrollView>
-              <View style={{ flexDirection: 'row', gap: 10 }}>
-                {tune.key !== 'auto' ? (
-                  <Seg small style={{ flex: 1 }} options={[{ key: 'major', label: t('major') }, { key: 'minor', label: t('minor') }]} value={tune.scale} onChange={(s) => updateVocal({ tune: { ...tune, scale: s } })} />
-                ) : null}
-                <Seg small style={{ flex: 1 }} options={[{ key: 'natural', label: t('natural') }, { key: 'hard', label: t('hard') }]} value={tune.style} onChange={(s) => updateVocal({ tune: { ...tune, style: s } })} />
-              </View>
-              <Text style={[sxType.small, tuneProgress != null && { color: SX.hot }]}>
-                {tuneProgress != null ? t('tuning', { pct: Math.round(tuneProgress * 100) }) : t('tuneHint')}
-              </Text>
+              <FxFader label={t('lowCut')} value={fx.lowCut} min={0} max={300} text={fx.lowCut < 20 ? t('off') : `${Math.round(fx.lowCut)} Hz`} onChange={(x) => setFx({ lowCut: x < 20 ? 0 : Math.round(x / 5) * 5 })} />
+              <FxFader label={t('presence')} value={fx.presence} min={-6} max={8} text={`${fx.presence > 0 ? '+' : ''}${fx.presence.toFixed(1)} dB`} onChange={(x) => setFx({ presence: Math.round(x * 2) / 2 })} />
+              <FxFader label={t('compression')} value={fx.comp} min={0} max={1} text={`${Math.round(fx.comp * 100)}%`} onChange={(x) => setFx({ comp: Math.round(x * 100) / 100 })} />
+              <FxFader label={t('delay')} value={fx.delay} min={0} max={0.6} text={fx.delay < 0.01 ? t('off') : `${Math.round(fx.delay * 100)}%`} onChange={(x) => setFx({ delay: x < 0.01 ? 0 : Math.round(x * 100) / 100 })} />
+              {fx.delay > 0.01 ? (
+                <Seg small options={[{ key: 0.25, label: '1/16' }, { key: 0.5, label: '1/8' }, { key: 0.75, label: '1/8 •' }, { key: 1, label: '1/4' }]} value={fx.delayBeats} onChange={(x) => setFx({ delayBeats: x })} />
+              ) : null}
+              <FxFader label={t('reverb')} value={fx.reverb} min={0} max={0.8} text={fx.reverb < 0.01 ? t('off') : `${Math.round(fx.reverb * 100)}%`} onChange={(x) => setFx({ reverb: x < 0.01 ? 0 : Math.round(x * 100) / 100 })} />
+              {fx.reverb > 0.01 ? <FxFader label={t('roomSize')} value={fx.room} min={0} max={1} text={`${Math.round(fx.room * 100)}%`} onChange={(x) => setFx({ room: Math.round(x * 100) / 100 })} /> : null}
             </>
           ) : null}
+          {!tune.on && tuneProgress != null ? <Text style={[sxType.small, { color: SX.cool }]}>{t('fxApplying', { pct: Math.round(tuneProgress * 100) })}</Text> : null}
 
-          <View style={st.divider} />
-          <HwButton
-            label={t('toSampler')}
-            icon={<Ionicons name="cut-outline" size={14} color={SX.text} />}
-            disabled={busy || !playBuf}
-            onPress={async () => {
-              try {
-                const buf = playBuf
-                const data = buf.getChannelData(0)
-                const from = Math.max(0, Math.floor(vocalOffset(v) * buf.sampleRate))
-                const uri = await saveWav(data.slice(from), buf.sampleRate, 'vs')
-                await onAddSample?.(uri, `${t('laneVocal')}${tune.on ? ' (tuned)' : ''}.wav`)
-              } catch (e) {
-                Alert.alert(t('recordFailed'), e?.message || t('tryAgain'))
-              }
-            }}
-          />
+          {v.kind !== 'import' ? (
+            <>
+              <View style={st.divider} />
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <Ionicons name="musical-note" size={16} color={SX.hot} />
+                <Text style={[sxType.title, { flex: 1 }]}>{t('tuneTitle')}</Text>
+                <HwButton label={tune.on ? t('on') : t('off')} active={tune.on} color={SX.hot} onPress={() => updateVocal({ tune: { ...tune, on: !tune.on } })} style={{ minWidth: 64 }} />
+              </View>
+              {tune.on ? (
+                <>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6 }}>
+                    <HwButton label={tune.key === 'auto' && tune.detected ? t('tuneAutoKey', { key: keyLabel(tune.detected.root, tune.detected.scale) }) : t('tuneAuto')} active={tune.key === 'auto'} color={SX.hot} onPress={() => updateVocal({ tune: { ...tune, key: 'auto' } })} style={st.chip} />
+                    {NOTE_NAMES.map((n, k) => (
+                      <HwButton key={n} label={n} active={tune.key === k} color={SX.hot} onPress={() => updateVocal({ tune: { ...tune, key: k, scale: tune.key === 'auto' && tune.detected ? tune.detected.scale : tune.scale } })} style={st.keyChip} />
+                    ))}
+                  </ScrollView>
+                  <View style={{ flexDirection: 'row', gap: 10 }}>
+                    {tune.key !== 'auto' ? (
+                      <Seg small style={{ flex: 1 }} options={[{ key: 'major', label: t('major') }, { key: 'minor', label: t('minor') }]} value={tune.scale} onChange={(s) => updateVocal({ tune: { ...tune, scale: s } })} />
+                    ) : null}
+                    <Seg small style={{ flex: 1 }} options={[{ key: 'natural', label: t('natural') }, { key: 'hard', label: t('hard') }]} value={tune.style} onChange={(s) => updateVocal({ tune: { ...tune, style: s } })} />
+                  </View>
+                  <Text style={[sxType.small, tuneProgress != null && { color: SX.hot }]}>
+                    {tuneProgress != null ? t('tuning', { pct: Math.round(tuneProgress * 100) }) : t('tuneHint')}
+                  </Text>
+                </>
+              ) : null}
+
+              <View style={st.divider} />
+              <HwButton
+                label={t('toSampler')}
+                icon={<Ionicons name="cut-outline" size={14} color={SX.text} />}
+                disabled={busy || !playBuf}
+                onPress={async () => {
+                  try {
+                    const buf = playBuf
+                    const data = buf.getChannelData(0)
+                    const from = Math.max(0, Math.floor(vocalOffset(v) * buf.sampleRate))
+                    const uri = await saveWav(data.slice(from), buf.sampleRate, 'vs')
+                    await onAddSample?.(uri, `${t('laneVocal')}${tune.on ? ' (tuned)' : ''}.wav`)
+                  } catch (e) {
+                    Alert.alert(t('recordFailed'), e?.message || t('tryAgain'))
+                  }
+                }}
+              />
+            </>
+          ) : null}
         </Panel>
       ) : null}
     </View>
   )
 }
+
+function FxFader({ label, value, min, max, text, onChange }) {
+  return (
+    <View>
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+        <Text style={sxType.label}>{label}</Text>
+        <Text style={[sxType.label, { color: SX.text }]}>{text}</Text>
+      </View>
+      <Fader value={value} min={min} max={max} onChange={onChange} color={SX.cool} height={26} />
+    </View>
+  )
+}
+
+const panLabel = (p) => (!p ? 'C' : p < 0 ? `L${Math.round(-p * 100)}` : `R${Math.round(p * 100)}`)
 
 function MiniPad({ pad, size, flashAt, onPress }) {
   const [lit, setLit] = useState(false)
@@ -670,6 +823,10 @@ const st = StyleSheet.create({
   vocalEmpty: { position: 'absolute', left: 8, fontFamily: FONT.uiSemi, fontSize: 12, color: SX.faint },
   playhead: { position: 'absolute', left: 0, top: 0, width: 2, backgroundColor: '#fff', shadowColor: '#fff', shadowOpacity: 0.8, shadowRadius: 4 },
   padGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  mixRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  mixName: { width: 92, flexDirection: 'row', alignItems: 'center', gap: 5, paddingVertical: 2, paddingHorizontal: 2 },
+  msBtn: { minHeight: 26, width: 30, paddingHorizontal: 0 },
+  mixVal: { width: 34, textAlign: 'right', fontFamily: FONT.uiSemi, fontSize: 11, color: SX.muted },
   miniPad: { borderRadius: 9, borderWidth: 1, alignItems: 'center', justifyContent: 'flex-end', paddingBottom: 4, paddingHorizontal: 2 },
   miniPadText: { fontFamily: FONT.ui, fontSize: 8.5, letterSpacing: 0.4, color: SX.text, textTransform: 'uppercase' },
   divider: { height: 1, backgroundColor: SX.line },

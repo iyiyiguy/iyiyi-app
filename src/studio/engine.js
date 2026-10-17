@@ -173,7 +173,7 @@ function swingOffset(step, bpm, swing) {
  * Starts looping the project's pattern. getProject() is read every tick so edits (steps, tempo,
  * volume) apply live. onStep(step, absStep) fires roughly when each step is heard (playhead).
  * opts.startAt: audio-clock start time (so other sounds can be scheduled in sync).
- * opts.song: () => ({ hits: [{ p, s }], steps, beatMute }) adds timeline pad hits (s = 16th
+ * opts.song: () => ({ hits: [{ p, s }], steps, beatMute, beatVol }) adds timeline pad hits (s = 16th
  * steps from the start, may be fractional) and stops after `steps` (opts.onEnd fires then).
  * Returns stop(); stop.startAt is the start time on the audio clock.
  */
@@ -203,15 +203,16 @@ export function startSequencer(getProject, onStep, opts = {}) {
       const s = step % len
       const dur = stepDuration(project.bpm)
       const at = next + swingOffset(s, project.bpm, project.swing)
+      const bv = song?.beatVol ?? 1
       if (!song?.beatMute) {
         for (let i = 0; i < project.pads.length; i++) {
           const cell = project.pattern?.[i]?.[s]
-          if (cell && audible(project, i)) triggerPad(project, i, at, cell === 2 ? 1 : 0.8)
+          if (cell && audible(project, i)) triggerPad(project, i, at, (cell === 2 ? 1 : 0.8) * bv)
         }
       }
       if (song?.hits?.length) {
         for (const h of song.hits) {
-          if (h.s >= abs && h.s < abs + 1 && audible(project, h.p)) triggerPad(project, h.p, next + (h.s - abs) * dur, h.v || 1)
+          if (h.s >= abs && h.s < abs + 1 && audible(project, h.p)) triggerPad(project, h.p, next + (h.s - abs) * dur, (h.v || 1) * bv)
         }
       }
       if (project.metronome && s % 4 === 0) click(at, s === 0)
@@ -242,8 +243,20 @@ export function countIn(startAt, bpm, beats = 4) {
   for (let k = 0; k < beats; k++) click(startAt - (beats - k) * beat, k === 0)
 }
 
-/** Plays a vocal buffer from `startAt` (audio clock); offset = seconds into the vocal. Returns stop(). */
-export function playBuffer(buf, startAt, offset = 0, gain = 1) {
+// Equal-power pan, scaled so the louder side stays at full level (centre = 1 / 1).
+export function panGains(pan) {
+  const x = (Math.max(-1, Math.min(1, pan || 0)) + 1) / 2
+  const l = Math.cos((x * Math.PI) / 2)
+  const r = Math.sin((x * Math.PI) / 2)
+  const m = Math.max(l, r)
+  return [l / m, r / m]
+}
+
+/**
+ * Plays a vocal buffer from `startAt` (audio clock); offset = seconds into the vocal; pan -1..1.
+ * Returns stop().
+ */
+export function playBuffer(buf, startAt, offset = 0, gain = 1, pan = 0) {
   if (!buf) return () => {}
   const c = getContext()
   const node = c.createBufferSource()
@@ -251,7 +264,19 @@ export function playBuffer(buf, startAt, offset = 0, gain = 1) {
   const g = c.createGain()
   g.gain.value = gain
   node.connect(g)
-  g.connect(master)
+  let out = g
+  if (pan && c.createStereoPanner) {
+    try {
+      const p = c.createStereoPanner()
+      const x = Math.max(-1, Math.min(1, pan))
+      p.pan.value = x
+      const f = (x + 1) / 2
+      g.gain.value = gain / Math.max(Math.cos((f * Math.PI) / 2), Math.sin((f * Math.PI) / 2)) // keep the louder side at full level
+      g.connect(p)
+      out = p
+    } catch { g.gain.value = gain; out = g }
+  }
+  out.connect(master)
   let at = startAt
   let from = offset
   if (from < 0) { at -= from; from = 0 }
@@ -379,9 +404,11 @@ export function renderProject(project, loops = 2) {
 
 /**
  * Renders the Song timeline: the looping beat (unless muted), the recorded pad hits and every
- * vocal track ([{ buf, v }], already pitch-corrected if that's on) for song.bars bars.
+ * vocal track ([{ buf, v }], already processed: pitch correction / trim / effects) for song.bars
+ * bars. opts.part: 'all' | 'beat' (instrumental: the beat + imported audio tracks) | 'vocals'.
  */
-export function renderSong(project, vocalBufs) {
+export function renderSong(project, vocalBufs, opts = {}) {
+  const part = opts.part || 'all'
   const sr = getContext().sampleRate || 44100
   const song = project.song || {}
   const steps = (song.bars || 8) * 16
@@ -389,27 +416,36 @@ export function renderSong(project, vocalBufs) {
   const total = Math.ceil((steps * stepS + 1.5) * sr)
   const L = new Float32Array(total)
   const R = new Float32Array(total)
-  const hits = song.beatMute ? [] : patternHits(project, 0, steps)
-  for (const h of song.hits || []) {
-    if (h.s < steps && audible(project, h.p)) hits.push({ i: h.p, t0: h.s * stepS, vel: h.v || 1 })
+  const bv = song.beatVol ?? 1
+  if (part !== 'vocals') {
+    const hits = song.beatMute ? [] : patternHits(project, 0, steps)
+    for (const h of song.hits || []) {
+      if (h.s < steps && audible(project, h.p)) hits.push({ i: h.p, t0: h.s * stepS, vel: h.v || 1 })
+    }
+    for (const h of hits) h.vel *= bv
+    mixHits(project, hits, L, R, sr)
   }
-  mixHits(project, hits, L, R, sr)
   // vocalBufs: [{ buf, v }] - every unmuted vocal track (already pitch-corrected if that's on)
   for (const { buf: vocalBuf, v } of Array.isArray(vocalBufs) ? vocalBufs : []) {
     if (!vocalBuf || !v || v.mute) continue
+    const isBeat = v.kind === 'import'
+    if ((part === 'beat' && !isBeat) || (part === 'vocals' && isBeat)) continue
     const d = vocalBuf.getChannelData(0)
     const vsr = vocalBuf.sampleRate || sr
     const gain = v.vol ?? 0.9
-    const off = (v.base || 0) + (v.nudgeMs || 0) / 1000 // seconds of the recording before bar 1
+    const [pl, pr] = panGains(v.pan)
+    const gl = gain * pl
+    const gr = gain * pr
+    const off = (v.base || 0) + (v.nudgeMs || 0) / 1000 - (v.shift || 0) // seconds of the recording before bar 1
     for (let o = 0; o < total; o++) {
       const pos = (o / sr + off) * vsr
       if (pos < 0) continue
       const i0 = pos | 0
       if (i0 >= d.length - 1) break
       const f = pos - i0
-      const x = (d[i0] + (d[i0 + 1] - d[i0]) * f) * gain
-      L[o] += x
-      R[o] += x
+      const x = d[i0] + (d[i0 + 1] - d[i0]) * f
+      L[o] += x * gl
+      R[o] += x * gr
     }
   }
   softClip(L, R)

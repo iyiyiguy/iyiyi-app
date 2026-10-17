@@ -129,7 +129,7 @@ export function useLabSession({ joinCode, project, setProject, onTakeRequested }
   const beatSig = useMemo(() => {
     if (!project) return ''
     const s = getSong(project)
-    return JSON.stringify([project.bpm, project.swing, project.steps, project.kit, project.pattern, project.pads.map((p) => [p.src?.uri || p.src?.pad, p.vol, p.pitch, p.mute]), s.bars, s.hits, s.beatMute, s.vocals.map((v) => [v.uri, v.vol, v.mute, v.nudgeMs, v.base, v.tune])])
+    return JSON.stringify([project.bpm, project.swing, project.steps, project.kit, project.pattern, project.pads.map((p) => [p.src?.uri || p.src?.pad, p.vol, p.pitch, p.mute]), s.bars, s.hits, s.beatMute, s.beatVol, s.vocals.map((v) => [v.uri, v.vol, v.mute, v.nudgeMs, v.base, v.tune, v.pan, v.fx, v.shift, v.trimIn, v.trimOut])])
   }, [project])
   useEffect(() => {
     if (!isHost || snap?.status !== 'connected') return undefined

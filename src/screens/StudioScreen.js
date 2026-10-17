@@ -71,13 +71,36 @@ export default function StudioScreen({ navigation, route }) {
   const tapTimes = useRef([])
   useEffect(() => () => setRecordSession(false), [])
 
+  // Undo: every edit pushes the previous project; quick runs of edits (a fader drag) are one step.
+  const undoStack = useRef([])
+  const lastEdit = useRef(0)
+  const [canUndo, setCanUndo] = useState(false)
   const setProject = useCallback((updater, { markDirty = true } = {}) => {
-    setProjectState((prev) => {
-      const next = typeof updater === 'function' ? updater(prev) : updater
-      projRef.current = next
-      return next
-    })
+    const prev = projRef.current
+    const next = typeof updater === 'function' ? updater(prev) : updater
+    if (next === prev) return
+    if (markDirty && prev && !prev.guestOf) {
+      const now = Date.now()
+      if (now - lastEdit.current > 600 || !undoStack.current.length) {
+        undoStack.current.push(prev)
+        if (undoStack.current.length > 40) undoStack.current.shift()
+        setCanUndo(true)
+      }
+      lastEdit.current = now
+    }
+    projRef.current = next
+    setProjectState(next)
     if (markDirty) setDirty(true)
+  }, [])
+  const undo = useCallback(() => {
+    const prev = undoStack.current.pop()
+    setCanUndo(undoStack.current.length > 0)
+    if (!prev) return
+    lastEdit.current = 0
+    projRef.current = prev
+    setProjectState(prev)
+    setDirty(true)
+    prepareProject(prev).catch(() => {})
   }, [])
 
   // load or create
@@ -90,6 +113,8 @@ export default function StudioScreen({ navigation, route }) {
       if (route?.params?.autoStyle) p = generateBeat(p, route.params.autoStyle)
       if (!alive) return
       projRef.current = p
+      undoStack.current = []
+      setCanUndo(false)
       setProjectState(p)
       try {
         await resumeAudio()
@@ -252,6 +277,7 @@ export default function StudioScreen({ navigation, route }) {
             <Text style={sxType.label}>Studio{dirty ? t('unsavedSuffix') : ''}</Text>
             <Text style={sxType.title} numberOfLines={1}>{project.name}</Text>
           </Pressable>
+          <HwButton icon={<Ionicons name="arrow-undo" size={16} color={canUndo ? SX.text : SX.faint} />} onPress={undo} disabled={!canUndo} accessibilityLabel={t('undo')} style={{ paddingHorizontal: 10 }} />
           <HwButton icon={<Ionicons name="save-outline" size={16} color={SX.text} />} onPress={() => save()} accessibilityLabel={t('saveBeat')} style={{ paddingHorizontal: 10 }} />
           <HwButton label={t('export')} active color={SX.accent} onPress={() => { stopRef.current?.(); stopRef.current = null; songStopRef.current?.(); setPlaying(false); if (signedIn === false) navigation.navigate('SignIn', { mode: 'signup' }); else setExportOpen(true) }} icon={<Ionicons name="share-outline" size={15} color={SX.accent} />} />
         </View>
@@ -795,27 +821,61 @@ function ExportSheet({ visible, project, onClose, onSaved, navigation }) {
   const songOk = hasSongContent(project)
   const [what, setWhat] = useState('song')
   useEffect(() => { if (visible) { setTitle(project.name); setBusy(''); setWhat(hasSongContent(project) ? 'song' : 'loop'); if (!tags.length && project.style) setTags([project.style]) } }, [visible])
-  const isSong = songOk && what === 'song'
+  const isSong = songOk && what !== 'loop'
+  const hasVocals = getSong(project).vocals.some((v) => !v.mute && v.kind !== 'import')
   const bars = isSong ? getSong(project).bars : (project.steps / 16) * loops
   const secs = isSong ? songSeconds(project) : (bars * 16 * 60) / project.bpm / 4
 
+  const render = async () => {
+    setBusy(t('rendering'))
+    await prepareProject(project)
+    await new Promise((r) => setTimeout(r, 30))
+    const song = getSong(project)
+    if (!isSong) return renderProject(project, loops)
+    const bufs = []
+    for (const v of song.vocals) if (!v.mute) bufs.push({ buf: (await vocalForPlayback(v, null, project.bpm)).buf, v })
+    return renderSong(project, bufs, { part: what === 'instrumental' ? 'beat' : what === 'vocals' ? 'vocals' : 'all' })
+  }
+  const fileName = () => `${(title || project.name || 'beat').replace(/[^\w\- ]+/g, '').trim().replace(/\s+/g, '-') || 'beat'}${what === 'instrumental' ? '-instrumental' : what === 'vocals' ? '-vocals' : ''}.wav`
+
+  // A WAV file of the mix for the user's own DAW / distributor (nothing is uploaded).
+  const saveFile = async () => {
+    try {
+      const out = await render()
+      const wav = encodeWav(out)
+      const name = fileName()
+      if (Platform.OS === 'web') {
+        const url = URL.createObjectURL(new Blob([wav], { type: 'audio/wav' }))
+        const a = document.createElement('a')
+        a.href = url
+        a.download = name
+        document.body.appendChild(a)
+        a.click()
+        a.remove()
+        setTimeout(() => URL.revokeObjectURL(url), 30000)
+      } else {
+        const { File, Paths } = require('expo-file-system')
+        const f = new File(Paths.cache, name)
+        try { if (f.exists) f.delete() } catch {}
+        try { f.create() } catch {}
+        f.write(new Uint8Array(wav))
+        const Sharing = await import('expo-sharing')
+        await Sharing.shareAsync(f.uri, { mimeType: 'audio/wav', UTI: 'com.microsoft.waveform-audio', dialogTitle: name })
+      }
+      setBusy('')
+    } catch (e) {
+      setBusy('')
+      Alert.alert(t('exportFailed'), e?.message || t('tryAgain'))
+    }
+  }
+
   const doExport = async () => {
     try {
-      setBusy(t('rendering'))
-      await prepareProject(project)
-      await new Promise((r) => setTimeout(r, 30))
-      let out
+      const out = await render()
       const song = getSong(project)
-      if (isSong) {
-        const bufs = []
-        for (const v of song.vocals) if (!v.mute) bufs.push({ buf: (await vocalForPlayback(v)).buf, v })
-        out = renderSong(project, bufs)
-      } else {
-        out = renderProject(project, loops)
-      }
       const wav = encodeWav(out)
       setBusy(vis === 'public' ? t('uploadingChecking') : t('uploading'))
-      const kind = isSong && song.vocals.some((v) => !v.mute) ? 'song' : 'beat'
+      const kind = isSong && what !== 'instrumental' && song.vocals.some((v) => !v.mute && v.kind !== 'import') ? 'song' : 'beat'
       const sound = await publishSound({ wav, title, visibility: vis, durationS: Math.round(out.duration * 10) / 10, bpm: project.bpm, kind, projectId: project.id, tags })
       await onSaved?.()
       setBusy('')
@@ -843,7 +903,16 @@ function ExportSheet({ visible, project, onClose, onSaved, navigation }) {
       {songOk ? (
         <>
           <Text style={[sxType.label, { marginTop: 14 }]}>{t('exportWhat')}</Text>
-          <Seg small options={[{ key: 'song', label: t('exportSong') }, { key: 'loop', label: t('exportLoop') }]} value={what} onChange={setWhat} />
+          <Seg
+            small
+            options={[
+              { key: 'song', label: t('exportSong') },
+              ...(hasVocals ? [{ key: 'instrumental', label: t('exportInstrumental') }, { key: 'vocals', label: t('exportVocals') }] : []),
+              { key: 'loop', label: t('exportLoop') },
+            ]}
+            value={what}
+            onChange={setWhat}
+          />
         </>
       ) : null}
       {!isSong ? (
@@ -861,6 +930,8 @@ function ExportSheet({ visible, project, onClose, onSaved, navigation }) {
       <Text style={[sxType.label, { marginTop: 14 }]}>{t('tags')}</Text>
       <TagPicker value={tags} onChange={setTags} colors={{ text: SX.text, muted: SX.muted, line: SX.lineStrong, panel: SX.panel2, accent: SX.accent || '#ff4fa3' }} />
       <HwButton label={busy || t('export')} active disabled={!!busy} onPress={doExport} style={{ marginTop: 16, height: 48 }} />
+      <HwButton label={t('saveWavFile')} icon={<Ionicons name="download-outline" size={15} color={SX.text} />} disabled={!!busy} onPress={saveFile} style={{ marginTop: 8, height: 44 }} />
+      <Text style={[sxType.small, { marginTop: 6, textAlign: 'center' }]}>{t('saveWavHint')}</Text>
     </Sheet>
   )
 }
