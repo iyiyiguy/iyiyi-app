@@ -124,7 +124,9 @@ export default function InviteListener({ navRef }) {
   const go = (inv) => {
     if (!navRef?.isReady?.()) return
     // push (not navigate) so an already-open lobby screen isn't reused with stale state.
-    navRef.dispatch(StackActions.push('GameLobby', { gameId: inv.gameId, code: inv.code }))
+    // Lab sessions open the drum machine itself (no lobby).
+    if (MP_GAMES[inv.gameId]?.sessionScreen) navRef.dispatch(StackActions.push(MP_GAMES[inv.gameId].sessionScreen, { session: inv.code }))
+    else navRef.dispatch(StackActions.push('GameLobby', { gameId: inv.gameId, code: inv.code }))
   }
 
   const fightBack = (inv) => {

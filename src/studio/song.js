@@ -4,9 +4,11 @@
 // project.song = {
 //   bars: 8, countIn: true, beatMute: false, snap: true,
 //   hits: [{ p: padIndex, s: stepFromStart (16ths, may be fractional), v: velocity }],
-//   vocal: { uri, duration, base: seconds of the take before bar 1 (latency included),
-//            nudgeMs, vol, mute, tune: { on, key: 'auto' | 0-11, scale, style, detected } } | null,
+//   vocals: [{ id, owner: 'me' | userId (a friend's take from a Lab session), name, uri,
+//              duration, base: seconds of the take before bar 1 (latency included), nudgeMs,
+//              vol, mute, tune: { on, key: 'auto' | 0-11, scale, style, detected } }],
 // }
+// (older projects had a single `vocal`; getSong turns it into vocals[0]).
 import { Platform } from 'react-native'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { loadSource, bufferFromPCM, getContext, stepDuration } from './engine'
@@ -16,13 +18,17 @@ import { autotune } from './autotune'
 export const SONG_BARS = [4, 8, 16, 32]
 
 export function getSong(project) {
-  return { bars: 8, countIn: true, beatMute: false, snap: true, hits: [], vocal: null, ...(project?.song || {}) }
+  const s = { bars: 8, countIn: true, beatMute: false, snap: true, hits: [], ...(project?.song || {}) }
+  if (!Array.isArray(s.vocals)) s.vocals = s.vocal ? [{ id: 'v-me', owner: 'me', ...s.vocal }] : []
+  delete s.vocal
+  return s
 }
 
 export const songSteps = (project) => getSong(project).bars * 16
 export const songSeconds = (project) => songSteps(project) * stepDuration(project.bpm)
 export const vocalOffset = (v) => (v ? (v.base || 0) + (v.nudgeMs || 0) / 1000 : 0)
-export const hasSongContent = (project) => !!(project?.song?.vocal || project?.song?.hits?.length)
+export const hasSongContent = (project) => { const s = getSong(project); return !!(s.vocals.length || s.hits?.length) }
+export const newTrackId = () => `v${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`
 
 // Typical round-trip latency (output + input) we compensate by default; Sync fine-tunes it.
 export const DEFAULT_LATENCY = Platform.OS === 'web' ? 0.06 : 0.03

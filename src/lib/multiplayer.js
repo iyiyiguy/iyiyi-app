@@ -217,6 +217,20 @@ export const MP_GAMES = {
       guessSeconds: { label: 'Guessing time', options: [15, 20, 30], default: 20, unit: 's' },
     },
   },
+  // The Lab session: friends join your beat (invite or code), video call, and record their part
+  // from their own phone onto your song. Always private: never advertised in lobbies.
+  lab: {
+    id: 'lab',
+    codePrefix: 'J',
+    name: 'The Lab',
+    icon: '🥁',
+    minPlayers: 1,
+    maxPlayers: 4,
+    usesLocation: false,
+    sessionScreen: 'StudioEditor',
+    blurb: 'Make a song together: friends join your beat, video call, and record their part from their own phone.',
+    settings: { visibility: { label: 'Lobby', options: ['private'], labels: { private: 'Private (invite only)' }, default: 'private' } },
+  },
 }
 
 // Laser Tag play-area presets (radius in metres) the host picks on the map.

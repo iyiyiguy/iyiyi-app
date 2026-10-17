@@ -105,7 +105,7 @@ export default function JoinGameScreen({ navigation, route }) {
   const t = useT(R)
   const insets = useArcadeInsets()
   useArcadeStatusBar()
-  const joinRoom = (gid, code) => navigation.navigate('GameLobby', { gameId: gid, code })
+  const joinRoom = (gid, code) => (MP_GAMES[gid]?.sessionScreen ? navigation.navigate(MP_GAMES[gid].sessionScreen, { session: code }) : navigation.navigate('GameLobby', { gameId: gid, code }))
   const linkCode = normalizeCode(route?.params?.code ?? '')
   const [linkError, setLinkError] = useState(null)
   const handled = useRef(null)

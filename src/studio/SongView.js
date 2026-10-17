@@ -1,5 +1,6 @@
 // Song timeline (GarageBand-style): a bar ruler, one lane per drum instrument (the looping beat
-// drawn faintly, pad hits you record drawn bright), a vocal lane with its waveform, and a playhead.
+// drawn faintly, pad hits you record drawn bright), vocal lanes (yours + each friend's take from a
+// Lab session) with their waveforms, and a playhead.
 // Record = count-in, then the beat plays while the mic records; the vocal waveform and any pad
 // hits draw onto the timeline live as they happen. Pitch correction applies to the take afterwards.
 import { useEffect, useMemo, useRef, useState } from 'react'
@@ -15,12 +16,15 @@ import {
   vocalForPlayback, cachedTuned, vocalPeaks,
 } from './song'
 import { NOTE_NAMES } from './autotune'
+import { newTrackId } from './song'
 import { useT } from '../i18n'
 import strings from '../i18n/strings/studio'
 
 const LABEL_W = 70
 const LANE_H = 24
-const VOCAL_H = 72
+const VOCAL_H_ONE = 72
+const VOCAL_H_MANY = 54
+const TRACK_COLORS = ['#39d5ff', '#b06cff', '#5cf2a0', '#ffb21e']
 const RULER_H = 18
 const DEFAULT_TUNE = { on: false, key: 'auto', scale: 'major', style: 'hard' }
 
@@ -33,13 +37,18 @@ function confirmAsync(title, msg, okLabel, cancelLabel) {
   ], { cancelable: true, onDismiss: () => res(false) }))
 }
 
-export default function SongView({ project, setProject, stopRef, onBeforeStart, onAddSample }) {
+export default function SongView({ project, setProject, stopRef, onBeforeStart, onAddSample, session, takeAsk, onInvite }) {
   const t = useT(strings)
   const { width } = useWindowDimensions()
   const song = getSong(project)
-  const v = song.vocal
+  const vocals = song.vocals
+  const mine = vocals.find((x) => x.owner === 'me') || null
+  const [selId, setSelId] = useState(null)
+  const v = vocals.find((x) => x.id === selId) || mine || vocals[0] || null
   const projRef = useRef(project)
   projRef.current = project
+  const [notice, setNotice] = useState(null)
+  const [askBanner, setAskBanner] = useState(false)
 
   const [mode, setMode] = useState('idle') // idle | count | play | rec
   const modeRef = useRef('idle')
@@ -50,9 +59,10 @@ export default function SongView({ project, setProject, stopRef, onBeforeStart, 
   const [countN, setCountN] = useState(0)
   const [recHits, setRecHits] = useState([])
   const recHitsRef = useRef([])
-  const [rawBuf, setRawBuf] = useState(null)
-  const [playBuf, setPlayBuf] = useState(null)
-  const [tuneProgress, setTuneProgress] = useState(null)
+  const [bufs, setBufs] = useState({}) // track id -> AudioBuffer as heard (pitch-corrected if on)
+  const [tuning, setTuning] = useState({}) // track id -> 0..1 while pitch correction runs
+  const playBuf = v ? bufs[v.id] || null : null
+  const tuneProgress = v && tuning[v.id] != null ? tuning[v.id] : null
   const [live, setLive] = useState([]) // [{ t, v }] while recording
   const liveRef = useRef([])
   const lastLiveDraw = useRef(0)
@@ -60,7 +70,7 @@ export default function SongView({ project, setProject, stopRef, onBeforeStart, 
   const [ducked, setDucked] = useState(false)
 
   const seqStop = useRef(null)
-  const vocalStop = useRef(null)
+  const vocalStop = useRef([])
   const micRef = useRef(null)
   const startAtRef = useRef(0)
   const raf = useRef(null)
@@ -79,40 +89,38 @@ export default function SongView({ project, setProject, stopRef, onBeforeStart, 
   const stepS = stepDuration(project.bpm)
   const songS = steps * stepS
 
-  // ---- vocal buffers (raw + pitch-corrected)
+  // ---- vocal buffers (raw + pitch-corrected), per track
+  const bufSig = vocals.map((x) => `${x.id}|${x.uri}|${x.tune?.on}|${x.tune?.key}|${x.tune?.scale}|${x.tune?.style}`).join(',')
   useEffect(() => {
     let alive = true
-    setRawBuf(null)
-    setPlayBuf(null)
-    if (!v?.uri) return
-    loadVocal(v).then((b) => { if (alive) setRawBuf(b) }).catch(() => {})
-    return () => { alive = false }
-  }, [v?.uri])
-
-  const tuneSig = v ? `${v.uri}|${v.tune?.on}|${v.tune?.key}|${v.tune?.scale}|${v.tune?.style}` : ''
-  useEffect(() => {
-    let alive = true
-    if (!rawBuf || !v) return
-    if (!v.tune?.on) { setPlayBuf(rawBuf); setTuneProgress(null); return }
-    const hit = cachedTuned(v)
-    if (hit) { setPlayBuf(hit.buf); return }
-    setTuneProgress(0)
-    vocalForPlayback(v, (p) => alive && setTuneProgress(p))
-      .then((res) => {
-        if (!alive) return
-        setPlayBuf(res.buf)
-        setTuneProgress(null)
-        const d = res.key
-        if (d && v.tune.key === 'auto' && (v.tune.detected?.root !== d.root || v.tune.detected?.scale !== d.scale)) {
-          updateVocal({ tune: { ...v.tune, detected: d } })
+    for (const tr of vocals) {
+      ;(async () => {
+        try {
+          const raw = await loadVocal(tr)
+          if (!alive || !raw) return
+          if (!tr.tune?.on) { setBufs((b) => ({ ...b, [tr.id]: raw })); return }
+          const hit = cachedTuned(tr)
+          if (hit) { setBufs((b) => ({ ...b, [tr.id]: hit.buf })); return }
+          setBufs((b) => ({ ...b, [tr.id]: raw }))
+          setTuning((m) => ({ ...m, [tr.id]: 0 }))
+          const res = await vocalForPlayback(tr, (pr) => alive && setTuning((m) => ({ ...m, [tr.id]: pr })))
+          if (!alive) return
+          setBufs((b) => ({ ...b, [tr.id]: res.buf }))
+          setTuning((m) => { const n = { ...m }; delete n[tr.id]; return n })
+          const d = res.key
+          if (d && tr.tune.key === 'auto' && (tr.tune.detected?.root !== d.root || tr.tune.detected?.scale !== d.scale)) updateTrack(tr.id, { tune: { ...tr.tune, detected: d } })
+        } catch {
+          setTuning((m) => { const n = { ...m }; delete n[tr.id]; return n })
         }
-      })
-      .catch(() => { if (alive) { setTuneProgress(null); setPlayBuf(rawBuf) } })
+      })()
+    }
     return () => { alive = false }
-  }, [rawBuf, tuneSig])
+  }, [bufSig]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const updateSong = (patch) => setProject((p) => ({ ...p, song: { ...getSong(p), ...(typeof patch === 'function' ? patch(getSong(p)) : patch) } }))
-  const updateVocal = (patch) => updateSong((s) => (s.vocal ? { vocal: { ...s.vocal, ...patch } } : {}))
+  const updateTrack = (id, patch) => updateSong((s) => ({ vocals: s.vocals.map((x) => (x.id === id ? { ...x, ...patch } : x)) }))
+  const updateVocal = (patch) => { if (v) updateTrack(v.id, patch) }
+  const deleteTrack = (id) => updateSong((s) => ({ vocals: s.vocals.filter((x) => x.id !== id) }))
 
   // ---- transport
   const clearTimers = () => { timers.current.forEach(clearTimeout); timers.current = [] }
@@ -153,8 +161,8 @@ export default function SongView({ project, setProject, stopRef, onBeforeStart, 
     clearTimers()
     seqStop.current?.()
     seqStop.current = null
-    vocalStop.current?.()
-    vocalStop.current = null
+    vocalStop.current.forEach((f) => f())
+    vocalStop.current = []
     duckBeat(1)
     setDucked(false)
     const wasMode = modeRef.current
@@ -171,7 +179,9 @@ export default function SongView({ project, setProject, stopRef, onBeforeStart, 
       try {
         const r = await mic.stop()
         if (keep && (wasMode === 'rec' || wasMode === 'count')) await keepTake(r, startAt)
+        else if (session?.guest) session.reportTake(null)
       } catch (e) {
+        if (session?.guest) session.reportTake('failed')
         Alert.alert(t('recordFailed'), e?.message || t('tryAgain'))
       }
     }
@@ -195,18 +205,36 @@ export default function SongView({ project, setProject, stopRef, onBeforeStart, 
     const uri = await saveWav(data, sr)
     rememberVocal(uri, bufferFromPCM(data, sr))
     const nudgeMs = await getDeviceNudge()
-    updateSong((s) => ({
-      vocal: { uri, duration: data.length / sr, base, nudgeMs, vol: s.vocal?.vol ?? 0.9, mute: false, tune: { ...DEFAULT_TUNE, ...(s.vocal?.tune || {}), detected: null } },
-    }))
+    updateSong((s) => {
+      const prev = s.vocals.find((x) => x.owner === 'me')
+      const track = {
+        id: prev?.id || newTrackId(), owner: 'me', name: null, uri, duration: data.length / sr, base, nudgeMs,
+        vol: prev?.vol ?? 0.9, mute: false, tune: { ...DEFAULT_TUNE, ...(prev?.tune || {}), detected: null },
+      }
+      return { vocals: prev ? s.vocals.map((x) => (x.owner === 'me' ? track : x)) : [track, ...s.vocals] }
+    })
+    setSelId(null)
+    // In someone else's session your take goes onto their song too.
+    if (session?.guest) {
+      try {
+        await session.sendTake({ data, sampleRate: sr, base, nudgeMs })
+        setNotice(t('takeSent', { name: session.host ? `@${session.host.username}` : '' }))
+      } catch (e) {
+        Alert.alert(t('recordFailed'), e?.message || t('tryAgain'))
+      }
+    }
   }
 
   const start = async (recording) => {
     if (modeRef.current !== 'idle') { stopAll(); return }
     const recVoice = recording && armVoice
-    if (recVoice && v) {
+    setAskBanner(false)
+    if (recVoice && mine && !session?.guest) {
       if (!(await confirmAsync(t('replaceVocalTitle'), t('replaceVocalMsg'), t('replace'), t('cancel')))) return
     }
     onBeforeStart?.()
+    // The video call can't share the mic with a studio take: pause it while recording.
+    if (recVoice && session?.call?.active) { session.call.hangup(); setNotice(t('videoPaused')) }
     await resumeAudio()
     let mic = null
     if (recVoice) {
@@ -220,6 +248,7 @@ export default function SongView({ project, setProject, stopRef, onBeforeStart, 
         mic = await startMic({ onChunk, echoCancel: speaker === true })
         duckBeat(getSong(projRef.current).recBeatVol ?? 0.4)
         setDucked(true)
+        if (session?.guest) session.reportTake('recording')
       } catch (e) {
         Alert.alert(t('recordFailed'), e?.message || t('tryAgain'))
         return
@@ -239,8 +268,10 @@ export default function SongView({ project, setProject, stopRef, onBeforeStart, 
       song: () => ({ hits: baseHits, steps: songSteps(projRef.current), beatMute: getSong(projRef.current).beatMute }),
       onEnd: () => stopAll(),
     })
-    const vocalNow = getSong(p).vocal
-    if (!recVoice && playBuf && vocalNow && !vocalNow.mute) vocalStop.current = playBuffer(playBuf, startAt, vocalOffset(vocalNow), vocalNow.vol ?? 0.9)
+    // every unmuted vocal track plays along (yours stays silent while you re-record it)
+    vocalStop.current = getSong(p).vocals
+      .filter((x) => !x.mute && bufs[x.id] && !(recVoice && x.owner === 'me'))
+      .map((x) => playBuffer(bufs[x.id], startAt, vocalOffset(x), x.vol ?? 0.9))
     if (doCount) {
       setModeBoth('count')
       for (let k = 0; k < 4; k++) later(Math.max(0, (startAt - beat * (4 - k) - c.currentTime) * 1000), () => setCountN(4 - k))
@@ -251,11 +282,15 @@ export default function SongView({ project, setProject, stopRef, onBeforeStart, 
     raf.current = requestAnimationFrame(tick)
   }
 
+  // the host asked you (guest) to record your part
+  useEffect(() => { if (takeAsk) setAskBanner(true) }, [takeAsk])
+  useEffect(() => { if (!notice) return undefined; const tm = setTimeout(() => setNotice(null), 5000); return () => clearTimeout(tm) }, [notice])
+
   useEffect(() => () => {
     cancelAnimationFrame(raf.current)
     clearTimers()
     seqStop.current?.()
-    vocalStop.current?.()
+    vocalStop.current.forEach((f) => f())
     micRef.current?.stop().catch(() => {})
     duckBeat(1)
   }, [])
@@ -302,19 +337,29 @@ export default function SongView({ project, setProject, stopRef, onBeforeStart, 
       })
   }, [project.pads, project.pattern, project.steps, song.beatMute, steps, stepW, allHits])
 
-  const vocalPath = useMemo(() => {
-    const buf = playBuf || rawBuf
-    if (!buf || !v) return ''
+  // vocal lanes: yours first (an empty one while you have none, so a take has a place to draw)
+  const trackLanes = useMemo(() => {
+    const list = [...(mine ? [mine] : [{ id: '__me', owner: 'me', empty: true }]), ...vocals.filter((x) => x.owner !== 'me')]
+    return list.map((tr, k) => ({ tr, color: TRACK_COLORS[k % TRACK_COLORS.length] }))
+  }, [vocals, mine])
+  const VOCAL_H = trackLanes.length > 1 ? VOCAL_H_MANY : VOCAL_H_ONE
+  const trackPaths = useMemo(() => {
+    const out = {}
     const buckets = Math.max(20, Math.floor(W / 3))
-    const pk = vocalPeaks(buf, vocalOffset(v), songS, buckets)
-    let d = ''
-    pk.forEach((p, b) => {
-      if (p < 0.02) return
-      const h = Math.max(1, p * (VOCAL_H - 10))
-      d += `M${b * 3} ${((VOCAL_H - h) / 2).toFixed(1)}h2v${h.toFixed(1)}h-2Z`
-    })
-    return d
-  }, [playBuf, rawBuf, v?.base, v?.nudgeMs, W, songS])
+    for (const { tr } of trackLanes) {
+      const buf = bufs[tr.id]
+      if (!buf || tr.empty) continue
+      const pk = vocalPeaks(buf, vocalOffset(tr), songS, buckets)
+      let d = ''
+      pk.forEach((p, b) => {
+        if (p < 0.02) return
+        const h = Math.max(1, p * (VOCAL_H - 10))
+        d += `M${b * 3} ${((VOCAL_H - h) / 2).toFixed(1)}h2v${h.toFixed(1)}h-2Z`
+      })
+      out[tr.id] = d
+    }
+    return out
+  }, [bufs, trackLanes, W, songS, VOCAL_H])
 
   const livePath = useMemo(() => {
     if (!live.length) return ''
@@ -326,17 +371,77 @@ export default function SongView({ project, setProject, stopRef, onBeforeStart, 
       d += `M${((p.t / songS) * W).toFixed(1)} ${((VOCAL_H - h) / 2).toFixed(1)}h1.6v${h.toFixed(1)}h-1.6Z`
     }
     return d
-  }, [live, W, songS])
+  }, [live, W, songS, VOCAL_H])
 
-  const lanesH = RULER_H + lanes.length * LANE_H + VOCAL_H + 4
+  const lanesH = RULER_H + lanes.length * LANE_H + trackLanes.length * VOCAL_H + 4
+  const vocalTop = RULER_H + lanes.length * LANE_H
   const busy = mode !== 'idle'
   const recording = mode === 'rec' || mode === 'count'
   const tune = { ...DEFAULT_TUNE, ...(v?.tune || {}) }
   const keyLabel = (root, scale) => `${NOTE_NAMES[root]} ${t(scale === 'minor' ? 'minor' : 'major')}`
   const padW = Math.floor((Math.min(width, 720) - 32 - 24 - 7 * 6) / 8)
 
+  const ts = session?.takeStatus || {}
+  const hostName = session?.host ? `@${session.host.username}` : ''
   return (
     <View style={{ gap: 12 }}>
+      {/* record with friends (Lab session) */}
+      {session ? (
+        <Panel style={{ gap: 10 }}>
+          {!session.active ? (
+            <>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <Ionicons name="people" size={16} color={SX.hot} />
+                <Text style={[sxType.title, { flex: 1 }]}>{t('sessionTitle')}</Text>
+              </View>
+              <Text style={sxType.small}>{t('sessionBody')}</Text>
+              <HwButton label={t('inviteFriends')} active color={SX.hot} icon={<Ionicons name="person-add" size={14} color={SX.hot} />} onPress={onInvite} disabled={busy} style={{ height: 42 }} />
+            </>
+          ) : session.guest ? (
+            <>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <View style={st.liveDot} />
+                <Text style={[sxType.title, { flex: 1 }]} numberOfLines={1}>{session.host ? t('inSession', { name: hostName }) : t('joining')}</Text>
+                <HwButton icon={<Ionicons name={session.call.active ? 'videocam' : 'videocam-outline'} size={15} color={session.call.active ? SX.ok : SX.text} />} active={session.call.status !== 'idle'} color={SX.ok} onPress={() => (session.call.status !== 'idle' ? session.call.hangup() : session.call.start())} disabled={!session.host || recording} accessibilityLabel={t('videoCall')} style={st.chip} />
+                <HwButton label={t('leaveSession')} onPress={session.leave} style={st.chip} />
+              </View>
+              <Text style={sxType.small}>{session.hostLeft ? t('sessionEnded') : !session.ready ? t('loadingBeat') : t('yourPartHint', { name: hostName })}</Text>
+            </>
+          ) : (
+            <>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <View style={st.liveDot} />
+                <Text style={[sxType.title, { flex: 1 }]} numberOfLines={1}>{t('sessionCode', { code: session.code })}</Text>
+                <HwButton icon={<Ionicons name="person-add" size={14} color={SX.text} />} onPress={onInvite} accessibilityLabel={t('inviteFriends')} style={st.chip} />
+                <HwButton label={t('endSession')} onPress={session.leave} disabled={busy} style={st.chip} />
+              </View>
+              {session.friends.length ? session.friends.map((f) => {
+                const stt = ts[f.id]
+                const inCall = session.callPeerId === f.id && session.call.status !== 'idle'
+                return (
+                  <View key={f.id} style={st.friendRow}>
+                    <Ionicons name="person-circle" size={22} color={SX.muted} />
+                    <View style={{ flex: 1 }}>
+                      <Text style={sxType.body} numberOfLines={1}>@{f.username}</Text>
+                      {stt ? <Text style={[sxType.small, stt === 'failed' ? { color: SX.rec } : { color: SX.hot }]}>{t(stt === 'asked' ? 'askedFriend' : stt === 'recording' ? 'friendRecording' : stt === 'uploading' ? 'friendUploading' : 'takeFailed')}</Text> : null}
+                    </View>
+                    <HwButton icon={<Ionicons name={inCall ? 'videocam' : 'videocam-outline'} size={15} color={inCall ? SX.ok : SX.text} />} active={inCall} color={SX.ok} onPress={() => session.callFriend(f.id)} accessibilityLabel={t('videoCall')} style={st.chip} />
+                    <HwButton label={t('recordFriend')} icon={<View style={st.miniRec} />} active={!!stt && stt !== 'failed'} color={SX.rec} disabled={!!stt && stt !== 'failed'} onPress={() => session.requestTake(f.id)} style={st.chip} />
+                  </View>
+                )
+              }) : <Text style={sxType.small}>{t('waitingFriends', { code: session.code })}</Text>}
+            </>
+          )}
+        </Panel>
+      ) : null}
+      {askBanner && !busy ? (
+        <Panel style={[st.banner, { gap: 8 }]}>
+          <Text style={sxType.body}>{t('takeAsked', { name: hostName })}</Text>
+          <HwButton label={t('recordNow')} active color={SX.rec} icon={<View style={st.miniRec} />} onPress={() => start(true)} style={{ height: 42 }} />
+        </Panel>
+      ) : null}
+      {notice ? <Text style={[sxType.small, { textAlign: 'center', color: SX.text }]}>{notice}</Text> : null}
+
       {/* transport */}
       <Panel style={{ gap: 10 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
@@ -389,10 +494,12 @@ export default function SongView({ project, setProject, stopRef, onBeforeStart, 
                 <Text style={st.laneText} numberOfLines={1}>{pad.label}</Text>
               </View>
             ))}
-            <View style={[st.laneLabel, { height: VOCAL_H }]}>
-              <Ionicons name="mic" size={12} color={v?.mute ? SX.faint : SX.rec} />
-              <Text style={[st.laneText, { color: SX.text }]} numberOfLines={1}>{t('laneVocal')}</Text>
-            </View>
+            {trackLanes.map(({ tr, color }) => (
+              <Pressable key={tr.id} onPress={() => !tr.empty && setSelId(tr.id)} style={[st.laneLabel, { height: VOCAL_H }, v?.id === tr.id && st.laneSel]}>
+                <Ionicons name="mic" size={12} color={tr.mute ? SX.faint : tr.owner === 'me' ? SX.rec : color} />
+                <Text style={[st.laneText, { color: SX.text }]} numberOfLines={2}>{tr.owner === 'me' ? (vocals.length > (mine ? 1 : 0) ? t('yourTrack') : t('laneVocal')) : tr.name}</Text>
+              </Pressable>
+            ))}
           </View>
           <ScrollView
             ref={scrollRef}
@@ -414,16 +521,18 @@ export default function SongView({ project, setProject, stopRef, onBeforeStart, 
                     {rec ? <Path d={rec} fill={pad.color} /> : null}
                   </G>
                 ))}
-                <G transform={`translate(0, ${RULER_H + lanes.length * LANE_H})`}>
-                  {vocalPath && !recording ? <Path d={vocalPath} fill={v?.mute ? SX.faint : tune.on ? SX.hot : SX.cool} /> : null}
-                  {livePath ? <Path d={livePath} fill={SX.rec} /> : null}
-                </G>
+                {trackLanes.map(({ tr, color }, k) => (
+                  <G key={tr.id} transform={`translate(0, ${vocalTop + k * VOCAL_H})`}>
+                    {trackPaths[tr.id] && !(recording && tr.owner === 'me' && armVoice) ? <Path d={trackPaths[tr.id]} fill={tr.mute ? SX.faint : tr.tune?.on ? SX.hot : tr.owner === 'me' ? SX.cool : color} /> : null}
+                    {tr.owner === 'me' && livePath ? <Path d={livePath} fill={SX.rec} /> : null}
+                  </G>
+                ))}
               </Svg>
               {/* bar numbers */}
               {Array.from({ length: song.bars }, (_, b) => (
                 <Text key={`n${b}`} style={[st.barNum, { left: b * barW + 4 }]}>{b + 1}</Text>
               ))}
-              {!v && !live.length ? <Text style={[st.vocalEmpty, { top: RULER_H + lanes.length * LANE_H + VOCAL_H / 2 - 8 }]} numberOfLines={1}>{t('vocalEmptyLane')}</Text> : null}
+              {!mine && !live.length ? <Text style={[st.vocalEmpty, { top: vocalTop + VOCAL_H / 2 - 8 }]} numberOfLines={1}>{t('vocalEmptyLane')}</Text> : null}
               <Animated.View pointerEvents="none" style={[st.playhead, { height: lanesH, transform: [{ translateX: head }] }]} />
             </View>
           </ScrollView>
@@ -437,7 +546,7 @@ export default function SongView({ project, setProject, stopRef, onBeforeStart, 
         </View>
       </Panel>
 
-      {!v && !busy ? <Text style={[sxType.small, { textAlign: 'center', paddingHorizontal: 12 }]}>{t('headphonesTip')}</Text> : null}
+      {!mine && !busy ? <Text style={[sxType.small, { textAlign: 'center', paddingHorizontal: 12 }]}>{t('headphonesTip')}</Text> : null}
 
       {/* pads */}
       <Panel style={{ gap: 8 }}>
@@ -455,10 +564,13 @@ export default function SongView({ project, setProject, stopRef, onBeforeStart, 
         <Panel style={{ gap: 12 }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
             <Ionicons name="mic" size={16} color={SX.rec} />
-            <Text style={[sxType.title, { flex: 1 }]}>{t('vocalTitle')}</Text>
+            <Text style={[sxType.title, { flex: 1 }]} numberOfLines={1}>{v.owner === 'me' ? t('vocalTitle') : v.name}</Text>
             <HwButton label="Mute" active={!!v.mute} color={SX.rec} onPress={() => updateVocal({ mute: !v.mute })} style={st.chip} />
-            <HwButton icon={<Ionicons name="trash-outline" size={14} color={SX.muted} />} accessibilityLabel={t('deleteVocalTitle')} disabled={busy} style={st.chip} onPress={async () => { if (await confirmAsync(t('deleteVocalTitle'), t('deleteVocalMsg'), t('delete'), t('cancel'))) updateSong({ vocal: null }) }} />
+            <HwButton icon={<Ionicons name="trash-outline" size={14} color={SX.muted} />} accessibilityLabel={t('deleteVocalTitle')} disabled={busy} style={st.chip} onPress={async () => { if (await confirmAsync(t('deleteVocalTitle'), t('deleteVocalMsg'), t('delete'), t('cancel'))) { deleteTrack(v.id); setSelId(null) } }} />
           </View>
+          {vocals.length > 1 ? (
+            <Seg small options={vocals.map((x) => ({ key: x.id, label: x.owner === 'me' ? t('yourTrack') : x.name || '?' }))} value={v.id} onChange={setSelId} />
+          ) : null}
           <View>
             <Text style={sxType.label}>{t('volume')}</Text>
             <Fader value={v.vol ?? 0.9} onChange={(x) => updateVocal({ vol: x })} color={SX.rec} />
@@ -547,6 +659,11 @@ const st = StyleSheet.create({
   chip: { minHeight: 28, paddingHorizontal: 8 },
   keyChip: { minHeight: 28, paddingHorizontal: 6, minWidth: 34 },
   laneLabel: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingRight: 6 },
+  laneSel: { backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: 6 },
+  liveDot: { width: 9, height: 9, borderRadius: 5, backgroundColor: SX.ok },
+  friendRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 4 },
+  miniRec: { width: 9, height: 9, borderRadius: 5, backgroundColor: SX.rec },
+  banner: { borderColor: SX.rec, backgroundColor: withAlpha(SX.rec, 0.1) },
   laneText: { fontFamily: FONT.uiSemi, fontSize: 11, color: SX.muted, flexShrink: 1 },
   dot: { width: 7, height: 7, borderRadius: 4 },
   barNum: { position: 'absolute', top: 2, fontFamily: FONT.display, fontSize: 10, color: SX.faint },

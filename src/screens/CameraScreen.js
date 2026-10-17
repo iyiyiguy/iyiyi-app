@@ -33,8 +33,10 @@ import LensCarousel from '../components/camera/filters/LensCarousel'
 import { LensArt } from '../components/camera/filters/LensArt'
 import { FrameOverlay, GradedPhoto, LiveLook } from '../components/camera/filters/LookLayer'
 import {
-  lensEveryone, lensNeedsFace, lensPairedLook, normalizeLens, normalizeLook,
+  lensEveryone, lensNeedsFace, lensPairedLook, normalizeLens, normalizeLook, LOOKS,
 } from '../components/camera/filters/lenses'
+import { LinearGradient } from 'expo-linear-gradient'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { DEFAULT_LENS_PREFS, loadLensPrefs, saveLensPrefs } from '../components/camera/filters/lensPrefs'
 import cameraStrings from '../components/camera/cameraStrings'
 import { PLATFORM_LABELS } from '../lib/socialLinks'
@@ -250,9 +252,12 @@ export default function CameraScreen({ navigation, route }) {
   const greenName = (bg) => tk(`bg_${bg.id}`)
   const { width: winWidth, height: winHeight } = useWindowDimensions()
   const isInline = route?.params?.inline ?? false
+  // Full screen (the floating card got crowded once sounds, green screen and voice were added).
   const cardSize = isInline
     ? { width: winWidth, height: winHeight * 0.5 }
-    : { width: winWidth * 0.9, height: winHeight * 0.72 }
+    : { width: winWidth, height: winHeight }
+  const insets = useSafeAreaInsets()
+  const [lookOpen, setLookOpen] = useState(false)
   const cameraRef = useRef(null)
   const cameraReadyRef = useRef(false)
   const modeChangedAt = useRef(0)
@@ -1393,9 +1398,13 @@ export default function CameraScreen({ navigation, route }) {
   // Swipe across the preview to switch Photo/Video, like the iPhone Camera app.
   const changeModeRef = useRef(changeMode)
   changeModeRef.current = changeMode
+  // Swipe down to close (full screen has no backdrop to tap).
+  const dismissRef = useRef(null)
+  dismissRef.current = () => { if (!recording.current && phaseRef.current === 'idle') dismiss() }
   const swipe = useMemo(() => PanResponder.create({
-    onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dx) > 24 && Math.abs(g.dx) > Math.abs(g.dy) * 1.6,
+    onMoveShouldSetPanResponder: (_, g) => (Math.abs(g.dx) > 24 && Math.abs(g.dx) > Math.abs(g.dy) * 1.6) || (g.dy > 30 && g.dy > Math.abs(g.dx) * 1.6),
     onPanResponderRelease: (_, g) => {
+      if (g.dy > 110 && g.dy > Math.abs(g.dx) * 1.6) { dismissRef.current?.(); return }
       if (Math.abs(g.dx) < 40) return
       changeModeRef.current(g.dx > 0 ? 'video' : 'picture')
     },
@@ -1576,7 +1585,7 @@ export default function CameraScreen({ navigation, route }) {
         </View>
       )}
 
-      <View style={styles.top}>
+      <View style={[styles.top, !isInline && { top: insets.top + 8 }]}>
         <Pressable onPress={dismiss} hitSlop={12} style={[styles.round, styles.roundGlass]} accessibilityLabel={tk('closeCamera')}>
           <Ionicons name="close" size={22} color="#fff" />
         </Pressable>
@@ -1608,9 +1617,18 @@ export default function CameraScreen({ navigation, route }) {
             <Ionicons name="musical-notes" size={19} color="#fff" />
           </Pressable>
         )}
+        <Pressable
+          onPress={() => { setGreenOpen(false); setLookOpen((o) => !o) }}
+          disabled={isRecording}
+          hitSlop={8}
+          style={[styles.round, styles.roundGlass, (normalizeLook(look) !== 'none' || fxPrefs.frame) && { backgroundColor: 'rgba(255,178,30,0.7)', borderColor: '#ffb21e' }, isRecording && { opacity: 0.5 }]}
+          accessibilityLabel={tk('opt_look')}
+        >
+          <Ionicons name="color-palette-outline" size={19} color="#fff" />
+        </Pressable>
         {greenAvailable ? (
           <Pressable
-            onPress={() => setGreenOpen((o) => !o)}
+            onPress={() => { setLookOpen(false); setGreenOpen((o) => !o) }}
             disabled={isRecording}
             hitSlop={8}
             style={[styles.round, styles.roundGlass, greenBg && { backgroundColor: 'rgba(0,200,83,0.75)', borderColor: '#00c853' }, isRecording && { opacity: 0.5 }]}
@@ -1640,8 +1658,27 @@ export default function CameraScreen({ navigation, route }) {
           </ScrollView>
         </View>
       ) : null}
-      {sound && !isRecording ? (
-        <Pressable onPress={() => setSoundPickerOpen(true)} style={styles.soundChip} accessibilityRole="button" accessibilityLabel={tk('soundA11y', { title: sound.title })}>
+      {lookOpen && !isRecording ? (
+        <View style={[styles.lookStrip, { top: (isInline ? 18 : insets.top + 8) + 52 }]} pointerEvents="box-none">
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.greenRow}>
+            {LOOKS.map((l) => {
+              const on = normalizeLook(look) === l.id
+              return (
+                <Pressable key={l.id} onPress={() => { Haptics.selectionAsync().catch(() => {}); changeLook(l.id) }} style={[styles.greenItem, on && styles.lookItemOn]} accessibilityLabel={tk(`look_${l.id}`)} accessibilityState={{ selected: on }}>
+                  <LinearGradient colors={l.swatch || ['#333', '#111']} style={styles.greenSwatch} />
+                  <Text style={styles.greenLabel} numberOfLines={1}>{tk(`look_${l.id}`)}</Text>
+                </Pressable>
+              )
+            })}
+            <Pressable onPress={() => changeFrame(!fxPrefs.frame)} style={[styles.greenItem, fxPrefs.frame && styles.lookItemOn]} accessibilityLabel={tk('frame')} accessibilityState={{ selected: !!fxPrefs.frame }}>
+              <Ionicons name="scan-outline" size={22} color="#fff" />
+              <Text style={styles.greenLabel}>{tk('frame')}</Text>
+            </Pressable>
+          </ScrollView>
+        </View>
+      ) : null}
+      {sound && !isRecording && !lookOpen ? (
+        <Pressable onPress={() => setSoundPickerOpen(true)} style={[styles.soundChip, !isInline && { top: insets.top + 62 }]} accessibilityRole="button" accessibilityLabel={tk('soundA11y', { title: sound.title })}>
           <Ionicons name="musical-note" size={12} color="#fff" />
           <Text style={styles.soundChipText} numberOfLines={1}>{sound.title}</Text>
           <Pressable onPress={() => setSound(null)} hitSlop={10} accessibilityLabel={tk('removeSound')}><Ionicons name="close" size={13} color="#fff" /></Pressable>
@@ -1650,7 +1687,7 @@ export default function CameraScreen({ navigation, route }) {
 
       {/* Captures hovering before they post */}
       {capturedQueue.length > 0 && (
-        <View style={styles.reviewStack} pointerEvents="box-none">
+        <View style={[styles.reviewStack, !isInline && { top: insets.top + 66 }]} pointerEvents="box-none">
           {capturedQueue.map((capture, idx) => (
             <View
               key={capture.id}
@@ -1677,7 +1714,7 @@ export default function CameraScreen({ navigation, route }) {
         </View>
       )}
 
-      <View style={styles.bottom} pointerEvents="box-none">
+      <View style={[styles.bottom, !isInline && { bottom: insets.bottom + 8 }]} pointerEvents="box-none">
         {hint ? <Text style={styles.hint}>{hint}</Text> : null}
         <View style={styles.optionsRow} pointerEvents="box-none">
           {/* Same width as the "?" on the right, so the bar stays centred. */}
@@ -1692,6 +1729,7 @@ export default function CameraScreen({ navigation, route }) {
             frame={!!fxPrefs.frame}
             onLook={changeLook}
             onFrame={changeFrame}
+            showLook={false}
           />
           {!barOpen && <HelpButton onPress={() => { setTip(null); setHelpOpen(true) }} disabled={busy} />}
         </View>
@@ -1824,6 +1862,8 @@ const styles = StyleSheet.create({
   voiceDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#ff3b30', marginLeft: 2 },
   voiceHeard: { color: 'rgba(255,255,255,0.85)', fontSize: 12, fontStyle: 'italic', textShadowColor: 'rgba(0,0,0,0.6)', textShadowRadius: 3, maxWidth: '90%' },
   greenStrip: { position: 'absolute', left: 0, right: 0, bottom: 210, alignItems: 'center' },
+  lookStrip: { position: 'absolute', left: 0, right: 0, alignItems: 'center' },
+  lookItemOn: { borderColor: '#ffb21e' },
   greenRow: { gap: 8, paddingHorizontal: 14 },
   greenItem: { width: 58, height: 76, borderRadius: 14, backgroundColor: 'rgba(0,0,0,0.45)', borderWidth: 2, borderColor: 'rgba(255,255,255,0.18)', alignItems: 'center', justifyContent: 'center', gap: 4, overflow: 'hidden' },
   greenItemOn: { borderColor: '#00c853' },
@@ -1832,8 +1872,8 @@ const styles = StyleSheet.create({
   greenLabel: { color: '#fff', fontSize: 11, fontWeight: '700' },
   // A dimmed scrim over the app, with the camera card floating in the middle so the
   // screen behind it stays visible - this pops open in place instead of taking over.
-  backdrop: { flex: 1, backgroundColor: 'rgba(5,2,8,0.72)', alignItems: 'center', justifyContent: 'center' },
-  card: { borderRadius: 32, overflow: 'hidden', backgroundColor: '#000', borderWidth: 2, borderColor: 'rgba(255,255,255,0.15)' },
+  backdrop: { flex: 1, backgroundColor: '#000', alignItems: 'center', justifyContent: 'center' },
+  card: { overflow: 'hidden', backgroundColor: '#000' },
   center: { alignItems: 'center', justifyContent: 'center', padding: 30, backgroundColor: colors.ink },
   permText: { textAlign: 'center', marginVertical: 14 },
   top: { position: 'absolute', top: 18, left: 14, right: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },

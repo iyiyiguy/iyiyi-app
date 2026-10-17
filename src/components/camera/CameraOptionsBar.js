@@ -173,7 +173,7 @@ function Caption({ text }) {
 // One glass pill of camera options: icons with their current value under them; tap one and
 // the pill turns into that option's choices (Off / 3s / 5s / 10s ...), tap the icon to go back.
 export default function CameraOptionsBar({
-  mode, options, onChange, disabled, onOpenChange, look = 'none', frame = false, onLook, onFrame,
+  mode, options, onChange, disabled, onOpenChange, look = 'none', frame = false, onLook, onFrame, showLook = true,
 }) {
   const [open, setOpen] = useState(null)
   const [custom, setCustom] = useState(null) // option key whose custom stepper is showing
@@ -339,9 +339,12 @@ export default function CameraOptionsBar({
       const burst = o.burst ?? 0
       items.push({ k: 'burst', icon: OPTION_DEFS.burst.icon, value: fmtShots(burst), active: !!burst, a11y: L('burstA11y', { v: fmtShots(burst) }) })
     }
-    const lk = normalizeLook(look)
-    const lkLabel = lk === 'none' ? (frame ? L('frame') : L('none')) : `${lookName(lk)}${frame ? '+' : ''}`
-    items.push({ k: 'look', icon: LOOK_DEF.icon, value: lkLabel, active: lk !== 'none' || !!frame, a11y: L(frame ? 'lookBarFrameA11y' : 'lookBarA11y', { v: lookName(lk) }) })
+    // Looks have their own button at the top of the full-screen camera (showLook=false there).
+    if (showLook) {
+      const lk = normalizeLook(look)
+      const lkLabel = lk === 'none' ? (frame ? L('frame') : L('none')) : `${lookName(lk)}${frame ? '+' : ''}`
+      items.push({ k: 'look', icon: LOOK_DEF.icon, value: lkLabel, active: lk !== 'none' || !!frame, a11y: L(frame ? 'lookBarFrameA11y' : 'lookBarA11y', { v: lookName(lk) }) })
+    }
     content = (
       <View style={styles.row}>
         {items.map((it, i) => (

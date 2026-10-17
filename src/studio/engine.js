@@ -378,10 +378,10 @@ export function renderProject(project, loops = 2) {
 }
 
 /**
- * Renders the Song timeline: the looping beat (unless muted), the recorded pad hits and the
- * vocal (an AudioBuffer, already auto-tuned if that's on) for song.bars bars.
+ * Renders the Song timeline: the looping beat (unless muted), the recorded pad hits and every
+ * vocal track ([{ buf, v }], already pitch-corrected if that's on) for song.bars bars.
  */
-export function renderSong(project, vocalBuf) {
+export function renderSong(project, vocalBufs) {
   const sr = getContext().sampleRate || 44100
   const song = project.song || {}
   const steps = (song.bars || 8) * 16
@@ -394,13 +394,15 @@ export function renderSong(project, vocalBuf) {
     if (h.s < steps && audible(project, h.p)) hits.push({ i: h.p, t0: h.s * stepS, vel: h.v || 1 })
   }
   mixHits(project, hits, L, R, sr)
-  const v = song.vocal
-  if (vocalBuf && v && !v.mute) {
+  // vocalBufs: [{ buf, v }] - every unmuted vocal track (already pitch-corrected if that's on)
+  for (const { buf: vocalBuf, v } of Array.isArray(vocalBufs) ? vocalBufs : []) {
+    if (!vocalBuf || !v || v.mute) continue
     const d = vocalBuf.getChannelData(0)
+    const vsr = vocalBuf.sampleRate || sr
     const gain = v.vol ?? 0.9
-    const off = v.offset || 0 // seconds of the recording before bar 1
+    const off = (v.base || 0) + (v.nudgeMs || 0) / 1000 // seconds of the recording before bar 1
     for (let o = 0; o < total; o++) {
-      const pos = (o / sr + off) * (vocalBuf.sampleRate || sr)
+      const pos = (o / sr + off) * vsr
       if (pos < 0) continue
       const i0 = pos | 0
       if (i0 >= d.length - 1) break

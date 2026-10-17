@@ -18,6 +18,9 @@ import {
   NUM_PADS, resumeAudio, prepareProject, loadSource, triggerPad, startSequencer, renderProject, renderSong, peaks as getPeaks, chop, playRegion, cachedBuffer, setRecordSession,
 } from '../studio/engine'
 import SongView from '../studio/SongView'
+import { useLabSession } from '../studio/labSession'
+import InvitePeopleSheet from '../components/InvitePeopleSheet'
+import { VideoCallLayer } from '../components/VideoCall'
 import { ensureMic, startMic } from '../studio/mic'
 import { getSong, hasSongContent, saveWav, vocalForPlayback, songSeconds } from '../studio/song'
 import { newProject, loadProject, saveProject, withKit, setSteps, keepFile, PAD_COLORS } from '../studio/projects'
@@ -43,13 +46,14 @@ export default function StudioScreen({ navigation, route }) {
   useStudioFonts()
   const t = useT(strings)
   const insets = useSafeAreaInsets()
-  const { width } = useWindowDimensions()
+  const { width, height: winH } = useWindowDimensions()
   const [project, setProjectState] = useState(null)
   useEffect(() => { pauseMusic() }, [])
   const projRef = useRef(null)
   const [dirty, setDirty] = useState(false)
   const [loading, setLoading] = useState(true)
-  const [tab, setTab] = useState('pads')
+  const joinCode = route?.params?.session || null // joining a friend's Lab session
+  const [tab, setTab] = useState(joinCode ? 'song' : 'pads')
   const [playing, setPlaying] = useState(false)
   const [playStep, setPlayStep] = useState(-1)
   const playStepRef = useRef(-1)
@@ -111,6 +115,24 @@ export default function StudioScreen({ navigation, route }) {
     setTab('sampler')
   }, [setProject])
 
+  // Lab session: friends join this beat, video call, and record their part onto the song.
+  const [takeAsk, setTakeAsk] = useState(0)
+  const [inviteOpen, setInviteOpen] = useState(false)
+  const session = useLabSession({
+    joinCode,
+    project,
+    setProject,
+    onTakeRequested: () => { setTab('song'); setTakeAsk(Date.now()) },
+  })
+  const openInvite = useCallback(async () => {
+    try {
+      if (!session.active) await session.start()
+      setInviteOpen(true)
+    } catch (e) {
+      Alert.alert(t('sessionFailed'), e?.message || t('tryAgain'))
+    }
+  }, [session.active, session.start]) // eslint-disable-line react-hooks/exhaustive-deps
+
   const save = useCallback(async (quiet) => {
     const p = projRef.current
     if (!p) return
@@ -122,7 +144,7 @@ export default function StudioScreen({ navigation, route }) {
 
   // autosave every 20 s while there are changes
   useEffect(() => {
-    if (!dirty) return
+    if (!dirty || projRef.current?.guestOf) return
     const t = setTimeout(() => save(true).catch(() => {}), 20000)
     return () => clearTimeout(t)
   }, [dirty, project, save])
@@ -205,11 +227,12 @@ export default function StudioScreen({ navigation, route }) {
     if (!playing) setTimeout(() => togglePlay(), 120)
   }
 
-  if (loading || !project) {
+  if (loading || !project || (joinCode && !session.ready)) {
     return (
-      <View style={[st.screen, { alignItems: 'center', justifyContent: 'center' }]}>
+      <View style={[st.screen, { alignItems: 'center', justifyContent: 'center', padding: 24 }]}>
         <ActivityIndicator color={SX.accent} />
-        <Text style={[sxType.small, { marginTop: 10 }]}>{t('loading')}</Text>
+        <Text style={[sxType.small, { marginTop: 10, textAlign: 'center' }]}>{joinCode ? (session.error || t('joiningSession')) : t('loading')}</Text>
+        {joinCode ? <HwButton label={t('back')} onPress={() => navigation.goBack()} style={{ marginTop: 16 }} /> : null}
       </View>
     )
   }
@@ -296,7 +319,7 @@ export default function StudioScreen({ navigation, route }) {
         ) : tab === 'steps' ? (
           <StepsView project={project} playStep={playStep} bar={bar} setBar={setBar} onToggle={toggleStep} selPad={selPad} setSelPad={setSelPad} />
         ) : tab === 'song' ? (
-          <SongView project={project} setProject={setProject} stopRef={songStopRef} onBeforeStart={stopLoop} onAddSample={addSampleFile} />
+          <SongView project={project} setProject={setProject} stopRef={songStopRef} onBeforeStart={stopLoop} onAddSample={addSampleFile} session={session} takeAsk={takeAsk} onInvite={openInvite} />
         ) : tab === 'sampler' ? (
           <SamplerView project={project} setProject={setProject} selPad={selPad} focusSample={focusSample} onBeforeRecord={() => { stopLoop(); songStopRef.current?.() }} />
         ) : (
@@ -307,6 +330,18 @@ export default function StudioScreen({ navigation, route }) {
       <AutoSheet visible={autoOpen} onClose={() => setAutoOpen(false)} onPick={runAuto} />
       <RenameSheet visible={renameOpen} name={project.name} onClose={() => setRenameOpen(false)} onSave={(name) => { setProject((p) => ({ ...p, name })); setRenameOpen(false) }} />
       <ExportSheet visible={exportOpen} project={project} onClose={() => setExportOpen(false)} onSaved={() => save(true)} navigation={navigation} />
+      {session.active && session.code ? (
+        <InvitePeopleSheet
+          visible={inviteOpen}
+          onClose={() => setInviteOpen(false)}
+          gameId="lab"
+          code={session.code}
+          excludeIds={session.friends.map((f) => f.id)}
+          title={t('inviteTitle')}
+          subtitle={t('inviteSub')}
+        />
+      ) : null}
+      {session.active ? <VideoCallLayer call={session.call} bounds={{ width, height: winH }} /> : null}
     </View>
   )
 }
@@ -770,14 +805,15 @@ function ExportSheet({ visible, project, onClose, onSaved, navigation }) {
       let out
       const song = getSong(project)
       if (isSong) {
-        const { buf } = song.vocal ? await vocalForPlayback(song.vocal) : { buf: null }
-        out = renderSong(project, buf)
+        const bufs = []
+        for (const v of song.vocals) if (!v.mute) bufs.push({ buf: (await vocalForPlayback(v)).buf, v })
+        out = renderSong(project, bufs)
       } else {
         out = renderProject(project, loops)
       }
       const wav = encodeWav(out)
       setBusy(vis === 'public' ? t('uploadingChecking') : t('uploading'))
-      const kind = isSong && song.vocal && !song.vocal.mute ? 'song' : 'beat'
+      const kind = isSong && song.vocals.some((v) => !v.mute) ? 'song' : 'beat'
       const sound = await publishSound({ wav, title, visibility: vis, durationS: Math.round(out.duration * 10) / 10, bpm: project.bpm, kind, projectId: project.id, tags })
       await onSaved?.()
       setBusy('')
