@@ -2,6 +2,7 @@
 import { View, Text, Pressable, StyleSheet } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { formatCount } from '../lib/sounds'
+import SoundArt from './SoundArt'
 import { useT } from '../i18n'
 import strings from '../i18n/strings/music'
 
@@ -16,8 +17,11 @@ export default function SoundRow({ sound: s, playing, onPlay, onPress, onMore, s
   const status = s.is_muted ? t('statusMutedReview') : s.status === 'private' ? t('statusOnlyYou') : s.status === 'scanning' ? t('statusChecking') : s.status === 'blocked' ? t('statusBlocked') : null
   return (
     <Pressable onPress={onPress} style={st.row} accessibilityRole="button" accessibilityLabel={s.title}>
-      <Pressable onPress={onPlay} style={[st.play, playing && { backgroundColor: MC.accent }]} hitSlop={4} accessibilityLabel={playing ? t('pauseName', { name: s.title }) : t('playName', { name: s.title })} disabled={s.is_muted}>
-        <Ionicons name={playing ? 'pause' : s.kind === 'song' ? 'musical-note' : 'play'} size={17} color={s.is_muted ? MC.faint : MC.text} />
+      <Pressable onPress={onPlay} style={st.art} hitSlop={4} accessibilityLabel={playing ? t('pauseName', { name: s.title }) : t('playName', { name: s.title })} disabled={s.is_muted}>
+        <SoundArt sound={s} size={48} radius={6} style={s.is_muted && { opacity: 0.4 }} />
+        <View style={[st.artPlay, playing && { backgroundColor: MC.accent }]}>
+          <Ionicons name={playing ? 'pause' : 'play'} size={12} color="#fff" style={!playing && { marginLeft: 1 }} />
+        </View>
       </Pressable>
       <View style={{ flex: 1 }}>
         <Text style={st.title} numberOfLines={1}>{s.title}</Text>
@@ -40,7 +44,8 @@ export default function SoundRow({ sound: s, playing, onPlay, onPress, onMore, s
 
 const st = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 10, borderRadius: 14, backgroundColor: MC.panel, borderWidth: 1, borderColor: MC.line, marginBottom: 8 },
-  play: { width: 42, height: 42, borderRadius: 21, backgroundColor: 'rgba(255,255,255,0.08)', alignItems: 'center', justifyContent: 'center' },
+  art: { width: 48, height: 48 },
+  artPlay: { position: 'absolute', right: -4, bottom: -4, width: 22, height: 22, borderRadius: 11, backgroundColor: 'rgba(0,0,0,0.7)', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)' },
   title: { color: MC.text, fontWeight: '700', fontSize: 15 },
   sub: { color: MC.muted, fontSize: 12, marginTop: 2 },
   tags: { color: MC.gold, fontSize: 11, marginTop: 2 },

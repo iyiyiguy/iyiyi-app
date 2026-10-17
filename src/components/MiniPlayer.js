@@ -2,6 +2,7 @@
 import { View, Text, Pressable, StyleSheet } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { useMusic, toggle, next, prev, stopMusic } from '../lib/musicPlayer'
+import SoundArt from './SoundArt'
 import { useT } from '../i18n'
 import strings from '../i18n/strings/music'
 
@@ -14,7 +15,7 @@ export default function MiniPlayer({ onOpen, style }) {
     <View style={[st.bar, style]}>
       <View style={[st.progress, { width: `${pct * 100}%` }]} />
       <Pressable onPress={() => onOpen?.(m.current)} style={st.info} accessibilityRole="button" accessibilityLabel={t('nowPlaying', { name: m.current.title })}>
-        <View style={st.art}><Ionicons name={m.current.kind === 'song' ? 'musical-note' : 'grid'} size={16} color="#ffb21e" /></View>
+        <SoundArt sound={m.current} size={36} radius={8} />
         <View style={{ flex: 1 }}>
           <Text style={st.title} numberOfLines={1}>{m.current.title}</Text>
           <Text style={st.sub} numberOfLines={1}>{m.current.profiles?.username ? `@${m.current.profiles.username}` : 'iYiYi'} · {m.index + 1}/{m.queue.length}</Text>

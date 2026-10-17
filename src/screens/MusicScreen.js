@@ -10,8 +10,9 @@ import * as DocumentPicker from 'expo-document-picker'
 import {
   searchSounds, soundTags, mySounds, savedSounds, publicSoundsOf, myPlaylists, publicPlaylistsOf, playlistSounds,
   createPlaylist, updatePlaylist, deletePlaylist, removeFromPlaylist, uploadSong, setSoundVisibility, deleteSound, isSoundAdmin,
+  pickSoundCover,
 } from '../lib/sounds'
-import { playQueue, toggle, useMusic } from '../lib/musicPlayer'
+import { playQueue, toggle, useMusic, updateTrack } from '../lib/musicPlayer'
 import SoundRow, { MC } from '../components/SoundRow'
 import HScroll from '../components/HScroll'
 import MiniPlayer from '../components/MiniPlayer'
@@ -42,7 +43,7 @@ export default function MusicScreen({ navigation, route }) {
   const [q, setQ] = useState('')
   const [tags, setTags] = useState([])
   const [data, setData] = useState({})
-  const [openList, setOpenList] = useState(null) // playlist being viewed
+  const [openList, setOpenList] = useState(route?.params?.openList || null) // playlist being viewed
   const [listSounds, setListSounds] = useState(null)
   const [menu, setMenu] = useState(null) // sound for the action menu
   const [plFor, setPlFor] = useState(null)
@@ -121,6 +122,8 @@ export default function MusicScreen({ navigation, route }) {
   }
 
   // ---- sound menu ----
+  // opened from Music home's "+" -> Upload a sound
+  useEffect(() => { if (route?.params?.upload) setTimeout(() => pickSong(), 350) }, []) // eslint-disable-line react-hooks/exhaustive-deps
   const isMine = (s) => !userId && tab === 'library' && !openList ? true : false
   const menuActions = (s) => {
     const acts = [
@@ -130,6 +133,12 @@ export default function MusicScreen({ navigation, route }) {
     ]
     if (openList && !userId) acts.push({ label: t('removeFromPlaylist'), icon: 'remove-circle-outline', run: () => removeFromPlaylist(openList.id, s.id).then(() => setListSounds((l) => l.filter((x) => x.id !== s.id))) })
     if (isMine(s)) {
+      acts.push({ label: t('editCover'), icon: 'image-outline', run: async () => {
+        try {
+          const url = await pickSoundCover(s)
+          if (url) { updateTrack(s.id, { cover_url: url }); load('library') }
+        } catch (e) { Alert.alert(t('coverFailed'), e?.message || t('tryAgain')) }
+      } })
       if (s.status !== 'blocked') acts.push({ label: s.status === 'public' ? t('makePrivate') : t('makePublic'), icon: s.status === 'public' ? 'lock-closed-outline' : 'globe-outline', run: async () => {
         try {
           const next = await setSoundVisibility(s, s.status === 'public' ? 'private' : 'public')
@@ -256,7 +265,7 @@ export default function MusicScreen({ navigation, route }) {
           )}
         />
       )}
-      <MiniPlayer style={[st.mini, { bottom: insets.bottom + 12 }]} onOpen={(s) => navigation.navigate('Sound', { soundId: s.id, sound: s })} />
+      <MiniPlayer style={[st.mini, { bottom: insets.bottom + 12 }]} onOpen={() => navigation.navigate('NowPlaying')} />
 
       <ActionMenu sound={menu} actions={menu ? menuActions(menu) : []} onClose={() => setMenu(null)} />
       <PlaylistSheet visible={!!plFor} sound={plFor} onClose={() => { setPlFor(null); if (tab === 'playlists') load('playlists') }} />

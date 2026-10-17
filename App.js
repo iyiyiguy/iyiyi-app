@@ -21,6 +21,7 @@ import { useStudioFonts } from './src/games/studio' // 1.4.1
 import { ensureProfile, linkProviderToProfile } from './src/lib/oauth'
 import { initCrashLogger, setupGlobalErrorHandler } from './src/lib/crashLogger'
 import TabBar from './src/components/TabBar'
+import MusicDock from './src/components/MusicDock'
 import GuestTabBar, { GuestSignupPill, guestTabBarHeight } from './src/components/GuestTabBar'
 import InviteListener from './src/components/InviteListener'
 import AuraBackground, { withAura } from './src/components/AuraBackground'
@@ -58,6 +59,8 @@ const StreamScreen = lazyScreen(() => import('./src/screens/StreamScreen'))
 const ArcadeStoreScreen = lazyScreen(() => import('./src/screens/ArcadeStoreScreen'))
 const StudioHomeScreen = lazyScreen(() => import('./src/screens/StudioHomeScreen'))
 const StudioScreen = lazyScreen(() => import('./src/screens/StudioScreen'))
+const MusicHomeScreen = lazyScreen(() => import('./src/screens/MusicHomeScreen'))
+const NowPlayingScreen = lazyScreen(() => import('./src/screens/NowPlayingScreen'))
 const SoundScreen = lazyScreen(() => import('./src/screens/SoundScreen'))
 const MusicScreen = lazyScreen(() => import('./src/screens/MusicScreen'))
 const CopyrightReviewScreen = lazyScreen(() => import('./src/screens/CopyrightReviewScreen'))
@@ -205,6 +208,7 @@ function Tabs() {
       <Tab.Screen name="Map" component={MapScreen} />
       <Tab.Screen name="Recommended" component={RecommendedRedirect} />
     </Tab.Navigator>
+    <MusicDock />
     </View>
   )
 }
@@ -506,6 +510,8 @@ export default function App() {
             <Stack.Screen name="MySounds" component={StudioHomeScreen} initialParams={{ tab: 'sounds' }} />
             <Stack.Screen name="Sound" component={SoundScreen} />
             <Stack.Screen name="Music" component={MusicScreen} />
+            <Stack.Screen name="MusicHome" component={MusicHomeScreen} options={{ animation: 'slide_from_bottom' }} />
+            <Stack.Screen name="NowPlaying" component={NowPlayingScreen} options={{ presentation: 'fullScreenModal', animation: 'slide_from_bottom' }} />
             <Stack.Screen name="CopyrightReview" component={CopyrightReviewScreen} />
             <Stack.Screen name="GamePlayScreen" component={GamePlayScreen} options={{ gestureEnabled: false }} />
             <Stack.Screen name="GameLobby" component={Aura.GameLobbyScreen} />

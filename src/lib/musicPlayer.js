@@ -81,6 +81,12 @@ export function seek(seconds) {
 
 export function setRepeat(on) { emit({ repeat: !!on }) }
 
+/** Updates a track's details in the queue (e.g. a new cover) without interrupting playback. */
+export function updateTrack(id, patch) {
+  if (!state.queue.some((t) => t.id === id)) return
+  emit({ queue: state.queue.map((t) => (t.id === id ? { ...t, ...patch } : t)) })
+}
+
 export function stopMusic() {
   release()
   emit({ queue: [], index: -1, playing: false, position: 0, duration: 0 })

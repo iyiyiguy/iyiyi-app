@@ -5,8 +5,9 @@ import { View, Text, Pressable, StyleSheet, ScrollView, ActivityIndicator, Image
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons'
 import { supabase } from '../lib/supabase'
-import { getSound, setSaved, savedSounds, videosWithSound, formatCount, soundPlayable } from '../lib/sounds'
-import { playQueue, toggle, useMusic } from '../lib/musicPlayer'
+import { getSound, setSaved, savedSounds, videosWithSound, formatCount, soundPlayable, pickSoundCover } from '../lib/sounds'
+import SoundArt from '../components/SoundArt'
+import { playQueue, toggle, useMusic, updateTrack } from '../lib/musicPlayer'
 import { avatarSource } from '../lib/avatarSource'
 import { openProfile } from '../lib/profileNav'
 import MasonryGrid from '../components/MasonryGrid'
@@ -94,10 +95,28 @@ export default function SoundScreen({ navigation, route }) {
       </View>
       <ScrollView contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: insets.bottom + 120, maxWidth: 820, width: '100%', alignSelf: 'center' }}>
         <View style={st.hero}>
-          <Pressable onPress={play} disabled={!playable} style={[st.cover, !playable && { opacity: 0.5 }]} accessibilityLabel={isPlaying ? t('pause') : t('play')}>
-            <Ionicons name={sound.kind === 'song' ? 'musical-note' : 'grid'} size={34} color={MC.gold} />
-            <View style={st.coverPlay}><Ionicons name={isPlaying ? 'pause' : 'play'} size={20} color={MC.bg} /></View>
-          </Pressable>
+          <View>
+            <Pressable onPress={play} disabled={!playable} style={[st.cover, !playable && { opacity: 0.5 }]} accessibilityLabel={isPlaying ? t('pause') : t('play')}>
+              <SoundArt sound={sound} size={112} radius={14} />
+              <View style={st.coverPlay}><Ionicons name={isPlaying ? 'pause' : 'play'} size={20} color={MC.bg} /></View>
+            </Pressable>
+            {mine ? (
+              <Pressable
+                onPress={async () => {
+                  try {
+                    const url = await pickSoundCover(sound)
+                    if (url) { setSound((x) => ({ ...x, cover_url: url })); updateTrack(sound.id, { cover_url: url }) }
+                  } catch (e) { Alert.alert(t('coverFailed'), e?.message || t('tryAgain')) }
+                }}
+                style={st.coverEdit}
+                accessibilityRole="button"
+                accessibilityLabel={t('editCover')}
+              >
+                <Ionicons name="image-outline" size={13} color={MC.text} />
+                <Text style={st.coverEditText}>{t('editCover')}</Text>
+              </Pressable>
+            ) : null}
+          </View>
           <View style={{ flex: 1, gap: 4 }}>
             <Text style={st.h1} numberOfLines={2}>{sound.title}</Text>
             <Pressable onPress={() => openProfile(navigation, sound.user_id, sound.profiles?.avatar_url)} style={st.owner}>
@@ -149,7 +168,7 @@ export default function SoundScreen({ navigation, route }) {
           </Pressable>
         ) : null}
       </ScrollView>
-      <MiniPlayer style={[st.mini, { bottom: insets.bottom + 12 }]} />
+      <MiniPlayer style={[st.mini, { bottom: insets.bottom + 12 }]} onOpen={() => navigation.navigate('NowPlaying')} />
       <PlaylistSheet visible={plOpen} sound={sound} onClose={() => setPlOpen(false)} />
       <ReportSheet visible={reportOpen} sound={sound} onClose={() => setReportOpen(false)} />
       <ContentViewer
@@ -169,7 +188,9 @@ const st = StyleSheet.create({
   top: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 12, paddingBottom: 8 },
   topTitle: { color: MC.text, fontSize: 17, fontWeight: '800' },
   hero: { flexDirection: 'row', gap: 16, alignItems: 'center', marginTop: 8 },
-  cover: { width: 112, height: 112, borderRadius: 20, backgroundColor: '#211a10', borderWidth: 1, borderColor: 'rgba(255,178,30,0.35)', alignItems: 'center', justifyContent: 'center' },
+  cover: { width: 112, height: 112, borderRadius: 14, overflow: 'hidden' },
+  coverEdit: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4, marginTop: 6, paddingVertical: 4, borderRadius: 10, backgroundColor: 'rgba(255,255,255,0.08)' },
+  coverEditText: { color: MC.text, fontSize: 11, fontWeight: '700' },
   coverPlay: { position: 'absolute', right: 8, bottom: 8, width: 34, height: 34, borderRadius: 17, backgroundColor: MC.text, alignItems: 'center', justifyContent: 'center' },
   h1: { color: MC.text, fontSize: 22, fontWeight: '900' },
   h2: { color: MC.text, fontSize: 18, fontWeight: '800', marginTop: 8 },

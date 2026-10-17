@@ -11,7 +11,7 @@ import { translate } from '../i18n'
 import strings from '../i18n/strings/music'
 
 const BUCKET = 'profile-media'
-const COLS = 'id, user_id, title, audio_url, storage_path, duration_s, bpm, kind, tags, status, is_muted, use_count, play_count, created_at, profiles:user_id (username, avatar_url)'
+const COLS = 'id, user_id, title, audio_url, storage_path, duration_s, bpm, kind, tags, status, is_muted, use_count, play_count, created_at, cover_url, profiles:user_id (username, avatar_url)'
 export const SOUND_COLS = COLS
 export const SUGGESTED_TAGS = ['trap', 'drill', 'boom bap', 'house', 'lo-fi', 'afrobeats', 'r&b', 'hip hop', 'pop', 'chill', 'hype', 'dark', 'happy', 'sad', 'love', 'party', 'gym', 'funny', 'vocal', 'sample', 'loop', 'instrumental']
 
@@ -87,7 +87,49 @@ export async function publicSoundsOf(userId) {
 export async function searchSounds(query = '', limit = 40, { tag = null, sort = 'popular' } = {}) {
   const { data, error } = await supabase.rpc('search_sounds', { q: query.trim(), lim: limit, tag, sort })
   if (error) throw error
-  return data ?? []
+  return attachCovers(data ?? [])
+}
+
+// search_sounds returns a fixed column set (no cover_url): fetch the covers alongside.
+async function attachCovers(rows) {
+  const ids = rows.filter((r) => r && r.cover_url === undefined).map((r) => r.id)
+  if (!ids.length) return rows
+  try {
+    const { data } = await supabase.from('sounds').select('id, cover_url').in('id', ids)
+    const map = new Map((data || []).map((r) => [r.id, r.cover_url]))
+    return rows.map((r) => (r.cover_url === undefined ? { ...r, cover_url: map.get(r.id) || null } : r))
+  } catch {
+    return rows
+  }
+}
+
+/** Newest public sounds (the "Latest releases" shelf). */
+export const latestSounds = (limit = 24) => searchSounds('', limit, { sort: 'new' })
+
+/** Sets a sound's cover art (your own sounds): a square image from the photo library. */
+export async function setSoundCover(sound, imageUri) {
+  const userId = await uid()
+  let body
+  if (Platform.OS === 'web' || !/^file:/.test(imageUri)) body = await fetch(imageUri).then((r) => r.arrayBuffer())
+  else {
+    const { File } = require('expo-file-system')
+    body = await new File(imageUri).arrayBuffer()
+  }
+  const path = `${userId}/sounds/covers/${sound.id}-${Date.now().toString(36)}.jpg`
+  const { error: upErr } = await supabase.storage.from(BUCKET).upload(path, body, { contentType: 'image/jpeg', upsert: true })
+  if (upErr) throw upErr
+  const url = supabase.storage.from(BUCKET).getPublicUrl(path).data.publicUrl
+  const { error } = await supabase.from('sounds').update({ cover_url: url }).eq('id', sound.id)
+  if (error) throw error
+  return url
+}
+
+/** Opens the photo library (square crop) and sets the picked image as the cover. Returns the url or null. */
+export async function pickSoundCover(sound) {
+  const ImagePicker = require('expo-image-picker')
+  const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsEditing: true, aspect: [1, 1], quality: 0.75 })
+  if (res.canceled || !res.assets?.[0]?.uri) return null
+  return setSoundCover(sound, res.assets[0].uri)
 }
 
 export async function soundTags(limit = 24) {
