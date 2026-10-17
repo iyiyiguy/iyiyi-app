@@ -39,6 +39,7 @@ export const DEFAULT_CAMERA_OPTIONS = {
   mode: 'picture',
   filter: 'none', // AR filter: none | logo | nametag | love (see lib/cameraFilters)
   autoPost: true, // captures hover 5 s then post; off = edit + description before posting
+  voice: false, // voice control: "cheese" / "action" / "cut"
 }
 
 const pick = (v, choices, fallback) => (choices.includes(v) ? v : fallback)
@@ -59,6 +60,7 @@ export async function loadCameraOptions() {
       mode: o.mode === 'video' ? 'video' : 'picture',
       filter: normalizeFilter(o.filter),
       autoPost: o.autoPost !== false,
+      voice: !!o.voice,
     }
   } catch {
     return { ...DEFAULT_CAMERA_OPTIONS }

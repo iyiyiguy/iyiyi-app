@@ -4,7 +4,7 @@ import { cityLabel, loadShowPhotoLocation } from '../lib/photoLocation'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   View, Text, Image, Pressable, ActivityIndicator, Alert, StyleSheet, useWindowDimensions, Animated,
-  PanResponder, Easing, ScrollView,
+  PanResponder, Easing, ScrollView, Platform,
 } from 'react-native'
 import { CameraView, useMicrophonePermissions } from 'expo-camera'
 import { CameraOff, useCameraGate } from '../components/CameraGate'
@@ -45,7 +45,8 @@ import {
 } from '../lib/cameraFilters'
 import { openProfile } from '../lib/profileNav'
 import { shareProfileLink } from '../lib/shareLinks'
-import { translate, useT } from '../i18n'
+import { translate, useT, useLanguage } from '../i18n'
+import { useVoiceCommands, voiceAvailable } from '../lib/voiceCommands'
 import camStrings from '../i18n/strings/camera'
 import reviewStrings from '../i18n/strings/cameraReview'
 import { colors, radii, type } from '../theme'
@@ -323,6 +324,16 @@ export default function CameraScreen({ navigation, route }) {
   const [greenOpen, setGreenOpen] = useState(false)
   const greenOnRef = useRef(false) // native green screen is running on the current preview
   const greenRecRef = useRef(false)
+  // Voice control ("cheese" / "action" / "cut" in every app language).
+  const language = useLanguage()
+  const voiceSupported = useMemo(() => voiceAvailable(), [])
+  const voiceCmdRef = useRef(null)
+  const voice = useVoiceCommands({
+    // Android can't share the mic between the recognizer and video recording: pause it then.
+    enabled: !!options.voice && voiceSupported && isFocused && !(Platform.OS === 'android' && isRecording),
+    lang: language,
+    onCommand: (c) => voiceCmdRef.current?.(c),
+  })
   const recSoundRef = useRef(null)
   useEffect(() => {
     if (!isRecording || !sound?.audio_url) return undefined
@@ -1266,6 +1277,29 @@ export default function CameraScreen({ navigation, route }) {
     }
   }
 
+  voiceCmdRef.current = async (cmd) => {
+    if (cmd === 'denied') { onOptionsChange({ voice: false }); Alert.alert(tk('voiceDeniedTitle'), tk('voiceDenied')); return }
+    if (!mounted.current || editing || composing) return
+    if (cmd === 'stop') {
+      if (recording.current) stopVideo()
+      else if (phaseRef.current === 'countdown' || phaseRef.current === 'redoCountdown') cancelSequence()
+      return
+    }
+    if (recording.current || phaseRef.current !== 'idle') return
+    const want = cmd === 'photo' ? 'picture' : 'video'
+    if (modeRef.current !== want) {
+      changeModeRef.current?.(want)
+      await wait(MODE_SETTLE_MS)
+      if (!mounted.current || recording.current) return
+    }
+    haptic(Haptics.ImpactFeedbackStyle.Light)
+    // Photos follow the shutter (timer / burst if set); "action" starts a hands-free recording
+    // (with the countdown first when a timer is set). Say "cut" or tap to stop.
+    if (cmd === 'photo') onShutter()
+    else if (timerSeconds(optionsRef.current)) onShutter()
+    else startVideo(true)
+  }
+
   // Hold to record: press and hold the shutter (photo or video mode) to film, release to stop.
   const holdingRef = useRef(false)
   const holdStartedRef = useRef(false)
@@ -1662,30 +1696,49 @@ export default function CameraScreen({ navigation, route }) {
           {!barOpen && <HelpButton onPress={() => { setTip(null); setHelpOpen(true) }} disabled={busy} />}
         </View>
         {!isRecording ? (
-          <Pressable
-            onPress={() => { haptic(); onOptionsChange({ autoPost: options.autoPost === false }) ; flash(options.autoPost === false ? tk('autoPostOn') : tk('editFirstOn')) }}
-            disabled={busy}
-            style={[styles.handsFree, options.autoPost !== false ? styles.handsFreeOn : null]}
-            accessibilityRole="switch"
-            accessibilityState={{ checked: options.autoPost !== false }}
-            accessibilityLabel={tk('autoPostA11y')}
-          >
-            <Ionicons name={options.autoPost !== false ? 'flash' : 'create-outline'} size={14} color="#fff" />
-            <Text style={styles.handsFreeText}>{options.autoPost !== false ? tk('autoPost5') : tk('editFirst')}</Text>
-          </Pressable>
+          <View style={styles.chipRow} pointerEvents="box-none">
+            <Pressable
+              onPress={() => { haptic(); onOptionsChange({ autoPost: options.autoPost === false }) ; flash(options.autoPost === false ? tk('autoPostOn') : tk('editFirstOn')) }}
+              disabled={busy}
+              style={[styles.handsFree, options.autoPost !== false ? styles.handsFreeOn : null]}
+              accessibilityRole="switch"
+              accessibilityState={{ checked: options.autoPost !== false }}
+              accessibilityLabel={tk('autoPostA11y')}
+            >
+              <Ionicons name={options.autoPost !== false ? 'flash' : 'create-outline'} size={14} color="#fff" />
+              <Text style={styles.handsFreeText}>{options.autoPost !== false ? tk('autoPost5') : tk('editFirst')}</Text>
+            </Pressable>
+            {voiceSupported ? (
+              <Pressable
+                onPress={() => { haptic(); const on = !options.voice; onOptionsChange({ voice: on }); if (on) flash(tk('voiceHint')) }}
+                disabled={busy}
+                style={[styles.handsFree, options.voice ? styles.handsFreeOn : null]}
+                accessibilityRole="switch"
+                accessibilityState={{ checked: !!options.voice }}
+                accessibilityLabel={tk('voiceA11y')}
+              >
+                <Ionicons name={options.voice ? 'mic' : 'mic-outline'} size={14} color="#fff" />
+                <Text style={styles.handsFreeText}>{tk('voice')}</Text>
+                {options.voice && voice.listening ? <View style={styles.voiceDot} /> : null}
+              </Pressable>
+            ) : null}
+            {mode === 'video' ? (
+              <Pressable
+                onPress={() => onOptionsChange({ timer: options.timer ? 0 : 5 })}
+                disabled={busy}
+                style={[styles.handsFree, options.timer ? styles.handsFreeOn : null]}
+                accessibilityRole="switch"
+                accessibilityState={{ checked: !!options.timer }}
+                accessibilityLabel={tk('handsFreeA11y')}
+              >
+                <Ionicons name="hand-left-outline" size={14} color="#fff" />
+                <Text style={styles.handsFreeText}>{options.timer ? tk('handsFreeN', { n: timerSeconds(options) }) : tk('handsFree')}</Text>
+              </Pressable>
+            ) : null}
+          </View>
         ) : null}
-        {mode === 'video' && !isRecording ? (
-          <Pressable
-            onPress={() => onOptionsChange({ timer: options.timer ? 0 : 5 })}
-            disabled={busy}
-            style={[styles.handsFree, options.timer ? styles.handsFreeOn : null]}
-            accessibilityRole="switch"
-            accessibilityState={{ checked: !!options.timer }}
-            accessibilityLabel={tk('handsFreeA11y')}
-          >
-            <Ionicons name="hand-left-outline" size={14} color="#fff" />
-            <Text style={styles.handsFreeText}>{options.timer ? tk('handsFreeN', { n: timerSeconds(options) }) : tk('handsFree')}</Text>
-          </Pressable>
+        {options.voice && voiceSupported && voice.heard && !busy ? (
+          <Text style={styles.voiceHeard} numberOfLines={1}>“{voice.heard.slice(-40)}”</Text>
         ) : null}
         <View style={styles.modeRow} pointerEvents="box-none">
           <Pressable
@@ -1767,6 +1820,9 @@ export default function CameraScreen({ navigation, route }) {
 }
 
 const styles = StyleSheet.create({
+  chipRow: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 6 },
+  voiceDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#ff3b30', marginLeft: 2 },
+  voiceHeard: { color: 'rgba(255,255,255,0.85)', fontSize: 12, fontStyle: 'italic', textShadowColor: 'rgba(0,0,0,0.6)', textShadowRadius: 3, maxWidth: '90%' },
   greenStrip: { position: 'absolute', left: 0, right: 0, bottom: 210, alignItems: 'center' },
   greenRow: { gap: 8, paddingHorizontal: 14 },
   greenItem: { width: 58, height: 76, borderRadius: 14, backgroundColor: 'rgba(0,0,0,0.45)', borderWidth: 2, borderColor: 'rgba(255,255,255,0.18)', alignItems: 'center', justifyContent: 'center', gap: 4, overflow: 'hidden' },

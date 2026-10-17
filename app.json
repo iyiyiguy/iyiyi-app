@@ -18,7 +18,7 @@
         "NSLocationWhenInUseUsageDescription": "iYiYi uses your location to show your profile to people within your chosen range and to show you who is nearby. For example, when you open Nearby, you see people within 150 ft of you, and in laser tag you see how far away other players are. Other people only see an approximate distance, never your exact location.",
         "NSPhotoLibraryUsageDescription": "iYiYi uses your photo library so you can choose pictures and videos to post or use as your profile photo. For example, you can pick a photo from your library to set as your profile picture.",
         "NSCameraUsageDescription": "iYiYi uses the camera to take photos and videos you can post, and to aim in camera games. For example, you can take a photo that tags people around you, or aim at another player in laser tag.",
-        "NSMicrophoneUsageDescription": "iYiYi uses the microphone to record sound in videos you shoot, your voice in video calls, and sounds or vocals you record into The Lab drum machine. For example, when you record a video with the iYiYi camera, your voice is included in the clip.",
+        "NSMicrophoneUsageDescription": "iYiYi uses the microphone to record sound in videos you shoot, your voice in video calls, sounds you record into The Lab, and to hear voice commands for the camera. For example, say \"cheese\" to take a photo hands-free.",
         "NSPhotoLibraryAddUsageDescription": "iYiYi saves the photos and videos you take in the app to your photo library. For example, after you shoot a photo with the iYiYi camera, it is saved to an iYiYi album.",
         "NSLocationAlwaysAndWhenInUseUsageDescription": "iYiYi uses your location in the background during laser tag games so you stay connected to the match and other players can see your position even when you switch apps briefly.",
         "UIBackgroundModes": [
@@ -66,7 +66,7 @@
         "expo-camera",
         {
           "cameraPermission": "iYiYi uses the camera to take photos and videos you can post, and to aim in camera games. For example, you can take a photo that tags people around you, or aim at another player in laser tag.",
-          "microphonePermission": "iYiYi uses the microphone to record sound in videos you shoot, your voice in video calls, and sounds or vocals you record into The Lab drum machine. For example, when you record a video with the iYiYi camera, your voice is included in the clip.",
+          "microphonePermission": "iYiYi uses the microphone to record sound in videos you shoot, your voice in video calls, sounds you record into The Lab, and to hear voice commands for the camera. For example, say \"cheese\" to take a photo hands-free.",
           "recordAudioAndroid": true
         }
       ],
@@ -108,7 +108,17 @@
           "remindersPermission": "iYiYi creates reminders for events you are going to. For example, you can get a reminder an hour before a meetup you RSVP'd to."
         }
       ],
-      "./plugins/withAppsFlyerKotlin.js"
+      "./plugins/withAppsFlyerKotlin.js",
+      [
+        "expo-speech-recognition",
+        {
+          "microphonePermission": "iYiYi uses the microphone to record sound in videos you shoot, your voice in video calls, sounds you record into The Lab, and to hear voice commands for the camera. For example, say \"cheese\" to take a photo hands-free.",
+          "speechRecognitionPermission": "iYiYi uses speech recognition only for camera voice commands. For example, say \"cheese\" to take a photo or \"action\" to start recording without touching the screen.",
+          "androidSpeechServicePackages": [
+            "com.google.android.googlequicksearchbox"
+          ]
+        }
+      ]
     ],
     "extra": {
       "eas": {
