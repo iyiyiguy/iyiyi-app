@@ -1,27 +1,77 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <script>if (window.chrome) document.documentElement.classList.add('lg')</script>
   <meta charset="utf-8" />
+  <script>
+    // Auto-language: send visitors to their language's page unless they picked one (or are a bot).
+    // 1) first browser language we have a page for; 2) else Brazilian time zone -> /pt/,
+    // Latin American / Spanish time zone -> /es/. Only this English page ever redirects.
+    (function () {
+      try {
+        if (/bot|crawl|spider|slurp|facebookexternalhit|preview|lighthouse|headless/i.test(navigator.userAgent || '')) return;
+        if (localStorage.getItem('iyiyi_site_lang')) return;
+        var map = { es: 'es', zh: 'zh', ja: 'ja', ko: 'ko', fr: 'fr', de: 'de', pt: 'pt', ar: 'ar', hi: 'hi', tl: 'tl', fil: 'tl' };
+        var langs = navigator.languages && navigator.languages.length ? navigator.languages : [navigator.language || ''];
+        var pick = '';
+        for (var i = 0; i < langs.length && !pick; i++) {
+          var b = String(langs[i] || '').toLowerCase().split(/[-_]/)[0];
+          if (Object.prototype.hasOwnProperty.call(map, b)) pick = map[b];
+        }
+        if (!pick) {
+          var tz = '';
+          try { tz = Intl.DateTimeFormat().resolvedOptions().timeZone || ''; } catch (e) {}
+          var br = /^America\/(Sao_Paulo|Fortaleza|Recife|Bahia|Belem|Manaus|Cuiaba|Campo_Grande|Porto_Velho|Boa_Vista|Rio_Branco|Araguaina|Maceio|Santarem|Noronha)$/;
+          var es = /^(America\/(Mexico_City|Cancun|Monterrey|Merida|Matamoros|Chihuahua|Ciudad_Juarez|Hermosillo|Mazatlan|Bahia_Banderas|Tijuana|Guatemala|El_Salvador|Tegucigalpa|Managua|Costa_Rica|Panama|Havana|Santo_Domingo|Puerto_Rico|Bogota|Caracas|Guayaquil|Lima|La_Paz|Santiago|Punta_Arenas|Montevideo|Asuncion|Buenos_Aires|Argentina\/.+)|Europe\/Madrid|Atlantic\/Canary)$/;
+          if (br.test(tz)) pick = 'pt';
+          else if (es.test(tz)) pick = 'es';
+        }
+        if (pick) location.replace('/' + pick + '/' + location.search + location.hash);
+      } catch (e) {}
+    })();
+  </script>
+  <script>if (window.chrome) document.documentElement.classList.add('lg')</script>
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>iYiYi — Grow Your Social Media Followers & Play Real-World Games | Social Media Growth App</title>
   <meta name="description" content="iYiYi is the #1 social media growth app for small businesses and creators. Get followers on Instagram, TikTok, YouTube and Snapchat from people nearby. Plus real-world Laser Tag and Battle Royale games." />
   <meta name="keywords" content="social media growth app, grow social media followers, small business marketing tool, get more followers, local business marketing, instagram followers, tiktok growth, social media for small business, real world games, laser tag app, battle royale app, location based social media, grow your socials" />
   <link rel="canonical" href="https://iyiyi.xyz/" />
+  <link rel="alternate" hreflang="en" href="https://iyiyi.xyz/" />
+  <link rel="alternate" hreflang="es" href="https://iyiyi.xyz/es/" />
+  <link rel="alternate" hreflang="zh" href="https://iyiyi.xyz/zh/" />
+  <link rel="alternate" hreflang="ja" href="https://iyiyi.xyz/ja/" />
+  <link rel="alternate" hreflang="ko" href="https://iyiyi.xyz/ko/" />
+  <link rel="alternate" hreflang="fr" href="https://iyiyi.xyz/fr/" />
+  <link rel="alternate" hreflang="de" href="https://iyiyi.xyz/de/" />
+  <link rel="alternate" hreflang="pt" href="https://iyiyi.xyz/pt/" />
+  <link rel="alternate" hreflang="ar" href="https://iyiyi.xyz/ar/" />
+  <link rel="alternate" hreflang="hi" href="https://iyiyi.xyz/hi/" />
+  <link rel="alternate" hreflang="tl" href="https://iyiyi.xyz/tl/" />
+  <link rel="alternate" hreflang="x-default" href="https://iyiyi.xyz/" />
 
   <!-- Open Graph -->
   <meta property="og:type" content="website" />
   <meta property="og:url" content="https://iyiyi.xyz/" />
   <meta property="og:title" content="iYiYi — The Social Media Growth App for Small Businesses & Creators" />
   <meta property="og:description" content="Turn foot traffic into followers. Get followed on Instagram, TikTok, YouTube and Snapchat by everyone within 150 feet — in one tap. Plus real-world Laser Tag and Battle Royale." />
-  <meta property="og:image" content="https://iyiyi.xyz/img/shot-laser.webp" />
+  <meta property="og:image" content="https://iyiyi.xyz/img/og-image.jpg" />
   <meta property="og:site_name" content="iYiYi" />
+  <meta property="og:locale" content="en_US" />
+  <meta property="og:locale:alternate" content="es_LA" />
+  <meta property="og:locale:alternate" content="zh_CN" />
+  <meta property="og:locale:alternate" content="ja_JP" />
+  <meta property="og:locale:alternate" content="ko_KR" />
+  <meta property="og:locale:alternate" content="fr_FR" />
+  <meta property="og:locale:alternate" content="de_DE" />
+  <meta property="og:locale:alternate" content="pt_BR" />
+  <meta property="og:locale:alternate" content="ar_AR" />
+  <meta property="og:locale:alternate" content="hi_IN" />
+  <meta property="og:locale:alternate" content="tl_PH" />
 
   <!-- Twitter Card -->
   <meta name="twitter:card" content="summary_large_image" />
   <meta name="twitter:title" content="iYiYi — Grow Your Social Media Followers from People Nearby" />
   <meta name="twitter:description" content="The social media growth app that turns foot traffic into followers. One tap follow on every platform. Plus real-world Laser Tag and Battle Royale." />
-  <meta name="twitter:image" content="https://iyiyi.xyz/img/shot-laser.webp" />
+  <meta name="twitter:image" content="https://iyiyi.xyz/img/og-image.jpg" />
 
   <meta name="theme-color" content="#07080f" />
   <link rel="icon" type="image/png" href="/favicon.png" />
@@ -202,6 +252,34 @@
     .foot-soc svg { width: 16px; height: 16px; }
     @media (max-width: 1080px) { .nav { gap: 18px; font-size: 13px; } }
     @media (max-width: 960px) { .nav { display: none; } }
+    /* Language menu (stays visible on phones; the nav links hide under 960px) */
+    header .bar { overflow: visible; }
+    .lang { position: relative; flex-shrink: 0; font-size: 13px; font-weight: 600; }
+    .lang summary { list-style: none; display: flex; align-items: center; gap: 5px; height: 34px; padding: 0 9px; border-radius: 999px;
+      color: var(--muted); cursor: pointer; user-select: none; -webkit-user-select: none; white-space: nowrap; transition: background .2s ease, color .2s ease; }
+    .lang summary::-webkit-details-marker { display: none; }
+    .lang summary:hover, .lang[open] summary { color: var(--text); background: rgba(255,255,255,.1); }
+    .lang summary:focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; }
+    .lang .globe { width: 17px; height: 17px; }
+    .lang .chev { width: 10px; height: 10px; opacity: .7; transition: transform .25s ease; }
+    .lang[open] .chev { transform: rotate(180deg); }
+    .lang-list { position: absolute; top: calc(100% + 12px); inset-inline-end: -6px; z-index: 40; list-style: none; min-width: 186px;
+      max-height: min(72vh, 480px); overflow-y: auto; padding: 6px; border-radius: 18px;
+      background: rgba(15,16,30,.94); border: 1px solid rgba(255,255,255,.16);
+      box-shadow: 0 22px 60px rgba(0,0,0,.6), inset 1px 1px 0 rgba(255,255,255,.12);
+      backdrop-filter: blur(18px) saturate(180%); -webkit-backdrop-filter: blur(18px) saturate(180%); }
+    .lang-list a { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 9px 12px; border-radius: 12px;
+      color: var(--muted); font-size: 14px; font-weight: 500; letter-spacing: 0; }
+    .lang-list a:hover, .lang-list a:focus-visible { background: rgba(255,255,255,.09); color: var(--text); outline: none; }
+    .lang-list a[aria-current="true"] { color: var(--text); font-weight: 700; }
+    .lang-list a[aria-current="true"]::after { content: "\2713"; color: var(--pink); }
+    @media (max-width: 640px) { .lang summary { padding: 0 7px; gap: 4px; } .lang .chev { display: none; } }
+    /* Small phones: brand, language menu and button never shrink; social icons that don't fit wrap onto a hidden row */
+    .brand, .actions { flex-shrink: 0; }
+    .socials { min-width: 0; flex-wrap: wrap; justify-content: flex-end; height: 34px; overflow: hidden; }
+    @media (max-width: 640px) { .socials { height: 30px; } }
+    @media (max-width: 380px) { .bar { gap: 8px; } .actions .btn { padding: 0 12px; } }
+    @media (max-width: 340px) { .socials { display: none; } .lang { margin-inline-start: auto; } }
     .actions { display: flex; align-items: center; gap: 8px; }
     .btn {
       display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 42px; padding: 0 18px;
@@ -370,6 +448,22 @@
           <a class="soc yt" href="https://www.youtube.com/@iyiyiguy" target="_blank" rel="noopener" aria-label="YouTube @iyiyiguy" title="YouTube @iyiyiguy"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M23 7.2a3 3 0 0 0-2.1-2.1C19 4.6 12 4.6 12 4.6s-7 0-8.9.5A3 3 0 0 0 1 7.2 31 31 0 0 0 .5 12a31 31 0 0 0 .5 4.8 3 3 0 0 0 2.1 2.1c1.9.5 8.9.5 8.9.5s7 0 8.9-.5a3 3 0 0 0 2.1-2.1 31 31 0 0 0 .5-4.8 31 31 0 0 0-.5-4.8zM9.75 15.02V8.98L15.5 12l-5.75 3.02z"/></svg></a>
           <a class="soc fb" href="https://www.facebook.com/profile.php?id=100076746220864" target="_blank" rel="noopener" aria-label="Facebook" title="Facebook"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M24 12.07C24 5.41 18.63 0 12 0S0 5.4 0 12.07C0 18.1 4.39 23.1 10.13 24v-8.44H7.08v-3.49h3.04V9.41c0-3.02 1.8-4.7 4.54-4.7 1.31 0 2.68.24 2.68.24v2.97h-1.5c-1.5 0-1.96.93-1.96 1.89v2.26h3.32l-.53 3.5h-2.8V24C19.62 23.1 24 18.1 24 12.07z"/></svg></a>
         </div>
+        <details class="lang" id="lang-menu">
+          <summary aria-label="Language: English" title="Language"><svg class="globe" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" aria-hidden="true"><circle cx="12" cy="12" r="9.2"/><path d="M2.8 12h18.4M12 2.8c2.6 2.6 3.9 5.7 3.9 9.2s-1.3 6.6-3.9 9.2c-2.6-2.6-3.9-5.7-3.9-9.2S9.4 5.4 12 2.8z"/></svg><span>EN</span><svg class="chev" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M2.5 4.5 6 8l3.5-3.5"/></svg></summary>
+          <ul class="lang-list">
+            <li><a href="/" hreflang="en" lang="en" data-lang="en" aria-current="true">English</a></li>
+            <li><a href="/es/" hreflang="es" lang="es" data-lang="es">Español</a></li>
+            <li><a href="/zh/" hreflang="zh" lang="zh-Hans" data-lang="zh">简体中文</a></li>
+            <li><a href="/ja/" hreflang="ja" lang="ja" data-lang="ja">日本語</a></li>
+            <li><a href="/ko/" hreflang="ko" lang="ko" data-lang="ko">한국어</a></li>
+            <li><a href="/fr/" hreflang="fr" lang="fr" data-lang="fr">Français</a></li>
+            <li><a href="/de/" hreflang="de" lang="de" data-lang="de">Deutsch</a></li>
+            <li><a href="/pt/" hreflang="pt" lang="pt-BR" data-lang="pt">Português</a></li>
+            <li><a href="/ar/" hreflang="ar" lang="ar" data-lang="ar">العربية</a></li>
+            <li><a href="/hi/" hreflang="hi" lang="hi" data-lang="hi">हिन्दी</a></li>
+            <li><a href="/tl/" hreflang="tl" lang="tl" data-lang="tl">Tagalog</a></li>
+          </ul>
+        </details>
         <div class="actions">
           <a class="glass btn" href="https://shop.iyiyi.xyz">Shop</a>
           <a class="btn btn-launch" href="https://app.iyiyi.xyz">Launch App ↗</a>
@@ -381,7 +475,7 @@
   <main>
     <!-- Hero -->
     <section class="hero wrap">
-      <a class="glass pill" href="#new"><i></i> New in 1.4.1: Follow everywhere, AR lenses &amp; a pro Arcade</a>
+      <a class="glass pill" href="#new"><i></i> New in 1.5.0: Studio, sounds &amp; a video editor</a>
       <h1>Grow your <span class="grad">social media</span> from the people <span class="grad-a">around you.</span></h1>
       <p class="lead">The social media growth app for small businesses and creators. Get followers on Instagram, TikTok, YouTube and Snapchat from everyone within 150 feet. Plus real-world Laser Tag and Battle Royale games you play with your phone camera.</p>
       <div class="stores">
@@ -404,18 +498,18 @@
       </div>
     </section>
 
-    <!-- What's new in 1.4.1 -->
+    <!-- What's new in 1.5.0 -->
     <section id="new" class="wrap" style="padding-top:10px">
-      <span class="kicker">New in iYiYi 1.4.1</span>
-      <h2 class="sec">The biggest update yet.</h2>
-      <p class="sub">A faster way to grow your socials, a new camera and a full upgrade to every game. On iPhone, Android and the web.</p>
+      <span class="kicker">New in iYiYi 1.5.0</span>
+      <h2 class="sec">Make the beat. Shoot the video.</h2>
+      <p class="sub">A drum machine and sampler, sounds for your videos, a new video editor and live green screen. Your whole creative studio, right inside iYiYi.</p>
       <div class="feats feats3">
-        <div class="glass lift feat"><div class="ico">⚡</div><h3>Follow everywhere, for real</h3><p>Tap "Follow ×4" on anyone nearby and follow them on Instagram, TikTok, YouTube and Snapchat in a few taps. iYiYi moves you to the next platform automatically when you come back.</p></div>
-        <div class="glass lift feat"><div class="ico">📍</div><h3>The new Here tab</h3><p>Everyone around you, on a list or the map, with search across names, @handles and links, plus events, people you met and your activity one tap away.</p></div>
-        <div class="glass lift feat"><div class="ico">✨</div><h3>AR camera lenses</h3><p>Lenses that follow your face: a Follow-me card with your socials, Shades, Crown, Halo, Sparkle and Doll Glam, plus film-style color looks and an iYiYi frame.</p></div>
-        <div class="glass lift feat"><div class="ico">🎯</div><h3>Pro-level Laser Tag</h3><p>A studio game HUD, live target tracking with aim assist and tap-to-shoot, rockets you can watch explode on walls and cover, and sticky bombs with one Detonate All.</p></div>
-        <div class="glass lift feat"><div class="ico">🪂</div><h3>Battle Royale your way</h3><p>Pick any area, from a quarter mile to 10 miles. Start with your fists, find weapons scattered around the zone and race to supply drops.</p></div>
-        <div class="glass lift feat"><div class="ico">🕵️</div><h3>Beside Them goes indoors</h3><p>Task stations placed for you outdoors, or walk &amp; place them across floors inside, or use QR codes. Then crack the code before the imposter finds you.</p></div>
+        <div class="glass lift feat"><div class="ico">🥁</div><h3>Studio: beats in your pocket</h3><p>A drum machine &amp; sampler with 16 pads and 8 kits: Trap, Boom Bap, House, Lo-fi, ATL 808, Church Keys, Piano Bells and Jersey Club. Program a step sequencer or let Auto beats start one for you.</p></div>
+        <div class="glass lift feat"><div class="ico">✂️</div><h3>Sample anything</h3><p>Import a song or a voice memo and iYiYi auto-chops it onto your pads. Or hit Jersey Club flip and get an instant beat.</p></div>
+        <div class="glass lift feat"><div class="ico">🎵</div><h3>Sounds for your videos</h3><p>Export your beats as sounds, private or public and copyright-checked. Add a sound while you shoot, browse trending sounds and find them by tags.</p></div>
+        <div class="glass lift feat"><div class="ico">🎬</div><h3>A TikTok-style editor</h3><p>Trim, crop and add captions with fonts, colors and styles. A new post screen with descriptions and #hashtags, and hold the shutter to record.</p></div>
+        <div class="glass lift feat"><div class="ico">🟩</div><h3>Live green screen on iPhone</h3><p>Put yourself on a beach, in Vegas, in space or on any photo of your own, live while you film.</p></div>
+        <div class="glass lift feat"><div class="ico">🗺️</div><h3>Music &amp; the map</h3><p>Upload your songs, build playlists on your profile and send songs to friends. The map now shows each person's best post.</p></div>
       </div>
     </section>
 
@@ -661,6 +755,22 @@
     </div>
   </footer>
 <script>
+  // Language menu: remember the visitor's choice so the auto-language redirect respects it.
+  (function () {
+    var menu = document.getElementById('lang-menu');
+    if (!menu) return;
+    menu.querySelectorAll('a[data-lang]').forEach(function (a) {
+      a.addEventListener('click', function (e) {
+        try { localStorage.setItem('iyiyi_site_lang', a.getAttribute('data-lang')); } catch (err) {}
+        e.preventDefault();
+        location.href = a.getAttribute('href') + location.hash;
+      });
+    });
+    document.addEventListener('click', function (e) { if (menu.open && !menu.contains(e.target)) menu.open = false; });
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' && menu.open) { menu.open = false; menu.querySelector('summary').focus(); }
+    });
+  })();
   // Android visitors: send the generic "Get the app" links to Google Play instead of the App Store.
   if (/Android/i.test(navigator.userAgent)) {
     document.querySelectorAll('a[href^="https://apps.apple.com/"]').forEach(function (a) {

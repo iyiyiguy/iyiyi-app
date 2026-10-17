@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Descarga iYiYi</title>
+  <meta name="description" content="Descarga iYiYi en el App Store o en Google Play." />
+  <meta name="robots" content="noindex" />
+  <link rel="canonical" href="https://iyiyi.xyz/es/get" />
+  <link rel="alternate" hreflang="en" href="https://iyiyi.xyz/get" />
+  <link rel="alternate" hreflang="es" href="https://iyiyi.xyz/es/get" />
+  <link rel="alternate" hreflang="zh" href="https://iyiyi.xyz/zh/get" />
+  <link rel="alternate" hreflang="ja" href="https://iyiyi.xyz/ja/get" />
+  <link rel="alternate" hreflang="ko" href="https://iyiyi.xyz/ko/get" />
+  <link rel="alternate" hreflang="fr" href="https://iyiyi.xyz/fr/get" />
+  <link rel="alternate" hreflang="de" href="https://iyiyi.xyz/de/get" />
+  <link rel="alternate" hreflang="pt" href="https://iyiyi.xyz/pt/get" />
+  <link rel="alternate" hreflang="ar" href="https://iyiyi.xyz/ar/get" />
+  <link rel="alternate" hreflang="hi" href="https://iyiyi.xyz/hi/get" />
+  <link rel="alternate" hreflang="tl" href="https://iyiyi.xyz/tl/get" />
+  <link rel="alternate" hreflang="x-default" href="https://iyiyi.xyz/get" />
+  <link rel="icon" href="/favicon.png" />
+  <script>
+    // Business-card QR (iyiyi.xyz/es/get): iPhone/iPad -> App Store, Android -> Google Play,
+    // anything else stays on this page with both buttons.
+    (function () {
+      var ua = navigator.userAgent || '';
+      var ios = /iPhone|iPad|iPod/i.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+      var android = /Android/i.test(ua);
+      var src = new URLSearchParams(location.search).get('src') || 'card';
+      if (ios) location.replace('https://apps.apple.com/app/id6445996160?pt=card&ct=' + encodeURIComponent(src));
+      else if (android) location.replace('https://play.google.com/store/apps/details?id=com.iyiyi.app&referrer=utm_source%3D' + encodeURIComponent(src));
+    })();
+  </script>
+  <style>
+    :root { color-scheme: dark; }
+    body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: #07060d; color: #fff;
+      font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; text-align: center; padding: 24px; box-sizing: border-box; }
+    img { width: 84px; height: auto; margin-bottom: 18px; }
+    h1 { font-size: 28px; margin: 0 0 8px; letter-spacing: -0.5px; }
+    p { color: rgba(255,255,255,.7); margin: 0 0 24px; }
+    .btns { display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; }
+    a { display: inline-block; padding: 14px 22px; border-radius: 999px; color: #fff; text-decoration: none; font-weight: 700;
+      background: linear-gradient(135deg, #ff4fa3, #8f5bff); }
+    a.alt { background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.18); }
+  </style>
+</head>
+<body>
+  <main>
+    <img src="/logo.png" alt="iYiYi" />
+    <h1>Descarga iYiYi</h1>
+    <p>Haz que te siga la gente que tienes cerca.</p>
+    <div class="btns">
+      <a href="https://apps.apple.com/app/id6445996160">App Store</a>
+      <a href="https://play.google.com/store/apps/details?id=com.iyiyi.app">Google Play</a>
+      <a class="alt" href="https://app.iyiyi.xyz">Abrir en la web</a>
+    </div>
+  </main>
+</body>
+</html>
