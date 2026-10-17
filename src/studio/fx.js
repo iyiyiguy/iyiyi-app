@@ -1,4 +1,4 @@
-// Vocal / track effects for The Lab (offline, plain JS, rendered into the track's playback
+// Vocal / track effects for The Lab (per track, offline, plain JS, rendered into the track's playback
 // buffer like pitch correction, so what you hear is exactly what exports):
 //   low cut (12 dB/oct high-pass) -> presence (peaking EQ ~3.5 kHz) -> compressor ->
 //   delay (tempo-synced, darkened feedback) -> reverb (Freeverb: 8 combs + 4 allpasses) -> soft limit
