@@ -257,3 +257,4 @@ if failures:
 print(f"All {len(ONE_TIME) + 1} Google Play products are set up.")
 # Release 1.4.1 (versionCode 199) to production.
 # Release 1.5.0 (versionCode 213, no AD_ID) to production.
+# Release 1.5.0 (versionCode 215: Song timeline, vocals + pads over the beat, pitch correction) to production.
