@@ -16,6 +16,7 @@ import { playQueue, toggle, useMusic, updateTrack } from '../lib/musicPlayer'
 import SoundRow, { MC } from '../components/SoundRow'
 import HScroll from '../components/HScroll'
 import MiniPlayer from '../components/MiniPlayer'
+import { useSignedIn } from '../lib/useSignedIn'
 import TagPicker from '../components/TagPicker'
 import { PlaylistSheet, shareSound } from '../components/SoundSheets'
 import { useT } from '../i18n'
@@ -37,9 +38,12 @@ export default function MusicScreen({ navigation, route }) {
   const insets = useSafeAreaInsets()
   const userId = route?.params?.userId || null
   const username = route?.params?.username || null
-  const tabs = userId ? THEIR_TABS : MY_TABS
+  const signedIn = useSignedIn()
+  // signed-out visitors (website) can browse and play public sounds only
+  const tabs = userId ? THEIR_TABS : signedIn === false ? MY_TABS.slice(0, 1) : MY_TABS
   const [tab, setTab] = useState(route?.params?.tab && tabs.some((t) => t.key === route.params.tab) ? route.params.tab : tabs[0].key)
   const [tag, setTag] = useState(route?.params?.tag || null)
+  useEffect(() => { if (!tabs.some((x) => x.key === tab)) setTab(tabs[0].key) }, [tabs.length]) // eslint-disable-line react-hooks/exhaustive-deps
   const [q, setQ] = useState('')
   const [tags, setTags] = useState([])
   const [data, setData] = useState({})
@@ -100,7 +104,8 @@ export default function MusicScreen({ navigation, route }) {
       if (res.canceled || !res.assets?.[0]) return
       const a = res.assets[0]
       if (a.size && a.size > 40 * 1024 * 1024) { Alert.alert(t('fileTooBig'), t('fileTooBigMsg')); return }
-      setUpload({ file: a, title: (a.name || 'Song').replace(/\.[^.]+$/, '').slice(0, 80), visibility: 'private', tags: [], busy: false })
+      // Public by default (after the copyright check) so it plays for everyone, on phones and the web.
+      setUpload({ file: a, title: (a.name || 'Song').replace(/\.[^.]+$/, '').slice(0, 80), visibility: 'public', tags: [], busy: false })
     } catch (e) {
       Alert.alert(t('openFileFailed'), e?.message || t('tryAnother'))
     }
@@ -123,7 +128,11 @@ export default function MusicScreen({ navigation, route }) {
 
   // ---- sound menu ----
   // opened from Music home's "+" -> Upload a sound
-  useEffect(() => { if (route?.params?.upload) setTimeout(() => pickSong(), 350) }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    const f = route?.params?.uploadFile // picked on Music home (keeps the tap's user gesture on the web)
+    if (f?.uri) setUpload({ file: f, title: (f.name || 'Song').replace(/\.[^.]+$/, '').slice(0, 80), visibility: 'public', tags: [], busy: false })
+    else if (route?.params?.upload) setTimeout(() => pickSong(), 350)
+  }, [route?.params?.uploadFile?.uri]) // eslint-disable-line react-hooks/exhaustive-deps
   const isMine = (s) => !userId && tab === 'library' && !openList ? true : false
   const menuActions = (s) => {
     const acts = [

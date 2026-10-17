@@ -29,7 +29,7 @@ export default function NowPlayingScreen({ navigation }) {
     if (!s?.id || !myId) return
     savedSounds().then((list) => setSavedState(list.some((x) => x.id === s.id))).catch(() => {})
   }, [s?.id, myId])
-  useEffect(() => { if (!s) navigation.goBack() }, [!!s]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (!s) { if (navigation.canGoBack()) navigation.goBack(); else navigation.navigate('MusicHome') } }, [!!s]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // seek bar
   const [barW, setBarW] = useState(1)
@@ -76,7 +76,7 @@ export default function NowPlayingScreen({ navigation }) {
       <LinearGradient colors={[c[0], '#15151d', MC.bg]} locations={[0, 0.55, 1]} style={StyleSheet.absoluteFill} />
       <View style={[st.wrap, { paddingTop: insets.top + 6, paddingBottom: insets.bottom + 18 }]}>
         <View style={st.top}>
-          <Pressable onPress={() => navigation.goBack()} hitSlop={10} style={st.iconBtn} accessibilityLabel={t('close')}>
+          <Pressable onPress={() => (navigation.canGoBack() ? navigation.goBack() : navigation.navigate('MusicHome'))} hitSlop={10} style={st.iconBtn} accessibilityLabel={t('close')}>
             <Ionicons name="chevron-down" size={28} color={MC.text} />
           </Pressable>
           <Text style={st.topText} numberOfLines={1}>{t('nowPlayingTitle')}</Text>
@@ -127,7 +127,7 @@ export default function NowPlayingScreen({ navigation }) {
         </View>
 
         <View style={st.actions}>
-          {s.status === 'public' || mine ? (
+          {myId && (s.status === 'public' || mine) ? (
             <Action icon="videocam-outline" label={t('useInVideo')} onPress={() => navigation.navigate('Camera', { sound: s })} />
           ) : null}
           <Action icon="musical-notes-outline" label={t('openSoundPage')} onPress={() => navigation.navigate('Sound', { soundId: s.id, sound: s })} />

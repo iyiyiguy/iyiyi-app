@@ -104,6 +104,9 @@ const LINKING = {
       PublicProfile: { path: 'u/:username' },
       // Shared sound links: app.iyiyi.xyz/sound/<id>.
       Sound: { path: 'sound/:soundId' },
+      // Music and The Lab open for everyone, also signed out: app.iyiyi.xyz/music, /lab.
+      MusicHome: { path: 'music' },
+      Studio: { path: 'lab' },
     },
   },
 }
@@ -246,6 +249,7 @@ function GuestTabs({ navigation }) {
       {GUEST_LOCKED_TABS.has(current) ? null : (
         <GuestSignupPill bottom={guestTabBarHeight(insets) + 12} onPress={() => navigation.navigate('SignIn', { mode: 'signup' })} />
       )}
+      {GUEST_LOCKED_TABS.has(current) ? null : <MusicDock bottom={guestTabBarHeight(insets) + 70} />}
     </View>
   )
 }
@@ -468,6 +472,12 @@ export default function App() {
             <Stack.Screen name="SignIn" component={Aura.AuthScreen} />
             <Stack.Screen name="PublicProfile" component={Aura.PublicProfileScreen} />
             <Stack.Screen name="Sound" component={SoundScreen} />
+            {/* Open to everyone (also on the website): listen to music and make beats without an account. */}
+            <Stack.Screen name="MusicHome" component={MusicHomeScreen} options={{ animation: 'slide_from_bottom' }} />
+            <Stack.Screen name="NowPlaying" component={NowPlayingScreen} options={{ presentation: 'fullScreenModal', animation: 'slide_from_bottom' }} />
+            <Stack.Screen name="Music" component={MusicScreen} />
+            <Stack.Screen name="Studio" component={StudioHomeScreen} />
+            <Stack.Screen name="StudioEditor" component={StudioScreen} options={{ gestureEnabled: false }} />
           </Stack.Navigator>
         ) : showIntent ? (
           <OnboardingIntent user={sessionUser} profile={onboardProfile} onDone={finishIntent} onSkipAll={skipOnboarding} {...stepProps('intent')} />

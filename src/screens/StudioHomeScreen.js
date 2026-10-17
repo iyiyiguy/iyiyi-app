@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { View, Text, Pressable, StyleSheet, ScrollView, Alert, ActivityIndicator, Platform, useWindowDimensions } from 'react-native'
 import HScroll from '../components/HScroll'
+import { useSignedIn } from '../lib/useSignedIn'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useFocusEffect } from '@react-navigation/native'
 import { Ionicons } from '@expo/vector-icons'
@@ -31,6 +32,7 @@ export default function StudioHomeScreen({ navigation, route }) {
   const insets = useSafeAreaInsets()
   const { width } = useWindowDimensions()
   const [tab, setTab] = useState(route?.params?.tab === 'sounds' ? 'sounds' : 'beats')
+  const signedIn = useSignedIn()
   const [projects, setProjects] = useState(null)
   const [sounds, setSounds] = useState(null)
   const [soundErr, setSoundErr] = useState(null)
@@ -69,7 +71,7 @@ export default function StudioHomeScreen({ navigation, route }) {
     <View style={st.screen}>
       <ScrollView contentContainerStyle={[st.content, { paddingTop: insets.top + 6, paddingBottom: insets.bottom + 40, maxWidth: maxW }]}>
         <View style={st.header}>
-          <Pressable onPress={() => navigation.goBack()} hitSlop={10} style={st.iconBtn} accessibilityLabel={t('back')}>
+          <Pressable onPress={() => (navigation.canGoBack() ? navigation.goBack() : navigation.navigate('Tabs'))} hitSlop={10} style={st.iconBtn} accessibilityLabel={t('back')}>
             <Ionicons name="chevron-back" size={22} color={SX.text} />
           </Pressable>
           <View style={{ flex: 1 }}>
@@ -104,7 +106,7 @@ export default function StudioHomeScreen({ navigation, route }) {
             )
           })}
         </HScroll>
-        <Seg options={[{ key: 'beats', label: t('myBeats') }, { key: 'sounds', label: t('mySounds') }]} value={tab} onChange={setTab} style={{ marginTop: 16 }} />
+        {signedIn !== false ? <Seg options={[{ key: 'beats', label: t('myBeats') }, { key: 'sounds', label: t('mySounds') }]} value={tab} onChange={setTab} style={{ marginTop: 16 }} /> : <View style={{ height: 16 }} />}
 
         {tab === 'beats' ? (
           projects == null ? <ActivityIndicator color={SX.accent} style={{ marginTop: 30 }} /> : projects.length ? (

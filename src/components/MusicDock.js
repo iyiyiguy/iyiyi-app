@@ -14,12 +14,12 @@ import strings from '../i18n/strings/music'
 
 const TAB_BAR_H = 70 // the floating tab pill (TabBar) above the bottom inset
 
-export default function MusicDock() {
+export default function MusicDock({ bottom: bottomOverride }) {
   const nav = useNavigation()
   const t = useT(strings)
   const insets = useSafeAreaInsets()
   const m = useMusic()
-  const bottom = Math.max(insets.bottom - 6, 10) + TAB_BAR_H + 8
+  const bottom = bottomOverride ?? Math.max(insets.bottom - 6, 10) + TAB_BAR_H + 8
   const s = m.current
 
   if (!s) {

@@ -3,7 +3,7 @@
 // playlists and sounds), a "+" menu (upload a sound / create in The Lab) and the mini player.
 // Opened from the floating music button above the tab bar.
 import { useCallback, useEffect, useState } from 'react'
-import { View, Text, Pressable, ScrollView, StyleSheet, Modal, ActivityIndicator, RefreshControl, useWindowDimensions } from 'react-native'
+import { View, Text, Pressable, ScrollView, StyleSheet, Modal, ActivityIndicator, RefreshControl, Alert, useWindowDimensions } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { LinearGradient } from 'expo-linear-gradient'
 import { Ionicons } from '@expo/vector-icons'
@@ -13,6 +13,7 @@ import { playQueue, toggle, useMusic } from '../lib/musicPlayer'
 import SoundArt from '../components/SoundArt'
 import MiniPlayer from '../components/MiniPlayer'
 import { MC } from '../components/SoundRow'
+import { useSignedIn } from '../lib/useSignedIn'
 import { useT } from '../i18n'
 import strings from '../i18n/strings/music'
 
@@ -29,6 +30,22 @@ export default function MusicHomeScreen({ navigation }) {
   const [data, setData] = useState(null)
   const [refreshing, setRefreshing] = useState(false)
   const [menu, setMenu] = useState(false)
+  const signedIn = useSignedIn()
+  // Pick the file right on the tap (browsers only open a file picker from a user gesture),
+  // then finish the upload (title, public/private) on the My music screen.
+  const upload = async () => {
+    if (signedIn === false) { navigation.navigate('SignIn', { mode: 'signup' }); return }
+    try {
+      const DocumentPicker = require('expo-document-picker')
+      const res = await DocumentPicker.getDocumentAsync({ type: ['audio/*'], copyToCacheDirectory: true, multiple: false })
+      const a = res?.assets?.[0]
+      if (res.canceled || !a) return
+      if (a.size && a.size > 40 * 1024 * 1024) { Alert.alert(t('fileTooBig'), t('fileTooBigMsg')); return }
+      navigation.navigate('Music', { tab: 'library', uploadFile: { uri: a.uri, name: a.name, mimeType: a.mimeType, size: a.size } })
+    } catch (e) {
+      Alert.alert(t('openFileFailed'), e?.message || t('tryAnother'))
+    }
+  }
 
   const load = useCallback(async () => {
     const safe = (p) => p.catch(() => null)
@@ -73,7 +90,7 @@ export default function MusicHomeScreen({ navigation }) {
         showsVerticalScrollIndicator={false}
       >
         <View style={st.header}>
-          <Pressable onPress={() => navigation.goBack()} hitSlop={10} style={st.iconBtn} accessibilityLabel={t('back')}>
+          <Pressable onPress={() => (navigation.canGoBack() ? navigation.goBack() : navigation.navigate('Tabs'))} hitSlop={10} style={st.iconBtn} accessibilityLabel={t('back')}>
             <Ionicons name="chevron-down" size={24} color={MC.text} />
           </Pressable>
           <Text style={st.greeting} numberOfLines={1}>{t(greetingKey())}</Text>
@@ -103,7 +120,7 @@ export default function MusicHomeScreen({ navigation }) {
                 <Text style={st.emptyBody}>{t('emptyHomeBody')}</Text>
                 <View style={{ flexDirection: 'row', gap: 8, marginTop: 6 }}>
                   <Pressable onPress={() => navigation.navigate('Studio')} style={[st.emptyBtn, { backgroundColor: '#fff' }]} accessibilityRole="button"><Text style={[st.emptyBtnText, { color: MC.bg }]}>{t('plusCreate')}</Text></Pressable>
-                  <Pressable onPress={() => navigation.navigate('Music', { tab: 'library', upload: true })} style={st.emptyBtn} accessibilityRole="button"><Text style={st.emptyBtnText}>{t('plusUpload')}</Text></Pressable>
+                  <Pressable onPress={upload} style={st.emptyBtn} accessibilityRole="button"><Text style={st.emptyBtnText}>{t('plusUpload')}</Text></Pressable>
                 </View>
               </LinearGradient>
             ) : null}
@@ -136,7 +153,7 @@ export default function MusicHomeScreen({ navigation }) {
       <Modal visible={menu} transparent animationType="fade" onRequestClose={() => setMenu(false)}>
         <Pressable style={st.backdrop} onPress={() => setMenu(false)} />
         <View style={[st.menu, { top: insets.top + 54 }]}>
-          <MenuRow icon="cloud-upload-outline" title={t('plusUpload')} sub={t('plusUploadSub')} onPress={() => { setMenu(false); navigation.navigate('Music', { tab: 'library', upload: true }) }} />
+          <MenuRow icon="cloud-upload-outline" title={t('plusUpload')} sub={t('plusUploadSub')} onPress={() => { setMenu(false); upload() }} />
           <View style={st.menuLine} />
           <MenuRow icon="grid-outline" title={t('plusCreate')} sub={t('plusCreateSub')} onPress={() => { setMenu(false); navigation.navigate('Studio') }} />
         </View>

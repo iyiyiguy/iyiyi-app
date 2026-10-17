@@ -19,6 +19,7 @@ import {
 } from '../studio/engine'
 import SongView from '../studio/SongView'
 import { useLabSession } from '../studio/labSession'
+import { useSignedIn } from '../lib/useSignedIn'
 import InvitePeopleSheet from '../components/InvitePeopleSheet'
 import { VideoCallLayer } from '../components/VideoCall'
 import { ensureMic, startMic } from '../studio/mic'
@@ -116,6 +117,7 @@ export default function StudioScreen({ navigation, route }) {
   }, [setProject])
 
   // Lab session: friends join this beat, video call, and record their part onto the song.
+  const signedIn = useSignedIn()
   const [takeAsk, setTakeAsk] = useState(0)
   const [inviteOpen, setInviteOpen] = useState(false)
   const session = useLabSession({
@@ -243,7 +245,7 @@ export default function StudioScreen({ navigation, route }) {
       <View style={[st.wrap, { paddingTop: insets.top + 6, maxWidth: maxW }]}>
         {/* header */}
         <View style={st.header}>
-          <Pressable onPress={() => { stopRef.current?.(); if (dirty) save(true).catch(() => {}); navigation.goBack() }} hitSlop={10} style={st.iconBtn} accessibilityLabel={t('back')}>
+          <Pressable onPress={() => { stopRef.current?.(); if (dirty) save(true).catch(() => {}); if (navigation.canGoBack()) navigation.goBack(); else navigation.navigate('Studio') }} hitSlop={10} style={st.iconBtn} accessibilityLabel={t('back')}>
             <Ionicons name="chevron-back" size={22} color={SX.text} />
           </Pressable>
           <Pressable onPress={() => setRenameOpen(true)} style={{ flex: 1 }} accessibilityLabel={t('renameBeat')}>
@@ -251,7 +253,7 @@ export default function StudioScreen({ navigation, route }) {
             <Text style={sxType.title} numberOfLines={1}>{project.name}</Text>
           </Pressable>
           <HwButton icon={<Ionicons name="save-outline" size={16} color={SX.text} />} onPress={() => save()} accessibilityLabel={t('saveBeat')} style={{ paddingHorizontal: 10 }} />
-          <HwButton label={t('export')} active color={SX.accent} onPress={() => { stopRef.current?.(); stopRef.current = null; songStopRef.current?.(); setPlaying(false); setExportOpen(true) }} icon={<Ionicons name="share-outline" size={15} color={SX.accent} />} />
+          <HwButton label={t('export')} active color={SX.accent} onPress={() => { stopRef.current?.(); stopRef.current = null; songStopRef.current?.(); setPlaying(false); if (signedIn === false) navigation.navigate('SignIn', { mode: 'signup' }); else setExportOpen(true) }} icon={<Ionicons name="share-outline" size={15} color={SX.accent} />} />
         </View>
 
         {/* LCD + transport deck (MPC-style): kit, tempo, position, playhead LEDs */}
@@ -319,7 +321,7 @@ export default function StudioScreen({ navigation, route }) {
         ) : tab === 'steps' ? (
           <StepsView project={project} playStep={playStep} bar={bar} setBar={setBar} onToggle={toggleStep} selPad={selPad} setSelPad={setSelPad} />
         ) : tab === 'song' ? (
-          <SongView project={project} setProject={setProject} stopRef={songStopRef} onBeforeStart={stopLoop} onAddSample={addSampleFile} session={session} takeAsk={takeAsk} onInvite={openInvite} />
+          <SongView project={project} setProject={setProject} stopRef={songStopRef} onBeforeStart={stopLoop} onAddSample={addSampleFile} session={signedIn ? session : null} takeAsk={takeAsk} onInvite={openInvite} />
         ) : tab === 'sampler' ? (
           <SamplerView project={project} setProject={setProject} selPad={selPad} focusSample={focusSample} onBeforeRecord={() => { stopLoop(); songStopRef.current?.() }} />
         ) : (

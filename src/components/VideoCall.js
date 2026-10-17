@@ -1,4 +1,5 @@
-// 1:1 video call for online games, using WebRTC inside a WebView (react-native-webview).
+// 1:1 video call (online games, Lab sessions), using WebRTC inside a WebView on phones and an
+// iframe on the web (CallFrame), so web and app users can call each other.
 //
 // Signalling rides on the game room's realtime channel: room.send('rtc', data, { to }) and
 // room.onMessage('rtc'). Flow: caller sends 'ring' (repeated until answered, 30 s timeout),
@@ -14,7 +15,7 @@
 // The WebView is mounted only while a call is connecting or live.
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Alert, Animated, AppState, Linking, Modal, PanResponder, Pressable, StyleSheet, Text, View } from 'react-native'
-import { WebView } from 'react-native-webview'
+import CallFrame from './CallFrame' // WebView on phones, iframe on the web
 import { Ionicons } from '@expo/vector-icons'
 import { AC } from '../games/arcadeUI'
 import { Avatar } from '../games/MultiplayerUI'
@@ -508,7 +509,7 @@ function VideoPanel({ call, bounds }) {
         {call.status !== 'live' ? <Text style={styles.gripText}>{t('connecting')}</Text> : null}
       </Pressable>
       <View style={{ width: size.w, height: size.h, backgroundColor: '#070914' }}>
-        <WebView
+        <CallFrame
           ref={call.webRef}
           originWhitelist={['*']}
           source={{ html, baseUrl: 'https://iyiyi.xyz' }}
