@@ -16,6 +16,11 @@ import GameFollowButton from '../../components/GameFollowButton'
 import { FONT, ST, stShadow, stType, withAlpha } from '../studio'
 import { LASER_MODES, TEAMS } from '../../lib/multiplayer'
 import { pickAimTarget } from './aimAssist'
+import { translate } from '../../i18n'
+import H from '../../i18n/strings/laserHud'
+import { laserMode, teamName } from '../../lib/games'
+
+const tr = (k, v) => translate(H, k, v)
 
 const W = '#fff'
 const MUTED = ST.muted
@@ -34,12 +39,12 @@ export const WeaponChip = memo(function WeaponChip({ weapon, count, onWheel, max
       hitSlop={6}
       style={({ pressed }) => [s.chip, Number.isFinite(maxWidth) && { maxWidth }, pressed && { opacity: 0.85 }]}
       accessibilityRole="button"
-      accessibilityLabel={`Weapon: ${weapon?.name}. Tap to choose a weapon`}
+      accessibilityLabel={tr('weapon_chip_a11y', { name: weapon?.name })}
     >
       <Image source={gunArt(weapon?.id)} style={s.chipImg} resizeMode="contain" />
       <View style={{ flexShrink: 1 }}>
         <Text style={s.chipName} numberOfLines={1}>{String(weapon?.name || '').toUpperCase()}</Text>
-        <Text style={s.chipSub} numberOfLines={1}>{weapon?.automatic ? 'AUTO' : weapon?.shotsPerClick > 1 ? 'BURST' : 'SEMI'} · ∞{count > 1 ? `  ·  ${count} GUNS` : ''}</Text>
+        <Text style={s.chipSub} numberOfLines={1}>{tr(weapon?.automatic ? 'fire_auto' : weapon?.shotsPerClick > 1 ? 'fire_burst' : 'fire_semi')} · ∞{count > 1 ? `  ·  ${tr('n_guns', { n: count })}` : ''}</Text>
       </View>
     </Pressable>
   )
@@ -64,10 +69,10 @@ export function TeamTotals({ state, meId, style }) {
   const mine = state.players?.[meId]?.team || 'A'
   const other = mine === 'A' ? 'B' : 'A'
   const val = (t) => (state.mode === 'snd' ? state.snd?.wins?.[t] : state.teamScore?.[t]) ?? 0
-  const unit = state.mode === 'snd' ? 'ROUNDS' : 'TAG-OUTS'
+  const unit = tr(state.mode === 'snd' ? 'rounds' : 'tagouts')
   return (
     <View style={[s.totals, style]}>
-      {[[mine, ST.friendly, `${TEAMS[mine]?.name || ''} · YOUR TEAM`], [other, ST.enemy, TEAMS[other]?.name || '']].map(([t, c, label]) => (
+      {[[mine, ST.friendly, tr('your_team', { team: TEAMS[mine] ? teamName(mine) : '' })], [other, ST.enemy, TEAMS[other] ? teamName(other) : '']].map(([t, c, label]) => (
         <View key={t} style={[s.totalTile, { backgroundColor: withAlpha(c, 0.12), borderTopColor: c }]}>
           <Text style={[stType.label, { color: c }]} numberOfLines={1}>{String(label).toUpperCase()}</Text>
           <Text style={s.totalNum}>{val(t)}</Text>
@@ -94,12 +99,12 @@ export function ScoreTable({ state, meId, shotsBy }) {
     <View>
       <View style={s.tHead}>
         <Text style={[s.th, { width: 22 }]}>#</Text>
-        <Text style={[s.th, { flex: 1 }]}>PLAYER</Text>
+        <Text style={[s.th, { flex: 1 }]}>{tr('th_player')}</Text>
         <Text style={[s.th, s.c]}>K</Text>
         <Text style={[s.th, s.c]}>D</Text>
-        {showBt && <Text style={[s.th, s.c]}>BT</Text>}
-        {shotsBy && <Text style={[s.th, s.cw]}>ACC</Text>}
-        <Text style={[s.th, s.cw]}>SCORE</Text>
+        {showBt && <Text style={[s.th, s.c]}>{tr('th_bt')}</Text>}
+        {shotsBy && <Text style={[s.th, s.cw]}>{tr('tile_acc')}</Text>}
+        <Text style={[s.th, s.cw]}>{tr('tile_score')}</Text>
         <View style={s.fcol} />
       </View>
       {rows.map((r, i) => {
@@ -111,7 +116,7 @@ export function ScoreTable({ state, meId, shotsBy }) {
             <PlayerTap player={me ? null : { id: r.id, username: r.name }} style={s.nameCell}>
               {teamMode || me ? <View style={[s.teamSq, { backgroundColor: color }]} /> : null}
               {!r.alive && state.phase === 'playing' ? <Ionicons name="close" size={12} color={RED} /> : null}
-              <Text style={[s.tdName, !r.alive && state.phase === 'playing' && { color: MUTED }]} numberOfLines={1}>{me ? 'YOU' : r.name}</Text>
+              <Text style={[s.tdName, !r.alive && state.phase === 'playing' && { color: MUTED }]} numberOfLines={1}>{me ? tr('you') : r.name}</Text>
             </PlayerTap>
             <Text style={[s.td, s.c]}>{r.kills || 0}</Text>
             <Text style={[s.td, s.c]}>{r.deaths || 0}</Text>
@@ -122,7 +127,7 @@ export function ScoreTable({ state, meId, shotsBy }) {
           </View>
         )
       })}
-      {showBt && <Text style={[s.th, { marginTop: 6 }]}>BT = BYSTANDER TAGS (IYIYI USERS OUTSIDE THE MATCH, +25 EACH)</Text>}
+      {showBt && <Text style={[s.th, { marginTop: 6 }]}>{tr('bt_note')}</Text>}
     </View>
   )
 }
@@ -133,17 +138,17 @@ export function ScoreboardOverlay({ visible, state, meId, onClose, insets, clock
   if (!visible || !state) return null
   const teamMode = state.mode !== 'ffa'
   const maxH = Math.max(160, winH - (insets?.top || 0) - (insets?.bottom || 0) - (teamMode ? 250 : 160))
-  const kicker = `${String(LASER_MODES[state.mode]?.name || 'Laser Tag').toUpperCase()}${clock ? ` · ${clock}` : ''}`
+  const kicker = `${String(LASER_MODES[state.mode] ? laserMode(state.mode) : 'Laser Tag').toUpperCase()}${clock ? ` · ${clock}` : ''}`
   return (
     <View style={[StyleSheet.absoluteFill, s.overlayRoot]}>
-      <Pressable style={s.backdrop} onPress={onClose} accessibilityRole="button" accessibilityLabel="Close scoreboard" />
+      <Pressable style={s.backdrop} onPress={onClose} accessibilityRole="button" accessibilityLabel={tr('close_scoreboard')} />
       <View style={[s.boardWrap, { paddingTop: (insets?.top || 0) + 12, paddingBottom: (insets?.bottom || 0) + 12, paddingLeft: 16 + (insets?.left || 0), paddingRight: 16 + (insets?.right || 0) }]} pointerEvents="box-none">
         <View style={s.panelHead}>
           <View style={{ flex: 1 }}>
             <Text style={stType.kicker} numberOfLines={1}>{kicker}</Text>
-            <Text style={stType.title}>SCOREBOARD</Text>
+            <Text style={stType.title}>{tr('scoreboard')}</Text>
           </View>
-          <Pressable onPress={onClose} hitSlop={12} style={s.close} accessibilityRole="button" accessibilityLabel="Close scoreboard">
+          <Pressable onPress={onClose} hitSlop={12} style={s.close} accessibilityRole="button" accessibilityLabel={tr('close_scoreboard')}>
             <Ionicons name="close" size={20} color={W} />
           </Pressable>
         </View>
@@ -151,7 +156,7 @@ export function ScoreboardOverlay({ visible, state, meId, onClose, insets, clock
         <ScrollView style={{ maxHeight: maxH, flexGrow: 0 }}>
           <ScoreTable state={state} meId={meId} />
         </ScrollView>
-        <Text style={[stType.small, { marginTop: 12 }]}>Tap a name for their iYiYi profile. Follow works on teammates and enemies.</Text>
+        <Text style={[stType.small, { marginTop: 12 }]}>{tr('scoreboard_hint')}</Text>
       </View>
     </View>
   )
@@ -210,7 +215,7 @@ export function HoldActionButton({ kind, site, holdMs, activeKey = null, color =
       setPct(p)
       const sec = Math.floor(el / 1000)
       if (sec > lastSec && p < 1) { lastSec = sec; buzz('light') }
-      if (!sawActive.current && el > 1800) { clearInterval(t); lose('Didn’t start — check the message and hold again'); return }
+      if (!sawActive.current && el > 1800) { clearInterval(t); lose(tr('hold_not_started')); return }
       if (p >= 1) {
         clearInterval(t)
         setPhase('done')
@@ -227,7 +232,7 @@ export function HoldActionButton({ kind, site, holdMs, activeKey = null, color =
     if (!sawActive.current) {
       if (activeKey != null && activeKey !== staleKey.current) { sawActive.current = true; ackKey.current = activeKey }
     } else if (activeKey !== ackKey.current) {
-      lose(plant ? 'Plant interrupted — hold again' : 'Defuse interrupted — hold again')
+      lose(tr(plant ? 'plant_interrupted' : 'defuse_interrupted'))
     }
   }, [activeKey]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -261,13 +266,12 @@ export function HoldActionButton({ kind, site, holdMs, activeKey = null, color =
     try { cb.current.onCancel?.() } catch { /* ignore */ }
   }
 
-  const verb = plant ? 'PLANT' : 'DEFUSE'
   const title = phase === 'holding'
-    ? `${plant ? 'PLANTING' : 'DEFUSING'}… ${Math.round(pct * 100)}%`
+    ? tr(plant ? 'planting_pct' : 'defusing_pct', { n: Math.round(pct * 100) })
     : phase === 'done'
-      ? (plant ? 'ARMING…' : 'DISARMING…')
-      : phase === 'lost' ? lostText : `HOLD TO ${verb}${plant && site ? ` · ${site}` : ''}`
-  const sub = phase === 'holding' ? 'Keep holding · stay in the zone' : phase === 'idle' ? `Hold ${Math.round(holdMs / 1000)} s — a hit or leaving cancels it` : null
+      ? tr(plant ? 'arming' : 'disarming')
+      : phase === 'lost' ? lostText : plant ? (site ? tr('hold_to_plant_site', { site }) : tr('hold_to_plant')) : tr('hold_to_defuse')
+  const sub = phase === 'holding' ? tr('keep_holding') : phase === 'idle' ? tr('hold_secs', { n: Math.round(holdMs / 1000) }) : null
   return (
     <Animated.View style={{ transform: [{ scale }] }}>
       <Pressable
@@ -276,7 +280,7 @@ export function HoldActionButton({ kind, site, holdMs, activeKey = null, color =
         pressRetentionOffset={{ top: 80, bottom: 80, left: 80, right: 80 }}
         style={[s.holdBtn, { borderColor: phase === 'lost' ? RED : color, backgroundColor: phase === 'holding' ? withA(color, 0.32) : 'rgba(0,0,0,0.72)' }]}
         accessibilityRole="button"
-        accessibilityLabel={`Hold to ${verb.toLowerCase()}${plant && site ? ` at site ${site}` : ''}`}
+        accessibilityLabel={plant ? (site ? tr('a11y_hold_plant_site', { site }) : tr('a11y_hold_plant')) : tr('a11y_hold_defuse')}
       >
         <View style={{ width: RING, height: RING }}>
           <Svg width={RING} height={RING}>
@@ -371,7 +375,7 @@ export function BombCountdown({ msLeft, top, inline }) {
     <Animated.View pointerEvents="none" style={[s.bomb, inline ? s.bombInline : { top }, { transform: [{ scale: pulse }] }]}>
       <View style={s.bombHead}>
         <View style={s.bombDiamond} />
-        <Text style={s.bombLabel}>BOMB</Text>
+        <Text style={s.bombLabel}>{tr('bomb')}</Text>
       </View>
       <Text style={[s.bombTime, secs <= 10 && { color: RED }]}>{secs}</Text>
     </Animated.View>

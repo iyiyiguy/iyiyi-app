@@ -9,6 +9,10 @@ import { FONT, ST } from '../studio'
 import { nearRadius, projectGround } from '../laser/arGround'
 import { bearingDeg, dist, formatDistance, validPos } from './geo'
 import { LOOT_AR_M } from './constants'
+import { translate } from '../../i18n'
+import S from '../../i18n/strings/royale'
+
+const tr = (k, v) => translate(S, k, v)
 
 const MAX_SHOWN = 8
 const MAX_EDGE = 3
@@ -49,7 +53,7 @@ export const LootAR = memo(function LootAR({ markers, view }) {
     <View style={StyleSheet.absoluteFill} pointerEvents="none">
       {markers.map((m) => {
         const color = m.color || ST.objective
-        const dText = m.near ? 'NEAR YOU' : formatDistance(m.d).toUpperCase()
+        const dText = m.near ? tr('near_you') : formatDistance(m.d).toUpperCase()
         if (!m.inView) {
           if (m.near || edges >= MAX_EDGE) return null
           edges += 1
@@ -82,7 +86,7 @@ export const LootAR = memo(function LootAR({ markers, view }) {
       {nearOnes.length ? (
         <View style={[s.feet, { bottom: Math.max(170, H * 0.27) }]}>
           <Text style={s.edgeText} numberOfLines={1}>
-            {nearOnes.length === 1 ? `${nearOnes[0].label} · AT YOUR FEET` : `${nearOnes.length} WEAPONS · AT YOUR FEET`}
+            {nearOnes.length === 1 ? tr('at_feet', { label: nearOnes[0].label }) : tr('n_weapons_feet', { n: nearOnes.length })}
           </Text>
         </View>
       ) : null}

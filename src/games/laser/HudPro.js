@@ -14,6 +14,12 @@ import Svg, { Path } from 'react-native-svg'
 import { angleDiff, formatDistance } from '../../lib/multiplayer'
 import { gunArt } from '../../lib/gunArt'
 import { FONT, ST, stGlow, stShadow, stType, withAlpha } from '../studio'
+import { translate } from '../../i18n'
+import H from '../../i18n/strings/laserHud'
+import { laserMode } from '../../lib/games'
+import { localizeLaserText } from './engineText'
+
+const tr = (k, v) => translate(H, k, v)
 
 // Legacy token names (GamePlayScreen, the lobby and the menu import these) re-pointed at
 // the studio palette so every Laser Tag surface shifts together.
@@ -165,10 +171,10 @@ export const StatusPanel = memo(function StatusPanel({ hp = 100, score = 0, kill
   const lit = Math.ceil((v / 100) * segs)
   const color = v > 60 ? ST.health : v > 30 ? ST.objective : ST.enemy
   return (
-    <View style={[s.health, { width }, protectedNow && { borderTopColor: ST.armor }]} pointerEvents="none" accessibilityLabel={`Health ${Math.round(v)}. ${score} points. ${kills} tag-outs, ${deaths} deaths`}>
+    <View style={[s.health, { width }, protectedNow && { borderTopColor: ST.armor }]} pointerEvents="none" accessibilityLabel={tr('health_a11y', { hp: Math.round(v), score, kills, deaths })}>
       <View style={s.healthHead}>
         <Text style={[s.hpNum, compact && { fontSize: 26, lineHeight: 28 }, v <= 30 && { color: ST.enemy }]}>{Math.round(v)}</Text>
-        <Text style={[stType.label, protectedNow && { color: ST.armor }]} numberOfLines={1}>{protectedNow ? 'SPAWN SHIELD' : 'HEALTH'}</Text>
+        <Text style={[stType.label, protectedNow && { color: ST.armor }]} numberOfLines={1}>{tr(protectedNow ? 'spawn_shield' : 'health')}</Text>
       </View>
       <View style={s.segRow}>
         {Array.from({ length: segs }, (_, i) => (
@@ -176,7 +182,7 @@ export const StatusPanel = memo(function StatusPanel({ hp = 100, score = 0, kill
         ))}
       </View>
       <View style={s.healthFoot}>
-        <Text style={s.healthFootText} numberOfLines={1}>{score} PTS</Text>
+        <Text style={s.healthFootText} numberOfLines={1}>{tr('pts_n', { n: score })}</Text>
         <Text style={[s.healthFootText, { color: 'rgba(242,244,247,0.75)' }]} numberOfLines={1}>K {kills} · D {deaths}</Text>
       </View>
     </View>
@@ -186,7 +192,7 @@ export const StatusPanel = memo(function StatusPanel({ hp = 100, score = 0, kill
 // ---------------------------------------------------------------------------
 // Score panel (top-left) + clock (top-centre). Tap the panel for the scoreboard.
 // ---------------------------------------------------------------------------
-const MODE_LABEL = { ffa: 'FREE-FOR-ALL', tdm: 'TEAM DEATHMATCH', snd: 'SEARCH & DESTROY' }
+const modeLabel = (mode) => (mode === 'ffa' || mode === 'tdm' || mode === 'snd' ? laserMode(mode).toUpperCase() : null)
 
 function ScoreRow({ value, max, color, label, pips }) {
   return (
@@ -214,20 +220,20 @@ export const ScorePanel = memo(function ScorePanel({ mode, teamScore, snd, myTea
   let foot = null
   if (live) {
     const me = players?.[meId]
-    body = <ScoreRow value={me?.score || 0} max={1} color={ST.friendly} label="PTS" />
-    foot = rank ? `ARENA · #${rank} OF ${of}` : 'ARENA'
+    body = <ScoreRow value={me?.score || 0} max={1} color={ST.friendly} label={tr('pts')} />
+    foot = rank ? tr('arena_rank', { rank, n: of }) : tr('arena')
   } else if (mode === 'tdm' && teamScore && myTeam) {
     const a = teamScore[myTeam] || 0
     const b = teamScore[enemyTeam] || 0
     const max = Math.max(10, a, b)
     body = <><ScoreRow value={a} max={max} color={ST.friendly} /><ScoreRow value={b} max={max} color={ST.enemy} /></>
-    foot = a === b ? 'TIED' : a > b ? `LEADING BY ${a - b}` : `DOWN ${b - a}`
+    foot = a === b ? tr('tied') : a > b ? tr('leading_by', { n: a - b }) : tr('down_by', { n: b - a })
   } else if (mode === 'snd' && snd && myTeam) {
     const needed = Math.floor((snd.totalRounds || 5) / 2) + 1
     const a = snd.wins?.[myTeam] || 0
     const b = snd.wins?.[enemyTeam] || 0
     body = <><ScoreRow value={a} pips={needed} color={ST.friendly} /><ScoreRow value={b} pips={needed} color={ST.enemy} /></>
-    foot = `ROUND ${snd.roundNo}/${snd.totalRounds} · ${snd.sides?.[myTeam] === 'attack' ? 'ATTACK' : 'DEFEND'}`
+    foot = tr('round_side', { n: snd.roundNo, total: snd.totalRounds, side: tr(snd.sides?.[myTeam] === 'attack' ? 'attack' : 'defend') })
   } else {
     // FFA: you vs the leader (or vs second place when you lead).
     const ranked = Object.entries(players || {}).map(([id, p]) => ({ id, score: p.score || 0 })).sort((x, y) => y.score - x.score)
@@ -235,8 +241,8 @@ export const ScorePanel = memo(function ScorePanel({ mode, teamScore, snd, myTea
     const myRank = 1 + ranked.filter((r) => r.score > mine).length
     const rival = ranked.find((r) => r.id !== meId)
     const max = Math.max(100, mine, rival?.score || 0)
-    body = <><ScoreRow value={mine} max={max} color={ST.friendly} label="YOU" /><ScoreRow value={rival?.score || 0} max={max} color={ST.enemy} label={myRank === 1 ? '2ND' : 'LEAD'} /></>
-    foot = `#${myRank} OF ${ranked.length || 1}`
+    body = <><ScoreRow value={mine} max={max} color={ST.friendly} label={tr('you')} /><ScoreRow value={rival?.score || 0} max={max} color={ST.enemy} label={tr(myRank === 1 ? 'second' : 'lead')} /></>
+    foot = tr('rank_of', { rank: myRank, n: ranked.length || 1 })
   }
   return (
     <Pressable
@@ -244,10 +250,10 @@ export const ScorePanel = memo(function ScorePanel({ mode, teamScore, snd, myTea
       hitSlop={6}
       style={({ pressed }) => [s.scorePanel, { width }, pressed && { opacity: 0.8 }]}
       accessibilityRole="button"
-      accessibilityLabel="Score. Tap for the scoreboard"
+      accessibilityLabel={tr('score_a11y')}
     >
       <View style={s.scoreHead}>
-        <Text style={[stType.label, { flexShrink: 1, fontSize: 9.5, letterSpacing: 1.4 }]} numberOfLines={1}>{live ? 'LIVE ARENA' : MODE_LABEL[mode] || 'LASER TAG'}</Text>
+        <Text style={[stType.label, { flexShrink: 1, fontSize: 9.5, letterSpacing: 1.4 }]} numberOfLines={1}>{live ? tr('live_arena') : modeLabel(mode) || 'LASER TAG'}</Text>
         <Ionicons name="podium-outline" size={11} color={ST.muted} />
       </View>
       {body}
@@ -264,7 +270,7 @@ export const MatchClock = memo(function MatchClock({ clock, live = false, kicker
       {live ? (
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
           <View style={s.liveDot} />
-          <Text style={[s.clock, compact && { fontSize: 22 }]}>LIVE</Text>
+          <Text style={[s.clock, compact && { fontSize: 22 }]}>{tr('live')}</Text>
         </View>
       ) : (
         <Text style={[s.clock, compact && { fontSize: 22 }]}>{clock}</Text>
@@ -312,7 +318,7 @@ export function parseFeedLine(text) {
   if (!icon && / joined the arena$/.test(rest)) icon = 'enter-outline'
   if (!icon && / dropped the bomb$/.test(rest)) icon = 'flag-outline'
   if (!icon && / picked up the bomb$/.test(rest)) icon = 'flag'
-  return { kind: 'text', text: stripSymbols(rest), icon }
+  return { kind: 'text', text: localizeLaserText(stripSymbols(rest)), icon }
 }
 
 const FeedLine = memo(function FeedLine({ line, colorOf, idOf, meId }) {
@@ -326,12 +332,12 @@ const FeedLine = memo(function FeedLine({ line, colorOf, idOf, meId }) {
     const gotMe = bId && bId === meId
     return (
       <Animated.View style={[s.feedLine, mine && s.feedMine, gotMe && s.feedGotMe, anim]}>
-        <Text style={[s.feedName, { color: colorOf(aId) }]} numberOfLines={1}>{mine ? 'YOU' : line.a.toUpperCase()}</Text>
+        <Text style={[s.feedName, { color: colorOf(aId) }]} numberOfLines={1}>{mine ? tr('you') : line.a.toUpperCase()}</Text>
         {line.how === 'blast'
           ? <Ionicons name="flame" size={12} color={ST.text} />
           : <GunGlyph color={ST.text} />}
         {line.how === 'head' ? <Ionicons name="locate" size={11} color={ST.objective} /> : null}
-        <Text style={[s.feedName, { color: colorOf(bId) }]} numberOfLines={1}>{gotMe ? 'YOU' : line.b.toUpperCase()}</Text>
+        <Text style={[s.feedName, { color: colorOf(bId) }]} numberOfLines={1}>{gotMe ? tr('you') : line.b.toUpperCase()}</Text>
       </Animated.View>
     )
   }
@@ -360,7 +366,7 @@ export const KillFeed = memo(function KillFeed({ feed, max = 3, align = 'flex-en
 // ---------------------------------------------------------------------------
 // Weapon card (bottom-right). Tap = weapon wheel.
 // ---------------------------------------------------------------------------
-export const fireModeLabel = (w) => (w?.automatic || w?.fireMode === 'automatic' ? 'AUTO' : (w?.shotsPerClick || 1) > 1 ? `BURST ${w.shotsPerClick}` : 'SEMI')
+export const fireModeLabel = (w) => (w?.automatic || w?.fireMode === 'automatic' ? tr('fire_auto') : (w?.shotsPerClick || 1) > 1 ? tr('fire_burst_n', { n: w.shotsPerClick }) : tr('fire_semi'))
 
 export const WeaponCard = memo(function WeaponCard({ weapon, count, onWheel, maxWidth, width = 170, compact = false }) {
   const mode = fireModeLabel(weapon)
@@ -370,7 +376,7 @@ export const WeaponCard = memo(function WeaponCard({ weapon, count, onWheel, max
       hitSlop={6}
       style={({ pressed }) => [s.weapon, { width }, Number.isFinite(maxWidth) && { maxWidth }, pressed && { opacity: 0.85, transform: [{ scale: 0.98 }] }]}
       accessibilityRole="button"
-      accessibilityLabel={`Weapon: ${weapon?.name}, ${mode}. Tap to change weapon`}
+      accessibilityLabel={tr('weapon_a11y', { name: weapon?.name, mode })}
     >
       <View style={s.weaponTop}>
         <Image source={gunArt(weapon?.id)} style={[s.weaponImg, compact && { width: 60, height: 22 }]} resizeMode="contain" />
@@ -400,8 +406,8 @@ export function NameTag({ name, d, hp, color = ST.enemy, close = false }) {
     <View style={{ alignItems: 'center', gap: 3 }}>
       <View style={s.plateBox}>
         <View style={[s.plateDiamond, { backgroundColor: color }]} />
-        <Text style={s.plateName} numberOfLines={1}>{String(name || 'Enemy').toUpperCase()}</Text>
-        {close || Number.isFinite(d) ? <Text style={s.plateDist} numberOfLines={1}>{close ? 'CLOSE' : formatDistance(d).toUpperCase()}</Text> : null}
+        <Text style={s.plateName} numberOfLines={1}>{String(name || tr('enemy')).toUpperCase()}</Text>
+        {close || Number.isFinite(d) ? <Text style={s.plateDist} numberOfLines={1}>{close ? tr('close_caps') : formatDistance(d).toUpperCase()}</Text> : null}
       </View>
       {hp != null ? <View style={s.plateHp}><View style={[s.plateHpFill, { width: `${hpW * 100}%`, backgroundColor: color }]} /></View> : null}
     </View>
@@ -509,14 +515,14 @@ export const FireButton = memo(function FireButton({ onPressIn, onPressOut, disa
       disabled={disabled}
       style={({ pressed }) => [s.fire, { width: size, height: size, borderRadius: size / 2, borderColor: c, opacity: disabled ? 0.4 : 1 }, locked && { backgroundColor: 'rgba(255,61,82,0.28)' }, pressed && { transform: [{ scale: 0.94 }], backgroundColor: locked ? 'rgba(255,61,82,0.45)' : 'rgba(255,255,255,0.18)' }]}
       accessibilityRole="button"
-      accessibilityLabel={auto ? 'Fire. Hold for continuous fire' : 'Fire'}
+      accessibilityLabel={tr(auto ? 'fire_a11y_auto' : 'fire_a11y')}
     >
       <View style={[s.fireRing, { width: size - 14, height: size - 14, borderRadius: (size - 14) / 2 }]} />
       <Svg width={24} height={24} viewBox="0 0 56 56" fill="none">
         <Path d="M28 6v12M28 38v12M6 28h12M38 28h12" stroke={c} strokeWidth={4} />
       </Svg>
-      <Text style={[s.fireText, { color: c }]}>FIRE</Text>
-      <Text style={s.fireSub}>{auto ? 'HOLD' : 'TAP'}</Text>
+      <Text style={[s.fireText, { color: c }]}>{tr('fire_caps')}</Text>
+      <Text style={s.fireSub}>{tr(auto ? 'hold_caps' : 'tap_caps')}</Text>
     </Pressable>
   )
 })

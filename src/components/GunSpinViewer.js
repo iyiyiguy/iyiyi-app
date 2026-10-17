@@ -11,6 +11,8 @@ import { memo, useEffect, useMemo, useRef, useState } from 'react'
 import { Animated, Easing, Image, PanResponder, Platform, StyleSheet, Text, View, useWindowDimensions } from 'react-native'
 import { RARITIES } from '../lib/guns'
 import { gunArt } from '../lib/gunArt'
+import { useT } from '../i18n'
+import G from '../i18n/strings/gunShop'
 
 const DEG_PER_PX = 0.6 // drag sensitivity: degrees of spin per pixel
 const IDLE_SPEED = 24 // auto-rotate, degrees per second
@@ -28,6 +30,7 @@ const touchDist = (touches) => {
 }
 
 function GunSpinViewer({ gun, frames, height = 280, autoRotate = true, style }) {
+  const t = useT(G)
   const { width: winW } = useWindowDimensions()
   const list = Array.isArray(frames) && frames.length > 0 ? frames : null
   const n = list ? list.length : 0
@@ -180,7 +183,7 @@ function GunSpinViewer({ gun, frames, height = 280, autoRotate = true, style }) 
   const rotateY = tilt.interpolate({ inputRange: [-90, 90], outputRange: ['-90deg', '90deg'] })
 
   return (
-    <View style={[{ height, width: '100%' }, st.root, style]} {...responder.panHandlers} accessibilityRole="adjustable" accessibilityLabel={`${gun?.name || 'Weapon'} 3D view. Drag to rotate.`}>
+    <View style={[{ height, width: '100%' }, st.root, style]} {...responder.panHandlers} accessibilityRole="adjustable" accessibilityLabel={t('spin_a11y', { name: gun?.name || t('weapon') })}>
       {/* Radial rarity glow (stacked translucent discs). */}
       <View style={st.center} pointerEvents="none">
         {[1, 0.78, 0.56, 0.36].map((k, i) => (
@@ -227,7 +230,7 @@ function GunSpinViewer({ gun, frames, height = 280, autoRotate = true, style }) 
       </View>
 
       <Animated.View style={[st.hint, { opacity: hint }]} pointerEvents="none">
-        <Text style={st.hintText}>↻  Drag to rotate</Text>
+        <Text style={st.hintText}>↻  {t('drag_rotate')}</Text>
       </Animated.View>
     </View>
   )

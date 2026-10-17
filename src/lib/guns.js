@@ -37,6 +37,8 @@
 //   blastRadius      explosive weapons: splash radius in metres (Laser Tag host: engine.ROCKET_RADIUS_M)
 //   Automatic: fires on press, then every shotIntervalMs() while held.
 import { supabase } from './supabase'
+import { translate } from '../i18n'
+import G from '../i18n/strings/gunShop'
 import { FREE_GUN_IDS, loadArcadeStats, _unlockItem, _equipItem, _grantItems } from './arcadeStats'
 import { minShotGapMs as _minShotGapMs } from '../games/laser/aimRules'
 
@@ -46,18 +48,18 @@ import { autoFireRate as _autoRate, TAP_BASELINE_RATE as _TAP } from './weaponFi
 export { playShot, playSfx, preloadWeaponSounds, releaseWeaponSounds, SFX } from './gunAudio'
 
 export const RARITIES = {
-  common: { id: 'common', name: 'Common', color: '#9aa3c0' },
-  rare: { id: 'rare', name: 'Rare', color: '#4fa3ff' },
-  epic: { id: 'epic', name: 'Epic', color: '#b46cff' },
-  legendary: { id: 'legendary', name: 'Legendary', color: '#ffb547' },
+  common: { id: 'common', get name() { return translate(G, 'rarity_common') }, color: '#9aa3c0' },
+  rare: { id: 'rare', get name() { return translate(G, 'rarity_rare') }, color: '#4fa3ff' },
+  epic: { id: 'epic', get name() { return translate(G, 'rarity_epic') }, color: '#b46cff' },
+  legendary: { id: 'legendary', get name() { return translate(G, 'rarity_legendary') }, color: '#ffb547' },
 }
 
 export const GUN_CATEGORIES = [
-  { id: 'all', name: 'All' },
-  { id: 'sidearm', name: 'Sidearms' },
-  { id: 'rifle', name: 'Rifles' },
-  { id: 'precision', name: 'Precision' },
-  { id: 'heavy', name: 'Heavy' },
+  { id: 'all', get name() { return translate(G, 'cat_all') } },
+  { id: 'sidearm', get name() { return translate(G, 'cat_sidearm') } },
+  { id: 'rifle', get name() { return translate(G, 'cat_rifle') } },
+  { id: 'precision', get name() { return translate(G, 'cat_precision') } },
+  { id: 'heavy', get name() { return translate(G, 'cat_heavy') } },
 ]
 
 // Field notes:
@@ -122,6 +124,16 @@ export const GUNS = [
     strength: 'Splash hits groups behind cover', weakness: '3 s reload, worst hip-fire aim, body hits don’t tag out' },
 ]
 
+// Shop text (description / strength / weakness) in the viewer's language
+// (i18n/strings/gunShop.js, keys '<id>_description' etc.). Gun names stay as they are.
+for (const g of GUNS) {
+  for (const f of ['description', 'strength', 'weakness']) {
+    if (typeof g[f] !== 'string') continue
+    const key = `${g.id}_${f}`
+    Object.defineProperty(g, f, { get: () => translate(G, key), enumerable: true, configurable: true })
+  }
+}
+
 export const WEAPONS = GUNS
 
 export const FEATURED_GUN_IDS = ['railgun', 'minigun', 'marksman']
@@ -140,7 +152,11 @@ export const isAutomatic = (w) => w?.fireMode === 'automatic'
 export const shotIntervalMs = (w) => Math.max(70, Math.round(1000 / (isAutomatic(w) ? _autoRate(w) : _TAP)))
 export const shotsPerPull = (w) => (isAutomatic(w) ? 1 : Math.max(1, Math.min(5, w?.shotsPerClick || 1)))
 
-export const FIRE_MODE_LABELS = { single: 'Semi-auto', burst: 'Burst', automatic: 'Full-auto' }
+export const FIRE_MODE_LABELS = {
+  get single() { return translate(G, 'fm_single') },
+  get burst() { return translate(G, 'fm_burst') },
+  get automatic() { return translate(G, 'fm_auto') },
+}
 
 /** Forced gap between two trigger pulls in ms (0 = as fast as you tap). Same rule as the host. */
 export function cycleMs(gun) {
@@ -164,11 +180,12 @@ export function pullsPerSecond(gun) {
 
 /** Short fire-rate label for the shop and the weapon wheel, e.g. "≈9 shots/s held" or "tap · 3 beams · 0.5 s". */
 export function fireRateLabel(gun) {
-  if (isAutomatic(gun)) return `≈${Math.round(pullsPerSecond(gun) * 10) / 10} shots/s held`
+  if (isAutomatic(gun)) return translate(G, 'rate_held', { n: Math.round(pullsPerSecond(gun) * 10) / 10 })
   const beams = shotsPerPull(gun)
   const gap = cycleMs(gun)
-  const cyc = gap > 0 ? ` · ${Math.round(gap / 100) / 10} s cycle` : ''
-  return beams > 1 ? `tap · ${beams} beams${cyc}` : gap > 0 ? `1 shot every ${Math.round(gap / 100) / 10} s` : 'every tap fires'
+  const s = Math.round(gap / 100) / 10
+  if (beams > 1) return gap > 0 ? translate(G, 'rate_beams_cycle', { n: beams, s }) : translate(G, 'rate_beams', { n: beams })
+  return gap > 0 ? translate(G, 'rate_every', { s }) : translate(G, 'rate_every_tap')
 }
 
 const HP = 100

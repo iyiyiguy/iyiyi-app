@@ -15,12 +15,17 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import GlassPanel from '../components/GlassPanel'
 import { Btn } from './MultiplayerUI'
 import { GameMap } from './GameMap'
-import { LASER_MODES, TEAMS, howToPlay } from '../lib/multiplayer'
+import { LASER_MODES, TEAMS } from '../lib/multiplayer'
 import { setPref, useGamePrefs } from '../lib/gamePrefs'
 import { attackingTeam } from './laser/engine'
 import { HUD, HudCta, hudSheet, hudType } from './laser/HudPro'
 import { colors, radii, type } from '../theme'
 import { FONT, ST } from './studio'
+import { translate, useT } from '../i18n'
+import M from '../i18n/strings/gameMenu'
+import { howToPlayText, laserMode, mpGameName } from '../lib/games'
+
+const tr = (k, v) => translate(M, k, v)
 
 // What each game shows on the full map. Mirrors the in-game visibility rules
 // (e.g. Search & Destroy hides enemies, Beside Them hides everyone).
@@ -38,13 +43,13 @@ function overlays(gameId, snap, positions) {
     const sites = state?.snd?.sites || (settings.mode === 'snd' ? settings.sites || [] : [])
     for (const x of sites) {
       circles.push({ id: `site-${x.id}`, lat: x.lat, lng: x.lng, radius: x.r || 12, color: HUD.gold })
-      markers.push({ id: `site-${x.id}`, lat: x.lat, lng: x.lng, label: `SITE ${x.id}`, color: HUD.red })
+      markers.push({ id: `site-${x.id}`, lat: x.lat, lng: x.lng, label: tr('site', { id: x.id }), color: HUD.red })
     }
     if (state?.game === 'lasertag') {
       const myTeam = state.players?.[meId]?.team
       const bomb = state.snd?.bomb
       if (bomb && bomb.lat != null && (bomb.state === 'planted' || (bomb.state === 'dropped' && myTeam === attackingTeam(state)))) {
-        markers.push({ id: 'bomb', lat: bomb.lat, lng: bomb.lng, label: bomb.state === 'planted' ? 'BOMB PLANTED' : 'BOMB DROPPED', color: HUD.red })
+        markers.push({ id: 'bomb', lat: bomb.lat, lng: bomb.lng, label: tr(bomb.state === 'planted' ? 'bomb_planted' : 'bomb_dropped'), color: HUD.red })
       }
       for (const id of Object.keys(state.players || {})) {
         if (id === meId) continue
@@ -74,17 +79,18 @@ function overlays(gameId, snap, positions) {
 }
 
 const SEGMENTS = {
-  aimMode: [['auto', 'Auto'], ['trigger', 'Trigger'], ['top', 'Top edge'], ['camera', 'Camera']],
-  handed: [['right', 'Right hand'], ['left', 'Left hand']],
+  aimMode: [['auto', 'aim_auto'], ['trigger', 'aim_trigger'], ['top', 'aim_top'], ['camera', 'aim_camera']],
+  handed: [['right', 'right_hand'], ['left', 'left_hand']],
 }
 const AIM_HINTS = {
-  auto: 'Switches with how you hold the phone: upright = Trigger, flat or sideways = Top edge.',
-  trigger: 'Camera aim. The whole screen is the trigger: tap for one shot, hold for automatic fire.',
-  top: 'Point the top edge of the phone at a player and tap anywhere. Compass aim, less precise.',
-  camera: 'Crosshair with a FIRE button and the first-person gun.',
+  auto: 'hint_auto',
+  trigger: 'hint_trigger',
+  top: 'hint_top',
+  camera: 'hint_camera',
 }
 
 export function GameMenu({ visible, onClose, gameId, snap, positions, onLeave }) {
+  const t = useT(M)
   const insets = useSafeAreaInsets()
   const { height: winH } = useWindowDimensions()
   const prefs = useGamePrefs()
@@ -110,17 +116,17 @@ export function GameMenu({ visible, onClose, gameId, snap, positions, onLeave })
 
   const confirmLeave = () => {
     Alert.alert(
-      'Leave game?',
-      snap?.isHost && (snap?.roster?.length || 0) > 1 ? 'You’re the host — another player will take over and the game carries on.' : 'You’ll leave this match.',
+      t('leave_title'),
+      snap?.isHost && (snap?.roster?.length || 0) > 1 ? t('leave_host') : t('leave_msg'),
       [
-        { text: 'Stay', style: 'cancel' },
-        { text: 'Leave', style: 'destructive', onPress: () => { setView('main'); onLeave?.() } },
+        { text: t('stay'), style: 'cancel' },
+        { text: t('leave'), style: 'destructive', onPress: () => { setView('main'); onLeave?.() } },
       ],
     )
   }
 
   const laser = gameId === 'lasertag'
-  const h = howToPlay(gameId, snap?.info?.settings)
+  const h = howToPlayText(gameId, snap?.info?.settings)
   // Laser Tag has its own tactical map in the HUD (double-tap the minimap), so the menu
   // only offers a map for the other location games.
   const showMap = gameId !== 'chess' && gameId !== 'lasertag'
@@ -128,55 +134,56 @@ export function GameMenu({ visible, onClose, gameId, snap, positions, onLeave })
 
   if (!visible) return null
 
-  const modeShort = laser ? LASER_MODES[snap?.state?.mode || snap?.info?.settings?.mode]?.short : null
+  const modeId = snap?.state?.mode || snap?.info?.settings?.mode
+  const modeShort = laser && LASER_MODES[modeId] ? laserMode(modeId, 'short') : null
   const S = shooter ? dark : light
   const inner = (
     <>
-      <Pressable onPress={close} hitSlop={12} style={[styles.closeBtn, shooter && styles.closeBtnHud]} accessibilityRole="button" accessibilityLabel="Close menu">
+      <Pressable onPress={close} hitSlop={12} style={[styles.closeBtn, shooter && styles.closeBtnHud]} accessibilityRole="button" accessibilityLabel={t('close_menu')}>
         <Ionicons name="close" size={shooter ? 18 : 20} color={shooter ? '#fff' : colors.text} />
       </Pressable>
       {view === 'main' && (
         <View style={styles.pad}>
           {shooter ? (
             <>
-              <Text style={hudType.kicker}>MENU</Text>
-              <Text style={[hudType.title, { marginTop: 2, marginRight: 44 }]} numberOfLines={1}>{laser ? `LASER TAG${modeShort ? ` · ${modeShort}` : ''}` : 'BATTLE ROYALE'}</Text>
-              {snap?.code ? <Text style={[hudType.label, { marginTop: 3, marginBottom: 10 }]}>CODE {snap.code}  ·  {snap.roster?.length || 0} PLAYERS</Text> : <View style={{ height: 10 }} />}
+              <Text style={hudType.kicker}>{t('menu_caps')}</Text>
+              <Text style={[hudType.title, { marginTop: 2, marginRight: 44 }]} numberOfLines={1}>{laser ? `${mpGameName('lasertag', 'Laser Tag').toUpperCase()}${modeShort ? ` · ${modeShort}` : ''}` : mpGameName('royale', 'Battle Royale').toUpperCase()}</Text>
+              {snap?.code ? <Text style={[hudType.label, { marginTop: 3, marginBottom: 10 }]}>{t('code_players', { code: snap.code, n: snap.roster?.length || 0 })}</Text> : <View style={{ height: 10 }} />}
             </>
           ) : (
-            <Text style={[type.title, { marginBottom: 4, marginRight: 44 }]}>Menu</Text>
+            <Text style={[type.title, { marginBottom: 4, marginRight: 44 }]}>{t('menu')}</Text>
           )}
-          <S.Row icon="settings-sharp" title="Settings" onPress={() => setView('settings')} />
-          {showMap && <S.Row icon="map" title="View map" onPress={() => setView('map')} />}
-          <S.Row icon="book" title="How to play" onPress={() => setView('rules')} />
+          <S.Row icon="settings-sharp" title={t('settings')} onPress={() => setView('settings')} />
+          {showMap && <S.Row icon="map" title={t('view_map')} onPress={() => setView('map')} />}
+          <S.Row icon="book" title={t('how_to_play')} onPress={() => setView('rules')} />
           {shooter
-            ? <HudCta tone="ghost" icon="exit-outline" title="Leave match" onPress={confirmLeave} style={{ marginTop: 18, borderColor: ST.enemy }} />
-            : <Btn title="Leave game" variant="danger" onPress={confirmLeave} style={{ marginTop: 16 }} />}
+            ? <HudCta tone="ghost" icon="exit-outline" title={t('leave_match')} onPress={confirmLeave} style={{ marginTop: 18, borderColor: ST.enemy }} />
+            : <Btn title={t('leave_game')} variant="danger" onPress={confirmLeave} style={{ marginTop: 16 }} />}
         </View>
       )}
       {view === 'settings' && (
         <ScrollView style={{ maxHeight: pageMaxH }} contentContainerStyle={styles.pad}>
-          <S.Header title="Settings" onBack={() => setView('main')} />
-          <S.Toggle label="Vibration" value={prefs.haptics} onChange={(v) => setPref('haptics', v)} />
-          <S.Toggle label="Sound effects" value={prefs.sound} onChange={(v) => setPref('sound', v)} />
+          <S.Header title={t('settings')} onBack={() => setView('main')} />
+          <S.Toggle label={t('vibration')} value={prefs.haptics} onChange={(v) => setPref('haptics', v)} />
+          <S.Toggle label={t('sound_fx')} value={prefs.sound} onChange={(v) => setPref('sound', v)} />
           {laser && (
             <>
-              <S.Toggle label="Show minimap" value={prefs.minimap} onChange={(v) => setPref('minimap', v)} />
-              <S.Toggle label="Target lock brackets" value={prefs.targetLock} onChange={(v) => setPref('targetLock', v)} />
-              <Text style={S.caption}>Highlights people the camera can see. Off saves battery; shooting still uses the camera.</Text>
-              <S.Segmented label="Aim & fire" value={prefs.aimMode} options={SEGMENTS.aimMode} onChange={(v) => setPref('aimMode', v)} />
-              <Text style={[S.caption, { marginTop: 6 }]}>{AIM_HINTS[prefs.aimMode] || AIM_HINTS.auto} Headshots do double damage.</Text>
-              <S.Segmented label="HUD layout" value={prefs.handed} options={SEGMENTS.handed} onChange={(v) => setPref('handed', v)} />
+              <S.Toggle label={t('show_minimap')} value={prefs.minimap} onChange={(v) => setPref('minimap', v)} />
+              <S.Toggle label={t('target_lock')} value={prefs.targetLock} onChange={(v) => setPref('targetLock', v)} />
+              <Text style={S.caption}>{t('target_lock_note')}</Text>
+              <S.Segmented label={t('aim_fire')} value={prefs.aimMode} options={SEGMENTS.aimMode.map(([v, k]) => [v, t(k)])} onChange={(v) => setPref('aimMode', v)} />
+              <Text style={[S.caption, { marginTop: 6 }]}>{t(AIM_HINTS[prefs.aimMode] || AIM_HINTS.auto)} {t('headshots_double')}</Text>
+              <S.Segmented label={t('hud_layout')} value={prefs.handed} options={SEGMENTS.handed.map(([v, k]) => [v, t(k)])} onChange={(v) => setPref('handed', v)} />
             </>
           )}
         </ScrollView>
       )}
       {view === 'map' && (
         <View style={styles.pad}>
-          <S.Header title="Map" onBack={() => setView('main')} />
+          <S.Header title={t('map')} onBack={() => setView('main')} />
           <GameMap height={Math.min(360, pageMaxH - 120)} center={ov.center} markers={ov.markers} circles={ov.circles} />
           <Text style={[S.caption, { marginTop: 8 }]}>
-            {gameId === 'beside-them' ? 'Pink stations are on your task list.' : 'Positions update about once a second.'}
+            {t(gameId === 'beside-them' ? 'pink_stations' : 'positions_update')}
           </Text>
         </View>
       )}
@@ -200,7 +207,7 @@ export function GameMenu({ visible, onClose, gameId, snap, positions, onLeave })
 
   return (
     <View style={[StyleSheet.absoluteFill, styles.root]}>
-      <Pressable style={styles.backdrop} onPress={close} accessibilityRole="button" accessibilityLabel="Close menu" />
+      <Pressable style={styles.backdrop} onPress={close} accessibilityRole="button" accessibilityLabel={t('close_menu')} />
       <View style={[styles.sheetWrap, { paddingTop: insets.top + 12, paddingBottom: insets.bottom + 12 }]} pointerEvents="box-none">
         {shooter
           ? <View style={[styles.sheetHud, { maxHeight: maxH }]}>{inner}</View>
@@ -223,8 +230,8 @@ function Row({ title, onPress }) {
 function Header({ title, onBack }) {
   return (
     <View style={styles.header}>
-      <Pressable onPress={onBack} hitSlop={10} accessibilityRole="button" accessibilityLabel="Back">
-        <Text style={[type.body, { color: colors.magenta }]}>‹ Back</Text>
+      <Pressable onPress={onBack} hitSlop={10} accessibilityRole="button" accessibilityLabel={tr('back')}>
+        <Text style={[type.body, { color: colors.magenta }]}>{tr('back_chev')}</Text>
       </Pressable>
       <Text style={[type.title, { flex: 1, textAlign: 'center', marginRight: 64 }]} numberOfLines={1}>{title}</Text>
     </View>
@@ -277,9 +284,9 @@ function HudRow({ title, icon, onPress }) {
 function HudHeader({ title, onBack }) {
   return (
     <View style={styles.header}>
-      <Pressable onPress={onBack} hitSlop={10} accessibilityRole="button" accessibilityLabel="Back" style={styles.backHud}>
+      <Pressable onPress={onBack} hitSlop={10} accessibilityRole="button" accessibilityLabel={tr('back')} style={styles.backHud}>
         <Ionicons name="chevron-back" size={18} color={ST.friendly} />
-        <Text style={[hudType.label, { color: ST.friendly, fontSize: 11 }]}>BACK</Text>
+        <Text style={[hudType.label, { color: ST.friendly, fontSize: 11 }]}>{tr('back_caps')}</Text>
       </Pressable>
       <Text style={[hudType.title, { flex: 1, textAlign: 'center', marginRight: 72 }]} numberOfLines={1}>{title}</Text>
     </View>

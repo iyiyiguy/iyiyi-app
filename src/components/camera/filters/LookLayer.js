@@ -6,6 +6,8 @@ import Svg, {
 } from 'react-native-svg'
 import { IY_LOGO } from './FilterArt'
 import { lookInfo } from './lenses'
+import { translate } from '../../../i18n'
+import camStrings from '../../../i18n/strings/camera'
 
 // Scene filters: colour-grade "looks" and the branded post frame.
 //
@@ -130,7 +132,7 @@ export function GradedPhoto({ uri, look, width, height, onReady }) {
 
 function fmtDate(d) {
   try {
-    const m = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'][d.getMonth()]
+    const m = translate(camStrings, 'months').split(',')[d.getMonth()]
     return `${m} ${d.getDate()} ${d.getFullYear()}`
   } catch {
     return ''

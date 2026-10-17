@@ -10,6 +10,10 @@ import { Accelerometer } from 'expo-sensors'
 import { GRENADE_MAX_THROW_M, GRENADE_MIN_THROW_M } from './engine'
 import { EquipTileFace, TileHint } from './Consumables'
 import { ST } from '../studio'
+import { translate } from '../../i18n'
+import H from '../../i18n/strings/laserHud'
+
+const tr = (k, v) => translate(H, k, v)
 
 export const GRENADE_FUSE_MS = 2500
 const FULL_POWER_MS = 1400
@@ -107,14 +111,14 @@ export function GrenadeButton({ count, disabled, size = 38, onThrow, onEmpty }) 
   const label = count === Infinity ? '∞' : String(Math.max(0, count | 0))
   return (
     <View style={{ alignItems: 'center' }} pointerEvents="box-none">
-      {holding && preview != null ? <TileHint text={`${preview} M · SWING OR LET GO`} /> : null}
+      {holding && preview != null ? <TileHint text={tr('grenade_hint', { n: preview })} /> : null}
       <Pressable
         onPressIn={begin}
         onPressOut={end}
         delayLongPress={100000}
         hitSlop={4}
         accessibilityRole="button"
-        accessibilityLabel={`Grenade, ${label} left. Hold to aim, then let go or make a throwing motion to throw.`}
+        accessibilityLabel={tr('grenade_a11y', { n: label })}
       >
         <EquipTileFace kind="grenade" label={label} size={size} accent={holding ? ST.objective : null} dim={disabled || empty}>
           <Animated.View style={[styles.fill, { height: ring }]} pointerEvents="none" />

@@ -14,6 +14,12 @@ import { HUD, HudCta, relColor } from './HudPro'
 import { ROUND_BREAK_MS } from './engine'
 import { LASER_MODES, TEAMS, offsetMeters } from '../../lib/multiplayer'
 import { FONT, ST, stShadow, stType, withAlpha } from '../studio'
+import { translate } from '../../i18n'
+import H from '../../i18n/strings/laserHud'
+import { laserMode, teamName } from '../../lib/games'
+
+const tr = (k, v) => translate(H, k, v)
+
 
 export const hudShadow = { textShadowColor: 'rgba(0,0,0,0.85)', textShadowRadius: 4, textShadowOffset: { width: 0, height: 1 } }
 
@@ -58,7 +64,7 @@ export function Minimap({ size = 140, rangeM = 75, me, headingDeg = 0, points = 
         })}
         <View style={[styles.dot, styles.meDot, { left: half - 6, top: half - 6 }]} />
         <Text style={[styles.north, { left: nLeft - 6, top: nTop - 8 }]}>N</Text>
-        <Text style={styles.scale}>{Math.round(rangeM * 3.28)} FT</Text>
+        <Text style={styles.scale}>{tr('n_ft', { n: Math.round(rangeM * 3.28) })}</Text>
       </View>
     </GlassPanel>
   )
@@ -78,29 +84,29 @@ export function CountdownOverlay({ state, now, meTeam }) {
     <View style={styles.overlay} pointerEvents="none">
       <View style={styles.letterboxTop} />
       <View style={styles.letterboxBottom} />
-      <Text style={[stType.kicker, stShadow]}>MATCH STARTING</Text>
-      <Text style={[styles.overTitle, stShadow]}>{String(mode?.name || 'Laser Tag').toUpperCase()}</Text>
-      <Animated.Text style={[styles.big, go && { color: ST.health }, { transform: [{ scale: pop }] }]}>{go ? 'GO' : left}</Animated.Text>
+      <Text style={[stType.kicker, stShadow]}>{tr('match_starting')}</Text>
+      <Text style={[styles.overTitle, stShadow]}>{String(mode ? laserMode(state.mode) : 'Laser Tag').toUpperCase()}</Text>
+      <Animated.Text style={[styles.big, go && { color: ST.health }, { transform: [{ scale: pop }] }]}>{go ? tr('go') : left}</Animated.Text>
       {state.mode === 'snd' ? (
         <Text style={[styles.overSub, stShadow]}>
-          ROUND {state.snd.roundNo}/{state.snd.totalRounds}  ·  <Text style={{ color: ST.friendly }}>{String(TEAMS[meTeam]?.name || '').toUpperCase()}</Text>  ·  <Text style={{ color: ST.objective }}>{side === 'attack' ? 'ATTACK' : 'DEFEND'}</Text>
+          {tr('round_n_total', { n: state.snd.roundNo, total: state.snd.totalRounds })}  ·  <Text style={{ color: ST.friendly }}>{String(TEAMS[meTeam] ? teamName(meTeam) : '').toUpperCase()}</Text>  ·  <Text style={{ color: ST.objective }}>{tr(side === 'attack' ? 'attack' : 'defend')}</Text>
         </Text>
       ) : state.mode === 'tdm' && meTeam ? (
-        <Text style={[styles.overSub, stShadow]}>YOU ARE <Text style={{ color: ST.friendly }}>{String(TEAMS[meTeam].name).toUpperCase()}</Text></Text>
-      ) : !!mode?.blurb && <Text style={[styles.overBody, stShadow]}>{mode.blurb}</Text>}
+        <Text style={[styles.overSub, stShadow]}>{tr('you_are')} <Text style={{ color: ST.friendly }}>{String(teamName(meTeam)).toUpperCase()}</Text></Text>
+      ) : !!mode?.blurb && <Text style={[styles.overBody, stShadow]}>{laserMode(state.mode, 'blurb')}</Text>}
       {state.mode === 'snd' && side ? (
-        <Text style={[styles.overBody, stShadow]}>{side === 'attack' ? 'Carry the bomb to site A or B and hold PLANT.' : 'Guard both sites. Stop the plant or defuse the bomb.'}</Text>
+        <Text style={[styles.overBody, stShadow]}>{tr(side === 'attack' ? 'snd_attack_brief' : 'snd_defend_brief')}</Text>
       ) : null}
-      {state.mode === 'snd' && state.snd.swapped && state.snd.roundNo > 1 && <Text style={[styles.overSub, stShadow, { color: ST.objective }]}>SIDES SWAPPED</Text>}
+      {state.mode === 'snd' && state.snd.swapped && state.snd.roundNo > 1 && <Text style={[styles.overSub, stShadow, { color: ST.objective }]}>{tr('sides_swapped')}</Text>}
     </View>
   )
 }
 
 const REASONS = {
-  defused: 'Bomb defused',
-  detonated: 'Bomb detonated',
-  eliminated: 'Team eliminated',
-  time: 'Time ran out',
+  defused: 'reason_defused',
+  detonated: 'reason_detonated',
+  eliminated: 'reason_eliminated',
+  time: 'reason_time',
 }
 
 export function RoundBreak({ state, now, meTeam }) {
@@ -115,17 +121,17 @@ export function RoundBreak({ state, now, meTeam }) {
   return (
     <View style={styles.overlayDim} pointerEvents="none">
       <View style={[styles.breakCard, { borderTopColor: tone }]}>
-        <Text style={[stType.label, { textAlign: 'center' }]}>ROUND {r?.roundNo} OF {state.snd.totalRounds}</Text>
-        <Text style={[styles.breakTitle, { color: tone }]}>{won ? 'ROUND WON' : 'ROUND LOST'}</Text>
-        <Text style={[stType.body, { textAlign: 'center', marginTop: 2 }]}>{REASONS[r?.reason] || ''}</Text>
+        <Text style={[stType.label, { textAlign: 'center' }]}>{tr('round_n_of', { n: r?.roundNo, total: state.snd.totalRounds })}</Text>
+        <Text style={[styles.breakTitle, { color: tone }]}>{tr(won ? 'round_won' : 'round_lost')}</Text>
+        <Text style={[stType.body, { textAlign: 'center', marginTop: 2 }]}>{REASONS[r?.reason] ? tr(REASONS[r.reason]) : ''}</Text>
         <View style={[styles.scoreRow, { marginTop: 14 }]}>
-          <TeamScore name={`${TEAMS[mine]?.name || ''} · YOU`} color={ST.friendly} value={state.snd.wins[mine]} />
+          <TeamScore name={tr('team_you', { team: TEAMS[mine] ? teamName(mine) : '' })} color={ST.friendly} value={state.snd.wins[mine]} />
           <Text style={styles.dash}>–</Text>
-          <TeamScore name={TEAMS[other]?.name || ''} color={ST.enemy} value={state.snd.wins[other]} />
+          <TeamScore name={TEAMS[other] ? teamName(other) : ''} color={ST.enemy} value={state.snd.wins[other]} />
         </View>
-        {half && <Text style={[stType.label, { color: ST.objective, textAlign: 'center', marginTop: 10 }]}>HALF TIME · SIDES SWAP</Text>}
+        {half && <Text style={[stType.label, { color: ST.objective, textAlign: 'center', marginTop: 10 }]}>{tr('half_time')}</Text>}
         <View style={styles.breakTrack}><View style={[styles.breakFill, { width: `${pct * 100}%` }]} /></View>
-        <Text style={[stType.label, { textAlign: 'center', marginTop: 6 }]}>NEXT ROUND IN {left}S</Text>
+        <Text style={[stType.label, { textAlign: 'center', marginTop: 6 }]}>{tr('next_round_in', { n: left })}</Text>
       </View>
     </View>
   )
@@ -156,32 +162,32 @@ export function MatchSummary({ state, meId, roster, shotsBy, isHost, onPlayAgain
   const iWon = state.winners?.includes(meId)
   const ids = Object.keys(state.players)
   const myRank = 1 + Object.values(state.players).filter((p) => (p.score || 0) > (me.score || 0)).length
-  let title = iWon ? 'Victory' : 'Defeat'
+  let title = iWon ? tr('victory') : tr('defeat')
   let tone = iWon ? ST.friendly : ST.enemy
   if (state.mode !== 'ffa') {
-    if (!state.winnerTeam) { title = 'Draw'; tone = ST.objective } else if (state.winnerTeam === me.team) { title = 'Victory'; tone = ST.friendly } else { title = 'Defeat'; tone = ST.enemy }
+    if (!state.winnerTeam) { title = tr('draw'); tone = ST.objective } else if (state.winnerTeam === me.team) { title = tr('victory'); tone = ST.friendly } else { title = tr('defeat'); tone = ST.enemy }
   }
   const mine = me.team || 'A'
   const other = mine === 'A' ? 'B' : 'A'
   const val = (t) => (state.mode === 'snd' ? state.snd?.wins?.[t] : state.teamScore?.[t]) ?? 0
-  const modeName = String(LASER_MODES[state.mode]?.name || 'Laser Tag').toUpperCase()
-  const kicker = state.mode === 'ffa' ? `${modeName} · #${myRank} OF ${ids.length}` : `${modeName} · ${val(mine)} – ${val(other)}`
+  const modeName = String(LASER_MODES[state.mode] ? laserMode(state.mode) : 'Laser Tag').toUpperCase()
+  const kicker = state.mode === 'ffa' ? `${modeName} · ${tr('rank_of', { rank: myRank, n: ids.length })}` : `${modeName} · ${val(mine)} – ${val(other)}`
   const sub = state.mode === 'ffa'
-    ? `You placed #${myRank} of ${ids.length}`
+    ? tr('placed', { rank: myRank, n: ids.length })
     : state.winnerTeam
-      ? `${TEAMS[state.winnerTeam].name} team wins${state.mode === 'snd' ? ` · ${(state.snd?.history || []).length} rounds played` : ''}`
-      : 'Scores level'
+      ? `${tr('team_wins', { team: teamName(state.winnerTeam) })}${state.mode === 'snd' ? ` · ${tr('rounds_played', { n: (state.snd?.history || []).length })}` : ''}`
+      : tr('scores_level')
   const shots = shotsBy?.[meId]
   const kd = (me.kills || 0) / Math.max(1, me.deaths || 0)
   const tiles = [
-    ['TAGS', String(me.kills || 0)],
+    [tr('tile_tags'), String(me.kills || 0)],
     ['K/D', kd.toFixed(1)],
-    ['ACC', shots ? `${Math.round((Math.min(me.hits || 0, shots) / shots) * 100)}%` : '—'],
-    ['SCORE', String(me.score || 0)],
+    [tr('tile_acc'), shots ? `${Math.round((Math.min(me.hits || 0, shots) / shots) * 100)}%` : '—'],
+    [tr('tile_score'), String(me.score || 0)],
   ]
   const mvp = state.mvp ? state.players[state.mvp] : null
-  const mvpLine = mvp ? [mvp.name, `${mvp.kills || 0} tag${mvp.kills === 1 ? '' : 's'}`, `${mvp.score || 0}`].join(' · ') : ''
-  const mvpExtra = mvp ? [mvp.headshots ? `${mvp.headshots} headshots` : null, mvp.plants ? `${mvp.plants} plants` : null, mvp.defuses ? `${mvp.defuses} defuses` : null].filter(Boolean).join(' · ') : ''
+  const mvpLine = mvp ? [mvp.name, tr(mvp.kills === 1 ? 'n_tags_one' : 'n_tags', { n: mvp.kills || 0 }), `${mvp.score || 0}`].join(' · ') : ''
+  const mvpExtra = mvp ? [mvp.headshots ? tr('n_headshots', { n: mvp.headshots }) : null, mvp.plants ? tr('n_plants', { n: mvp.plants }) : null, mvp.defuses ? tr('n_defuses', { n: mvp.defuses }) : null].filter(Boolean).join(' · ') : ''
   const others = ids.filter((id) => id !== meId)
     .map((id) => ({ id, ...state.players[id] }))
     .sort((a, b) => (b.score || 0) - (a.score || 0))
@@ -214,7 +220,7 @@ export function MatchSummary({ state, meId, roster, shotsBy, isHost, onPlayAgain
         <View style={styles.mvpCard}>
           <Ionicons name="star-outline" size={28} color={ST.objective} />
           <PlayerTap player={state.mvp === meId ? null : { id: state.mvp, username: mvp.name, avatar: avatarOf(state.mvp) }} style={{ flex: 1, minWidth: 0 }}>
-            <Text style={[stType.label, { color: ST.objective }]}>MATCH MVP{state.mvp === meId ? ' · YOU' : ''}</Text>
+            <Text style={[stType.label, { color: ST.objective }]}>{tr(state.mvp === meId ? 'match_mvp_you' : 'match_mvp')}</Text>
             <Text style={styles.mvpName} numberOfLines={1}>{mvpLine}</Text>
             {mvpExtra ? <Text style={stType.small} numberOfLines={1}>{mvpExtra}</Text> : null}
           </PlayerTap>
@@ -224,12 +230,12 @@ export function MatchSummary({ state, meId, roster, shotsBy, isHost, onPlayAgain
 
       {others.length > 0 && (
         <>
-          <Text style={[stType.label, { marginTop: 22, marginBottom: 6 }]}>PLAYED WITH · FOLLOW ON IYIYI</Text>
+          <Text style={[stType.label, { marginTop: 22, marginBottom: 6 }]}>{tr('played_with')}</Text>
           <View style={{ gap: 2 }}>
             {others.map((p) => {
               const c = relColor(state, meId, p.id)
-              const rel = state.mode === 'ffa' ? null : c === ST.friendly ? 'Teammate' : 'Enemy'
-              const line = [rel, `${p.kills || 0} tag${p.kills === 1 ? '' : 's'}`, `${p.score || 0} pts`].filter(Boolean).join(' · ')
+              const rel = state.mode === 'ffa' ? null : tr(c === ST.friendly ? 'rel_teammate' : 'rel_enemy')
+              const line = [rel, tr(p.kills === 1 ? 'n_tags_one' : 'n_tags', { n: p.kills || 0 }), tr('n_pts', { n: p.score || 0 })].filter(Boolean).join(' · ')
               return (
                 <View key={p.id} style={styles.withRow}>
                   <PlayerTap player={{ id: p.id, username: p.name, avatar: avatarOf(p.id) }} style={styles.withTap}>
@@ -247,30 +253,30 @@ export function MatchSummary({ state, meId, roster, shotsBy, isHost, onPlayAgain
         </>
       )}
 
-      <Text style={[stType.label, { marginTop: 22, marginBottom: 6 }]}>FULL RESULTS</Text>
+      <Text style={[stType.label, { marginTop: 22, marginBottom: 6 }]}>{tr('full_results')}</Text>
       <View style={styles.tableCard}>
         <ScoreTable state={state} meId={meId} shotsBy={shotsBy} />
       </View>
 
       <View style={styles.ctaRow}>
         {isHost
-          ? <HudCta title="Rematch" icon="refresh" onPress={onPlayAgain} style={{ flex: 1 }} />
+          ? <HudCta title={tr('rematch')} icon="refresh" onPress={onPlayAgain} style={{ flex: 1 }} />
           : (
             <View style={styles.waiting}>
               <ActivityIndicator color={HUD.muted} size="small" />
-              <Text style={stType.label}>WAITING FOR THE HOST…</Text>
+              <Text style={stType.label}>{tr('waiting_host')}</Text>
             </View>
           )}
-        {others.length > 1 ? <HudCta tone="ghost" title={followedAll ? 'Followed' : 'Follow all'} icon={followedAll ? 'checkmark' : 'person-add'} disabled={followedAll} onPress={followAll} style={{ width: 150 }} /> : null}
+        {others.length > 1 ? <HudCta tone="ghost" title={tr(followedAll ? 'followed' : 'follow_all')} icon={followedAll ? 'checkmark' : 'person-add'} disabled={followedAll} onPress={followAll} style={{ width: 150 }} /> : null}
       </View>
-      <HudCta tone="ghost" title="Leave" icon="exit" onPress={onExit} style={{ marginTop: 10 }} />
+      <HudCta tone="ghost" title={tr('leave')} icon="exit" onPress={onExit} style={{ marginTop: 10 }} />
     </ScrollView>
   )
 }
 
 export function TeamBadge({ team }) {
   if (!team) return null
-  return <Pill text={TEAMS[team].name.toUpperCase()} color={TEAMS[team].color} />
+  return <Pill text={teamName(team).toUpperCase()} color={TEAMS[team].color} />
 }
 
 const styles = StyleSheet.create({

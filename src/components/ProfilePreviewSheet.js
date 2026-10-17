@@ -7,6 +7,8 @@ import { avatarSource } from '../lib/avatarSource'
 import { useFollow, loadProfile } from '../lib/followCache'
 import { useOpenProfile } from '../lib/profileNav'
 import { FONT, ST, stType, useStudioFonts } from '../games/studio'
+import { useT } from '../i18n'
+import strings from '../i18n/strings/arcadeSocial'
 
 // Player card shown over a running game (laser tag camera, live GPS games, party games):
 // who someone is, Follow (teammates and enemies alike) and View profile, without the
@@ -16,7 +18,7 @@ import { FONT, ST, stType, useStudioFonts } from '../games/studio'
 // person: { id, username?, avatar?, teamColor?, teamLabel?, relation?, stats?, line? } - what
 // the game knows, shown until the real profile loads. relation: 'teammate' | 'enemy' |
 // 'opponent'; stats: [{ label, value, color? }] (this-match numbers, shown first).
-const RELATION = { teammate: 'Teammate', enemy: 'Enemy', opponent: 'Opponent' }
+const RELATION = { teammate: 'rel_teammate', enemy: 'rel_enemy', opponent: 'rel_opponent' } // string keys
 
 function compact(n) {
   const v = Number(n) || 0
@@ -26,6 +28,7 @@ function compact(n) {
 }
 
 export default function ProfilePreviewSheet({ person, onClose }) {
+  const t = useT(strings)
   useStudioFonts()
   const visible = !!person?.id
   const insets = useSafeAreaInsets()
@@ -34,17 +37,17 @@ export default function ProfilePreviewSheet({ person, onClose }) {
 
   useEffect(() => { if (person?.id) loadProfile(person.id) }, [person?.id])
 
-  const name = profile?.username || person?.username || 'Player'
+  const name = profile?.username || person?.username || t('player')
   const avatar = profile?.avatar_url || person?.avatar || null
   const relation = RELATION[person?.relation] ? person.relation : null
   const team = person?.teamColor || (relation === 'teammate' ? ST.friendly : relation ? ST.enemy : ST.friendly)
-  const kicker = [person?.teamLabel, relation ? RELATION[relation] : null].filter(Boolean).join(' · ')
+  const kicker = [person?.teamLabel, relation ? t(RELATION[relation]) : null].filter(Boolean).join(' · ')
 
   const tiles = [
     ...(Array.isArray(person?.stats) ? person.stats.filter((x) => x && x.label != null) : []),
     ...(profile ? [
-      { label: 'Followers', value: compact(profile.follower_count) },
-      { label: 'Following', value: compact(profile.following_count) },
+      { label: t('followers'), value: compact(profile.follower_count) },
+      { label: t('following'), value: compact(profile.following_count) },
     ] : []),
   ].slice(0, 3)
 
@@ -57,7 +60,7 @@ export default function ProfilePreviewSheet({ person, onClose }) {
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose} statusBarTranslucent>
-      <Pressable style={s.backdrop} onPress={onClose} accessibilityRole="button" accessibilityLabel="Close player card" />
+      <Pressable style={s.backdrop} onPress={onClose} accessibilityRole="button" accessibilityLabel={t('close_card')} />
       <View style={[s.sheet, { paddingBottom: 16 + insets.bottom, borderTopColor: team }]}>
         <View style={s.grab} />
         <View style={s.row}>
@@ -72,7 +75,7 @@ export default function ProfilePreviewSheet({ person, onClose }) {
             {kicker ? <Text style={[s.kicker, { color: team }]} numberOfLines={1}>{kicker}</Text> : null}
             <Text style={s.name} numberOfLines={1}>{name}</Text>
           </View>
-          <Pressable onPress={onClose} hitSlop={10} accessibilityRole="button" accessibilityLabel="Close" style={({ pressed }) => [s.close, pressed && { opacity: 0.7 }]}>
+          <Pressable onPress={onClose} hitSlop={10} accessibilityRole="button" accessibilityLabel={t('close')} style={({ pressed }) => [s.close, pressed && { opacity: 0.7 }]}>
             <Ionicons name="close" size={20} color={ST.muted} />
           </Pressable>
         </View>
@@ -94,11 +97,11 @@ export default function ProfilePreviewSheet({ person, onClose }) {
 
         <View style={s.actions}>
           <GameFollowButton userId={person?.id} name={name} style={s.follow} />
-          <Pressable onPress={viewProfile} accessibilityRole="button" accessibilityLabel={`View ${name}’s profile`} style={({ pressed }) => [s.ghost, pressed && { opacity: 0.8 }]}>
-            <Text style={s.ghostTxt}>VIEW PROFILE</Text>
+          <Pressable onPress={viewProfile} accessibilityRole="button" accessibilityLabel={t('view_profile_a11y', { name })} style={({ pressed }) => [s.ghost, pressed && { opacity: 0.8 }]}>
+            <Text style={s.ghostTxt}>{t('view_profile')}</Text>
           </Pressable>
         </View>
-        <Text style={s.hint}>The match keeps running behind this card.</Text>
+        <Text style={s.hint}>{t('card_hint')}</Text>
       </View>
     </Modal>
   )

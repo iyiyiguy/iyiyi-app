@@ -26,6 +26,8 @@ import {
   useHostLoop, useRoomClock, useRoomSnapshot, useSharedLocation,
 } from '../lib/multiplayer'
 import { buzz } from '../lib/gamePrefs'
+import { translate, useT } from '../i18n'
+import M from '../i18n/strings/mafia'
 import { ST, StButton, stType, useStudioFonts, withAlpha } from './studio'
 import {
   StBanner, StFeed, StGrid, StHero, StPlayerRow, StPlayerTile, StResultsFooter, StScreen, StSection,
@@ -33,6 +35,11 @@ import {
 } from './beside/studioKit'
 
 // ─── Character art ────────────────────────────────────────────────────────────
+const tr = (k, v) => translate(M, k, v)
+// Host lines carry { k, v } (see nightAction / resolveNight / resolveVote); older hosts only send text.
+const lineText = (x) => (x?.k ? tr(x.k, { ...(x.v || {}), ...(x.v?.role ? { role: tr(`role_${x.v.role}`) } : null) }) : String(x?.text || ''))
+const localFeed = (feed) => (Array.isArray(feed) ? feed.map((f) => (f?.k ? { ...f, text: lineText(f) } : f)) : feed)
+
 const CHAR_IMAGES = {
   town: require('../../assets/mafia-characters/townsperson.png'),
   mafia: require('../../assets/mafia-characters/mafia.png'),
@@ -42,10 +49,10 @@ const CHAR_IMAGES = {
 
 // ─── Role config ──────────────────────────────────────────────────────────────
 const ROLES = {
-  town: { label: 'Townsperson', color: ST.friendly, icon: 'people-outline', desc: 'Find and vote out the Mafia.', image: CHAR_IMAGES.town },
-  mafia: { label: 'Mafia', color: ST.enemy, icon: 'skull-outline', desc: 'Eliminate the Town without getting caught.', image: CHAR_IMAGES.mafia },
-  doctor: { label: 'Doctor', color: ST.health, icon: 'medkit-outline', desc: 'Each night, choose someone to protect.', image: CHAR_IMAGES.doctor },
-  detective: { label: 'Detective', color: ST.objective, icon: 'search-outline', desc: 'Each night, investigate one player.', image: CHAR_IMAGES.detective },
+  town: { get label() { return tr('role_town') }, color: ST.friendly, icon: 'people-outline', get desc() { return tr('desc_town') }, image: CHAR_IMAGES.town },
+  mafia: { get label() { return tr('role_mafia') }, color: ST.enemy, icon: 'skull-outline', get desc() { return tr('desc_mafia') }, image: CHAR_IMAGES.mafia },
+  doctor: { get label() { return tr('role_doctor') }, color: ST.health, icon: 'medkit-outline', get desc() { return tr('desc_doctor') }, image: CHAR_IMAGES.doctor },
+  detective: { get label() { return tr('role_detective') }, color: ST.objective, icon: 'search-outline', get desc() { return tr('desc_detective') }, image: CHAR_IMAGES.detective },
 }
 
 // ─── Timing ───────────────────────────────────────────────────────────────────
@@ -143,27 +150,27 @@ function mafiaChoice(s, sec, shuffle = shuffled) {
 // Night action from `from`. Returns a list of private replies [{ to, type, data }].
 function nightAction(s, sec, action, from) {
   const replies = []
-  const say = (to, text) => replies.push({ to, type: 'notice', data: { text } })
+  const say = (to, text, k, v) => replies.push({ to, type: 'notice', data: { text, k, v } })
   const role = sec.roles[from]
   const target = action?.target
   if (s.phase !== 'night' || !s.players[from]?.alive) return replies
   const victim = s.players[target]
   if (!victim?.alive) return replies
   if (action.type === 'mafia_target' && role === 'mafia') {
-    if (sec.roles[target] === 'mafia') { say(from, 'That’s one of your own.'); return replies }
+    if (sec.roles[target] === 'mafia') { say(from, 'That’s one of your own.', 'n_own'); return replies }
     sec.mafiaVotes[from] = target
     sec.mafiaTarget = mafiaChoice(s, sec, (a) => a) // provisional (deterministic) until dawn
-    say(from, `Target locked: ${victim.name}`)
+    say(from, `Target locked: ${victim.name}`, 'n_target_locked', { name: victim.name })
     for (const m of mafiaTeam(sec.roles)) {
-      if (m !== from && s.players[m]?.alive) say(m, `${s.players[from].name} wants ${victim.name}.`)
+      if (m !== from && s.players[m]?.alive) say(m, `${s.players[from].name} wants ${victim.name}.`, 'n_wants', { who: s.players[from].name, name: victim.name })
     }
   } else if (action.type === 'doctor_save' && role === 'doctor') {
-    if (target === sec.lastDoctorTarget) { say(from, `You protected ${victim.name} last night — choose someone else.`); return replies }
+    if (target === sec.lastDoctorTarget) { say(from, `You protected ${victim.name} last night — choose someone else.`, 'n_protected_last', { name: victim.name }); return replies }
     sec.doctorTarget = target
-    say(from, `Protecting ${victim.name} tonight.`)
+    say(from, `Protecting ${victim.name} tonight.`, 'n_protecting', { name: victim.name })
   } else if (action.type === 'detective_investigate' && role === 'detective') {
     if (target === from) return replies
-    if (sec.detectiveTarget) { say(from, 'You’ve already investigated someone tonight.'); return replies }
+    if (sec.detectiveTarget) { say(from, 'You’ve already investigated someone tonight.', 'n_already_investigated'); return replies }
     sec.detectiveTarget = target
     replies.push({ to: from, type: 'investigate', data: { target, name: victim.name, isMafia: sec.roles[target] === 'mafia', day: s.dayNumber } })
   }
@@ -191,9 +198,9 @@ function resolveNight(s, sec, t, shuffle = shuffled) {
   const feed = [...s.feed]
   if (killed) {
     players[killed] = { ...players[killed], alive: false, eliminated: true }
-    feed.unshift({ id: `kill-${s.dayNumber}`, text: `Day ${s.dayNumber}: ${players[killed].name} was found eliminated.` })
+    feed.unshift({ id: `kill-${s.dayNumber}`, text: `Day ${s.dayNumber}: ${players[killed].name} was found eliminated.`, k: 'f_killed', v: { day: s.dayNumber, name: players[killed].name } })
   } else {
-    feed.unshift({ id: `safe-${s.dayNumber}`, text: `Day ${s.dayNumber}: No one was eliminated last night.` })
+    feed.unshift({ id: `safe-${s.dayNumber}`, text: `Day ${s.dayNumber}: No one was eliminated last night.`, k: 'f_safe', v: { day: s.dayNumber } })
   }
   const nightResult = { killed, saved }
   if (checkWin(players, sec.roles)) return endState(s, players, sec, { feed: feed.slice(0, 20), nightResult })
@@ -234,9 +241,9 @@ function resolveVote(s, sec, t) {
   const feed = [...s.feed]
   if (eliminated) {
     players[eliminated] = { ...players[eliminated], alive: false, eliminated: true }
-    feed.unshift({ id: `vote-${s.dayNumber}`, text: `${players[eliminated].name} was voted out. They were ${ROLES[sec.roles[eliminated]]?.label || 'Town'}.` })
+    feed.unshift({ id: `vote-${s.dayNumber}`, text: `${players[eliminated].name} was voted out. They were ${translate(M, `role_${ROLES[sec.roles[eliminated]] ? sec.roles[eliminated] : 'town'}`, null, 'en')}.`, k: 'f_voted', v: { name: players[eliminated].name, role: ROLES[sec.roles[eliminated]] ? sec.roles[eliminated] : 'town' } })
   } else {
-    feed.unshift({ id: `novote-${s.dayNumber}`, text: `No one was voted out${tie ? ' (tie)' : top && skip >= top[1] ? ' (skipped)' : ''}.` })
+    feed.unshift({ id: `novote-${s.dayNumber}`, text: `No one was voted out${tie ? ' (tie)' : top && skip >= top[1] ? ' (skipped)' : ''}.`, k: tie ? 'f_novote_tie' : top && skip >= top[1] ? 'f_novote_skip' : 'f_novote' })
   }
   const voteResult = { eliminated, tally, skip }
   if (checkWin(players, sec.roles)) return endState(s, players, sec, { voteResult, feed: feed.slice(0, 20) })
@@ -264,6 +271,7 @@ export const mafiaEngine = {
 // ─── Component ────────────────────────────────────────────────────────────────
 export function MafiaGame({ room, onExit }) {
   useStudioFonts()
+  const t = useT(M)
   const snap = useRoomSnapshot(room)
   const now = useRoomClock(room, 500)
   useSharedLocation(room) // share GPS so nearby invite + proximity features work
@@ -300,7 +308,7 @@ export function MafiaGame({ room, onExit }) {
       room.onMessage('role', (d) => {
         if (d && typeof d.round === 'number' && ROLES[d.role]) setMyRole({ round: d.round, role: d.role, team: Array.isArray(d.team) ? d.team : null })
       }),
-      room.onMessage('notice', (d) => { buzz('warning'); flash(String(d?.text || '')) }),
+      room.onMessage('notice', (d) => { buzz('warning'); flash(lineText(d)) }),
       room.onMessage('investigate', (d) => {
         if (d && typeof d.target === 'string') {
           buzz('select')
@@ -391,7 +399,7 @@ export function MafiaGame({ room, onExit }) {
         const sec = recoverSecret(s, claims.current.roles, presentIds)
         if (sec) { secret.current = sec; return }
         if (t - claims.current.since > RECOVER_MS) {
-          room.publishState({ ...s, phase: 'ended', winner: null, reason: 'host_left', feed: [{ id: `void-${t}`, text: 'The host left and the roles couldn’t be recovered. This round doesn’t count.' }, ...s.feed].slice(0, 20) })
+          room.publishState({ ...s, phase: 'ended', winner: null, reason: 'host_left', feed: [{ id: `void-${t}`, text: 'The host left and the roles couldn’t be recovered. This round doesn’t count.', k: 'f_void' }, ...s.feed].slice(0, 20) })
           return
         }
         room.send('whois', { round: s.round })
@@ -442,13 +450,13 @@ export function MafiaGame({ room, onExit }) {
 
   // ── Render ──
   if (!room || !snap) return null
-  if (!state) return <StSpectating title="Starting" text="Dealing the roles…" />
+  if (!state) return <StSpectating title={t('starting')} text={t('dealing_roles')} />
   const me = state.players[meId]
   if (!me) return <StSpectating />
 
   const avatarOf = (id) => snap.roster.find((r) => r.id === id)?.avatar
   const nameOf = (id) => state.players[id]?.name || '?'
-  const playerOf = (id) => ({ id, username: id === meId ? `${nameOf(id)} (you)` : nameOf(id), avatar: avatarOf(id) })
+  const playerOf = (id) => ({ id, username: id === meId ? t('you_suffix', { name: nameOf(id) }) : nameOf(id), avatar: avatarOf(id) })
   const ids = Object.keys(state.players)
   const alive = ids.filter((id) => state.players[id].alive)
   const dead = ids.filter((id) => !state.players[id].alive)
@@ -463,15 +471,15 @@ export function MafiaGame({ room, onExit }) {
     return (
       <StScreen scroll={false} style={styles.center}>
         <View style={[styles.revealEdge, { backgroundColor: c }]} />
-        <Text style={[stType.kicker, { color: ST.night }]}>Mafia · your secret role</Text>
+        <Text style={[stType.kicker, { color: ST.night }]}>{t('secret_role')}</Text>
         <View style={[styles.portrait, { borderColor: c }]}>
           {role ? <Image source={role.image} style={styles.portraitImg} /> : <Ionicons name="help-circle-outline" size={48} color={ST.muted} />}
         </View>
-        <Text style={[stType.display, { color: c, textAlign: 'center' }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.5}>{role ? role.label : 'Dealing'}</Text>
-        <Text style={[stType.body, { textAlign: 'center', marginTop: 6, maxWidth: 320 }]}>{role ? role.desc : 'Getting your role…'}</Text>
-        {mates.length ? <Text style={[stType.small, { color: ST.enemy, marginTop: 8, textAlign: 'center' }]}>Your Mafia partner{mates.length > 1 ? 's' : ''}: {mates.join(', ')}</Text> : null}
+        <Text style={[stType.display, { color: c, textAlign: 'center' }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.5}>{role ? role.label : t('dealing')}</Text>
+        <Text style={[stType.body, { textAlign: 'center', marginTop: 6, maxWidth: 320 }]}>{role ? role.desc : t('getting_role')}</Text>
+        {mates.length ? <Text style={[stType.small, { color: ST.enemy, marginTop: 8, textAlign: 'center' }]}>{t(mates.length > 1 ? 'partner_many' : 'partner_one', { names: mates.join(', ') })}</Text> : null}
         <Text style={[stType.num, { fontSize: 72, marginTop: 20 }]}>{left}</Text>
-        <Text style={[stType.label, { marginTop: 6 }]}>Don’t show your screen</Text>
+        <Text style={[stType.label, { marginTop: 6 }]}>{t('dont_show')}</Text>
       </StScreen>
     )
   }
@@ -480,19 +488,19 @@ export function MafiaGame({ room, onExit }) {
   if (state.phase === 'ended') return <Summary state={state} meId={meId} roleKnown={roleKnown} playerOf={playerOf} isHost={isHost} room={room} snap={snap} onExit={onExit} />
 
   const RoleChip = (
-    <Pressable onPress={() => setPeek((v) => !v)} accessibilityRole="button" accessibilityLabel="Show or hide your role" style={[styles.roleChip, { borderLeftColor: peek && role ? role.color : ST.lineStrong }]}>
+    <Pressable onPress={() => setPeek((v) => !v)} accessibilityRole="button" accessibilityLabel={t('peek_a11y')} style={[styles.roleChip, { borderLeftColor: peek && role ? role.color : ST.lineStrong }]}>
       <View style={{ flex: 1 }}>
-        <Text style={[stType.label, peek && role ? { color: role.color } : null]}>Your role</Text>
-        <Text style={[stType.name, { fontSize: 17 }]}>{peek && role ? role.label.toUpperCase() : roleKnown ? 'TAP TO PEEK' : 'GETTING ROLE…'}</Text>
+        <Text style={[stType.label, peek && role ? { color: role.color } : null]}>{t('your_role')}</Text>
+        <Text style={[stType.name, { fontSize: 17 }]}>{peek && role ? role.label.toUpperCase() : roleKnown ? t('tap_peek') : t('getting_role_caps')}</Text>
       </View>
       <Ionicons name={peek ? 'eye-off-outline' : 'eye-outline'} size={18} color={ST.muted} />
     </Pressable>
   )
 
   const DetectiveLog = roleKnown === 'detective' && investigations.length ? (
-    <StSection label="Your investigations · only you see this" accent={ST.objective}>
+    <StSection label={t('investigations')} accent={ST.objective}>
       {investigations.map((x) => (
-        <StPlayerRow key={x.target} player={playerOf(x.target)} follow={false} subtitle={`Night ${x.day ?? '?'}`} right={<StTag text={x.isMafia ? 'Mafia' : 'Not Mafia'} color={x.isMafia ? ST.enemy : ST.health} solid={x.isMafia} />} />
+        <StPlayerRow key={x.target} player={playerOf(x.target)} follow={false} subtitle={t('night_n', { n: x.day ?? '?' })} right={<StTag text={x.isMafia ? t('role_mafia') : t('not_mafia')} color={x.isMafia ? ST.enemy : ST.health} solid={x.isMafia} />} />
       ))}
     </StSection>
   ) : null
@@ -507,20 +515,20 @@ export function MafiaGame({ room, onExit }) {
     const investigatedTonight = roleKnown === 'detective' && investigations.some((x) => x.round === round && x.day === state.dayNumber)
     const acts = me.alive && (roleKnown === 'mafia' || roleKnown === 'doctor' || roleKnown === 'detective')
     const cfg = !me.alive ? null
-      : roleKnown === 'mafia' ? { title: 'Choose a target', verb: 'Target', color: ST.enemy, type: 'mafia_target', can: (id) => id !== meId && !team.includes(id) }
-        : roleKnown === 'doctor' ? { title: 'Choose who to save', verb: 'Save', color: ST.night, type: 'doctor_save', can: (id) => id !== lastSaved }
-          : roleKnown === 'detective' ? { title: 'Who to investigate', verb: 'Investigate', color: ST.objective, type: 'detective_investigate', can: (id) => id !== meId && !investigatedTonight }
-            : { title: 'The town sleeps', verb: 'Suspect', color: ST.friendly, local: true, can: (id) => id !== meId }
+      : roleKnown === 'mafia' ? { title: t('choose_target'), verb: t('verb_target'), color: ST.enemy, type: 'mafia_target', can: (id) => id !== meId && !team.includes(id) }
+        : roleKnown === 'doctor' ? { title: t('choose_save'), verb: t('verb_save'), color: ST.night, type: 'doctor_save', can: (id) => id !== lastSaved }
+          : roleKnown === 'detective' ? { title: t('who_investigate'), verb: t('verb_investigate'), color: ST.objective, type: 'detective_investigate', can: (id) => id !== meId && !investigatedTonight }
+            : { title: t('town_sleeps'), verb: t('verb_suspect'), color: ST.friendly, local: true, can: (id) => id !== meId }
     const tagFor = (id) => {
       const p = state.players[id]
-      if (!p.alive) return 'Out'
-      if (id === meId) return role ? role.label : 'You'
-      if (team.includes(id)) return 'Mafia'
-      if (id === lastSaved) return 'Saved last night'
+      if (!p.alive) return t('tag_out')
+      if (id === meId) return role ? role.label : t('tag_you')
+      if (team.includes(id)) return t('role_mafia')
+      if (id === lastSaved) return t('tag_saved_last')
       const inv = investigations.find((x) => x.target === id)
-      if (inv) return inv.isMafia ? 'Mafia' : 'Cleared'
-      if (sent === id) return roleKnown === 'town' ? 'Suspect' : 'Locked'
-      return 'Alive'
+      if (inv) return inv.isMafia ? t('role_mafia') : t('tag_cleared')
+      if (sent === id) return roleKnown === 'town' ? t('verb_suspect') : t('tag_locked')
+      return t('tag_alive')
     }
     const send = () => {
       if (!sel || !cfg) return
@@ -534,10 +542,10 @@ export function MafiaGame({ room, onExit }) {
     return (
       <StScreen>
         <StHero
-          kicker={`Night ${state.dayNumber} · ${formatClock(timeLeft)}`}
+          kicker={`${t('night_n', { n: state.dayNumber })} · ${formatClock(timeLeft)}`}
           color={ST.night}
-          title={!me.alive ? 'Night falls' : cfg.title}
-          sub={!me.alive ? 'You’re out. Watch quietly — no hints.' : acts ? `You are the ${role.label}. Only you see this.` : roleKnown ? 'Mark who you suspect. Everyone taps at night so no one can tell who has a role.' : 'Getting your role…'}
+          title={!me.alive ? t('night_falls') : cfg.title}
+          sub={!me.alive ? t('out_watch') : acts ? t('you_are_role', { role: role.label }) : roleKnown ? t('mark_suspect') : t('getting_role')}
         />
         {cfg ? (
           <StGrid cols={3}>
@@ -561,10 +569,10 @@ export function MafiaGame({ room, onExit }) {
         {cfg ? (
           <View style={{ marginTop: 6, marginBottom: 10 }}>
             {sent ? (
-              <StBanner icon="lock-closed-outline" color={cfg.color} text={cfg.local ? `You marked ${nameOf(sent)}.` : roleKnown === 'detective' ? `Investigating ${nameOf(sent)}…` : `${cfg.verb}: ${nameOf(sent)} · locked in`} sub={roleKnown === 'mafia' && team.length > 1 ? 'The most-chosen target is hit at dawn.' : 'Wait for daylight.'} />
+              <StBanner icon="lock-closed-outline" color={cfg.color} text={cfg.local ? t('you_marked', { name: nameOf(sent) }) : roleKnown === 'detective' ? t('investigating', { name: nameOf(sent) }) : t('locked_in', { verb: cfg.verb, name: nameOf(sent) })} sub={roleKnown === 'mafia' && team.length > 1 ? t('most_chosen') : t('wait_daylight')} />
             ) : (
               <StButton
-                title={sel ? `${cfg.verb} ${nameOf(sel)}` : roleKnown === 'detective' && investigatedTonight ? 'Investigated tonight' : `Pick a player`}
+                title={sel ? t('verb_name', { verb: cfg.verb, name: nameOf(sel) }) : roleKnown === 'detective' && investigatedTonight ? t('investigated_tonight') : t('pick_player')}
                 color={cfg.color}
                 disabled={!sel}
                 onPress={send}
@@ -575,11 +583,11 @@ export function MafiaGame({ room, onExit }) {
         {!!notice && <StBanner text={notice} color={ST.night} icon="information-circle-outline" />}
         {DetectiveLog}
         {prev && state.dayNumber > 1 ? (
-          <StSection label="Today’s vote">
-            <Text style={stType.body}>{prev.eliminated ? `${nameOf(prev.eliminated)} was voted out.` : 'No one was voted out.'}</Text>
+          <StSection label={t('todays_vote')}>
+            <Text style={stType.body}>{prev.eliminated ? t('was_voted_out', { name: nameOf(prev.eliminated) }) : t('f_novote')}</Text>
           </StSection>
         ) : null}
-        <Text style={[stType.small, { color: 'rgba(242,244,247,0.55)' }]}>Long-press any player for their iYiYi profile and Follow. Roles stay hidden.</Text>
+        <Text style={[stType.small, { color: 'rgba(242,244,247,0.55)' }]}>{t('longpress_hint')}</Text>
       </StScreen>
     )
   }
@@ -599,26 +607,26 @@ export function MafiaGame({ room, onExit }) {
   return (
     <StScreen>
       <StHero
-        kicker={`Day ${state.dayNumber} · ${discussing ? 'discussion' : 'voting'} · ${formatClock(timeLeft)}`}
+        kicker={t('day_kicker', { n: state.dayNumber, phase: t(discussing ? 'discussion' : 'voting'), t: formatClock(timeLeft) })}
         color={discussing ? ST.friendly : ST.enemy}
-        title={discussing ? 'Talk it out' : 'Vote someone out'}
-        sub={discussing ? 'Who seems suspicious? Voting opens when the timer ends.' : 'Most votes is out. A tie — or Skip on top — means no one goes.'}
+        title={t(discussing ? 'talk_it_out' : 'vote_out')}
+        sub={t(discussing ? 'discuss_sub' : 'vote_sub')}
       />
       <StBanner
         icon={nr?.killed ? 'skull-outline' : 'sunny-outline'}
         color={nr?.killed ? ST.enemy : ST.health}
-        text={nr ? (nr.killed ? `${nameOf(nr.killed)} was found eliminated.` : 'No one was eliminated last night.') : 'Morning.'}
+        text={nr ? (nr.killed ? t('found_eliminated', { name: nameOf(nr.killed) }) : t('no_one_last_night')) : t('morning')}
       />
       {RoleChip}
-      {!me.alive ? <StBanner icon="eye-outline" color={ST.muted} text="You’re out. You can watch but not vote." /> : null}
+      {!me.alive ? <StBanner icon="eye-outline" color={ST.muted} text={t('out_no_vote')} /> : null}
 
-      <StSection label={`Alive · ${alive.length}`} right={voting ? `${votedCount} voted` : null}>
+      <StSection label={t('alive_n', { n: alive.length })} right={voting ? t('n_voted', { n: votedCount }) : null}>
         <StGrid cols={3}>
           {alive.map((id) => (
             <StPlayerTile
               key={id}
               player={playerOf(id)}
-              tag={voting ? (tally[id] ? `${tally[id]} vote${tally[id] > 1 ? 's' : ''}` : state.votes[id] !== undefined ? 'Voted' : 'Deciding') : team.includes(id) && id !== meId ? 'Mafia' : 'Alive'}
+              tag={voting ? (tally[id] ? t(tally[id] > 1 ? 'n_votes' : 'n_vote', { n: tally[id] }) : state.votes[id] !== undefined ? t('tag_voted') : t('tag_deciding')) : team.includes(id) && id !== meId ? t('role_mafia') : t('tag_alive')}
               selected={(canVote ? sel : myVote) === id}
               color={ST.enemy}
               disabled={!canVote || id === meId}
@@ -630,28 +638,29 @@ export function MafiaGame({ room, onExit }) {
 
       {canVote ? (
         <View style={{ flexDirection: 'row', gap: 8, marginBottom: 10 }}>
-          <StButton title={sel ? `Vote out ${nameOf(sel)}` : 'Pick a suspect'} tone="danger" disabled={!sel} style={{ flex: 1 }} onPress={() => { buzz('select'); room.sendAction({ type: 'vote', target: sel }) }} />
-          <StButton title={`Skip${tally.skip ? ` · ${tally.skip}` : ''}`} tone="ghost" style={{ width: 110 }} onPress={() => { buzz('select'); room.sendAction({ type: 'vote', target: 'skip' }) }} />
+          <StButton title={sel ? t('vote_out_name', { name: nameOf(sel) }) : t('pick_suspect')} tone="danger" disabled={!sel} style={{ flex: 1 }} onPress={() => { buzz('select'); room.sendAction({ type: 'vote', target: sel }) }} />
+          <StButton title={`${t('skip')}${tally.skip ? ` · ${tally.skip}` : ''}`} tone="ghost" style={{ width: 110 }} onPress={() => { buzz('select'); room.sendAction({ type: 'vote', target: 'skip' }) }} />
         </View>
       ) : voting && me.alive ? (
-        <StBanner icon="checkmark" color={ST.enemy} text={myVote === 'skip' ? 'You skipped. Waiting for others…' : `You voted for ${nameOf(myVote)}. Waiting for others…`} />
+        <StBanner icon="checkmark" color={ST.enemy} text={myVote === 'skip' ? t('you_skipped') : t('you_voted_for', { name: nameOf(myVote) })} />
       ) : null}
 
       {DetectiveLog}
       {!!notice && <StBanner text={notice} color={ST.night} icon="information-circle-outline" />}
 
       {dead.length > 0 && (
-        <StSection label="Eliminated">
+        <StSection label={t('eliminated_section')}>
           {dead.map((id) => <StPlayerRow key={id} player={playerOf(id)} dim />)}
         </StSection>
       )}
-      <StFeed items={state.feed} label="Event log" />
+      <StFeed items={localFeed(state.feed)} label={t('event_log')} />
     </StScreen>
   )
 }
 
 // ─── Summary ──────────────────────────────────────────────────────────────────
 function Summary({ state, meId, roleKnown, playerOf, isHost, room, snap, onExit }) {
+  const t = useT(M)
   const isMafia = roleKnown === 'mafia'
   const void_ = !state.winner
   const iWon = !void_ && (state.winner === 'mafia') === isMafia
@@ -665,9 +674,9 @@ function Summary({ state, meId, roleKnown, playerOf, isHost, room, snap, onExit 
   return (
     <StScreen>
       <StHero
-        kicker={void_ ? 'Mafia · round void' : `Mafia · day ${state.dayNumber}`}
-        title={void_ ? 'No result' : state.winner === 'town' ? 'Town wins' : 'Mafia wins'}
-        sub={void_ ? 'The host left mid-round.' : roleKnown ? (iWon ? 'You were on the winning side.' : 'Better luck next time.') : null}
+        kicker={void_ ? t('kicker_void') : t('kicker_day', { n: state.dayNumber })}
+        title={void_ ? t('no_result') : t(state.winner === 'town' ? 'town_wins' : 'mafia_wins')}
+        sub={void_ ? t('host_left') : roleKnown ? t(iWon ? 'winning_side' : 'better_luck') : null}
         color={void_ ? ST.muted : winColor}
         big
       />
@@ -675,17 +684,17 @@ function Summary({ state, meId, roleKnown, playerOf, isHost, room, snap, onExit 
         <View style={[styles.banner, { borderColor: winColor }]}>
           <Image source={state.winner === 'town' ? CHAR_IMAGES.town : CHAR_IMAGES.mafia} style={styles.bannerImg} />
           <View style={{ flex: 1 }}>
-            <Text style={[stType.label, { color: winColor }]}>{iWon ? 'Victory' : 'Defeat'}</Text>
-            <Text style={[stType.name, { fontSize: 18 }]}>{state.winner === 'town' ? 'Every Mafia member is out' : 'The Mafia matched the Town'}</Text>
+            <Text style={[stType.label, { color: winColor }]}>{t(iWon ? 'victory' : 'defeat')}</Text>
+            <Text style={[stType.name, { fontSize: 18 }]}>{t(state.winner === 'town' ? 'all_mafia_out' : 'mafia_matched')}</Text>
           </View>
         </View>
       ) : null}
       <StStats items={[
-        { label: 'Days', value: String(state.dayNumber || 0) },
-        { label: 'Survivors', value: `${survivors}/${ids.length}` },
-        { label: 'Mafia', value: roles && Object.keys(roles).length ? String(mafiaCount) : '—', color: ST.enemy },
+        { label: t('stat_days'), value: String(state.dayNumber || 0) },
+        { label: t('stat_survivors'), value: `${survivors}/${ids.length}` },
+        { label: t('role_mafia'), value: roles && Object.keys(roles).length ? String(mafiaCount) : '—', color: ST.enemy },
       ]} />
-      <StSection label={Object.keys(roles).length ? 'Roles revealed · follow on iYiYi' : 'Played with · follow on iYiYi'}>
+      <StSection label={t(Object.keys(roles).length ? 'roles_revealed' : 'played_with')}>
         {sorted.map((id) => {
           const p = state.players[id]
           const r = ROLES[roles[id] || (id === meId ? roleKnown : null)]
@@ -694,14 +703,14 @@ function Summary({ state, meId, roleKnown, playerOf, isHost, room, snap, onExit 
               key={id}
               player={playerOf(id)}
               color={r?.color}
-              subtitle={p.alive ? 'Survived' : 'Eliminated'}
+              subtitle={t(p.alive ? 'survived' : 'was_eliminated')}
               dim={!p.alive}
               right={r ? <StTag text={r.label} color={r.color} /> : null}
             />
           )
         })}
       </StSection>
-      <StFeed items={state.feed} label="Event log" max={20} />
+      <StFeed items={localFeed(state.feed)} label={t('event_log')} max={20} />
       <StResultsFooter isHost={isHost} onAgain={() => room.setInfo({ round: (snap.info.round || 0) + 1 })} onExit={onExit} />
     </StScreen>
   )

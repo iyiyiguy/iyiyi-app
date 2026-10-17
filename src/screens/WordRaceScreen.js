@@ -6,9 +6,12 @@ import { WordGame } from '../games/WordGame'
 import { AC, ArcadeBackground, IconCircle, useArcadeInsets, useArcadeStatusBar } from '../games/arcadeUI'
 import { loadArcadeStats } from '../lib/arcadeStats'
 import { FONT, ST, stType } from '../games/studio'
+import { useT } from '../i18n'
+import strings from '../i18n/strings/arcadeMisc'
 
 // Route params (optional): { mode: 'daily' } opens straight into today's daily word.
 export default function WordRaceScreen({ navigation, route }) {
+  const t = useT(strings)
   useArcadeStatusBar()
   const insets = useArcadeInsets()
   const [best, setBest] = useState(null)
@@ -23,13 +26,13 @@ export default function WordRaceScreen({ navigation, route }) {
     <View style={styles.screen}>
       <ArcadeBackground />
       <View style={[styles.header, { paddingTop: insets.top + 6, paddingLeft: 16 + insets.left, paddingRight: 16 + insets.right }]}>
-        <IconCircle icon="chevron-back" label="Back" onPress={() => navigation.goBack()} size={40} />
+        <IconCircle icon="chevron-back" label={t('back')} onPress={() => navigation.goBack()} size={40} />
         <View style={{ flex: 1, minWidth: 0 }}>
-          <Text style={styles.kicker} numberOfLines={1}>ARCADE · PUZZLE</Text>
+          <Text style={styles.kicker} numberOfLines={1}>{t('word_kicker')}</Text>
           <Text style={styles.title} numberOfLines={1}>What's The Word</Text>
         </View>
         {best != null ? (
-          <View style={styles.best} accessibilityLabel={`Best score ${best}`}>
+          <View style={styles.best} accessibilityLabel={t('best_a11y', { n: best })}>
             <Ionicons name="trophy" size={12} color={AC.gold} />
             <Text style={styles.bestText}>{best.toLocaleString()}</Text>
           </View>

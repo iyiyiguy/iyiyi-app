@@ -2,7 +2,9 @@ import React, { useEffect, useRef, useState } from 'react'
 import { Animated, Pressable, StyleSheet, Text, View } from 'react-native'
 import * as Haptics from 'expo-haptics'
 import Shutter from '../Shutter'
-import { LENSES, lensLabel } from './lenses'
+import { LENSES } from './lenses'
+import { useT } from '../../../i18n'
+import camStrings from '../../../i18n/strings/camera'
 import { LensThumb } from './LensArt'
 
 const ITEM = 64 // snap interval: one lens per 64 px
@@ -16,6 +18,7 @@ const THUMB = 50
 export default function LensCarousel({
   value, onChange, mode, recording, shutterBusy, onShutter, onHoldStart, onHoldEnd, disabled, hidden, note,
 }) {
+  const t = useT(camStrings)
   const [width, setWidth] = useState(0)
   const [label, setLabel] = useState(null)
   const scrollX = useRef(new Animated.Value(0)).current
@@ -33,7 +36,7 @@ export default function LensCarousel({
   const flashLabel = (i) => {
     const id = LENSES[i]?.id
     if (!id) return
-    setLabel(lensLabel(id))
+    setLabel(t(`lens_${id}`))
     labelO.stopAnimation()
     Animated.sequence([
       Animated.timing(labelO, { toValue: 1, duration: 140, useNativeDriver: true }),
@@ -139,7 +142,7 @@ export default function LensCarousel({
                     onPress={() => tapLens(i)}
                     style={styles.item}
                     accessibilityRole="button"
-                    accessibilityLabel={`${l.label} lens`}
+                    accessibilityLabel={t('lensA11y', { name: t(`lens_${l.id}`) })}
                     accessibilityState={{ selected: l.id === value }}
                   >
                     <Animated.View style={[styles.thumb, { opacity, transform: [{ scale }] }]}>

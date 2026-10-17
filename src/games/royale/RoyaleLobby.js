@@ -15,15 +15,20 @@ import { FONT, ST, StButton, stType, withAlpha } from '../studio'
 import { useNavigation } from '@react-navigation/native'
 import { UavBalancePill, openArcadeStore } from '../UavStore'
 import { useUavInventory } from '../../lib/uav'
-import { MP_GAMES, howToPlay } from '../../lib/multiplayer'
+import { MP_GAMES } from '../../lib/multiplayer'
 import { buzz } from '../../lib/gamePrefs'
 import {
-  BIG_AREA_TEXT, CUSTOM_AREA_ID, CUSTOM_DEFAULT_M, CUSTOM_MAX_M, CUSTOM_MIN_M, CUSTOM_STEPS_M, FOOT_RADIUS_M, PACE, PRESET_AREA_IDS, ROYALE_AREAS,
+  bigAreaText, CUSTOM_AREA_ID, CUSTOM_DEFAULT_M, CUSTOM_MAX_M, CUSTOM_MIN_M, CUSTOM_STEPS_M, FOOT_RADIUS_M, PACE, PRESET_AREA_IDS, ROYALE_AREAS,
   areaRadius, clampRadius, isBigArea, radiusText, resolveArea,
 } from './constants'
 import { estimateMatch } from './zone'
 import { isValidCoord } from './geo'
 import { RoyaleCover } from './RoyaleCover'
+import { translate, useT } from '../../i18n'
+import S from '../../i18n/strings/royale'
+import { howToPlayText, mpGameName } from '../../lib/games'
+
+const tr = (k, v) => translate(S, k, v)
 
 const MAX_AVATARS = 40
 
@@ -70,7 +75,7 @@ function SquareIcon({ icon, label, onPress }) {
 
 const Caption = ({ children, style }) => <Text style={[stType.small, style]}>{children}</Text>
 
-const fmtMinutes = (m) => (m >= 90 ? `${Math.floor(m / 60)} h${m % 60 ? ` ${m % 60} min` : ''}` : `${m} min`)
+const fmtMinutes = (m) => (m >= 90 ? `${Math.floor(m / 60)} h${m % 60 ? ` ${m % 60} min` : ''}` : `${m} min`) // h / min / km: unit symbols, kept as is
 const kmText = (r) => `${Math.round((r / 1000) * 10) / 10} km`
 
 /** The next custom radius stop up (dir 1) or down (dir -1) from r. */
@@ -87,18 +92,19 @@ function Stepper({ value, onMinus, onPlus, disabled }) {
     </Pressable>
   )
   return (
-    <View style={s.stepper} accessibilityRole="adjustable" accessibilityValue={{ text: `${radiusText(value)} radius` }}>
-      {btn('remove', onMinus, value <= CUSTOM_MIN_M, 'Smaller area')}
+    <View style={s.stepper} accessibilityRole="adjustable" accessibilityValue={{ text: tr('radius_val', { d: radiusText(value) }) }}>
+      {btn('remove', onMinus, value <= CUSTOM_MIN_M, tr('smaller_area'))}
       <View style={{ flex: 1, alignItems: 'center' }}>
         <Text style={s.stepValue}>{radiusText(value)}</Text>
-        <Text style={stType.small}>{`radius · ${value >= 1000 ? kmText(value) : `${Math.round(value * 3.28084)} ft`}`}</Text>
+        <Text style={stType.small}>{`${tr('radius_word')} · ${value >= 1000 ? kmText(value) : `${Math.round(value * 3.28084)} ft`}`}</Text>
       </View>
-      {btn('add', onPlus, value >= CUSTOM_MAX_M, 'Bigger area')}
+      {btn('add', onPlus, value >= CUSTOM_MAX_M, tr('bigger_area'))}
     </View>
   )
 }
 
 export function RoyaleLobby({ room, snap, onExit }) {
+  const t = useT(S)
   const insets = useArcadeInsets()
   const navigation = useNavigation()
   const uavInv = useUavInventory()
@@ -155,7 +161,7 @@ export function RoyaleLobby({ room, snap, onExit }) {
       const lng = pos?.coords?.longitude
       if (isValidCoord(lat, lng)) patch({ area: { preset: areaId, lat, lng, r: radius } })
     } catch {
-      Alert.alert('Location unavailable', 'Turn on location, or tap the map to set the centre.')
+      Alert.alert(t('loc_unavailable'), t('loc_unavailable_msg'))
     }
   }
 
@@ -190,7 +196,7 @@ export function RoyaleLobby({ room, snap, onExit }) {
 
   const share = async () => {
     try {
-      await Share.share({ message: `Join my Battle Royale on iYiYi — open Arcade › Laser Tag › Join with a code and enter ${room.code}` })
+      await Share.share({ message: t('share_msg', { code: room.code }) })
     } catch { /* dismissed */ }
   }
 
@@ -198,14 +204,14 @@ export function RoyaleLobby({ room, snap, onExit }) {
     if (!isHost) return
     const min = MP_GAMES.royale?.minPlayers || 2
     if (roster.length < min) {
-      Alert.alert('Not enough players', `Battle Royale needs at least ${min} players. Invite someone to join.`)
+      Alert.alert(t('not_enough_title'), t('not_enough_msg', { n: min }))
       return
     }
     buzz('heavy')
     if (!area) {
-      Alert.alert('Starting area', 'No centre is set yet, so the zone will start around your current location.', [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Start', onPress: () => room.setInfo({ phase: 'playing', round: (room.info.round || 0) + 1, startedAt: Date.now() }) },
+      Alert.alert(t('starting_area'), t('no_centre'), [
+        { text: t('cancel'), style: 'cancel' },
+        { text: t('start'), onPress: () => room.setInfo({ phase: 'playing', round: (room.info.round || 0) + 1, startedAt: Date.now() }) },
       ])
       return
     }
@@ -217,7 +223,7 @@ export function RoyaleLobby({ room, snap, onExit }) {
     [area?.lat, area?.lng, radius], // eslint-disable-line react-hooks/exhaustive-deps
   )
   const shown = roster.slice(0, MAX_AVATARS)
-  const how = howToPlay('royale', settings)
+  const how = howToPlayText('royale', settings)
   const coverH = 200
 
   return (
@@ -225,13 +231,13 @@ export function RoyaleLobby({ room, snap, onExit }) {
       <ScrollView contentContainerStyle={{ paddingBottom: insets.bottom + 40 }} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
         <RoyaleCover height={insets.top + 56 + coverH} glyphSize={64}>
           <View style={[s.bar, { top: insets.top + 6 }]}>
-            <SquareIcon icon="chevron-back" label="Leave lobby" onPress={onExit} />
+            <SquareIcon icon="chevron-back" label={t('leave_lobby')} onPress={onExit} />
             <UavBalancePill balance={uavInv.balance} owner={uavInv.owner} onPress={() => openArcadeStore(navigation)} />
           </View>
           <View style={s.heroInfo} pointerEvents="none">
-            <Text style={[stType.kicker, { color: ST.objective }]}>REAL WORLD · UP TO {max} PLAYERS</Text>
-            <Text style={s.heroTitle}>Battle Royale</Text>
-            <Text style={s.heroTag}>One life. Shrinking zone. Last one standing.</Text>
+            <Text style={[stType.kicker, { color: ST.objective }]}>{t('hero_kicker', { n: max })}</Text>
+            <Text style={s.heroTitle}>{mpGameName('royale', 'Battle Royale')}</Text>
+            <Text style={s.heroTag}>{t('hero_tag')}</Text>
           </View>
         </RoyaleCover>
 
@@ -239,36 +245,36 @@ export function RoyaleLobby({ room, snap, onExit }) {
           {/* Code + invites */}
           <Panel>
             <View style={s.rowBetween}>
-              <Text style={stType.label}>GAME CODE</Text>
+              <Text style={stType.label}>{t('game_code')}</Text>
               <View style={[s.tag, { borderColor: visibility === 'private' ? ST.lineStrong : withAlpha(ST.health, 0.6) }]}>
                 <Ionicons name={visibility === 'private' ? 'lock-closed' : 'globe-outline'} size={11} color={visibility === 'private' ? ST.muted : ST.health} />
-                <Text style={[s.tagText, { color: visibility === 'private' ? ST.muted : ST.health }]}>{visibility === 'private' ? 'PRIVATE' : 'PUBLIC'}</Text>
+                <Text style={[s.tagText, { color: visibility === 'private' ? ST.muted : ST.health }]}>{t(visibility === 'private' ? 'private_caps' : 'public_caps')}</Text>
               </View>
             </View>
             <View style={s.rowBetween}>
               <Text style={s.code} selectable>{room.code}</Text>
-              <StButton title="Share" tone="ghost" height={38} onPress={share} left={<Ionicons name="share-outline" size={15} color="#fff" />} />
+              <StButton title={t('share')} tone="ghost" height={38} onPress={share} left={<Ionicons name="share-outline" size={15} color="#fff" />} />
             </View>
-            <StButton title="Invite friends" onPress={() => { buzz('select'); setInviteOpen(true) }} left={<Ionicons name="person-add" size={17} color={ST.ink} />} />
+            <StButton title={t('invite_friends')} onPress={() => { buzz('select'); setInviteOpen(true) }} left={<Ionicons name="person-add" size={17} color={ST.ink} />} />
             <Caption style={{ marginTop: 8 }}>
-              {visibility === 'private' ? 'Private — only people with the code or an invite can join.' : 'Public — anyone can find this lobby under Laser Tag › Battle Royale.'}
+              {t(visibility === 'private' ? 'private_note' : 'public_note')}
             </Caption>
           </Panel>
 
           {/* Settings */}
-          <Section title="MATCH SETTINGS" />
+          <Section title={t('match_settings')} />
           <Panel>
-            <Text style={stType.label}>LOBBY</Text>
+            <Text style={stType.label}>{t('lobby')}</Text>
             <View style={s.chips}>
-              <Chip label="PUBLIC" icon="globe-outline" active={visibility === 'public'} onPress={() => setVisibility('public')} />
-              <Chip label="PRIVATE" icon="lock-closed" active={visibility === 'private'} onPress={() => setVisibility('private')} />
+              <Chip label={t('public_caps')} icon="globe-outline" active={visibility === 'public'} onPress={() => setVisibility('public')} />
+              <Chip label={t('private_caps')} icon="lock-closed" active={visibility === 'private'} onPress={() => setVisibility('private')} />
             </View>
-            <Text style={[stType.label, { marginTop: 14 }]}>STARTING AREA · RADIUS</Text>
+            <Text style={[stType.label, { marginTop: 14 }]}>{t('area_radius')}</Text>
             <View style={s.chips}>
               {PRESET_AREA_IDS.map((id) => ROYALE_AREAS[id]).filter(Boolean).map((a) => (
-                <Chip key={a.id} label={`${a.id === 'quick' ? 'QUICK · ' : ''}${a.label.toUpperCase()}`} icon={isBigArea(a.r) ? 'car-outline' : undefined} active={areaId === a.id} onPress={() => setArea(a.id)} />
+                <Chip key={a.id} label={`${a.id === 'quick' ? t('quick_prefix') : ''}${a.label.toUpperCase()}`} icon={isBigArea(a.r) ? 'car-outline' : undefined} active={areaId === a.id} onPress={() => setArea(a.id)} />
               ))}
-              <Chip label="CUSTOM" icon="options-outline" active={areaId === CUSTOM_AREA_ID} onPress={() => setArea(CUSTOM_AREA_ID)} />
+              <Chip label={t('custom')} icon="options-outline" active={areaId === CUSTOM_AREA_ID} onPress={() => setArea(CUSTOM_AREA_ID)} />
             </View>
             {areaId === CUSTOM_AREA_ID ? (
               <Stepper value={radius} disabled={!isHost} onMinus={() => setCustomRadius(stepRadius(radius, -1))} onPlus={() => setCustomRadius(stepRadius(radius, 1))} />
@@ -276,12 +282,12 @@ export function RoyaleLobby({ room, snap, onExit }) {
             {big ? (
               <View style={s.warn} accessibilityRole="alert">
                 <Ionicons name="warning" size={14} color={ST.objective} />
-                <Text style={[stType.small, { flex: 1, color: ST.text }]}>{BIG_AREA_TEXT}</Text>
+                <Text style={[stType.small, { flex: 1, color: ST.text }]}>{bigAreaText()}</Text>
               </View>
             ) : radius > FOOT_RADIUS_M + 1 ? (
-              <Caption style={{ marginTop: 8 }}>A long match on foot: the gas always gives walkers time to reach the next zone. Never play while driving.</Caption>
+              <Caption style={{ marginTop: 8 }}>{t('long_foot')}</Caption>
             ) : null}
-            <Text style={[stType.label, { marginTop: 14 }]}>GAS PACE</Text>
+            <Text style={[stType.label, { marginTop: 14 }]}>{t('gas_pace')}</Text>
             <View style={s.chips}>
               {Object.values(PACE).map((p) => (
                 <Chip key={p.id} label={p.label.toUpperCase()} active={pace === p.id} onPress={() => isHost && (buzz('select'), patch({ pace: p.id }))} />
@@ -290,15 +296,15 @@ export function RoyaleLobby({ room, snap, onExit }) {
             {estimate ? (
               <Caption style={{ marginTop: 10 }}>
                 {big
-                  ? `Estimated match: about ${fmtMinutes(estimate.minutes)} · the zone edge travels ~${estimate.walkKm} km. Early circles allow for passenger travel; the last ones are on foot.`
-                  : `Estimated match: about ${fmtMinutes(estimate.minutes)} · up to ~${estimate.walkKm} km of walking. Played on foot.`}
+                  ? t('est_big', { t: fmtMinutes(estimate.minutes), km: estimate.walkKm })
+                  : t('est_foot', { t: fmtMinutes(estimate.minutes), km: estimate.walkKm })}
               </Caption>
             ) : null}
-            {!isHost && <Caption style={{ marginTop: 10 }}>The host chooses the settings.</Caption>}
+            {!isHost && <Caption style={{ marginTop: 10 }}>{t('host_chooses')}</Caption>}
           </Panel>
 
           {/* Area map */}
-          <Section title="STARTING ZONE" action={isHost ? 'USE MY LOCATION' : null} onAction={useMyLocation} />
+          <Section title={t('starting_zone')} action={isHost ? t('use_my_loc') : null} onAction={useMyLocation} />
           <Panel style={{ padding: 10 }}>
             <View style={s.mapFrame}>
               <GameMap
@@ -307,24 +313,24 @@ export function RoyaleLobby({ room, snap, onExit }) {
                 follow
                 height={260}
                 onPick={isHost ? pickCenter : undefined}
-                hint={isHost ? 'Tap the map to move the centre' : null}
+                hint={isHost ? t('tap_move_centre') : null}
                 circles={circles}
               />
             </View>
             <Caption style={{ marginTop: 8, paddingHorizontal: 4 }}>
               {area
-                ? `${radiusText(radius)} radius. Weapons are scattered across this zone at the start. The gas starts shrinking after the drop-in${big ? '' : ' and always gives walkers time to reach the next zone'}. Never play while driving.`
+                ? t(big ? 'zone_info' : 'zone_info_foot', { d: radiusText(radius) })
                 : isHost
-                  ? (locState === 'error' ? 'Turn on location to centre the zone on you, or tap the map.' : 'Finding your location…')
-                  : 'The host is setting the starting zone.'}
+                  ? t(locState === 'error' ? 'loc_off_zone' : 'finding_loc')
+                  : t('host_setting_zone')}
             </Caption>
           </Panel>
 
           {/* Roster */}
-          <Section title={`PLAYERS · ${roster.length}/${max}`} />
+          <Section title={t('players_n', { n: roster.length, max })} />
           <Panel>
             {roster.length === 0 ? (
-              <Caption>Connecting…</Caption>
+              <Caption>{t('connecting')}</Caption>
             ) : (
               <View style={s.avatars}>
                 {shown.map((p) => (
@@ -333,13 +339,13 @@ export function RoyaleLobby({ room, snap, onExit }) {
                       <Avatar uri={p.avatar} name={p.username} size={40} />
                       {p.id === snap.hostId && <View style={s.hostBadge}><Ionicons name="star" size={9} color={ST.ink} /></View>}
                     </View>
-                    <Text style={[s.personName, p.id === snap.me?.id && { color: ST.friendly }]} numberOfLines={1}>{p.id === snap.me?.id ? 'You' : p.username}</Text>
+                    <Text style={[s.personName, p.id === snap.me?.id && { color: ST.friendly }]} numberOfLines={1}>{p.id === snap.me?.id ? t('you_name') : p.username}</Text>
                   </View>
                 ))}
                 {roster.length > shown.length && (
                   <View style={s.person}>
                     <View style={s.more}><Text style={s.moreText}>+{roster.length - shown.length}</Text></View>
-                    <Text style={s.personName}>more</Text>
+                    <Text style={s.personName}>{t('more')}</Text>
                   </View>
                 )}
               </View>
@@ -348,15 +354,15 @@ export function RoyaleLobby({ room, snap, onExit }) {
 
           {/* How to play */}
           <Pressable onPress={() => setHowOpen((v) => !v)} style={s.section} accessibilityRole="button" accessibilityState={{ expanded: howOpen }}>
-            <Text style={s.sectionTitle}>HOW TO PLAY</Text>
-            <Text style={s.sectionAction}>{howOpen ? 'HIDE' : 'SHOW'}</Text>
+            <Text style={s.sectionTitle}>{t('how_to_play')}</Text>
+            <Text style={s.sectionAction}>{t(howOpen ? 'hide' : 'show')}</Text>
           </Pressable>
           {howOpen && (
             <Panel>
-              {how.steps.map((t, i) => (
-                <View key={t} style={[s.step, i ? { marginTop: 8 } : null]}>
+              {how.steps.map((step, i) => (
+                <View key={step} style={[s.step, i ? { marginTop: 8 } : null]}>
                   <Text style={s.stepNum}>{i + 1}</Text>
-                  <Text style={[stType.body, { flex: 1 }]}>{t}</Text>
+                  <Text style={[stType.body, { flex: 1 }]}>{step}</Text>
                 </View>
               ))}
             </Panel>
@@ -364,12 +370,12 @@ export function RoyaleLobby({ room, snap, onExit }) {
 
           <View style={{ height: 18 }} />
           {isHost ? (
-            <StButton title={`Start match · ${roster.length} player${roster.length === 1 ? '' : 's'}`} height={54} disabled={snap.status !== 'connected' || roster.length < (MP_GAMES.royale?.minPlayers || 2)} onPress={start} left={<Ionicons name="flag" size={18} color={ST.ink} />} />
+            <StButton title={t(roster.length === 1 ? 'start_match_one' : 'start_match', { n: roster.length })} height={54} disabled={snap.status !== 'connected' || roster.length < (MP_GAMES.royale?.minPlayers || 2)} onPress={start} left={<Ionicons name="flag" size={18} color={ST.ink} />} />
           ) : (
-            <Caption style={{ textAlign: 'center' }}>Waiting for the host to start…</Caption>
+            <Caption style={{ textAlign: 'center' }}>{t('waiting_host')}</Caption>
           )}
-          {isHost && roster.length < 2 && <Caption style={{ textAlign: 'center', marginTop: 8 }}>Waiting for at least one more player.</Caption>}
-          <StButton title="Leave lobby" tone="ghost" onPress={onExit} style={{ marginTop: 12 }} left={<Ionicons name="exit-outline" size={16} color="#fff" />} />
+          {isHost && roster.length < 2 && <Caption style={{ textAlign: 'center', marginTop: 8 }}>{t('waiting_one_more')}</Caption>}
+          <StButton title={t('leave_lobby')} tone="ghost" onPress={onExit} style={{ marginTop: 12 }} left={<Ionicons name="exit-outline" size={16} color="#fff" />} />
         </View>
       </ScrollView>
       <StatusBarScrim height={insets.top} />

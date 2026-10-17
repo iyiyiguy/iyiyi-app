@@ -4,15 +4,18 @@ import { useFocusEffect } from '@react-navigation/native'
 import { LinearGradient } from 'expo-linear-gradient'
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons'
 import {
-  GUNS, RARITIES, setEquippedGun, ensureOwnerUnlocks, gunRatings, fireRateLabel, isArcadeOwner,
+  GUNS, RARITIES, setEquippedGun, ensureOwnerUnlocks, gunRatings, isArcadeOwner, FIRE_MODE_LABELS,
 } from '../lib/guns'
+import { useT } from '../i18n'
+import G from '../i18n/strings/gunShop'
+import { uavRulesText } from '../games/laser/uavText'
 import { loadArcadeStats, subscribeArcadeStats } from '../lib/arcadeStats'
 import { buzz } from '../lib/gamePrefs'
 import {
   AC, ArcadeBackground, useArcadeInsets, GhostButton, PlayButton, SectionHeader, arcadeText, useArcadeStatusBar,
 } from '../games/arcadeUI'
 import { FONT, ST, stType, withAlpha } from '../games/studio'
-import { UAV_RULES_TEXT, useUavInventory } from '../lib/uav'
+import { useUavInventory } from '../lib/uav'
 import { GRENADES_PER_MATCH, useGrenadeInventory } from '../lib/grenades'
 import { STICKY_BOMBS_PER_MATCH, useStickyBombInventory } from '../lib/stickyBombs'
 import { LAND_MINES_PER_MATCH, useLandMineInventory } from '../lib/landMines'
@@ -20,10 +23,10 @@ import { gunArt } from '../lib/gunArt'
 
 const PAD = 20
 const GAP = 12
-const FIRE_MODE = { single: 'Semi-auto', burst: 'Burst', automatic: 'Full-auto' }
+const FIRE_MODE = FIRE_MODE_LABELS
 
 const rarityOf = (gun) => RARITIES[gun?.rarity] || RARITIES.common
-const STAT_LABELS = { power: 'POWER', fireRate: 'FIRE RATE', accuracy: 'HIP AIM', range: 'RANGE' }
+const STAT_KEYS = { power: 'stat_power', fireRate: 'stat_fire_rate', accuracy: 'stat_hip_aim', range: 'stat_range' }
 
 function Glow({ color, size, style }) {
   return (
@@ -36,6 +39,7 @@ function Glow({ color, size, style }) {
 }
 
 export default function MyEquipScreen({ navigation }) {
+  const t = useT(G)
   const { width } = useWindowDimensions()
   const insets = useArcadeInsets()
   const [stats, setStats] = useState(null)
@@ -91,10 +95,10 @@ export default function MyEquipScreen({ navigation }) {
         {/* Header */}
         <View style={[styles.pad, styles.header]}>
           <View>
-            <Text style={styles.headerKicker}>YOUR LOADOUT</Text>
-            <Text style={styles.headerTitle}>My Equip</Text>
+            <Text style={styles.headerKicker}>{t('your_loadout')}</Text>
+            <Text style={styles.headerTitle}>{t('my_equip')}</Text>
           </View>
-          <Pressable onPress={() => navigation.goBack()} hitSlop={12} accessibilityRole="button" accessibilityLabel="Close" style={({ pressed }) => [styles.closeBtn, pressed && { opacity: 0.7 }]}>
+          <Pressable onPress={() => navigation.goBack()} hitSlop={12} accessibilityRole="button" accessibilityLabel={t('close')} style={({ pressed }) => [styles.closeBtn, pressed && { opacity: 0.7 }]}>
             <Ionicons name="close" size={22} color={ST.text} />
           </Pressable>
         </View>
@@ -110,7 +114,7 @@ export default function MyEquipScreen({ navigation }) {
             <View style={[styles.equippedStripe, { backgroundColor: rarityOf(equippedGun).color }]} />
             <View style={styles.equippedBadge}>
               <Ionicons name="checkmark-circle" size={12} color={ST.health} />
-              <Text style={styles.equippedBadgeText}>EQUIPPED</Text>
+              <Text style={styles.equippedBadgeText}>{t('equipped_caps')}</Text>
             </View>
             <View style={styles.equippedArt}>
               <Glow color={rarityOf(equippedGun).color} size={contentW * 0.7} />
@@ -128,7 +132,7 @@ export default function MyEquipScreen({ navigation }) {
               </View>
               <Text style={styles.equippedName}>{equippedGun.name}</Text>
               <Text style={styles.equippedDesc}>{equippedGun.description}</Text>
-              {equippedGun.weakness ? <Text style={styles.equippedTrade}>{`Trade-off: ${equippedGun.weakness}`}</Text> : null}
+              {equippedGun.weakness ? <Text style={styles.equippedTrade}>{t('tradeoff', { text: equippedGun.weakness })}</Text> : null}
               {/* Stats */}
               <View style={styles.statsRow}>
                 {Object.entries(gunRatings(equippedGun)).map(([k, v]) => (
@@ -136,7 +140,7 @@ export default function MyEquipScreen({ navigation }) {
                     <View style={styles.statBarBg}>
                       <View style={[styles.statBarFill, { width: `${Math.round(v * 100)}%`, backgroundColor: rarityOf(equippedGun).color }]} />
                     </View>
-                    <Text style={styles.statLabel}>{STAT_LABELS[k] || k.toUpperCase()}</Text>
+                    <Text style={styles.statLabel}>{STAT_KEYS[k] ? t(STAT_KEYS[k]).toUpperCase() : k.toUpperCase()}</Text>
                   </View>
                 ))}
               </View>
@@ -150,42 +154,42 @@ export default function MyEquipScreen({ navigation }) {
             <View style={styles.summaryCard}>
               <Ionicons name="flash" size={18} color={ST.friendly} />
               <Text style={styles.summaryValue}>{ownedGuns.length}<Text style={styles.summaryOf}>/{GUNS.length}</Text></Text>
-              <Text style={styles.summaryLabel}>WEAPONS</Text>
+              <Text style={styles.summaryLabel}>{t('weapons_caps')}</Text>
             </View>
             <View style={styles.summaryCard}>
               <MaterialCommunityIcons name="satellite-variant" size={18} color={ST.enemy} />
               <Text style={styles.summaryValue}>{uav.owner ? '∞' : uav.balance}</Text>
-              <Text style={styles.summaryLabel}>UAVS</Text>
+              <Text style={styles.summaryLabel}>{t('uavs_caps')}</Text>
             </View>
             <View style={styles.summaryCard}>
               <MaterialCommunityIcons name="bomb" size={18} color={ST.objective} />
               <Text style={styles.summaryValue}>{grenades.owner ? '∞' : grenades.balance}</Text>
-              <Text style={styles.summaryLabel}>GRENADES</Text>
-              <Text style={styles.summaryLimit}>{`MAX ${GRENADES_PER_MATCH}/MATCH`}</Text>
+              <Text style={styles.summaryLabel}>{t('grenades_caps')}</Text>
+              <Text style={styles.summaryLimit}>{t('max_per_match', { n: GRENADES_PER_MATCH })}</Text>
             </View>
             <View style={styles.summaryCard}>
               <Image source={require('../../assets/guns/stickybomb.png')} style={styles.summaryImg} resizeMode="contain" />
               <Text style={styles.summaryValue}>{stickyBombs.owner ? '∞' : stickyBombs.balance}</Text>
-              <Text style={styles.summaryLabel}>STICKY</Text>
-              <Text style={styles.summaryLimit}>{`MAX ${STICKY_BOMBS_PER_MATCH}/MATCH`}</Text>
+              <Text style={styles.summaryLabel}>{t('sticky_caps')}</Text>
+              <Text style={styles.summaryLimit}>{t('max_per_match', { n: STICKY_BOMBS_PER_MATCH })}</Text>
             </View>
             <View style={styles.summaryCard}>
               <Image source={require('../../assets/guns/landmine.png')} style={styles.summaryImg} resizeMode="contain" />
               <Text style={styles.summaryValue}>{landMines.owner ? '∞' : landMines.balance}</Text>
-              <Text style={styles.summaryLabel}>MINES</Text>
-              <Text style={styles.summaryLimit}>{`MAX ${LAND_MINES_PER_MATCH}/MATCH`}</Text>
+              <Text style={styles.summaryLabel}>{t('mines_caps')}</Text>
+              <Text style={styles.summaryLimit}>{t('max_per_match', { n: LAND_MINES_PER_MATCH })}</Text>
             </View>
             <View style={styles.summaryCard}>
               <Ionicons name="diamond" size={16} color={ST.objective} />
               <Text style={styles.summaryValue}>{points.toLocaleString()}</Text>
-              <Text style={styles.summaryLabel}>COINS</Text>
+              <Text style={styles.summaryLabel}>{t('coins_caps')}</Text>
             </View>
           </View>
-          <Text style={styles.limitsNote}>{`Fair play: everything you own stays yours, but each match caps what you can use. ${UAV_RULES_TEXT}`}</Text>
+          <Text style={styles.limitsNote}>{`${t('fair_play')} ${uavRulesText()}`}</Text>
         </View>
 
         {/* Owned weapons grid */}
-        <SectionHeader title={`Owned Weapons (${ownedGuns.length})`} style={[styles.pad, { marginTop: 20 }]} />
+        <SectionHeader title={t('owned_weapons', { n: ownedGuns.length })} style={[styles.pad, { marginTop: 20 }]} />
         <View style={[styles.pad, styles.grid]}>
           {ownedGuns.map((gun) => {
             const r = rarityOf(gun)
@@ -226,12 +230,12 @@ export default function MyEquipScreen({ navigation }) {
                       {isEquipped ? (
                         <View style={[styles.pill, { backgroundColor: withAlpha(ST.health, 0.12), borderWidth: 1, borderColor: withAlpha(ST.health, 0.6) }]}>
                           <Ionicons name="checkmark-circle" size={12} color={ST.health} style={{ marginRight: 4 }} />
-                          <Text style={[styles.pillText, { color: ST.health }]}>Equipped</Text>
+                          <Text style={[styles.pillText, { color: ST.health }]}>{t('equipped')}</Text>
                         </View>
                       ) : (
                         <View style={[styles.pill, { backgroundColor: withAlpha(ST.friendly, 0.1), borderWidth: 1, borderColor: withAlpha(ST.friendly, 0.6) }]}>
                           <Ionicons name="swap-horizontal" size={12} color={ST.friendly} style={{ marginRight: 4 }} />
-                          <Text style={[styles.pillText, { color: ST.friendly }]}>Equip</Text>
+                          <Text style={[styles.pillText, { color: ST.friendly }]}>{t('equip')}</Text>
                         </View>
                       )}
                     </View>
@@ -245,9 +249,9 @@ export default function MyEquipScreen({ navigation }) {
         {ownedGuns.length === 0 && (
           <View style={[styles.pad, { alignItems: 'center', marginTop: 20 }]}>
             <Ionicons name="bag-handle-outline" size={48} color={AC.faint} />
-            <Text style={[arcadeText.caption, { textAlign: 'center', marginTop: 12 }]}>No weapons owned yet.</Text>
+            <Text style={[arcadeText.caption, { textAlign: 'center', marginTop: 12 }]}>{t('no_weapons')}</Text>
             <View style={{ marginTop: 16 }}>
-              <PlayButton title="Visit Shop" icon="bag-handle" onPress={() => navigation.navigate('GunShop')} />
+              <PlayButton title={t('visit_shop')} icon="bag-handle" onPress={() => navigation.navigate('GunShop')} />
             </View>
           </View>
         )}
@@ -259,7 +263,7 @@ export default function MyEquipScreen({ navigation }) {
             style={({ pressed }) => [styles.shopLink, pressed && { opacity: 0.7 }]}
           >
             <Ionicons name="bag-handle" size={16} color={ST.friendly} />
-            <Text style={styles.shopLinkText}>Browse the Shop</Text>
+            <Text style={styles.shopLinkText}>{t('browse_shop')}</Text>
             <Ionicons name="chevron-forward" size={14} color={ST.friendly} />
           </Pressable>
         </View>

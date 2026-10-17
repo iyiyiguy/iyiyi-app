@@ -13,8 +13,11 @@ import * as Location from 'expo-location'
 import * as ImagePicker from 'expo-image-picker'
 import { FONT, ST, StButton, stType, withAlpha } from '../studio'
 import { makeThumbnail, uploadStationPhoto } from '../../lib/arcadeMedia'
-import { STATION_OBJECTS, finiteAlt, floorIndex, floorLabel, makePlaceStation, MAX_AUTO_STATIONS } from './engine'
+import { STATION_OBJECTS, finiteAlt, floorIndex, makePlaceStation, MAX_AUTO_STATIONS } from './engine'
 import { SETUP_TAG, calibrate, refPressureAlt, refTag, restoreRef, useBaro } from './baro'
+import { useT } from '../../i18n'
+import B from '../../i18n/strings/besideThem'
+import { floorName, stationName } from './text'
 const WEAK_ACC_M = 15
 
 function suggestName(taken, skip) {
@@ -24,6 +27,7 @@ function suggestName(taken, skip) {
 }
 
 export function PlacePanel({ room, stations, meId }) {
+  const t = useT(B)
   const baro = useBaro(true)
   const [fix, setFix] = useState(null) // { lat, lng, acc }
   const [locErr, setLocErr] = useState(null)
@@ -46,7 +50,7 @@ export function PlacePanel({ room, stations, meId }) {
       try {
         const perm = await Location.requestForegroundPermissionsAsync()
         if (cancelled) return
-        if (perm.status !== 'granted') { setLocErr('Location is off. Allow it to place stations.'); return }
+        if (perm.status !== 'granted') { setLocErr(t('pl_loc_off')); return }
         sub = await Location.watchPositionAsync(
           { accuracy: Location.Accuracy.BestForNavigation, timeInterval: 1000, distanceInterval: 0 },
           (l) => setFix({ lat: l.coords.latitude, lng: l.coords.longitude, acc: l.coords.accuracy ?? null }),
@@ -54,7 +58,7 @@ export function PlacePanel({ room, stations, meId }) {
         )
         if (cancelled) sub?.remove()
       } catch {
-        if (!cancelled) setLocErr('Couldn’t read your location.')
+        if (!cancelled) setLocErr(t('pl_loc_error'))
       }
     })()
     return () => { cancelled = true; sub?.remove() }
@@ -85,7 +89,7 @@ export function PlacePanel({ room, stations, meId }) {
         ? { ...st, alt: Math.round((st.alt - shift) * 10) / 10, floor: floorIndex(st.alt - shift) + 1 }
         : st)),
     })
-    setFlash('Start floor set here. Floors are counted from this one.')
+    setFlash(t('pl_floor_set'))
     clearTimeout(flashTimer.current)
     flashTimer.current = setTimeout(() => setFlash(null), 3500)
   }
@@ -94,17 +98,17 @@ export function PlacePanel({ room, stations, meId }) {
     setError(null)
     try {
       const perm = await ImagePicker.requestCameraPermissionsAsync()
-      if (!perm.granted) { setError('Camera is off. You can place the station without a photo.'); return }
+      if (!perm.granted) { setError(t('pl_cam_off')); return }
       const res = await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 0.6, allowsEditing: false })
       if (!res.canceled && res.assets?.[0]?.uri) setPhotoUri(res.assets[0].uri)
     } catch {
-      setError('Couldn’t open the camera.')
+      setError(t('pl_cam_error'))
     }
   }
 
   const place = async () => {
     if (busy) return
-    if (!fix) { setError('Waiting for GPS…'); return }
+    if (!fix) { setError(t('pl_wait_gps')); return }
     setBusy(true)
     setError(null)
     // Position and floor at the moment of the tap; the photo is processed afterwards.
@@ -125,7 +129,7 @@ export function PlacePanel({ room, stations, meId }) {
       setName('')
       setPhotoUri(null)
       setSuggested(suggestName([...latest, st].map((x) => x.name)))
-      setFlash(`${st.name} placed${st.floor ? ` · Floor ${st.floor}` : ''}.`)
+      setFlash(st.floor ? t('pl_placed_floor', { name: stationName(st), floor: floorName(st.floor - 1) }) : t('pl_placed', { name: stationName(st) }))
       clearTimeout(flashTimer.current)
       flashTimer.current = setTimeout(() => setFlash(null), 3500)
     }
@@ -135,50 +139,50 @@ export function PlacePanel({ room, stations, meId }) {
   const full = stations.length >= MAX_AUTO_STATIONS
   const weak = fix && Number.isFinite(fix.acc) && fix.acc > WEAK_ACC_M
   const floorText = noBaro
-    ? 'No barometer on this phone — floors are off.'
+    ? t('pl_no_baro')
     : baro.status === 'ready' && finiteAlt(alt)
-      ? `${floorLabel(alt)} (${alt >= 0 ? '+' : ''}${alt.toFixed(1)} m)`
-      : 'Reading the barometer…'
+      ? `${floorName(floorIndex(alt))} (${alt >= 0 ? '+' : ''}${alt.toFixed(1)} m)`
+      : t('pl_reading_baro')
 
   return (
     <View style={styles.wrap}>
       <View style={styles.readouts}>
         <View style={styles.readout}>
-          <Text style={stType.label}>GPS</Text>
-          <Text style={[stType.small, { color: weak ? ST.objective : ST.text }]}>{locErr || (fix ? `±${Math.round(fix.acc ?? 0)} m${weak ? ' · weak (ok indoors)' : ''}` : 'Finding you…')}</Text>
+          <Text style={stType.label}>{t('gps')}</Text>
+          <Text style={[stType.small, { color: weak ? ST.objective : ST.text }]}>{locErr || (fix ? `±${Math.round(fix.acc ?? 0)} m${weak ? ` · ${t('pl_weak_ok')}` : ''}` : t('pl_finding_you'))}</Text>
         </View>
         <View style={styles.readout}>
-          <Text style={stType.label}>Floor</Text>
+          <Text style={stType.label}>{t('floor')}</Text>
           <Text style={[stType.small, { color: noBaro ? ST.objective : ST.text }]}>{floorText}</Text>
         </View>
       </View>
       {!noBaro ? (
-        <Pressable onPress={resetFloor} hitSlop={6} accessibilityRole="button" accessibilityLabel="Set the start floor here">
-          <Text style={[stType.small, { color: ST.friendly, marginBottom: 8, fontSize: 12 }]}>Start floor = where the game starts. Set it here</Text>
+        <Pressable onPress={resetFloor} hitSlop={6} accessibilityRole="button" accessibilityLabel={t('pl_set_floor_a11y')}>
+          <Text style={[stType.small, { color: ST.friendly, marginBottom: 8, fontSize: 12 }]}>{t('pl_start_floor')}</Text>
         </Pressable>
       ) : null}
       <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
         <TextInput
           value={name}
           onChangeText={setName}
-          placeholder={suggested}
+          placeholder={stationName(suggested)}
           placeholderTextColor={ST.faint}
           style={styles.input}
           maxLength={40}
-          accessibilityLabel="Station name"
+          accessibilityLabel={t('pl_station_name')}
         />
-        <Pressable onPress={() => setSuggested(suggestName(stations.map((s) => s.name), suggested))} style={styles.iconBtn} accessibilityRole="button" accessibilityLabel="Suggest another name">
+        <Pressable onPress={() => setSuggested(suggestName(stations.map((s) => s.name), suggested))} style={styles.iconBtn} accessibilityRole="button" accessibilityLabel={t('pl_suggest_name')}>
           <Ionicons name="shuffle-outline" size={18} color={ST.friendly} />
         </Pressable>
-        <Pressable onPress={photoUri ? () => setPhotoUri(null) : takePhoto} style={styles.iconBtn} accessibilityRole="button" accessibilityLabel={photoUri ? 'Remove the photo hint' : 'Add a photo of the spot as a hint'}>
+        <Pressable onPress={photoUri ? () => setPhotoUri(null) : takePhoto} style={styles.iconBtn} accessibilityRole="button" accessibilityLabel={photoUri ? t('pl_remove_photo') : t('pl_add_photo')}>
           {photoUri ? <Image source={{ uri: photoUri }} style={styles.preview} /> : <Ionicons name="camera-outline" size={18} color={ST.friendly} />}
         </Pressable>
       </View>
-      <Text style={[stType.small, { fontSize: 11, marginTop: 4 }]}>Leave the name empty to use “{suggested}”. The photo is optional — a hint for players.</Text>
+      <Text style={[stType.small, { fontSize: 11, marginTop: 4 }]}>{t('pl_name_hint', { name: stationName(suggested) })}</Text>
       {error ? <Text style={[stType.small, { color: ST.objective, marginTop: 6 }]}>{error}</Text> : null}
       {flash ? <Text style={[stType.small, { color: ST.health, marginTop: 6 }]}>{flash}</Text> : null}
       <StButton
-        title={full ? `Max ${MAX_AUTO_STATIONS} stations` : busy ? 'Placing…' : 'Place station here'}
+        title={full ? t('pl_max', { n: MAX_AUTO_STATIONS }) : busy ? t('pl_placing') : t('pl_place_here')}
         tone="objective"
         height={46}
         disabled={busy || full || !fix}
@@ -187,7 +191,7 @@ export function PlacePanel({ room, stations, meId }) {
         style={{ marginTop: 10 }}
       />
       <Text style={[stType.small, { fontSize: 11, marginTop: 6 }]}>
-        Stand right at the spot (a doorway, the fridge, the top of the stairs). Players must come within about 15 m{noBaro ? '' : ' on the same floor'} to start its task.
+        {noBaro ? t('pl_stand_hint') : t('pl_stand_hint_floor')}
       </Text>
     </View>
   )

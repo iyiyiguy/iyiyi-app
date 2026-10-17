@@ -6,6 +6,10 @@ import * as Guns from '../../lib/guns'
 import { zoneDamage as laserZoneDamage } from '../laser/vision'
 import { minShotGapMs as laserMinShotGapMs } from '../laser/aimRules'
 import { LOOT_RARITY, MELEE_ID, ROCKET_GAP_MS } from './constants'
+import { translate } from '../../i18n'
+import S from '../../i18n/strings/royale'
+
+const tr = (k, v) => translate(S, k, v)
 
 const FALLBACK = {
   id: 'pistol', name: 'Starter Pistol', icon: '🔫', fireMode: 'single', shotsPerClick: 1, fireRate: 3,
@@ -123,7 +127,12 @@ export const RARITY_COLORS = {
   epic: '#b06cff',
   legendary: '#ffb21e',
 }
-export const RARITY_LABEL = { common: 'COMMON', rare: 'RARE', epic: 'EPIC', legendary: 'LEGENDARY' }
+export const RARITY_LABEL = {
+  get common() { return tr('rarity_common') },
+  get rare() { return tr('rarity_rare') },
+  get epic() { return tr('rarity_epic') },
+  get legendary() { return tr('rarity_legendary') },
+}
 
 /** Beams per trigger pull (1 for automatic weapons). */
 export const shotsPerPull = (w) => (w?.automatic ? 1 : Math.max(1, Math.min(5, w?.shotsPerClick || 1)))

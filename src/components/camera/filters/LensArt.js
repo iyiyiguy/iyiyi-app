@@ -8,6 +8,8 @@ import Svg, {
 import SocialIcon from '../../SocialIcon'
 import { FilterArt, IY_LOGO } from './FilterArt'
 import { OVERLAY_BOX, isLegacyLens } from './lenses'
+import { translate } from '../../../i18n'
+import camStrings from '../../../i18n/strings/camera'
 
 // Art for the AR lenses. Each one draws inside an OVERLAY_BOX square (pivot = bottom-centre,
 // see lenses.js for where each lens's art sits in the box). Vector art (react-native-svg) so it
@@ -392,13 +394,13 @@ function IdCard({ name, platforms, live, onReady }) {
                   {list.map((p) => <SocialIcon key={p} platform={p} size={9.5} color="#ffffff" />)}
                 </View>
               ) : (
-                <Text style={styles.cardSub} numberOfLines={1}>on iYiYi</Text>
+                <Text style={styles.cardSub} numberOfLines={1}>{translate(camStrings, 'onIyiyi')}</Text>
               )}
             </View>
           </View>
           <View style={styles.cardCta}>
             <Ionicons name="person-add" size={10} color="#7a2cff" />
-            <Text style={styles.cardCtaText}>Follow me</Text>
+            <Text style={styles.cardCtaText}>{translate(camStrings, 'followMe')}</Text>
           </View>
         </View>
       </View>

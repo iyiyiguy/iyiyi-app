@@ -9,29 +9,32 @@ import { Ionicons } from '@expo/vector-icons'
 import { reportQueue, resolveReport } from '../lib/sounds'
 import { useSoundPreview } from '../lib/soundPreview'
 import { MC } from '../components/SoundRow'
+import { useT, translate } from '../i18n'
+import strings from '../i18n/strings/music'
 
 const when = (iso) => {
   if (!iso) return ''
   const ms = new Date(iso).getTime() - Date.now()
   const h = Math.round(Math.abs(ms) / 36e5)
-  return ms > 0 ? `mutes in ${h}h` : `muted ${h}h ago`
+  return ms > 0 ? translate(strings, 'mutesIn', { h }) : translate(strings, 'mutedAgo', { h })
 }
 
 export default function CopyrightReviewScreen({ navigation }) {
+  const t = useT(strings)
   const insets = useSafeAreaInsets()
   const [rows, setRows] = useState(null)
   const [busy, setBusy] = useState(null)
   const preview = useSoundPreview()
-  const load = useCallback(() => { reportQueue().then(setRows).catch((e) => { setRows([]); Alert.alert('Couldn’t load reports', e?.message) }) }, [])
+  const load = useCallback(() => { reportQueue().then(setRows).catch((e) => { setRows([]); Alert.alert(translate(strings, 'loadReportsFailed'), e?.message) }) }, [])
   useFocusEffect(useCallback(() => { load(); return () => preview.stop() }, [load]))
 
   const act = (r, action) => {
-    const labels = { dismiss: 'Dismiss reports', takedown: 'Take it down', reinstate: 'Reinstate' }
-    Alert.alert(`${labels[action]}?`, `"${r.title}" by @${r.creator || 'member'}`, [
-      { text: 'Cancel', style: 'cancel' },
+    const labels = { dismiss: t('dismissReports'), takedown: t('takeItDown'), reinstate: t('reinstate') }
+    Alert.alert(t('actionQ', { action: labels[action] }), t('byCreator', { title: r.title, creator: r.creator || t('member') }), [
+      { text: t('cancel'), style: 'cancel' },
       { text: labels[action], style: action === 'takedown' ? 'destructive' : 'default', onPress: async () => {
         setBusy(r.sound_id)
-        try { await resolveReport(r.sound_id, action); load() } catch (e) { Alert.alert('Failed', e?.message) } finally { setBusy(null) }
+        try { await resolveReport(r.sound_id, action); load() } catch (e) { Alert.alert(t('failed'), e?.message) } finally { setBusy(null) }
       } },
     ])
   }
@@ -40,7 +43,7 @@ export default function CopyrightReviewScreen({ navigation }) {
     <View style={[st.screen, { paddingTop: Platform.OS === 'web' ? 12 : insets.top + 4 }]}>
       <View style={st.top}>
         <Pressable onPress={() => navigation.goBack()} hitSlop={10}><Ionicons name="chevron-back" size={26} color={MC.text} /></Pressable>
-        <Text style={st.topTitle}>Copyright reports</Text>
+        <Text style={st.topTitle}>{t('copyrightReports')}</Text>
         <Pressable onPress={load} hitSlop={10}><Ionicons name="refresh" size={20} color={MC.text} /></Pressable>
       </View>
       {rows == null ? <ActivityIndicator color={MC.accent} style={{ marginTop: 30 }} /> : (
@@ -48,7 +51,7 @@ export default function CopyrightReviewScreen({ navigation }) {
           data={rows}
           keyExtractor={(r) => r.sound_id}
           contentContainerStyle={{ padding: 16, paddingBottom: insets.bottom + 40, maxWidth: 820, width: '100%', alignSelf: 'center' }}
-          ListEmptyComponent={<Text style={st.empty}>No copyright reports right now.</Text>}
+          ListEmptyComponent={<Text style={st.empty}>{t('noReports')}</Text>}
           renderItem={({ item: r }) => {
             const playing = preview.playingId === r.sound_id
             const open = Number(r.open_reports) > 0
@@ -60,15 +63,15 @@ export default function CopyrightReviewScreen({ navigation }) {
                   </Pressable>
                   <Pressable style={{ flex: 1 }} onPress={() => navigation.navigate('Sound', { soundId: r.sound_id })}>
                     <Text style={st.title} numberOfLines={1}>{r.title}</Text>
-                    <Text style={st.sub}>@{r.creator || 'member'} · {r.status}{r.taken_down ? ' · taken down' : r.muted ? ' · muted' : ''}</Text>
-                    <Text style={[st.sub, open && { color: MC.bad }]}>{open ? `${r.open_reports} open · ${when(r.mute_at)}` : 'Resolved'}</Text>
+                    <Text style={st.sub}>@{r.creator || t('member')} · {r.status}{r.taken_down ? t('takenDownSuffix') : r.muted ? t('mutedSuffix') : ''}</Text>
+                    <Text style={[st.sub, open && { color: MC.bad }]}>{open ? t('openReports', { n: r.open_reports, when: when(r.mute_at) }) : t('resolved')}</Text>
                   </Pressable>
                 </View>
                 {(r.reasons || []).filter(Boolean).map((x, i) => <Text key={i} style={st.reason}>“{x}”</Text>)}
                 <View style={st.actions}>
-                  {open ? <Btn label="Dismiss" onPress={() => act(r, 'dismiss')} disabled={busy === r.sound_id} /> : null}
-                  {!r.taken_down ? <Btn label="Take down" danger onPress={() => act(r, 'takedown')} disabled={busy === r.sound_id} /> : null}
-                  {r.taken_down || r.muted ? <Btn label="Reinstate" ok onPress={() => act(r, 'reinstate')} disabled={busy === r.sound_id} /> : null}
+                  {open ? <Btn label={t('dismiss')} onPress={() => act(r, 'dismiss')} disabled={busy === r.sound_id} /> : null}
+                  {!r.taken_down ? <Btn label={t('takeDown')} danger onPress={() => act(r, 'takedown')} disabled={busy === r.sound_id} /> : null}
+                  {r.taken_down || r.muted ? <Btn label={t('reinstate')} ok onPress={() => act(r, 'reinstate')} disabled={busy === r.sound_id} /> : null}
                 </View>
               </View>
             )

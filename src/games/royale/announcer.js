@@ -7,6 +7,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { buzz, getPrefs } from '../../lib/gamePrefs'
 import { playSfx } from './weaponsAdapter'
+import { getLanguage, translate } from '../../i18n'
+import S from '../../i18n/strings/royale'
+
+const tr = (k, v) => translate(S, k, v)
+// Voice language for the app language (callouts are shown and spoken in it).
+const VOICE = { en: 'en-US', es: 'es-ES', zh: 'zh-CN', ja: 'ja-JP', ko: 'ko-KR', fr: 'fr-FR', de: 'de-DE', pt: 'pt-BR', ar: 'ar-SA', hi: 'hi-IN', tl: 'fil-PH' }
 
 const TONES = {
   // Studio role colours: info = friendly, warn = objective/zone, danger = enemy, good = health.
@@ -46,6 +52,13 @@ function voiceEnabled() {
 // Banner text -> something a voice can read: no bullets/dashes, units spelled out, damage
 // rates (" −5/s") dropped, "#3" -> "number 3".
 export function spokenText(title, sub) {
+  // The unit / number rewrites below are English; other languages only get the punctuation clean-up.
+  if (getLanguage() !== 'en') {
+    const tidy = (s) => String(s ?? '').replace(/[−-]\s?\d+(\.\d+)?\/s/g, '').replace(/[·•—–|]/g, ',').replace(/\s*,\s*(,\s*)*/g, ', ').replace(/\s+/g, ' ').replace(/^[\s,]+|[\s,]+$/g, '')
+    const a = tidy(title)
+    const b = tidy(sub)
+    return a && b ? `${a}. ${b}` : a || b
+  }
   const clean = (s) => String(s ?? '')
     .replace(/[−-]\s?\d+(\.\d+)?\/s/g, '')
     .replace(/#(\d+)/g, 'number $1')
@@ -91,7 +104,7 @@ export function speakCallout(text, tone = 'info') {
     stopSpeaking() // never overlap: the newest callout wins
     const max = Number(Speech.maxSpeechInputLength) || 4000
     Speech.speak(String(text).slice(0, Math.min(max, 400)), {
-      language: 'en-US',
+      language: VOICE[getLanguage()] || 'en-US',
       rate: def.rate,
       pitch: def.pitch,
       onError: () => {},
@@ -146,7 +159,7 @@ export function usePlayersRemainingCallout(count, announce, enabled = true) {
       if (hit == null || Date.now() - s.at < 15000) return
       s.said.add(hit)
       s.at = Date.now()
-      announce(n === 2 ? 'Final two!' : `${n} players remaining`, { tone: n <= 3 ? 'warn' : 'info', ms: 3000 })
+      announce(n === 2 ? tr('final_two') : tr('n_remaining', { n }), { tone: n <= 3 ? 'warn' : 'info', ms: 3000 })
     } catch {
       // Callouts are optional.
     }

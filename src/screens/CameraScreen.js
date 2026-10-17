@@ -45,7 +45,8 @@ import {
 } from '../lib/cameraFilters'
 import { openProfile } from '../lib/profileNav'
 import { shareProfileLink } from '../lib/shareLinks'
-import { useT } from '../i18n'
+import { translate, useT } from '../i18n'
+import camStrings from '../i18n/strings/camera'
 import reviewStrings from '../i18n/strings/cameraReview'
 import { colors, radii, type } from '../theme'
 import { apiJson } from '../lib/api'
@@ -157,7 +158,7 @@ function saveToAlbum(uri) {
 async function getUserId() {
   const { data } = await supabase.auth.getSession()
   const userId = data?.session?.user?.id
-  if (!userId) throw new Error('You need to be signed in to post.')
+  if (!userId) throw new Error(translate(camStrings, 'signInToPost'))
   return userId
 }
 
@@ -244,6 +245,8 @@ export default function CameraScreen({ navigation, route }) {
   const isFocused = useIsFocused()
   const tr = useT(reviewStrings)
   const tc = useT(cameraStrings)
+  const tk = useT(camStrings)
+  const greenName = (bg) => tk(`bg_${bg.id}`)
   const { width: winWidth, height: winHeight } = useWindowDimensions()
   const isInline = route?.params?.inline ?? false
   const cardSize = isInline
@@ -514,7 +517,7 @@ export default function CameraScreen({ navigation, route }) {
     greenOnRef.current = ok
     if (!ok) {
       setGreenBg(null)
-      flash('Green screen needs a moment for the camera to start. Try again.')
+      flash(tk('greenWait'))
     }
   }
   const chooseGreen = async (bg) => {
@@ -523,7 +526,7 @@ export default function CameraScreen({ navigation, route }) {
       try {
         const r = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.9 })
         if (r.canceled || !r.assets?.[0]?.uri) return
-        bg = { id: 'photo', uri: r.assets[0].uri, label: 'Photo' }
+        bg = { id: 'photo', uri: r.assets[0].uri, label: tk('bg_photo') }
       } catch { return }
     }
     greenBgRef.current = bg
@@ -538,12 +541,12 @@ export default function CameraScreen({ navigation, route }) {
     flashShutter()
     const uri = await captureGreenScreenPhoto()
     if (uri) afterCapture({ type: 'photo', uri, fx: null })
-    else Alert.alert("Couldn't take the photo", 'Please try again.')
+    else Alert.alert(tk('photoFailTitle'), tk('tryAgain'))
   }
   const startGreenVideo = async (startLocked) => {
     const mic = await ensureMic()
     const ok = await startGreenScreenRecording(!!mic)
-    if (!ok) { Alert.alert("Couldn't start recording", 'Give the green screen a second to start, then try again.'); return }
+    if (!ok) { Alert.alert(tk('recStartFailTitle'), tk('greenRecWait')); return }
     greenRecRef.current = true
     recording.current = true
     handsFree.current = startLocked
@@ -566,7 +569,7 @@ export default function CameraScreen({ navigation, route }) {
     greenRecRef.current = false
     resetRecordingState()
     if (uri) afterCapture({ type: 'video', uri, postUri: uri })
-    else if (mounted.current) Alert.alert("Video didn't save", 'Please try recording again.')
+    else if (mounted.current) Alert.alert(tk('videoFailTitle'), tk('recordAgain'))
   }
   // A fresh preview mounts whenever the screen regains focus.
   useEffect(() => {
@@ -576,11 +579,11 @@ export default function CameraScreen({ navigation, route }) {
     console.warn('Camera failed to start', e?.message ?? e)
     cameraReadyRef.current = false
     if (mountErrors.current >= 2) {
-      flash("Camera couldn't start. Close it and try again.")
+      flash(tk('camFailClose'))
       return
     }
     mountErrors.current += 1
-    flash("Camera couldn't start - trying again…")
+    flash(tk('camFailRetry'))
     setTimeout(() => { if (mounted.current) setCamKey((k) => k + 1) }, 600)
   }
   // Resolves once the preview is up (and, for video, the session has had time to add the
@@ -807,16 +810,16 @@ export default function CameraScreen({ navigation, route }) {
             lastError = e
           }
         }
-        if (failed && failed === (item.shots || []).length) throw lastError || new Error('The burst could not be posted.')
-        if (failed) Alert.alert('Some photos didn’t post', `${failed} of ${item.shots.length} burst photos couldn't be posted.`)
+        if (failed && failed === (item.shots || []).length) throw lastError || new Error(tk('burstPostFail'))
+        if (failed) Alert.alert(tk('somePhotosTitle'), tk('somePhotosMsg', { failed, total: item.shots.length }))
       }
       ok = true
     } catch (e) {
       console.warn('Camera post failed', e?.message ?? e, e?.code ?? '')
       // The original is already in the camera roll (saved at capture).
-      const msg = "Couldn't post — saved to your camera roll"
+      const msg = tk('postFailSaved')
       if (mounted.current) flash(msg)
-      else Alert.alert(msg, e?.message ?? 'Please try again.')
+      else Alert.alert(msg, e?.message ?? tk('tryAgain'))
     } finally {
       postingCount.current -= 1
       if (mounted.current) setPosting(postingCount.current)
@@ -887,9 +890,9 @@ export default function CameraScreen({ navigation, route }) {
   const backToEditor = () => {
     const c = composing
     if (c?.item?.type === 'photo') {
-      Alert.alert('Discard this photo?', 'It’s still saved in your camera roll.', [
-        { text: 'Keep', style: 'cancel' },
-        { text: 'Discard', style: 'destructive', onPress: () => setComposing(null) },
+      Alert.alert(tk('discardPhotoTitle'), tk('stillSaved'), [
+        { text: tk('keep'), style: 'cancel' },
+        { text: tk('discard'), style: 'destructive', onPress: () => setComposing(null) },
       ])
       return
     }
@@ -902,9 +905,9 @@ export default function CameraScreen({ navigation, route }) {
     if (c) publish({ ...c.item, edit: c.edit, soundId: c.sound?.id || null, caption })
   }
   const cancelEdit = () => {
-    Alert.alert('Discard this video?', 'It’s still saved in your camera roll.', [
-      { text: 'Keep editing', style: 'cancel' },
-      { text: 'Discard', style: 'destructive', onPress: () => setEditing(null) },
+    Alert.alert(tk('discardVideoTitle'), tk('stillSaved'), [
+      { text: tk('keepEditing'), style: 'cancel' },
+      { text: tk('discard'), style: 'destructive', onPress: () => setEditing(null) },
     ])
   }
 
@@ -965,10 +968,10 @@ export default function CameraScreen({ navigation, route }) {
       if (photo?.uri) {
         afterCapture({ type: 'photo', uri: photo.uri, width: photo.width, height: photo.height, fx })
       } else {
-        Alert.alert("Couldn't take the photo", 'No image came back from the camera - please try again.')
+        Alert.alert(tk('photoFailTitle'), tk('noImage'))
       }
     } catch (e) {
-      Alert.alert("Couldn't take the photo", e?.message ?? 'Please try again.')
+      Alert.alert(tk('photoFailTitle'), e?.message ?? tk('tryAgain'))
     } finally {
       holdFilter.current = false
     }
@@ -1031,7 +1034,7 @@ export default function CameraScreen({ navigation, route }) {
     }
     const results = (await Promise.all(inFlight)).filter((r) => r?.uri)
     if (!results.length) {
-      if (mounted.current && seqRef.current === token) Alert.alert('Burst failed', 'The camera didn’t return any photos - please try again.')
+      if (mounted.current && seqRef.current === token) Alert.alert(tk('burstFailTitle'), tk('burstFailMsg'))
       return
     }
     if (results.length === 1) {
@@ -1060,7 +1063,7 @@ export default function CameraScreen({ navigation, route }) {
         return true
       }
       if (!muted) { setMuted(true); modeChangedAt.current = Date.now() }
-      flash('No microphone access - videos will record without sound.')
+      flash(tk('noMic'))
       return false
     } catch {
       return false
@@ -1091,7 +1094,7 @@ export default function CameraScreen({ navigation, route }) {
     await ensureMic()
     const ready = await waitForCamera(true)
     if (!mounted.current || recording.current || !ready) {
-      if (mounted.current && !ready) Alert.alert("Couldn't start recording", 'The camera isn’t ready yet - please try again.')
+      if (mounted.current && !ready) Alert.alert(tk('recStartFailTitle'), tk('camNotReady'))
       return
     }
     // The chosen cut-off (preset or custom), fixed for this recording.
@@ -1156,10 +1159,10 @@ export default function CameraScreen({ navigation, route }) {
       console.warn('Recording failed', error)
       if (mounted.current) {
         Alert.alert(
-          "Video didn't save",
+          tk('videoFailTitle'),
           error?.message
-            ? `The camera reported: ${error.message}`
-            : 'Nothing was recorded - hold on a moment after starting before you stop.',
+            ? tk('camReported', { msg: error.message })
+            : tk('nothingRecorded'),
         )
       }
       return
@@ -1198,7 +1201,7 @@ export default function CameraScreen({ navigation, route }) {
         resetRecordingState()
         cameraReadyRef.current = false
         setCamKey((k) => k + 1)
-        Alert.alert("Video didn't save", 'The camera stopped responding. Please try recording again.')
+        Alert.alert(tk('videoFailTitle'), tk('camStopped'))
       }, 6000)
     }
     const sinceStart = Date.now() - recordStartedAtRef.current
@@ -1376,7 +1379,7 @@ export default function CameraScreen({ navigation, route }) {
         type: asset.type === 'video' ? 'video' : 'photo', uri: asset.uri, width: asset.width, height: asset.height, fromLibrary: true,
       })
     } catch (e) {
-      Alert.alert("Couldn't open your library", e?.message ?? 'Please try again.')
+      Alert.alert(tk('libraryFailTitle'), e?.message ?? tk('tryAgain'))
     }
   }
 
@@ -1402,7 +1405,7 @@ export default function CameraScreen({ navigation, route }) {
     if (camPerm.status === 'undetermined') return <Backdrop isInline={isInline} cardSize={cardSize} onDismiss={dismiss} />
     return (
       <GlassBackground isDark={true}>
-        <CameraOff what="photos, videos and the AR filters" onBack={dismiss} backLabel="Back" />
+        <CameraOff what={tk('camOffWhat')} onBack={dismiss} />
       </GlassBackground>
     )
   }
@@ -1412,7 +1415,7 @@ export default function CameraScreen({ navigation, route }) {
     : phase === 'countdown'
       ? null
       : isRecording
-        ? (isHandsFree ? 'Hands-free · tap to stop' : 'Tap to stop')
+        ? (isHandsFree ? tk('hintHandsFree') : tk('hintTapStop'))
         : null
   // Side by side while they fit; past that they overlap like a fanned stack.
   const cardStep = capturedQueue.length > 1
@@ -1529,18 +1532,18 @@ export default function CameraScreen({ navigation, route }) {
       {(phase === 'countdown' || phase === 'redoCountdown') && (
         <CountdownNumber
           value={countdown}
-          hint={phase === 'redoCountdown' ? 'Restarting…' : 'Tap the shutter to cancel'}
+          hint={phase === 'redoCountdown' ? tk('restarting') : tk('tapShutterCancel')}
         />
       )}
       {phase === 'burst' && (
         <View style={styles.overlayCenter} pointerEvents="none">
           <Text style={styles.burstNumber}>{burstCount}</Text>
-          <Text style={styles.overlayHint}>BURST · {burstTotal}</Text>
+          <Text style={styles.overlayHint}>{tk('burstOverlay', { n: burstTotal })}</Text>
         </View>
       )}
 
       <View style={styles.top}>
-        <Pressable onPress={dismiss} hitSlop={12} style={[styles.round, styles.roundGlass]} accessibilityLabel="Close camera">
+        <Pressable onPress={dismiss} hitSlop={12} style={[styles.round, styles.roundGlass]} accessibilityLabel={tk('closeCamera')}>
           <Ionicons name="close" size={22} color="#fff" />
         </Pressable>
         {isRecording ? (
@@ -1557,7 +1560,7 @@ export default function CameraScreen({ navigation, route }) {
           </Pressable>
         )}
         {posting ? (
-          <View style={[styles.round, styles.roundGlass]} accessibilityLabel="Posting">
+          <View style={[styles.round, styles.roundGlass]} accessibilityLabel={tk('posting')}>
             <ActivityIndicator color="#fff" size="small" />
           </View>
         ) : (
@@ -1566,7 +1569,7 @@ export default function CameraScreen({ navigation, route }) {
             disabled={isRecording}
             hitSlop={8}
             style={[styles.round, styles.roundGlass, sound && { backgroundColor: 'rgba(255,79,163,0.75)', borderColor: '#ff4fa3' }, isRecording && { opacity: 0.5 }]}
-            accessibilityLabel={sound ? `Sound: ${sound.title}. Change sound` : 'Add sound'}
+            accessibilityLabel={sound ? tk('soundChange', { title: sound.title }) : tk('addSound')}
           >
             <Ionicons name="musical-notes" size={19} color="#fff" />
           </Pressable>
@@ -1577,7 +1580,7 @@ export default function CameraScreen({ navigation, route }) {
             disabled={isRecording}
             hitSlop={8}
             style={[styles.round, styles.roundGlass, greenBg && { backgroundColor: 'rgba(0,200,83,0.75)', borderColor: '#00c853' }, isRecording && { opacity: 0.5 }]}
-            accessibilityLabel={greenBg ? `Green screen: ${greenBg.label}. Change background` : 'Green screen'}
+            accessibilityLabel={greenBg ? tk('greenChange', { name: greenName(greenBg) }) : tk('greenScreen')}
           >
             <Ionicons name="person-circle-outline" size={20} color="#fff" />
           </Pressable>
@@ -1586,28 +1589,28 @@ export default function CameraScreen({ navigation, route }) {
       {greenOpen && !isRecording ? (
         <View style={styles.greenStrip} pointerEvents="box-none">
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.greenRow}>
-            <Pressable onPress={() => { chooseGreen(null); setGreenOpen(false) }} style={[styles.greenItem, !greenBg && styles.greenItemOn]} accessibilityLabel="Green screen off">
+            <Pressable onPress={() => { chooseGreen(null); setGreenOpen(false) }} style={[styles.greenItem, !greenBg && styles.greenItemOn]} accessibilityLabel={tk('greenOff')}>
               <Ionicons name="close" size={20} color="#fff" />
-              <Text style={styles.greenLabel}>Off</Text>
+              <Text style={styles.greenLabel}>{tk('off')}</Text>
             </Pressable>
-            <Pressable onPress={() => chooseGreen({ id: 'photo' })} style={[styles.greenItem, greenBg?.id === 'photo' && styles.greenItemOn]} accessibilityLabel="Use one of your photos">
+            <Pressable onPress={() => chooseGreen({ id: 'photo' })} style={[styles.greenItem, greenBg?.id === 'photo' && styles.greenItemOn]} accessibilityLabel={tk('usePhoto')}>
               <Ionicons name="images-outline" size={20} color="#fff" />
-              <Text style={styles.greenLabel}>Photo</Text>
+              <Text style={styles.greenLabel}>{tk('bg_photo')}</Text>
             </Pressable>
             {GREEN_BACKGROUNDS.map((bg) => (
-              <Pressable key={bg.id} onPress={() => chooseGreen(bg)} style={[styles.greenItem, greenBg?.id === bg.id && styles.greenItemOn]} accessibilityLabel={`Background ${bg.label}`}>
+              <Pressable key={bg.id} onPress={() => chooseGreen(bg)} style={[styles.greenItem, greenBg?.id === bg.id && styles.greenItemOn]} accessibilityLabel={tk('bgA11y', { name: greenName(bg) })}>
                 {bg.asset ? <Image source={bg.asset} style={styles.greenThumb} /> : bg.mode === 'blur' ? <Ionicons name="water-outline" size={20} color="#fff" /> : <View style={[styles.greenSwatch, { backgroundColor: bg.color }]} />}
-                <Text style={styles.greenLabel}>{bg.label}</Text>
+                <Text style={styles.greenLabel}>{greenName(bg)}</Text>
               </Pressable>
             ))}
           </ScrollView>
         </View>
       ) : null}
       {sound && !isRecording ? (
-        <Pressable onPress={() => setSoundPickerOpen(true)} style={styles.soundChip} accessibilityRole="button" accessibilityLabel={`Sound ${sound.title}`}>
+        <Pressable onPress={() => setSoundPickerOpen(true)} style={styles.soundChip} accessibilityRole="button" accessibilityLabel={tk('soundA11y', { title: sound.title })}>
           <Ionicons name="musical-note" size={12} color="#fff" />
           <Text style={styles.soundChipText} numberOfLines={1}>{sound.title}</Text>
-          <Pressable onPress={() => setSound(null)} hitSlop={10} accessibilityLabel="Remove sound"><Ionicons name="close" size={13} color="#fff" /></Pressable>
+          <Pressable onPress={() => setSound(null)} hitSlop={10} accessibilityLabel={tk('removeSound')}><Ionicons name="close" size={13} color="#fff" /></Pressable>
         </Pressable>
       ) : null}
 
@@ -1660,15 +1663,15 @@ export default function CameraScreen({ navigation, route }) {
         </View>
         {!isRecording ? (
           <Pressable
-            onPress={() => { haptic(); onOptionsChange({ autoPost: options.autoPost === false }) ; flash(options.autoPost === false ? 'Auto-post on: captures post after 5 seconds' : 'Edit first: add text, sound and a description before posting') }}
+            onPress={() => { haptic(); onOptionsChange({ autoPost: options.autoPost === false }) ; flash(options.autoPost === false ? tk('autoPostOn') : tk('editFirstOn')) }}
             disabled={busy}
             style={[styles.handsFree, options.autoPost !== false ? styles.handsFreeOn : null]}
             accessibilityRole="switch"
             accessibilityState={{ checked: options.autoPost !== false }}
-            accessibilityLabel="Auto-post: captures post after 5 seconds. Off: edit before posting"
+            accessibilityLabel={tk('autoPostA11y')}
           >
             <Ionicons name={options.autoPost !== false ? 'flash' : 'create-outline'} size={14} color="#fff" />
-            <Text style={styles.handsFreeText}>{options.autoPost !== false ? 'Auto-post 5s' : 'Edit first'}</Text>
+            <Text style={styles.handsFreeText}>{options.autoPost !== false ? tk('autoPost5') : tk('editFirst')}</Text>
           </Pressable>
         ) : null}
         {mode === 'video' && !isRecording ? (
@@ -1678,10 +1681,10 @@ export default function CameraScreen({ navigation, route }) {
             style={[styles.handsFree, options.timer ? styles.handsFreeOn : null]}
             accessibilityRole="switch"
             accessibilityState={{ checked: !!options.timer }}
-            accessibilityLabel="Hands-free: countdown, then records until you tap stop"
+            accessibilityLabel={tk('handsFreeA11y')}
           >
             <Ionicons name="hand-left-outline" size={14} color="#fff" />
-            <Text style={styles.handsFreeText}>{options.timer ? `Hands-free · ${timerSeconds(options)}s` : 'Hands-free'}</Text>
+            <Text style={styles.handsFreeText}>{options.timer ? tk('handsFreeN', { n: timerSeconds(options) }) : tk('handsFree')}</Text>
           </Pressable>
         ) : null}
         <View style={styles.modeRow} pointerEvents="box-none">
@@ -1690,7 +1693,7 @@ export default function CameraScreen({ navigation, route }) {
             hitSlop={10}
             style={[styles.sideButton, styles.sideButtonSmall, busy && { opacity: 0.4 }]}
             disabled={busy}
-            accessibilityLabel="Choose from library"
+            accessibilityLabel={tk('fromLibrary')}
           >
             <Ionicons name="images-outline" size={19} color="#fff" />
           </Pressable>
@@ -1698,7 +1701,7 @@ export default function CameraScreen({ navigation, route }) {
             <ModeSwitcher mode={mode} onChange={changeMode} disabled={busy} />
           </View>
           {isRecording ? (
-            <Pressable onPress={redoRecording} hitSlop={10} style={[styles.sideButton, styles.sideButtonSmall, styles.sideButtonArmed]} accessibilityLabel="Restart recording">
+            <Pressable onPress={redoRecording} hitSlop={10} style={[styles.sideButton, styles.sideButtonSmall, styles.sideButtonArmed]} accessibilityLabel={tk('restartRec')}>
               <Ionicons name="refresh" size={19} color="#fff" />
             </Pressable>
           ) : (
@@ -1707,7 +1710,7 @@ export default function CameraScreen({ navigation, route }) {
               hitSlop={10}
               style={[styles.sideButton, styles.sideButtonSmall, phase !== 'idle' && { opacity: 0.4 }]}
               disabled={phase !== 'idle'}
-              accessibilityLabel={facing === 'back' ? 'Switch to front camera' : 'Switch to back camera'}
+              accessibilityLabel={facing === 'back' ? tk('toFront') : tk('toBack')}
             >
               <Animated.View style={{ transform: [{ rotateY: flipRotate }] }}>
                 <Ionicons name="camera-reverse-outline" size={21} color="#fff" />

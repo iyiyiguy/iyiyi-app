@@ -3,7 +3,7 @@ import { View, Text, Pressable, StyleSheet, ScrollView, Image } from 'react-nati
 import { useFocusEffect } from '@react-navigation/native'
 import { Ionicons } from '@expo/vector-icons'
 import { supabase } from '../lib/supabase'
-import { GAMES } from '../lib/games'
+import { GAMES, gameText, rankName } from '../lib/games'
 import { GUNS, getGunById } from '../lib/guns'
 import { loadArcadeStats, subscribeArcadeStats, totalsFor, winRateFor, rankFor } from '../lib/arcadeStats'
 import { useUavInventory } from '../lib/uav'
@@ -15,9 +15,12 @@ import { UavBalancePill, openArcadeStore } from '../games/UavStore'
 import { FONT, ST, StBar } from '../games/studio'
 import { avatarSource } from '../lib/avatarSource'
 import { gunArt } from '../lib/gunArt'
+import { useT } from '../i18n'
+import A from '../i18n/strings/arcadeStats'
 
 // The signed-in player's arcade profile: their account basics plus real local stats.
 export default function PlayerProfileScreen({ navigation }) {
+  const t = useT(A)
   const insets = useArcadeInsets()
   useArcadeStatusBar()
   const uav = useUavInventory()
@@ -49,7 +52,7 @@ export default function PlayerProfileScreen({ navigation }) {
 
   const totals = stats ? totalsFor(stats) : null
   const gun = stats ? getGunById(stats.unlockedGuns.includes(stats.equippedGun) ? stats.equippedGun : 'pistol') : null
-  const name = profile?.username || 'You'
+  const name = profile?.username || t('you')
   const rank = rankFor(stats?.lifetimePoints || 0)
 
   return (
@@ -57,8 +60,8 @@ export default function PlayerProfileScreen({ navigation }) {
       <ArcadeBackground />
       <ScrollView contentContainerStyle={{ paddingTop: insets.top + 10, paddingBottom: insets.bottom + 60, paddingHorizontal: 20 }} showsVerticalScrollIndicator={false}>
         <ArcadeHeader
-          kicker="Arcade"
-          title="Profile"
+          kicker={t('arcade')}
+          title={t('profile')}
           onBack={() => navigation.goBack()}
           right={<CoinPill value={stats ? stats.points : null} compact onPress={() => navigation.navigate('GunShop')} />}
         />
@@ -71,41 +74,41 @@ export default function PlayerProfileScreen({ navigation }) {
           </View>
           <View style={{ flex: 1, minWidth: 0 }}>
             <Text style={styles.name} numberOfLines={1}>{name}</Text>
-            <Text style={[styles.rankName, { color: rank.color }]}>{rank.name} · Level {rank.level}</Text>
+            <Text style={[styles.rankName, { color: rank.color }]}>{rankName(rank)} · {t('level_n', { n: rank.level })}</Text>
             <StBar value={rank.levelProgress} color={rank.color} height={4} style={styles.xpTrack} />
-            <Text style={[arcadeText.caption, { fontVariant: ['tabular-nums'] }]}>{stats ? `${rank.xpToNextLevel.toLocaleString()} XP to level ${rank.level + 1}` : 'Loading…'}</Text>
+            <Text style={[arcadeText.caption, { fontVariant: ['tabular-nums'] }]}>{stats ? t('xp_to_level', { xp: rank.xpToNextLevel.toLocaleString(), n: rank.level + 1 }) : t('loading')}</Text>
           </View>
         </View>
 
         {stats && (
           <>
             <View style={styles.tiles}>
-              <StatTile label="Played" value={totals.played} />
-              <StatTile label="Wins" value={totals.wins} accent={AC.live} />
-              <StatTile label="Win rate" value={totals.winRate != null ? `${totals.winRate}%` : '—'} accent={AC.gold} />
+              <StatTile label={t('played')} value={totals.played} />
+              <StatTile label={t('wins')} value={totals.wins} accent={AC.live} />
+              <StatTile label={t('win_rate')} value={totals.winRate != null ? `${totals.winRate}%` : '—'} accent={AC.gold} />
               {/* Online rating once you've played people (that's what others see); else vs AI. */}
               {stats.chess.online?.games > 0
-                ? <StatTile label="Chess online" value={formatOnlineRating(stats.chess.online.rating, stats.chess.online.games) ?? '—'} accent={AC.accent} />
-                : <StatTile label="Chess vs AI" value={stats.chess.ratedGames > 0 ? stats.chess.rating : '—'} accent={AC.accent} />}
+                ? <StatTile label={t('chess_online')} value={formatOnlineRating(stats.chess.online.rating, stats.chess.online.games) ?? '—'} accent={AC.accent} />
+                : <StatTile label={t('chess_vs_ai')} value={stats.chess.ratedGames > 0 ? stats.chess.rating : '—'} accent={AC.accent} />}
             </View>
 
-            <SectionHeader title="Loadout" />
+            <SectionHeader title={t('loadout')} />
             <ArcadeCard glow={AC.glowHot}>
               <View style={styles.row}>
                 <View style={styles.gunIcon}><Image source={gunArt(gun)} style={{ width: '92%', height: '60%' }} resizeMode="contain" /></View>
                 <View style={{ flex: 1, minWidth: 0 }}>
-                  <Text style={arcadeText.label}>Equipped for Laser Tag</Text>
+                  <Text style={arcadeText.label}>{t('equipped_laser')}</Text>
                   <Text style={styles.cardTitle} numberOfLines={1}>{gun.name}</Text>
-                  <Text style={arcadeText.caption}>{stats.unlockedGuns.filter((id) => GUNS.some((g) => g.id === id)).length} of {GUNS.length} weapons unlocked</Text>
+                  <Text style={arcadeText.caption}>{t('weapons_unlocked', { n: stats.unlockedGuns.filter((id) => GUNS.some((g) => g.id === id)).length, total: GUNS.length })}</Text>
                 </View>
               </View>
               <View style={[styles.row, { marginTop: 14, justifyContent: 'space-between' }]}>
-                <Text style={arcadeText.caption}>UAVs</Text>
+                <Text style={arcadeText.caption}>{t('uavs')}</Text>
                 <UavBalancePill balance={uav.balance} owner={uav.owner} onPress={() => openArcadeStore(navigation)} />
               </View>
             </ArcadeCard>
 
-            <SectionHeader title="Games" />
+            <SectionHeader title={t('games')} />
             {GAMES.map((g) => {
               const s = stats.games[g.id] || { played: 0, bestScore: null }
               const wr = winRateFor(s)
@@ -113,18 +116,18 @@ export default function PlayerProfileScreen({ navigation }) {
                 <ArcadeCard key={g.id} style={{ marginBottom: 12 }}>
                   <View style={[styles.row, { marginBottom: 12 }]}>
                     <View style={styles.gameIcon}><Ionicons name={gameIcon(g.id)} size={18} color={ST.friendly} /></View>
-                    <Text style={styles.cardTitle} numberOfLines={1}>{g.name}</Text>
+                    <Text style={styles.cardTitle} numberOfLines={1}>{gameText(g, 'name')}</Text>
                   </View>
                   <View style={[styles.tiles, { marginTop: 0 }]}>
-                    <StatTile label="Played" value={s.played} />
+                    <StatTile label={t('played')} value={s.played} />
                     {g.id === 'word-race'
-                      ? <StatTile label="Words" value={stats.wordRace.totalWords} accent={AC.live} />
-                      : <StatTile label="Win rate" value={wr != null ? `${wr}%` : '—'} accent={AC.live} />}
+                      ? <StatTile label={t('words')} value={stats.wordRace.totalWords} accent={AC.live} />
+                      : <StatTile label={t('win_rate')} value={wr != null ? `${wr}%` : '—'} accent={AC.live} />}
                     {g.id === 'chess'
-                      ? <StatTile label="vs AI" value={stats.chess.ratedGames > 0 ? stats.chess.rating : '—'} accent={AC.gold} />
-                      : <StatTile label="Best" value={s.bestScore ?? '—'} accent={AC.gold} />}
+                      ? <StatTile label={t('vs_ai')} value={stats.chess.ratedGames > 0 ? stats.chess.rating : '—'} accent={AC.gold} />
+                      : <StatTile label={t('best')} value={s.bestScore ?? '—'} accent={AC.gold} />}
                     {g.id === 'chess' && (
-                      <StatTile label="Online" value={stats.chess.online?.games > 0 ? formatOnlineRating(stats.chess.online.rating, stats.chess.online.games) ?? '—' : '—'} accent={AC.accent} />
+                      <StatTile label={t('online')} value={stats.chess.online?.games > 0 ? formatOnlineRating(stats.chess.online.rating, stats.chess.online.games) ?? '—' : '—'} accent={AC.accent} />
                     )}
                   </View>
                 </ArcadeCard>
@@ -134,10 +137,10 @@ export default function PlayerProfileScreen({ navigation }) {
         )}
 
         <View style={styles.links}>
-          <LinkTile icon="trophy" label="My records" onPress={() => navigation.navigate('GameLeaderboard')} />
-          <LinkTile icon="bag-handle" label="Shop" onPress={() => navigation.navigate('GunShop')} />
-          <LinkTile icon="shield-checkmark" label="My Equip" onPress={() => navigation.navigate('MyEquip')} />
-          <LinkTile icon="sparkles" label="Store" onPress={() => openArcadeStore(navigation)} />
+          <LinkTile icon="trophy" label={t('my_records_lc')} onPress={() => navigation.navigate('GameLeaderboard')} />
+          <LinkTile icon="bag-handle" label={t('shop')} onPress={() => navigation.navigate('GunShop')} />
+          <LinkTile icon="shield-checkmark" label={t('my_equip')} onPress={() => navigation.navigate('MyEquip')} />
+          <LinkTile icon="sparkles" label={t('store')} onPress={() => openArcadeStore(navigation)} />
         </View>
       </ScrollView>
       <StatusBarScrim height={insets.top} />

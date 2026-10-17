@@ -2,14 +2,17 @@ import { View, Text, StyleSheet } from 'react-native'
 import { LinearGradient } from 'expo-linear-gradient'
 import BrandHeader from '../components/BrandHeader'
 import { type } from '../theme'
+import { useT } from '../i18n'
+import strings from '../i18n/strings/arcadeMisc'
 
 // Teaser only (nothing links here yet). Called "Weekly drops", not "Airdrop", to avoid crypto
 // connotations in review; has a Back button so a deep link never strands anyone.
 export default function AirdropScreen({ navigation }) {
+  const t = useT(strings)
   const goBack = () => (navigation?.canGoBack?.() ? navigation.goBack() : navigation?.navigate?.('Tabs'))
   return (
     <View style={styles.screen}>
-      <BrandHeader title="Weekly drops" onBack={goBack} />
+      <BrandHeader title={t('drops_title')} onBack={goBack} />
       <View style={styles.body}>
         <LinearGradient
           colors={['#ffd166', '#ef476f', '#e0158b']}
@@ -20,10 +23,9 @@ export default function AirdropScreen({ navigation }) {
           <Text style={styles.gift}>🎁</Text>
         </LinearGradient>
 
-        <Text style={[type.display, styles.title]}>Weekly drops are coming!</Text>
+        <Text style={[type.display, styles.title]}>{t('drops_head')}</Text>
         <Text style={[type.caption, styles.subtitle]}>
-          Soon you'll be able to meet up with people nearby and score weekly drops just for
-          showing up. Stay tuned — we're figuring out the fun details.
+          {t('drops_sub')}
         </Text>
       </View>
     </View>

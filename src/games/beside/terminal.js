@@ -13,6 +13,8 @@ import { AccessibilityInfo, Animated, Easing, Platform, StyleSheet, Text, View }
 import { LinearGradient } from 'expo-linear-gradient'
 import { FONT, ST, stType, withAlpha } from '../studio'
 import { Confetti, PopToys } from './toys'
+import { useT } from '../../i18n'
+import B from '../../i18n/strings/besideThem'
 
 export const TERM = {
   ground: '#121c46',
@@ -247,6 +249,7 @@ export function TermModule({ title, code, color = ST.friendly, children, style, 
 
 /** "ACCESS GRANTED" (with confetti) / "TRY AGAIN" stamp; pops in on mount. */
 export function AccessStamp({ granted = true, sub, reduce, style }) {
+  const t = useT(B)
   const c = granted ? TERM.granted : TERM.denied
   const v = useRef(new Animated.Value(reduce ? 1 : 0)).current
   useEffect(() => {
@@ -258,10 +261,10 @@ export function AccessStamp({ granted = true, sub, reduce, style }) {
   const scale = v.interpolate({ inputRange: [0, 1], outputRange: [1.6, 1] })
   return (
     <View style={{ alignItems: 'center', justifyContent: 'center' }}>
-      <Animated.View style={[s.stamp, { borderColor: c, backgroundColor: withAlpha(c, granted ? 0.16 : 0.12), opacity: v, transform: [{ scale }, { rotate: granted ? '-4deg' : '3deg' }] }, style]} accessibilityRole="alert" accessibilityLabel={granted ? 'Access granted' : 'Not quite, try again'}>
-        <Text style={[stType.label, { color: c, textAlign: 'center' }]}>{granted ? 'Nice one! Clearance verified' : 'Not quite'}</Text>
+      <Animated.View style={[s.stamp, { borderColor: c, backgroundColor: withAlpha(c, granted ? 0.16 : 0.12), opacity: v, transform: [{ scale }, { rotate: granted ? '-4deg' : '3deg' }] }, style]} accessibilityRole="alert" accessibilityLabel={granted ? t('access_granted') : t('not_quite_try')}>
+        <Text style={[stType.label, { color: c, textAlign: 'center' }]}>{granted ? t('clearance_verified') : t('not_quite')}</Text>
         <Text style={[stType.display, { color: c, fontSize: 38, lineHeight: 42, letterSpacing: 3, textAlign: 'center' }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.5}>
-          {granted ? 'Access granted' : 'Try again'}
+          {granted ? t('access_granted') : t('try_again')}
         </Text>
         {sub ? <Text style={[termType.mono, { color: withAlpha(c, 0.9), textAlign: 'center', marginTop: 2 }]} numberOfLines={1}>{sub}</Text> : null}
       </Animated.View>

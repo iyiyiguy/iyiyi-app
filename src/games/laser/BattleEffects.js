@@ -10,6 +10,10 @@ import { Ionicons } from '@expo/vector-icons'
 import { bearingDeg } from '../../lib/multiplayer'
 import { ENEMY_BOLT, glowFor } from './gunGlow'
 import { FONT, ST, stShadow } from '../studio'
+import { translate } from '../../i18n'
+import H from '../../i18n/strings/laserHud'
+
+const tr = (k, v) => translate(H, k, v)
 
 // ─── Perspective helpers for the laser bolts ───
 // A bolt moving at constant speed away from the camera covers less and less of the screen
@@ -70,6 +74,9 @@ const PALETTES = {
 }
 const DEFAULT_PALETTE = PALETTES.Grenade
 export const paletteFor = (label) => PALETTES[label] || DEFAULT_PALETTE
+// Explosion labels arrive as the English keys above; show them in the viewer's language.
+const FX_KEYS = { 'Land mine': 'fx_mine', 'Sticky bomb': 'fx_sticky', Grenade: 'fx_grenade', Rocket: 'fx_rocket', Explosion: 'fx_explosion' }
+const fxLabel = (label) => (FX_KEYS[label] ? tr(FX_KEYS[label]) : String(label || ''))
 
 // Layered fireball: a colour flash over the whole screen, a bright core and three
 // rings in different colours racing outwards. `size` is the fireball diameter in px.
@@ -144,7 +151,7 @@ function Explosion({ id, label, onDone }) {
     <View style={st.explosion} pointerEvents="none">
       <ScreenFlash color={palette[4]} peak={0.5} duration={EXPLOSION_DURATION * 0.7} />
       <Fireball palette={palette} size={width * 0.7} duration={EXPLOSION_DURATION} />
-      {label ? <Text style={[st.explosionLabel, { color: palette[1] }]}>{label.toUpperCase()}</Text> : null}
+      {label ? <Text style={[st.explosionLabel, { color: palette[1] }]}>{fxLabel(label).toUpperCase()}</Text> : null}
     </View>
   )
 }
@@ -180,7 +187,7 @@ function MegaExplosion({ id, label, angle, dist, by, onDone }) {
       <View style={st.megaLabelWrap}>
         <View style={st.megaRow}>
           {!inView && rel < 0 ? <Ionicons name="caret-back" size={20} color={palette[1]} /> : null}
-          <Text style={[st.megaLabel, { color: palette[1] }]}>{`${String(label || 'Explosion').toUpperCase()}${distText ? ` · ${distText.toUpperCase()}` : ''}`}</Text>
+          <Text style={[st.megaLabel, { color: palette[1] }]}>{`${fxLabel(label || 'Explosion').toUpperCase()}${distText ? ` · ${distText.toUpperCase()}` : ''}`}</Text>
           {!inView && rel > 0 ? <Ionicons name="caret-forward" size={20} color={palette[1]} /> : null}
         </View>
         {by ? <Text style={st.megaBy}>{String(by).toUpperCase()}</Text> : null}
@@ -360,10 +367,10 @@ function KillBanner({ id, victim, weapon, points, onDone }) {
     >
       <View style={st.killHead}>
         <View style={st.killRule} />
-        <Text style={st.killWord}>ELIMINATED</Text>
+        <Text style={st.killWord}>{tr('eliminated')}</Text>
         <View style={st.killRule} />
       </View>
-      <Text style={st.killName} numberOfLines={1}>{String(victim || 'Enemy').toUpperCase()}</Text>
+      <Text style={st.killName} numberOfLines={1}>{String(victim || tr('enemy')).toUpperCase()}</Text>
       <View style={st.killPill}>
         {weapon ? <Text style={st.killWeapon} numberOfLines={1}>{String(weapon).toUpperCase()}</Text> : null}
         {points ? <Text style={st.killPts}>+{points}</Text> : null}

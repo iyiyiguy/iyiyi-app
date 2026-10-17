@@ -9,6 +9,8 @@ import { CameraOff, useCameraGate } from '../../components/CameraGate'
 import { ST, StButton, stShadow, stType } from '../studio'
 import { Brackets, TERM, TermBackdrop, termType, useReduceMotion } from './terminal'
 import { parseQrPayload } from './engine'
+import { useT } from '../../i18n'
+import B from '../../i18n/strings/besideThem'
 
 const SCANNER = { barcodeTypes: ['qr'] }
 
@@ -17,14 +19,15 @@ const SCANNER = { barcodeTypes: ['qr'] }
  * payloads (the same code is ignored for 1.5 s); onOther(text) for any other QR.
  */
 export function QrCamera({ active, onScan, onOther }) {
+  const t = useT(B)
   const [perm] = useCameraGate(active)
   const last = useRef({ text: null, at: 0 })
   const handle = (res) => {
     const text = res?.data
     if (!active || typeof text !== 'string') return
-    const t = Date.now()
-    if (last.current.text === text && t - last.current.at < 1500) return
-    last.current = { text, at: t }
+    const tNow = Date.now()
+    if (last.current.text === text && tNow - last.current.at < 1500) return
+    last.current = { text, at: tNow }
     const parsed = parseQrPayload(text)
     if (parsed) onScan?.(parsed)
     else onOther?.(text)
@@ -32,7 +35,7 @@ export function QrCamera({ active, onScan, onOther }) {
   if (!perm?.granted) {
     return (
       <View style={[StyleSheet.absoluteFill, styles.center, { backgroundColor: TERM.ground }]}>
-        {perm && perm.status === 'denied' ? <CameraOff what="scanning station codes" compact /> : null}
+        {perm && perm.status === 'denied' ? <CameraOff what={t('cam_what_codes')} compact /> : null}
       </View>
     )
   }
@@ -40,18 +43,20 @@ export function QrCamera({ active, onScan, onOther }) {
 }
 
 /** Square viewfinder frame drawn over the camera. */
-export function QrFrame({ label = 'Point at a station code' }) {
+export function QrFrame({ label }) {
+  const t = useT(B)
   return (
     <View style={styles.frameWrap} pointerEvents="none">
       <View style={styles.frame}>
         <Brackets color={ST.friendly} size={34} thick={4} />
       </View>
-      <Text style={[termType.mono, styles.frameLabel, stShadow]}>{label}</Text>
+      <Text style={[termType.mono, styles.frameLabel, stShadow]}>{label ?? t('point_at_code')}</Text>
     </View>
   )
 }
 
-export function QrScanSheet({ visible, onClose, onScan, title = 'Scan a station', hint, error }) {
+export function QrScanSheet({ visible, onClose, onScan, title, hint, error }) {
+  const t = useT(B)
   const reduce = useReduceMotion()
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="fullScreen" onRequestClose={onClose}>
@@ -61,13 +66,13 @@ export function QrScanSheet({ visible, onClose, onScan, title = 'Scan a station'
         <QrFrame />
         <SafeAreaView style={styles.overlay} edges={['top', 'bottom']} pointerEvents="box-none">
           <View>
-            <Text style={[stType.kicker, stShadow]}>Station codes</Text>
-            <Text style={[stType.title, stShadow]}>{title}</Text>
-            <Text style={[termType.mono, { color: ST.text }, stShadow]}>&gt; {hint || 'Find a printed code and fill the square with it.'}</Text>
+            <Text style={[stType.kicker, stShadow]}>{t('station_codes')}</Text>
+            <Text style={[stType.title, stShadow]}>{title ?? t('scan_a_station')}</Text>
+            <Text style={[termType.mono, { color: ST.text }, stShadow]}>&gt; {hint || t('find_printed_code')}</Text>
           </View>
           <View>
             {error ? <Text style={[stType.small, styles.error, stShadow]}>{error}</Text> : null}
-            <StButton title="Close" tone="ghost" onPress={onClose} style={{ backgroundColor: ST.panelStrong }} />
+            <StButton title={t('close')} tone="ghost" onPress={onClose} style={{ backgroundColor: ST.panelStrong }} />
           </View>
         </SafeAreaView>
       </View>

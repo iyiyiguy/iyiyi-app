@@ -1,6 +1,10 @@
 // Map half of the Here tab (MapScreen) and the map pin picker (MapPickerModal).
 export default {
   en: {
+    mapUnavailable: "Map unavailable in this build",
+    viewProfileLink: "View profile ›",
+    loadFailed: "Could not load the map",
+    you: "You",
     couldntSave: "Couldn't save",
     checkConnection: "Check your connection and try again.",
     refreshTitle: "Refresh Location",
@@ -59,6 +63,10 @@ export default {
     useThisSpot: "Use this spot",
   },
   es: {
+    mapUnavailable: "El mapa no está disponible en esta versión",
+    viewProfileLink: "Ver perfil ›",
+    loadFailed: "No se pudo cargar el mapa",
+    you: "Tú",
     couldntSave: "No se pudo guardar",
     checkConnection: "Revisa tu conexión e inténtalo de nuevo.",
     refreshTitle: "Actualizar ubicación",
@@ -117,6 +125,10 @@ export default {
     useThisSpot: "Usar este lugar",
   },
   zh: {
+    mapUnavailable: "此版本无法使用地图",
+    viewProfileLink: "查看主页 ›",
+    loadFailed: "无法加载地图",
+    you: "你",
     couldntSave: "无法保存",
     checkConnection: "请检查网络连接后重试。",
     refreshTitle: "刷新位置",
@@ -175,6 +187,10 @@ export default {
     useThisSpot: "使用此位置",
   },
   ja: {
+    mapUnavailable: "このビルドではマップを利用できません",
+    viewProfileLink: "プロフィールを見る ›",
+    loadFailed: "マップを読み込めませんでした",
+    you: "あなた",
     couldntSave: "保存できませんでした",
     checkConnection: "接続を確認して、もう一度お試しください。",
     refreshTitle: "位置情報を更新",
@@ -233,6 +249,10 @@ export default {
     useThisSpot: "この場所を使う",
   },
   ko: {
+    mapUnavailable: "이 빌드에서는 지도를 사용할 수 없어요",
+    viewProfileLink: "프로필 보기 ›",
+    loadFailed: "지도를 불러올 수 없어요",
+    you: "나",
     couldntSave: "저장하지 못했어요",
     checkConnection: "연결 상태를 확인하고 다시 시도해 주세요.",
     refreshTitle: "위치 새로고침",
@@ -291,6 +311,10 @@ export default {
     useThisSpot: "이 위치 사용",
   },
   fr: {
+    mapUnavailable: "Carte indisponible dans cette version",
+    viewProfileLink: "Voir le profil ›",
+    loadFailed: "Impossible de charger la carte",
+    you: "Vous",
     couldntSave: "Impossible d'enregistrer",
     checkConnection: "Vérifiez votre connexion et réessayez.",
     refreshTitle: "Actualiser la position",
@@ -349,6 +373,10 @@ export default {
     useThisSpot: "Utiliser cet endroit",
   },
   de: {
+    mapUnavailable: "Karte in diesem Build nicht verfügbar",
+    viewProfileLink: "Profil ansehen ›",
+    loadFailed: "Karte konnte nicht geladen werden",
+    you: "Du",
     couldntSave: "Speichern fehlgeschlagen",
     checkConnection: "Prüfe deine Verbindung und versuche es erneut.",
     refreshTitle: "Standort aktualisieren",
@@ -407,6 +435,10 @@ export default {
     useThisSpot: "Diesen Ort verwenden",
   },
   pt: {
+    mapUnavailable: "Mapa indisponível nesta versão",
+    viewProfileLink: "Ver perfil ›",
+    loadFailed: "Não foi possível carregar o mapa",
+    you: "Você",
     couldntSave: "Não foi possível salvar",
     checkConnection: "Verifique sua conexão e tente novamente.",
     refreshTitle: "Atualizar localização",
@@ -465,6 +497,10 @@ export default {
     useThisSpot: "Usar este local",
   },
   ar: {
+    mapUnavailable: "الخريطة غير متاحة في هذا الإصدار",
+    viewProfileLink: "عرض الملف الشخصي ›",
+    loadFailed: "تعذّر تحميل الخريطة",
+    you: "أنت",
     couldntSave: "تعذّر الحفظ",
     checkConnection: "تحقّق من اتصالك وحاول مجددًا.",
     refreshTitle: "تحديث الموقع",
@@ -523,6 +559,10 @@ export default {
     useThisSpot: "استخدام هذا المكان",
   },
   hi: {
+    mapUnavailable: "इस बिल्ड में मैप उपलब्ध नहीं है",
+    viewProfileLink: "प्रोफ़ाइल देखें ›",
+    loadFailed: "मैप लोड नहीं हो सका",
+    you: "आप",
     couldntSave: "सहेजा नहीं जा सका",
     checkConnection: "अपना कनेक्शन जांचें और फिर से कोशिश करें।",
     refreshTitle: "लोकेशन रीफ़्रेश करें",
@@ -581,6 +621,10 @@ export default {
     useThisSpot: "यह जगह चुनें",
   },
   tl: {
+    mapUnavailable: "Hindi available ang mapa sa build na ito",
+    viewProfileLink: "Tingnan ang profile ›",
+    loadFailed: "Hindi ma-load ang mapa",
+    you: "Ikaw",
     couldntSave: "Hindi ma-save",
     checkConnection: "Tingnan ang iyong koneksyon at subukan ulit.",
     refreshTitle: "I-refresh ang Lokasyon",

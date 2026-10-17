@@ -18,8 +18,10 @@ import { Chess } from 'chess.js'
 import { FONT, ST, StButton, StHeader, stType, useStudioFonts, withAlpha } from './studio'
 import {
   ActionTile, ChessBoard, ChessClock, ChessResultSheet, ChessSeat, MoveList, PromotionPicker, SeatAvatar,
-  capturedBy, capturedText, describeResult, formatClock, reasonLabel,
+  capturedBy, capturedText, colorLabel, describeResult, formatClock, reasonLabel,
 } from './ChessGame'
+import { useT } from '../i18n'
+import C from '../i18n/strings/chess'
 import { useHostLoop, useRoomSnapshot } from '../lib/multiplayer'
 import { loadArcadeStats, recordOnlineChessGame } from '../lib/arcadeStats'
 import { ONLINE_START_RATING, onlineGameUpdates } from '../lib/chessRating'
@@ -286,6 +288,7 @@ export const ratingText = (v) => (v && Number.isFinite(v.r) ? `${v.r}${(v.n || 0
 
 export function OnlineChessGame({ room, onExit }) {
   useStudioFonts()
+  const t = useT(C)
   const snap = useRoomSnapshot(room)
   const { width } = useWindowDimensions()
   const boardSize = Math.floor(Math.min(width - 24, 520) / 8) * 8
@@ -480,11 +483,11 @@ export function OnlineChessGame({ room, onExit }) {
         <View style={styles.center}>
           <ActivityIndicator color={ST.friendly} style={{ marginBottom: 18 }} />
           <StHeader
-            kicker="Online chess"
-            title="Setting up the board"
-            sub={opponent ? `Waiting for ${opponent.name || 'your opponent'} to connect.` : 'Waiting for both players to connect.'}
+            kicker={t('online_chess')}
+            title={t('setting_up_board')}
+            sub={opponent ? t('waiting_x_connect', { name: opponent.name || t('your_opponent_lc') }) : t('waiting_both_connect')}
           />
-          <StButton title="Leave" tone="ghost" height={44} onPress={onExit} style={{ marginTop: 24, minWidth: 160 }} />
+          <StButton title={t('leave')} tone="ghost" height={44} onPress={onExit} style={{ marginTop: 24, minWidth: 160 }} />
         </View>
         {overlays}
       </View>
@@ -544,42 +547,43 @@ export function OnlineChessGame({ room, onExit }) {
   onSquareRef.current = onSquare
 
   const resign = () => {
-    Alert.alert('Resign?', 'Your opponent wins this game.', [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Resign', style: 'destructive', onPress: () => send({ type: 'resign' }) },
+    Alert.alert(t('resign_q'), t('opp_wins_game'), [
+      { text: t('cancel'), style: 'cancel' },
+      { text: t('resign'), style: 'destructive', onPress: () => send({ type: 'resign' }) },
     ])
   }
 
-  const colorName = (c) => (c === 'w' ? 'White' : 'Black')
+  const colorName = colorLabel
   const aborted = r?.reason === 'aborted'
   const tone = !r ? 'draw' : aborted || !r.winner ? 'draw' : !myColor ? 'win' : r.winner === myColor ? 'win' : 'loss'
-  const resultTitle = !r ? '' : aborted ? 'Aborted' : !r.winner ? 'Draw' : !myColor ? `${colorName(r.winner)} wins` : r.winner === myColor ? 'Victory' : 'Defeat'
+  const resultTitle = !r ? '' : aborted ? t('aborted') : !r.winner ? t('draw') : !myColor ? t('x_wins', { name: colorName(r.winner) }) : r.winner === myColor ? t('victory') : t('defeat')
+  const nMoves = t('n_moves', { n: Math.ceil(state.moves.length / 2) })
   const resultSub = !r ? '' : aborted
-    ? `${colorName(r.by || turn)} didn’t make a first move · not rated`
+    ? t('no_first_move', { name: colorName(r.by || turn) })
     : r.winner
-      ? `${r.winner === myColor ? 'You' : state.players[r.winner]?.name || colorName(r.winner)} won by ${reasonLabel(r.reason).toLowerCase()} · ${Math.ceil(state.moves.length / 2)} moves`
-      : `Draw by ${reasonLabel(r.reason).toLowerCase()} · ${Math.ceil(state.moves.length / 2)} moves`
+      ? `${r.winner === myColor ? t('you_won') : t('x_won', { name: state.players[r.winner]?.name || colorName(r.winner) })} · ${reasonLabel(r.reason)} · ${nMoves}`
+      : `${t('draw')} · ${reasonLabel(r.reason)} · ${nMoves}`
   const iWantRematch = !!state.rematch?.[meId]
   const theyWantRematch = !!opponent && !!state.rematch?.[opponent.id]
   const callBusy = call?.status && call.status !== 'idle'
 
   // My seat status line (friendly when it's my move, enemy for check).
   let mySub = { text: '', color: ST.muted }
-  if (r) mySub = { text: aborted ? 'Game aborted' : !r.winner ? `Draw · ${reasonLabel(r.reason)}` : r.winner === myColor ? `Won · ${reasonLabel(r.reason)}` : `Lost · ${reasonLabel(r.reason)}`, color: r.winner === myColor ? ST.objective : ST.muted }
-  else if (pending) mySub = { text: 'Sending move…', color: ST.muted }
-  else if (myTurn && firstMoveWindow) mySub = { text: `Make your first move · ${Math.ceil(firstMoveLeft / 1000)}s`, color: firstMoveLeft < 15000 ? ST.enemy : ST.friendly }
-  else if (myTurn) mySub = { text: inCheck ? 'Check · your move' : 'Your move', color: inCheck ? ST.enemy : ST.friendly }
-  else mySub = { text: `${opponent?.name || 'Opponent'} to move`, color: ST.muted }
+  if (r) mySub = { text: aborted ? t('r_aborted') : !r.winner ? `${t('draw')} · ${reasonLabel(r.reason)}` : r.winner === myColor ? `${t('won')} · ${reasonLabel(r.reason)}` : `${t('lost')} · ${reasonLabel(r.reason)}`, color: r.winner === myColor ? ST.objective : ST.muted }
+  else if (pending) mySub = { text: t('sending_move'), color: ST.muted }
+  else if (myTurn && firstMoveWindow) mySub = { text: t('make_first_move', { n: Math.ceil(firstMoveLeft / 1000) }), color: firstMoveLeft < 15000 ? ST.enemy : ST.friendly }
+  else if (myTurn) mySub = { text: inCheck ? `${t('check')} · ${t('your_move')}` : t('your_move'), color: inCheck ? ST.enemy : ST.friendly }
+  else mySub = { text: t('x_to_move', { name: opponent?.name || t('opponent') }), color: ST.muted }
 
   // Online ratings shown in the game: the host-frozen pre-game value when there is one.
   const frozenOf = (c) => (state.ratings?.[c] ? state.ratings[c] : null)
   const myAward = award && award.key === `${snap?.code}:${state.round}:${state.gameNo}` ? award : null
   const myRatingLabel = myColor ? ratingText(frozenOf(myColor) || ratings.mine) : null
   const oppRating = myColor ? frozenOf(opponentColor) || (opponent ? ratings.of(opponent.id) : null) : null
-  const oppRatingLabel = ratingText(oppRating) ? `${ratingText(oppRating)} online` : null
+  const oppRatingLabel = ratingText(oppRating) ? t('x_online', { r: ratingText(oppRating) }) : null
   const oppResultLine = myAward?.opp
-    ? `Online ${myAward.opp.after} (${myAward.opp.delta >= 0 ? '+' : ''}${myAward.opp.delta})`
-    : oppRatingLabel ? `Rated ${oppRatingLabel}` : null
+    ? t('online_x', { r: `${myAward.opp.after} (${myAward.opp.delta >= 0 ? '+' : ''}${myAward.opp.delta})` })
+    : oppRatingLabel ? t('rated_x', { r: oppRatingLabel }) : null
 
   // Spectators (no seat) see both seats as plain rows.
   const spectatorSeat = (c) => {
@@ -587,8 +591,8 @@ export function OnlineChessGame({ room, onExit }) {
     const here = p && roster.some((x) => x.id === p.id)
     return (
       <ChessSeat
-        name={p?.name || 'Waiting…'}
-        sub={`${colorName(c)}${p && !here ? ' · disconnected' : ''}${turn === c && !r ? ' · to move' : ''}`}
+        name={p?.name || t('waiting_dots')}
+        sub={`${colorName(c)}${p && !here ? ` · ${t('disconnected_lc')}` : ''}${turn === c && !r ? ` · ${t('to_move_lc')}` : ''}`}
         subColor={turn === c && !r ? ST.friendly : ST.muted}
         avatar={p?.avatar}
         accent={c === 'w' ? '#ffffff' : ST.faint}
@@ -599,7 +603,7 @@ export function OnlineChessGame({ room, onExit }) {
 
   const opponentClock = hasClock && myColor ? (
     <View style={styles.clockRow}>
-      {firstMoveWindow && turn === opponentColor ? <Text style={[stType.label, { flex: 1 }]}>First move · {Math.ceil(firstMoveLeft / 1000)}s</Text> : <View style={{ flex: 1 }} />}
+      {firstMoveWindow && turn === opponentColor ? <Text style={[stType.label, { flex: 1 }]}>{t('first_move_s', { n: Math.ceil(firstMoveLeft / 1000) })}</Text> : <View style={{ flex: 1 }} />}
       <ChessClock ms={clockFor(opponentColor)} active={clockActive(opponentColor)} />
     </View>
   ) : null
@@ -629,14 +633,14 @@ export function OnlineChessGame({ room, onExit }) {
         {!r && opponent && !opponentHere && (
           <View style={[styles.banner, { borderColor: withAlpha(ST.objective, 0.5), backgroundColor: withAlpha(ST.objective, 0.08) }]}>
             <Ionicons name="cloud-offline" size={15} color={ST.objective} />
-            <Text style={styles.bannerText}>{opponent.name} lost connection. Waiting for them to come back…</Text>
+            <Text style={styles.bannerText}>{t('lost_connection', { name: opponent.name })}</Text>
           </View>
         )}
         {!r && state.drawOffer && state.drawOffer !== myColor && myColor && (
           <View style={[styles.banner, { borderColor: ST.objective }]}>
-            <Text style={[styles.bannerText, { color: ST.objective }]} numberOfLines={2}>{opponent?.name || 'Your opponent'} offers a draw</Text>
-            <StButton title="Decline" tone="ghost" height={36} onPress={() => send({ type: 'draw_decline' })} style={{ paddingHorizontal: 12 }} />
-            <StButton title="Accept" tone="objective" height={36} onPress={() => send({ type: 'draw_accept' })} style={{ paddingHorizontal: 12 }} />
+            <Text style={[styles.bannerText, { color: ST.objective }]} numberOfLines={2}>{t('offers_draw', { name: opponent?.name || t('your_opponent') })}</Text>
+            <StButton title={t('decline')} tone="ghost" height={36} onPress={() => send({ type: 'draw_decline' })} style={{ paddingHorizontal: 12 }} />
+            <StButton title={t('accept')} tone="objective" height={36} onPress={() => send({ type: 'draw_accept' })} style={{ paddingHorizontal: 12 }} />
           </View>
         )}
 
@@ -660,8 +664,8 @@ export function OnlineChessGame({ room, onExit }) {
 
         {myColor ? (
           <ChessSeat
-            name={`You · ${colorName(myColor)}`}
-            sub={`${mySub.text}${myRatingLabel ? ` · Online ${myRatingLabel}` : ''}`}
+            name={`${t('you')} · ${colorName(myColor)}`}
+            sub={`${mySub.text}${myRatingLabel ? ` · ${t('online_x', { r: myRatingLabel })}` : ''}`}
             subColor={mySub.color}
             avatar={snap?.me?.avatar}
             accent={ST.friendly}
@@ -674,38 +678,38 @@ export function OnlineChessGame({ room, onExit }) {
           <View style={styles.actions}>
             {!r ? (
               <ActionTile
-                label={state.drawOffer === myColor ? 'Offered' : 'Draw'}
+                label={state.drawOffer === myColor ? t('offered') : t('draw')}
                 icon="hand-left-outline"
                 disabled={!!state.drawOffer || state.moves.length < 2}
                 onPress={() => { buzz('select'); send({ type: 'draw_offer' }) }}
-                accessibilityLabel={state.drawOffer === myColor ? 'Draw offered' : 'Offer draw'}
+                accessibilityLabel={state.drawOffer === myColor ? t('draw_offered') : t('offer_draw')}
               />
             ) : (
-              <ActionTile label="Result" icon="podium" tone="objective" onPress={() => setShowResult(true)} />
+              <ActionTile label={t('result')} icon="podium" tone="objective" onPress={() => setShowResult(true)} />
             )}
-            {!r ? <ActionTile label="Resign" icon="flag" tone="danger" onPress={resign} /> : (
+            {!r ? <ActionTile label={t('resign')} icon="flag" tone="danger" onPress={resign} /> : (
               <ActionTile
-                label={iWantRematch ? 'Waiting' : 'Rematch'}
+                label={iWantRematch ? t('waiting') : t('rematch')}
                 icon="refresh"
                 tone="friendly"
                 disabled={iWantRematch || !opponentHere}
                 onPress={() => { buzz('medium'); send({ type: 'rematch' }) }}
               />
             )}
-            <ActionTile label="Chat" icon="chatbubble-ellipses" onPress={() => setChatOpen(true)} badge={unread > 0 ? (unread > 9 ? '9+' : String(unread)) : null} accessibilityLabel={unread ? `Chat, ${unread} unread` : 'Chat'} />
+            <ActionTile label={t('chat')} icon="chatbubble-ellipses" onPress={() => setChatOpen(true)} badge={unread > 0 ? (unread > 9 ? '9+' : String(unread)) : null} accessibilityLabel={unread ? t('chat_unread', { n: unread }) : t('chat')} />
             <ActionTile
-              label={callBusy ? 'End' : 'Call'}
+              label={callBusy ? t('end') : t('call')}
               icon={callBusy ? 'videocam-off' : 'videocam'}
               tone={callBusy ? 'danger' : undefined}
               disabled={!opponentHere && !callBusy}
               onPress={callBusy ? call.hangup : call.start}
-              accessibilityLabel={callBusy ? 'End video call' : 'Video call'}
+              accessibilityLabel={callBusy ? t('end_video_call') : t('video_call')}
             />
           </View>
         ) : null}
         {hasClock && state.tc ? (
           <Text style={[stType.label, { marginTop: 10, color: ST.faint }]}>
-            {Math.round(state.tc.base / 60000)}+{Math.round((state.tc.inc || 0) / 1000)} · clocks start after each side’s first move
+            {Math.round(state.tc.base / 60000)}+{Math.round((state.tc.inc || 0) / 1000)} · {t('clocks_start')}
           </Text>
         ) : null}
       </ScrollView>
@@ -722,54 +726,54 @@ export function OnlineChessGame({ room, onExit }) {
       <ChessResultSheet
         visible={showResult && !!r}
         tone={tone}
-        kicker={`Online chess · ${reasonLabel(r?.reason)}`}
+        kicker={`${t('online_chess')} · ${reasonLabel(r?.reason)}`}
         title={resultTitle}
         sub={resultSub}
         onRequestClose={() => setShowResult(false)}
         stats={[
-          { label: 'Moves', value: String(Math.ceil(state.moves.length / 2)) },
-          ...(myColor ? [{ label: 'Colour', value: colorName(myColor) }] : []),
-          ...(hasClock && myColor ? [{ label: 'Your clock', value: formatClock(clockFor(myColor)), color: ST.friendly }] : []),
+          { label: t('moves'), value: String(Math.ceil(state.moves.length / 2)) },
+          ...(myColor ? [{ label: t('colour'), value: colorName(myColor) }] : []),
+          ...(hasClock && myColor ? [{ label: t('your_clock_label'), value: formatClock(clockFor(myColor)), color: ST.friendly }] : []),
           ...(myColor && myAward ? [
-            { label: 'Online rating', value: String(myAward.after) },
-            { label: 'Change', value: `${myAward.delta >= 0 ? '+' : ''}${myAward.delta}`, color: myAward.delta >= 0 ? ST.health : ST.enemy },
-          ] : myColor && myRatingLabel ? [{ label: 'Online rating', value: myRatingLabel }] : []),
+            { label: t('online_rating'), value: String(myAward.after) },
+            { label: t('change'), value: `${myAward.delta >= 0 ? '+' : ''}${myAward.delta}`, color: myAward.delta >= 0 ? ST.health : ST.enemy },
+          ] : myColor && myRatingLabel ? [{ label: t('online_rating'), value: myRatingLabel }] : []),
         ]}
         actions={(
           <>
             {myColor ? (
               opponentHere ? (
                 <StButton
-                  title={iWantRematch ? 'Waiting for opponent…' : theyWantRematch ? 'Accept rematch' : 'Rematch'}
+                  title={iWantRematch ? t('waiting_opponent') : theyWantRematch ? t('accept_rematch') : t('rematch')}
                   disabled={iWantRematch}
                   onPress={() => { buzz('medium'); send({ type: 'rematch' }) }}
                 />
               ) : (
-                <Text style={[stType.small, { textAlign: 'center' }]}>Your opponent left the game.</Text>
+                <Text style={[stType.small, { textAlign: 'center' }]}>{t('opp_left')}</Text>
               )
             ) : null}
-            {theyWantRematch && !iWantRematch ? <Text style={[stType.small, { textAlign: 'center', color: ST.objective }]}>{opponent?.name} wants a rematch · you’ll swap colours</Text> : null}
+            {theyWantRematch && !iWantRematch ? <Text style={[stType.small, { textAlign: 'center', color: ST.objective }]}>{t('wants_rematch', { name: opponent?.name })}</Text> : null}
             <View style={{ flexDirection: 'row', gap: 8 }}>
-              <StButton title="View board" tone="ghost" height={44} onPress={() => setShowResult(false)} style={{ flex: 1 }} />
-              <StButton title="Leave" tone="ghost" height={44} onPress={onExit} style={{ flex: 1 }} />
+              <StButton title={t('view_board')} tone="ghost" height={44} onPress={() => setShowResult(false)} style={{ flex: 1 }} />
+              <StButton title={t('leave')} tone="ghost" height={44} onPress={onExit} style={{ flex: 1 }} />
             </View>
           </>
         )}
       >
         {myColor && opponent ? (
           <View style={{ marginTop: 18 }}>
-            <Text style={[stType.label, { marginBottom: 6 }]}>Played with · follow on iYiYi</Text>
+            <Text style={[stType.label, { marginBottom: 6 }]}>{t('played_with')}</Text>
             <View style={styles.playedRow}>
               <SeatAvatar uri={opponent.avatar} name={opponent.name} accent={ST.enemy} size={36} />
               <Pressable
                 onPress={() => { setShowResult(false); viewProfile() }}
                 style={{ flex: 1, minWidth: 0 }}
                 accessibilityRole="button"
-                accessibilityLabel={`View ${opponent.name}’s profile`}
+                accessibilityLabel={t('view_profile_a11y', { name: opponent.name })}
               >
                 <Text style={styles.playedName} numberOfLines={1}>{opponent.name}</Text>
                 <Text style={styles.playedLine} numberOfLines={1}>
-                  {oppResultLine ? `${oppResultLine} · ` : ''}{colorName(opponentColor)}{opponentHere ? '' : ' · left'}
+                  {oppResultLine ? `${oppResultLine} · ` : ''}{colorName(opponentColor)}{opponentHere ? '' : ` · ${t('left_lc')}`}
                 </Text>
               </Pressable>
               {opponent?.id ? <GameFollowButton userId={opponent.id} name={opponent.name} /> : null}

@@ -7,6 +7,8 @@
 // 12 hours mutes the sound everywhere (is_muted) until Colin reinstates it.
 import { Platform } from 'react-native'
 import { supabase } from './supabase'
+import { translate } from '../i18n'
+import strings from '../i18n/strings/music'
 
 const BUCKET = 'profile-media'
 const COLS = 'id, user_id, title, audio_url, storage_path, duration_s, bpm, kind, tags, status, is_muted, use_count, play_count, created_at, profiles:user_id (username, avatar_url)'
@@ -16,7 +18,7 @@ export const SUGGESTED_TAGS = ['trap', 'drill', 'boom bap', 'house', 'lo-fi', 'a
 async function uid() {
   const { data } = await supabase.auth.getSession()
   const id = data?.session?.user?.id
-  if (!id) throw new Error('Sign in to save sounds.')
+  if (!id) throw new Error(translate(strings, 'errSignInSave'))
   return id
 }
 
@@ -30,7 +32,7 @@ export async function publishSound({ wav, title, visibility = 'private', duratio
   const status = visibility === 'public' ? 'scanning' : 'private'
   const { data, error } = await supabase
     .from('sounds')
-    .insert({ user_id: userId, title: (title || 'Untitled beat').slice(0, 80), audio_url: audioUrl, storage_path: path, duration_s: durationS, bpm, kind, status, project_id: projectId || null, tags: cleanTags(tags) })
+    .insert({ user_id: userId, title: (title || translate(strings, 'untitledBeat')).slice(0, 80), audio_url: audioUrl, storage_path: path, duration_s: durationS, bpm, kind, status, project_id: projectId || null, tags: cleanTags(tags) })
     .select(COLS)
     .single()
   if (error) throw error
@@ -192,7 +194,7 @@ export async function publicPlaylistsOf(userId) {
 }
 export async function createPlaylist(title, visibility = 'private') {
   const userId = await uid()
-  const { data, error } = await supabase.from('playlists').insert({ user_id: userId, title: (title || 'My playlist').slice(0, 60), visibility }).select(PL_COLS).single()
+  const { data, error } = await supabase.from('playlists').insert({ user_id: userId, title: (title || translate(strings, 'myPlaylist')).slice(0, 60), visibility }).select(PL_COLS).single()
   if (error) throw error
   return data
 }
@@ -237,7 +239,7 @@ export async function videosWithSound(soundId, limit = 60) {
     media_url: r.watermarked_url || r.media_url,
     media_type: r.media_type === 'video' ? 'video' : 'photo',
     owner_id: r.user_id,
-    owner_username: r.profiles?.username ?? 'Someone',
+    owner_username: r.profiles?.username ?? translate(strings, 'someone'),
     owner_avatar_url: r.profiles?.avatar_url ?? null,
     profiles: undefined,
   }))

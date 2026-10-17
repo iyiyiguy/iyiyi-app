@@ -1,6 +1,8 @@
 import React from 'react'
 import { View, Text, Pressable, StyleSheet } from 'react-native'
 import { logCrash } from '../lib/crashLogger'
+import { translate } from '../i18n'
+import strings from '../i18n/strings/arcadeSocial'
 
 export class ErrorBoundary extends React.Component {
   constructor(props) {
@@ -42,25 +44,26 @@ export class ErrorBoundary extends React.Component {
 
   render() {
     if (this.state.hasError) {
+      const t = (k) => translate(strings, k)
       return (
         <View style={styles.container}>
           <View style={styles.card}>
-            <Text style={styles.title}>Oops! Something went wrong</Text>
+            <Text style={styles.title}>{t('eb_title')}</Text>
 
             <View style={styles.errorBox}>
               <Text style={styles.errorText}>
-                {this.state.error?.message || 'Unknown error'}
+                {this.state.error?.message || t('eb_unknown')}
               </Text>
             </View>
 
-            <Text style={styles.subtitle}>We've logged this error and our team is looking into it.</Text>
+            <Text style={styles.subtitle}>{t('eb_sub')}</Text>
 
             <Pressable onPress={this.handleReset} style={styles.button}>
-              <Text style={styles.buttonText}>Try Again</Text>
+              <Text style={styles.buttonText}>{t('eb_retry')}</Text>
             </Pressable>
             {this.props.onBack ? (
               <Pressable onPress={() => { this.handleReset(); this.props.onBack() }} style={[styles.button, { marginTop: 10, backgroundColor: 'rgba(255,255,255,0.12)' }]}>
-                <Text style={styles.buttonText}>Go back</Text>
+                <Text style={styles.buttonText}>{t('eb_back')}</Text>
               </Pressable>
             ) : null}
 

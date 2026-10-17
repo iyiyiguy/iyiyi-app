@@ -2,6 +2,8 @@ import { useState } from 'react'
 import { View, Text, Pressable, StyleSheet } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { FONT, ST, StBar, stType, useStudioFonts, withAlpha } from '../games/studio'
+import { useT } from '../i18n'
+import strings from '../i18n/strings/arcadeMisc'
 
 // Step-by-step "How to play" overlay in the studio look. Props: steps [{ icon, title,
 // description }], onComplete(), gameTitle. Rendered absolutely over its parent.
@@ -31,9 +33,10 @@ function StepIcon({ icon }) {
 }
 
 export const GameTutorial = ({ steps, onComplete, gameTitle }) => {
+  const t = useT(strings)
   useStudioFonts()
   const [currentStep, setCurrentStep] = useState(0)
-  const list = Array.isArray(steps) && steps.length > 0 ? steps : [{ icon: 'game-controller', title: gameTitle || 'How to play', description: '' }]
+  const list = Array.isArray(steps) && steps.length > 0 ? steps : [{ icon: 'game-controller', title: gameTitle || t('how_to_play'), description: '' }]
   const index = Math.min(currentStep, list.length - 1)
   const step = list[index]
   const isLast = index >= list.length - 1
@@ -46,9 +49,9 @@ export const GameTutorial = ({ steps, onComplete, gameTitle }) => {
       <View style={styles.backdrop} />
       <View style={styles.card} accessibilityViewIsModal>
         <View style={styles.header}>
-          <Text style={styles.gameTitle} numberOfLines={1}>{gameTitle} · How to play</Text>
-          <Pressable onPress={onComplete} hitSlop={10} accessibilityRole="button" accessibilityLabel="Skip tutorial">
-            <Text style={styles.skipAll}>Skip</Text>
+          <Text style={styles.gameTitle} numberOfLines={1}>{t('tut_header', { game: gameTitle })}</Text>
+          <Pressable onPress={onComplete} hitSlop={10} accessibilityRole="button" accessibilityLabel={t('skip_a11y')}>
+            <Text style={styles.skipAll}>{t('skip')}</Text>
           </Pressable>
         </View>
         <StBar value={(index + 1) / list.length} height={3} />
@@ -68,10 +71,10 @@ export const GameTutorial = ({ steps, onComplete, gameTitle }) => {
             accessibilityState={{ disabled: index === 0 }}
             style={({ pressed }) => [styles.secondaryBtn, { opacity: index === 0 ? 0.4 : pressed ? 0.75 : 1 }]}
           >
-            <Text style={styles.secondaryText}>Back</Text>
+            <Text style={styles.secondaryText}>{t('back')}</Text>
           </Pressable>
           <Pressable onPress={next} accessibilityRole="button" style={({ pressed }) => [styles.primaryBtn, pressed && { opacity: 0.85 }]}>
-            <Text style={styles.primaryText}>{isLast ? 'Got it' : 'Next'}</Text>
+            <Text style={styles.primaryText}>{isLast ? t('got_it') : t('next')}</Text>
           </Pressable>
         </View>
       </View>

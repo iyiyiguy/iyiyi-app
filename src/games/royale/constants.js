@@ -1,5 +1,9 @@
 // Battle Royale tuning. Everything the host rules, the HUD and the lobby share.
 import { ROYALE_AREAS as SHARED_AREAS } from '../../lib/multiplayer'
+import { translate } from '../../i18n'
+import S from '../../i18n/strings/royale'
+
+const tr = (k, v) => translate(S, k, v)
 
 // Starting areas (radius around the centre). There is NO public cap: the host picks a preset
 // or a custom radius (CUSTOM_MIN_M - CUSTOM_MAX_M) in any lobby. The zone schedule scales
@@ -34,6 +38,8 @@ export const PASSENGER_AREA_M = 8000 // ≈ 5 mi
 export const FOOT_RADIUS_M = 1609.34 // circles this size or smaller: always walkable
 export const PASSENGER_MPS = 4 // ≈ 9 mph incl. stops: the travel speed the big circles allow for
 export const BIG_AREA_TEXT = '5+ mile games assume players may travel as passengers — never play while driving. Firing locks at vehicle speed and the gas pauses for you in transit (up to 5 min per match).'
+/** BIG_AREA_TEXT in the viewer's language. */
+export const bigAreaText = () => tr('big_area')
 export const isBigArea = (r) => Number(r) >= PASSENGER_AREA_M
 export const clampRadius = (r) => {
   const v = Number(r)
@@ -93,9 +99,9 @@ export const gasSpeedFor = (r) => Math.max(GAS_SPEED_MIN, Math.min(GAS_SPEED_MAX
 // A steady walk (m/s): the pace the zone schedule guarantees is enough on every area.
 export const WALK_MPS = 1.3
 export const PACE = {
-  fast: { id: 'fast', label: 'Fast', speed: 1.6, wait: 0.6 },
-  normal: { id: 'normal', label: 'Normal', speed: 1, wait: 1 },
-  long: { id: 'long', label: 'Long', speed: 0.7, wait: 1.4 },
+  fast: { id: 'fast', get label() { return tr('pace_fast') }, speed: 1.6, wait: 0.6 },
+  normal: { id: 'normal', get label() { return tr('pace_normal') }, speed: 1, wait: 1 },
+  long: { id: 'long', get label() { return tr('pace_long') }, speed: 0.7, wait: 1.4 },
 }
 
 // Loot: walk this close to pick a weapon up.
@@ -175,6 +181,8 @@ export const ROYALE_COLORS = {
 
 // Lobby/game copy.
 export const TRANSIT_TEXT = 'In transit — firing is off and the gas is paused while you move at vehicle speed (up to 5 min per match). Never play while driving; passengers can view the map.'
+/** TRANSIT_TEXT in the viewer's language. */
+export const transitText = () => tr('transit_text')
 
 // Rockets follow the Laser Tag rules (laser/engine.js ROCKET_RADIUS_M / ROCKET_GAP_MS /
 // ROCKET_SPLASH_*): 9 m blast (+ up to 3 m GPS slack), 70 → 20 splash damage, 1 per 3 s.

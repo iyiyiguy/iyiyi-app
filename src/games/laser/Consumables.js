@@ -9,6 +9,10 @@ import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
 import Svg, { Circle, Ellipse, Path, Rect } from 'react-native-svg'
 import { FONT, ST, stShadow, withAlpha } from '../studio'
+import { translate } from '../../i18n'
+import H from '../../i18n/strings/laserHud'
+
+const tr = (k, v) => translate(H, k, v)
 
 /** Line icons from the HUD kit. kind: 'grenade' | 'c4' | 'mine' | 'uav' */
 export function EquipIcon({ kind, color = ST.text, size = 18 }) {
@@ -66,7 +70,7 @@ export function StickyBombButton({ count, placedCount = 0, disabled, size = 38, 
         onPress={handlePress}
         hitSlop={4}
         accessibilityRole="button"
-        accessibilityLabel={`Sticky bomb, ${label} left${placedCount ? `, ${placedCount} placed` : ''}. Tap to place one at your position.`}
+        accessibilityLabel={placedCount ? tr('sticky_a11y_placed', { n: label, p: placedCount }) : tr('sticky_a11y', { n: label })}
         style={({ pressed }) => pressed && { transform: [{ scale: 0.94 }] }}
       >
         <EquipTileFace kind="c4" label={label} size={size} accent={placedCount > 0 ? ST.objective : null} dim={disabled || empty} />
@@ -91,13 +95,13 @@ export function DetonateAllButton({ count, disabled, onDetonate, style }) {
       onPress={handlePress}
       hitSlop={6}
       accessibilityRole="button"
-      accessibilityLabel={count > 1 ? `Detonate all ${count} sticky bombs` : 'Detonate the sticky bomb'}
+      accessibilityLabel={count > 1 ? tr('det_all_a11y', { n: count }) : tr('det_one_a11y')}
       style={({ pressed }) => [s.det, disabled && { opacity: 0.45 }, pressed && { transform: [{ scale: 0.97 }] }, style]}
     >
       <Svg width={16} height={16} viewBox="0 0 24 24">
         <Path d="M13 2L4 14h7l-1 8 9-12h-7z" stroke="#fff" strokeWidth={2} fill="none" strokeLinejoin="round" />
       </Svg>
-      <Text style={s.detText} numberOfLines={1}>{count > 1 ? `DETONATE ALL · ${count}` : 'DETONATE'}</Text>
+      <Text style={s.detText} numberOfLines={1}>{count > 1 ? tr('det_all', { n: count }) : tr('det')}</Text>
     </Pressable>
   )
 }
@@ -128,7 +132,7 @@ export function LandMineButton({ count, disabled, size = 38, onDrop, onEmpty }) 
         onPress={handlePress}
         hitSlop={4}
         accessibilityRole="button"
-        accessibilityLabel={`Land mine, ${label} left. Tap to drop at your position.`}
+        accessibilityLabel={tr('mine_a11y', { n: label })}
         style={({ pressed }) => pressed && { transform: [{ scale: 0.94 }] }}
       >
         <EquipTileFace kind="mine" label={label} size={size} dim={disabled || empty || cooldown} />

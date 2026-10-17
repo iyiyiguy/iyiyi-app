@@ -8,6 +8,10 @@ import { StyleSheet, Text, View } from 'react-native'
 import Svg, { Circle, Line, Path } from 'react-native-svg'
 import { angleDiff, formatDistance } from '../../lib/multiplayer'
 import { FONT, ST, stShadow, stType } from '../studio'
+import { translate } from '../../i18n'
+import H from '../../i18n/strings/laserHud'
+
+const tr = (k, v) => translate(H, k, v)
 
 const rad = (d) => (d * Math.PI) / 180
 
@@ -72,7 +76,7 @@ export const HipFireRadar = memo(function HipFireRadar({ size = 300, heading, ra
         return (
           <View key={e.id} style={{ position: 'absolute', left: p.x - 60, top: p.y - sz / 2, width: 120, alignItems: 'center' }}>
             <View style={[st.enemy, { width: sz, height: sz, opacity: locked ? 1 : p.inCone && !p.out ? 0.9 : 0.55 }, locked && st.enemyLocked]} />
-            {locked ? <Text style={st.enemyName} numberOfLines={1}>{String(e.name || 'Enemy').toUpperCase()} · {formatDistance(e.d).toUpperCase()}</Text> : null}
+            {locked ? <Text style={st.enemyName} numberOfLines={1}>{String(e.name || tr('enemy')).toUpperCase()} · {formatDistance(e.d).toUpperCase()}</Text> : null}
           </View>
         )
       })}
@@ -88,7 +92,7 @@ export function HipFireStatus({ target, waiting }) {
     return (
       <View style={st.statusWrap} pointerEvents="none">
         <View style={[st.lock, st.lockIdle]}>
-          <Text style={st.lockText}>{waiting ? 'WAITING FOR PLAYERS’ GPS' : 'NO TARGET'}</Text>
+          <Text style={st.lockText}>{tr(waiting ? 'waiting_gps_caps' : 'no_target')}</Text>
         </View>
       </View>
     )
@@ -98,10 +102,10 @@ export function HipFireStatus({ target, waiting }) {
     <View style={st.statusWrap} pointerEvents="none">
       <View style={st.lock}>
         <View style={st.lockDiamond} />
-        <Text style={st.lockText}>TARGET IN SIGHTS</Text>
+        <Text style={st.lockText}>{tr('target_in_sights')}</Text>
       </View>
       <View style={st.chanceRow}>
-        <Text style={stType.label}>HIT CHANCE</Text>
+        <Text style={stType.label}>{tr('hit_chance')}</Text>
         <View style={st.chanceTrack}><View style={[st.chanceFill, { width: `${pct}%` }]} /></View>
         <Text style={st.chanceNum}>{pct}%</Text>
       </View>
@@ -113,8 +117,8 @@ export function HipFireStatus({ target, waiting }) {
 export function HipFireZone({ auto, height = 96 }) {
   return (
     <View style={[st.zone, { height }]} pointerEvents="none">
-      <Text style={st.zoneTitle}>TAP ANYWHERE</Text>
-      <Text style={st.zoneSub} numberOfLines={2}>{auto ? 'HOLD FOR AUTO' : 'EVERY TAP FIRES'} · RAISE THE PHONE TO AIM WITH THE CAMERA</Text>
+      <Text style={st.zoneTitle}>{tr('tap_anywhere')}</Text>
+      <Text style={st.zoneSub} numberOfLines={2}>{tr(auto ? 'hold_auto' : 'every_tap')} · {tr('raise_phone')}</Text>
     </View>
   )
 }

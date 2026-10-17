@@ -10,14 +10,18 @@ import { encodeQr, qrSvgPath, qrSvgString } from './qr'
 import { qrPayload } from './engine'
 import { pad2 } from './terminal'
 import { Toy } from './toys'
+import { useT } from '../../i18n'
+import B from '../../i18n/strings/besideThem'
+import { bt, stationName } from './text'
 
 /** A station's QR code, black on white with a quiet zone. */
 export function QrImage({ station, size = 220 }) {
+  const t = useT(B)
   const qr = useMemo(() => { try { return encodeQr(qrPayload(station)) } catch { return null } }, [station])
   if (!qr) return null
   const n = qr.size + 8
   return (
-    <Svg width={size} height={size} viewBox={`0 0 ${n} ${n}`} accessibilityLabel={`QR code for ${station.name}`}>
+    <Svg width={size} height={size} viewBox={`0 0 ${n} ${n}`} accessibilityLabel={t('qr_for', { name: stationName(station) })}>
       <Rect x={0} y={0} width={n} height={n} fill="#ffffff" />
       <Path d={qrSvgPath(qr, 4)} fill="#000000" />
     </Svg>
@@ -30,7 +34,7 @@ export function qrPrintHtml(stations) {
   const cards = stations.map((st, i) => {
     let svg = ''
     try { svg = qrSvgString(encodeQr(qrPayload(st)), 300) } catch { svg = '' }
-    return `<div class="card"><div class="no">STATION ${pad2(st.no || i + 1)}</div>${svg}<div class="name">${esc(st.name)}</div><div class="hint">Beside Them · scan with the game to start this task</div></div>`
+    return `<div class="card"><div class="no">${esc(bt('station_no', { n: pad2(st.no || i + 1) }))}</div>${svg}<div class="name">${esc(stationName(st))}</div><div class="hint">${esc(bt('print_hint'))}</div></div>`
   }).join('')
   return `<!doctype html><html><head><meta charset="utf-8"><style>
     @page { margin: 12mm; }
@@ -44,6 +48,7 @@ export function qrPrintHtml(stations) {
 }
 
 export function QrCodesSheet({ visible, onClose, stations }) {
+  const t = useT(B)
   const { width } = useWindowDimensions()
   const [i, setI] = useState(0)
   const [busy, setBusy] = useState(false)
@@ -61,12 +66,12 @@ export function QrCodesSheet({ visible, onClose, stations }) {
       if (share) {
         const { uri } = await Print.printToFileAsync({ html })
         const Sharing = await import('expo-sharing')
-        await Sharing.shareAsync(uri, { mimeType: 'application/pdf', UTI: 'com.adobe.pdf', dialogTitle: 'Beside Them station codes' })
+        await Sharing.shareAsync(uri, { mimeType: 'application/pdf', UTI: 'com.adobe.pdf', dialogTitle: t('codes_dialog') })
       } else {
         await Print.printAsync({ html })
       }
     } catch (e) {
-      if (!/cancel/i.test(String(e?.message || ''))) Alert.alert('Couldn’t print the codes', e?.message || 'Try Share PDF instead.')
+      if (!/cancel/i.test(String(e?.message || ''))) Alert.alert(t('print_failed'), e?.message || t('try_share_pdf'))
     } finally {
       setBusy(false)
     }
@@ -76,38 +81,38 @@ export function QrCodesSheet({ visible, onClose, stations }) {
     <Modal visible={visible} animationType="slide" presentationStyle="fullScreen" onRequestClose={onClose}>
       <SafeAreaView style={styles.fill} edges={['top', 'bottom']}>
         <ScrollView contentContainerStyle={{ padding: 16, alignItems: 'center' }}>
-          <Text style={[stType.kicker, { alignSelf: 'flex-start' }]}>Station codes · {list.length}</Text>
+          <Text style={[stType.kicker, { alignSelf: 'flex-start' }]}>{t('station_codes')} · {list.length}</Text>
           <Text style={[stType.small, { alignSelf: 'flex-start', marginBottom: 14 }]}>
-            Print them (or show this screen) and tape one up at each spot. Players scan a code to start that station’s task.
+            {t('codes_intro')}
           </Text>
           {st ? (
             <View style={styles.card}>
               <View style={styles.cardHead}>
                 {st.toy ? <Toy kind={st.toy} size={34} /> : null}
                 <View style={{ marginLeft: 8, flex: 1 }}>
-                  <Text style={styles.cardNo}>STATION {pad2(st.no || idx + 1)}</Text>
-                  <Text style={styles.cardName} numberOfLines={1}>{st.name}</Text>
+                  <Text style={styles.cardNo}>{t('station_no', { n: pad2(st.no || idx + 1) })}</Text>
+                  <Text style={styles.cardName} numberOfLines={1}>{stationName(st)}</Text>
                 </View>
               </View>
               <QrImage station={st} size={size} />
             </View>
           ) : null}
           <View style={styles.pager}>
-            <Pressable onPress={() => setI(Math.max(0, idx - 1))} disabled={idx === 0} hitSlop={10} accessibilityRole="button" accessibilityLabel="Previous code" style={{ opacity: idx === 0 ? 0.3 : 1 }}>
+            <Pressable onPress={() => setI(Math.max(0, idx - 1))} disabled={idx === 0} hitSlop={10} accessibilityRole="button" accessibilityLabel={t('prev_code')} style={{ opacity: idx === 0 ? 0.3 : 1 }}>
               <Ionicons name="chevron-back" size={28} color={ST.text} />
             </Pressable>
             <Text style={[stType.label, { minWidth: 70, textAlign: 'center' }]}>{list.length ? `${idx + 1} / ${list.length}` : '—'}</Text>
-            <Pressable onPress={() => setI(Math.min(list.length - 1, idx + 1))} disabled={idx >= list.length - 1} hitSlop={10} accessibilityRole="button" accessibilityLabel="Next code" style={{ opacity: idx >= list.length - 1 ? 0.3 : 1 }}>
+            <Pressable onPress={() => setI(Math.min(list.length - 1, idx + 1))} disabled={idx >= list.length - 1} hitSlop={10} accessibilityRole="button" accessibilityLabel={t('next_code')} style={{ opacity: idx >= list.length - 1 ? 0.3 : 1 }}>
               <Ionicons name="chevron-forward" size={28} color={ST.text} />
             </Pressable>
           </View>
         </ScrollView>
         <View style={styles.foot}>
           <View style={{ flexDirection: 'row', gap: 10 }}>
-            <StButton title={busy ? 'Working…' : 'Print'} tone="objective" disabled={busy || !list.length} onPress={() => print(false)} left={<Ionicons name="print-outline" size={18} color={ST.ink} />} style={{ flex: 1 }} />
-            <StButton title="Share PDF" tone="outline" disabled={busy || !list.length} onPress={() => print(true)} left={<Ionicons name="share-outline" size={18} color={ST.friendly} />} style={{ flex: 1 }} />
+            <StButton title={busy ? t('working') : t('print')} tone="objective" disabled={busy || !list.length} onPress={() => print(false)} left={<Ionicons name="print-outline" size={18} color={ST.ink} />} style={{ flex: 1 }} />
+            <StButton title={t('share_pdf')} tone="outline" disabled={busy || !list.length} onPress={() => print(true)} left={<Ionicons name="share-outline" size={18} color={ST.friendly} />} style={{ flex: 1 }} />
           </View>
-          <StButton title="Done" tone="ghost" onPress={onClose} style={{ marginTop: 10 }} />
+          <StButton title={t('done')} tone="ghost" onPress={onClose} style={{ marginTop: 10 }} />
         </View>
       </SafeAreaView>
     </Modal>

@@ -18,6 +18,8 @@ import { Pacifico_400Regular } from '@expo-google-fonts/pacifico'
 import { PermanentMarker_400Regular } from '@expo-google-fonts/permanent-marker'
 import { ChakraPetch_700Bold } from '@expo-google-fonts/chakra-petch'
 
+// The labels below are English fallbacks: the editor shows them translated through
+// i18n/strings/editor.js (font_<id>, style_<id>, aspectOriginal).
 export const CAPTION_FONTS = [
   { id: 'classic', label: 'Classic', family: 'Manrope_800ExtraBold' },
   { id: 'bold', label: 'Bold', family: 'BebasNeue_400Regular', upper: true },

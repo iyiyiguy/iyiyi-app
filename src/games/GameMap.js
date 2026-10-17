@@ -7,6 +7,8 @@ import MapView from '../components/SafeMapView'
 import { Circle, Marker } from 'react-native-maps'
 import * as Location from 'expo-location'
 import { FONT, ST } from './studio'
+import { useT } from '../i18n'
+import AM from '../i18n/strings/arcadeMisc'
 
 export const isValidCoord = (lat, lng) =>
   Number.isFinite(lat) && Number.isFinite(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180
@@ -40,6 +42,7 @@ export function deltaForRadius(r) {
 // fitRadius: zoom so a circle of this many metres around `center` fits.
 // follow: re-centre (animated) whenever `center` / `fitRadius` change.
 export function GameMap({ center, markers = [], circles = [], onPick, style, height = 280, hint, fitRadius, follow = false }) {
+  const t = useT(AM)
   const delta = deltaForRadius(fitRadius)
   const [region, setRegion] = useState(() =>
     center && isValidCoord(center.lat, center.lng)
@@ -115,7 +118,7 @@ export function GameMap({ center, markers = [], circles = [], onPick, style, hei
           ))}
         </MapView>
       ) : failed ? (
-        <View style={styles.center}><Text style={styles.offText}>Location is off, so the map can’t be shown. Turn on location for iYiYi in Settings.</Text></View>
+        <View style={styles.center}><Text style={styles.offText}>{t('map_loc_off')}</Text></View>
       ) : (
         <View style={styles.center}><ActivityIndicator color={ST.muted} /></View>
       )}

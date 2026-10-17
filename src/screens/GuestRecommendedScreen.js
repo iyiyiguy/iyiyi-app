@@ -136,7 +136,7 @@ export default function GuestRecommendedScreen({ navigation }) {
         ))}
         ListEmptyComponent={
           users == null ? <ActivityIndicator color={colors.text} style={{ marginTop: 60 }} /> : (
-            <Text style={styles.empty}>{filtering ? 'No profiles match that search or those tags.' : 'No profiles to show yet.'}</Text>
+            <Text style={styles.empty}>{filtering ? t('recNoMatch') : t('recEmpty')}</Text>
           )
         }
       />

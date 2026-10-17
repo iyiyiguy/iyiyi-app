@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { View, Text, ScrollView, StyleSheet } from 'react-native'
 import { useFocusEffect } from '@react-navigation/native'
 import { Ionicons } from '@expo/vector-icons'
-import { GAMES, getGame } from '../lib/games'
+import { GAMES, gameText, getGame } from '../lib/games'
 import { loadArcadeStats, subscribeArcadeStats, totalsFor, winRateFor } from '../lib/arcadeStats'
 import { DIFFICULTIES, DIFFICULTY_LABELS } from '../lib/chessAI'
 import { formatOnlineRating } from '../lib/chessMatchmaking'
@@ -10,14 +10,27 @@ import {
   AC, ArcadeBackground, ArcadeCard, ArcadeHeader, StatTile, StatusBarScrim, arcadeText, gameIcon, useArcadeInsets, useArcadeStatusBar,
 } from '../games/arcadeUI'
 import { FONT, ST, stType } from '../games/studio'
+import { translate, useT } from '../i18n'
+import A from '../i18n/strings/arcadeStats'
+
+const ta = (k, v) => translate(A, k, v)
+// Recent-game labels are stored in English by lib/arcadeStats; show them translated.
+const LEVEL_KEYS = { Easy: 'easy', Medium: 'medium', Hard: 'hard' }
+function recentLabel(label) {
+  if (label === 'Pass & play') return ta('pass_play')
+  if (label === 'Online') return ta('online')
+  const m = /^vs (\S+) AI$/.exec(String(label || ''))
+  if (m && LEVEL_KEYS[m[1]]) return ta('vs_level_ai', { level: DIFFICULTY_LABELS[LEVEL_KEYS[m[1]]] })
+  return label
+}
 
 function formatWhen(iso) {
-  if (!iso) return 'Never'
+  if (!iso) return ta('never')
   const d = new Date(iso)
   return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
 }
 
-const RESULT_LABEL = { win: 'Win', loss: 'Loss', draw: 'Draw', local: 'Played', score: 'Score', played: 'Played' }
+const RESULT_KEYS = { win: 'res_win', loss: 'res_loss', draw: 'res_draw', local: 'res_played', score: 'res_score', played: 'res_played' }
 const RESULT_COLOR = { win: AC.live, loss: AC.danger, draw: AC.gold }
 
 // One stats card: title row + a row of stat tiles (+ optional children).
@@ -44,6 +57,7 @@ function RecordCard({ title, icon, subtitle, stats, children, glow }) {
 // "My Records": the signed-in player's own real stats and personal bests.
 // (Route params from older callers, e.g. { gameId }, are accepted and ignored.)
 export default function GameLeaderboardScreen({ navigation }) {
+  const t = useT(A)
   const insets = useArcadeInsets()
   useArcadeStatusBar()
   const [stats, setStats] = useState(null)
@@ -61,82 +75,82 @@ export default function GameLeaderboardScreen({ navigation }) {
     <View style={styles.screen}>
       <ArcadeBackground />
       <ScrollView contentContainerStyle={{ paddingTop: insets.top + 10, paddingBottom: insets.bottom + 60, paddingHorizontal: 20 }} showsVerticalScrollIndicator={false}>
-        <ArcadeHeader kicker="Arcade" title="My Records" onBack={() => navigation.goBack()} />
+        <ArcadeHeader kicker={t('arcade')} title={t('my_records')} onBack={() => navigation.goBack()} />
         {!stats ? (
-          <Text style={styles.empty}>Loading…</Text>
+          <Text style={styles.empty}>{t('loading')}</Text>
         ) : (
           <>
             <View style={styles.overview}>
               <View style={styles.overviewRow}>
-                <Big label="Lifetime points" value={stats.lifetimePoints} accent />
-                <Big label="Games played" value={totals.played} />
-                <Big label="Win rate" value={totals.winRate != null ? `${totals.winRate}%` : '—'} />
+                <Big label={t('lifetime_points')} value={stats.lifetimePoints} accent />
+                <Big label={t('games_played')} value={totals.played} />
+                <Big label={t('win_rate')} value={totals.winRate != null ? `${totals.winRate}%` : '—'} />
               </View>
               {totals.played === 0 && (
-                <Text style={styles.hint}>Nothing here yet. Play a game from the Arcade and your records will show up here.</Text>
+                <Text style={styles.hint}>{t('nothing_yet')}</Text>
               )}
             </View>
 
-            <Section title="Chess" />
+            <Section title={t('chess')} />
             <RecordCard
-              title="Online rating"
+              title={t('online_rating')}
               icon={gameIcon('chess')}
               subtitle={stats.chess.online?.games > 0
-                ? `${stats.chess.online.games} rated online game${stats.chess.online.games === 1 ? '' : 's'} · this device${stats.chess.online.games < 10 ? ' · ? = provisional' : ''}`
-                : 'Unrated – play someone online to get a rating'}
+                ? `${t(stats.chess.online.games === 1 ? 'rated_online_one' : 'rated_online', { n: stats.chess.online.games })} · ${t('this_device')}${stats.chess.online.games < 10 ? ` · ${t('provisional')}` : ''}`
+                : t('unrated_online')}
               stats={[
-                { label: 'Online', value: stats.chess.online?.games > 0 ? formatOnlineRating(stats.chess.online.rating, stats.chess.online.games) ?? '—' : '—' },
-                { label: 'Peak', value: stats.chess.online?.games > 0 ? stats.chess.online.peakRating ?? '—' : '—' },
-                { label: 'W-L-D', value: `${stats.chess.online?.w || 0}-${stats.chess.online?.l || 0}-${stats.chess.online?.d || 0}` },
+                { label: t('online'), value: stats.chess.online?.games > 0 ? formatOnlineRating(stats.chess.online.rating, stats.chess.online.games) ?? '—' : '—' },
+                { label: t('peak'), value: stats.chess.online?.games > 0 ? stats.chess.online.peakRating ?? '—' : '—' },
+                { label: t('wld'), value: `${stats.chess.online?.w || 0}-${stats.chess.online?.l || 0}-${stats.chess.online?.d || 0}` },
               ]}
             />
             <RecordCard
-              title="vs AI rating"
-              subtitle={stats.chess.ratedGames > 0 ? `${stats.chess.ratedGames} rated games vs the computer` : 'Unrated – play the computer to get a rating'}
+              title={t('vs_ai_rating')}
+              subtitle={stats.chess.ratedGames > 0 ? t('rated_vs_computer', { n: stats.chess.ratedGames }) : t('unrated_ai')}
               stats={[
-                { label: 'vs AI', value: stats.chess.ratedGames > 0 ? stats.chess.rating : '—' },
-                { label: 'Peak', value: stats.chess.ratedGames > 0 ? stats.chess.peakRating : '—' },
-                { label: 'Pass & play', value: stats.chess.localGames },
+                { label: t('vs_ai'), value: stats.chess.ratedGames > 0 ? stats.chess.rating : '—' },
+                { label: t('peak'), value: stats.chess.ratedGames > 0 ? stats.chess.peakRating : '—' },
+                { label: t('pass_play'), value: stats.chess.localGames },
               ]}
             />
             <RecordCard
-              title="vs Computer"
+              title={t('vs_computer')}
               stats={DIFFICULTIES.map((d) => {
                 const r = stats.chess.vsAI[d]
                 return { label: DIFFICULTY_LABELS[d], value: `${r.w}-${r.l}-${r.d}` }
               })}
             >
-              <Text style={styles.caption}>Wins-losses-draws per level</Text>
+              <Text style={styles.caption}>{t('wld_per_level')}</Text>
             </RecordCard>
 
-            <Section title="What's The Word" />
+            <Section title={gameText(getGame('word-race'), 'name') || "What's The Word"} />
             <RecordCard
-              title="Personal bests"
+              title={t('personal_bests')}
               icon={gameIcon('word-race')}
-              subtitle={`Last played ${formatWhen(stats.games['word-race'].lastPlayed)}`}
+              subtitle={t('last_played', { when: formatWhen(stats.games['word-race'].lastPlayed) })}
               stats={[
-                { label: 'Best score', value: stats.games['word-race'].bestScore ?? '—' },
-                { label: 'Most words', value: stats.wordRace.bestWords },
-                { label: 'Best streak', value: stats.wordRace.bestStreak },
-                { label: 'Runs', value: stats.games['word-race'].played },
+                { label: t('best_score'), value: stats.games['word-race'].bestScore ?? '—' },
+                { label: t('most_words'), value: stats.wordRace.bestWords },
+                { label: t('best_streak'), value: stats.wordRace.bestStreak },
+                { label: t('runs'), value: stats.games['word-race'].played },
               ]}
             />
 
-            <Section title="Multiplayer" />
+            <Section title={t('multiplayer')} />
             {GAMES.filter((g) => g.kind === 'multiplayer').map((g) => {
               const s = stats.games[g.id] || { played: 0, wins: 0, losses: 0, draws: 0, bestScore: null, lastPlayed: null }
               const wr = winRateFor(s)
               return (
                 <RecordCard
                   key={g.id}
-                  title={g.name}
+                  title={gameText(g, 'name')}
                   icon={gameIcon(g.id)}
-                  subtitle={s.played ? `Last played ${formatWhen(s.lastPlayed)}` : 'Not played yet'}
+                  subtitle={s.played ? t('last_played', { when: formatWhen(s.lastPlayed) }) : t('not_played')}
                   stats={[
-                    { label: 'Played', value: s.played },
-                    { label: 'Wins', value: s.wins },
-                    { label: 'Win rate', value: wr != null ? `${wr}%` : '—' },
-                    { label: 'Best score', value: s.bestScore ?? '—' },
+                    { label: t('played'), value: s.played },
+                    { label: t('wins'), value: s.wins },
+                    { label: t('win_rate'), value: wr != null ? `${wr}%` : '—' },
+                    { label: t('best_score'), value: s.bestScore ?? '—' },
                   ]}
                 />
               )
@@ -144,17 +158,17 @@ export default function GameLeaderboardScreen({ navigation }) {
 
             {stats.recent.length > 0 && (
               <>
-                <Section title="Recent games" />
+                <Section title={t('recent_games')} />
                 <ArcadeCard padded={false} style={{ marginBottom: 4 }}>
                   <View style={styles.recent}>
                   {stats.recent.map((r, i) => (
                     <View key={`${r.at}-${i}`} style={[styles.recentRow, i > 0 && styles.recentDivider]}>
                       <Text style={styles.recentGame} numberOfLines={1}>
-                        {getGame(r.gameId)?.name || r.gameId}
-                        {r.label ? <Text style={styles.caption}>  {r.label}</Text> : null}
+                        {getGame(r.gameId) ? gameText(getGame(r.gameId), 'name') : r.gameId}
+                        {r.label ? <Text style={styles.caption}>  {recentLabel(r.label)}</Text> : null}
                       </Text>
                       <Text style={[styles.recentResult, RESULT_COLOR[r.result] && { color: RESULT_COLOR[r.result] }]}>
-                        {r.result === 'score' ? r.score : RESULT_LABEL[r.result] || r.result}
+                        {r.result === 'score' ? r.score : RESULT_KEYS[r.result] ? t(RESULT_KEYS[r.result]) : r.result}
                       </Text>
                       <Text style={styles.recentPoints}>+{r.points}</Text>
                     </View>
@@ -163,7 +177,7 @@ export default function GameLeaderboardScreen({ navigation }) {
                 </ArcadeCard>
               </>
             )}
-            <Text style={styles.footnote}>Records are saved on this device for your account.</Text>
+            <Text style={styles.footnote}>{t('saved_device')}</Text>
           </>
         )}
       </ScrollView>

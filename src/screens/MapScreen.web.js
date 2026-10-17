@@ -13,6 +13,10 @@ import { colors, type } from '../theme'
 import { API_URL, supabase } from '../lib/supabase'
 import { loadSafeZone, updateSafeZonePresence } from '../lib/safeZone'
 import { openProfile } from '../lib/profileNav'
+import { translate, useT } from '../i18n'
+import mapStrings from '../i18n/strings/map'
+import hereStrings from '../i18n/strings/here'
+import scopeStrings from '../i18n/strings/scope'
 
 // react-native-maps has no web implementation, so this screen (Metro picks
 // it automatically when bundled for web) uses Leaflet + OpenStreetMap
@@ -37,7 +41,7 @@ function loadLeaflet() {
     script.id = 'leaflet-js'
     script.src = LEAFLET_JS
     script.onload = () => resolve(window.L)
-    script.onerror = () => reject(new Error('Could not load the map'))
+    script.onerror = () => reject(new Error(translate(mapStrings, 'loadFailed')))
     document.head.appendChild(script)
   })
   return leafletPromise
@@ -54,6 +58,8 @@ const PRESETS = [
   { key: 'national', label: 'Nation', zoom: 4 },
   { key: 'global', label: 'Worldwide', zoom: 2 },
 ]
+// Word labels come from the scope dictionary; distances (150 ft / 5 mi) stay as-is.
+const PRESET_SCOPE_KEY = { city: 'city', state: 'state', national: 'nation', global: 'world' }
 
 // Same original penguin as the native PenguinMarker, drawn in CSS for Leaflet.
 const PENGUIN_CSS = `
@@ -166,12 +172,12 @@ function buildProfilePopup(user, onOpenProfile) {
 
   const nameRow = document.createElement('div')
   nameRow.style.cssText = 'font-weight:700;font-size:14px;color:#1a1a1a;'
-  nameRow.textContent = `${user.username ?? 'iYiYi user'} ${TIER_LABEL[user.account_type] ?? ''}`.trim()
+  nameRow.textContent = `${user.username ?? translate(mapStrings, 'iyiyiUser')} ${TIER_LABEL[user.account_type] ?? ''}`.trim()
   info.appendChild(nameRow)
 
   const linkRow = document.createElement('div')
   linkRow.style.cssText = 'font-size:11px;color:#e0158b;font-weight:600;margin-top:2px;'
-  linkRow.textContent = 'View profile ›'
+  linkRow.textContent = translate(mapStrings, 'viewProfileLink')
   info.appendChild(linkRow)
 
   card.appendChild(info)
@@ -180,6 +186,9 @@ function buildProfilePopup(user, onOpenProfile) {
 }
 
 export default function MapScreen({ navigation }) {
+  const t = useT(mapStrings)
+  const th = useT(hereStrings)
+  const tsc = useT(scopeStrings)
   const containerRef = useRef(null)
   const mapRef = useRef(null)
   const userMarkersRef = useRef([])
@@ -257,7 +266,7 @@ export default function MapScreen({ navigation }) {
       try {
         const { status } = await Location.requestForegroundPermissionsAsync()
         if (status !== 'granted') {
-          if (!cancelled) setError("Location access is off. Enable it to see the map.")
+          if (!cancelled) setError(t('locationOff'))
           return
         }
 
@@ -279,14 +288,14 @@ export default function MapScreen({ navigation }) {
 
         L.circleMarker([loc.coords.latitude, loc.coords.longitude], {
           radius: 9, color: colors.magenta, weight: 3, fillColor: colors.magenta, fillOpacity: 0.9,
-        }).addTo(map).bindPopup('You')
+        }).addTo(map).bindPopup(t('you'))
 
         mapRef.current = map
 
         if (cancelled) return
         await loadNearbyMarkers(L, map, loc.coords.latitude, loc.coords.longitude)
       } catch (e) {
-        if (!cancelled) setError(e.message ?? 'Could not load the map')
+        if (!cancelled) setError(e.message ?? t('loadFailed'))
       }
     }
 
@@ -303,7 +312,7 @@ export default function MapScreen({ navigation }) {
     if (typeof window === 'undefined') return
     // eslint-disable-next-line no-alert
     const confirmed = window.confirm(
-      "iYiYi refreshes your location every 10 seconds... Would you like to refresh your location?"
+      t('refreshMsg')
     )
     if (!confirmed) return
 
@@ -371,13 +380,13 @@ export default function MapScreen({ navigation }) {
   return (
     <View style={styles.screen}>
       <BrandHeader
-        title="Map"
+        title={th('map')}
         right={
           <>
             <GlassButton size="sm" onPress={() => navigation.navigate('Events')} icon={<Ionicons name="calendar-outline" size={16} color={colors.text} />}>
-              Events
+              {th('events')}
             </GlassButton>
-            <HeaderButton icon={tagCount ? 'funnel' : 'funnel-outline'} label="Filter by tag" badge={tagCount > 0} onPress={() => setTagMenuOpen((v) => !v)} />
+            <HeaderButton icon={tagCount ? 'funnel' : 'funnel-outline'} label={t('filterByTag')} badge={tagCount > 0} onPress={() => setTagMenuOpen((v) => !v)} />
           </>
         }
       />
@@ -396,9 +405,9 @@ export default function MapScreen({ navigation }) {
                 {PRESETS.map((p) => (
                   <Pressable key={p.key} onPress={() => choosePreset(p)}>
                     {preset === p.key ? (
-                      <View style={styles.presetActive}><Text style={styles.presetTextActive}>{p.label}</Text></View>
+                      <View style={styles.presetActive}><Text style={styles.presetTextActive}>{PRESET_SCOPE_KEY[p.key] ? tsc(PRESET_SCOPE_KEY[p.key]) : p.label}</Text></View>
                     ) : (
-                      <Glass radius={16} shadow={false}><View style={styles.preset}><Text style={styles.presetText}>{p.label}</Text></View></Glass>
+                      <Glass radius={16} shadow={false}><View style={styles.preset}><Text style={styles.presetText}>{PRESET_SCOPE_KEY[p.key] ? tsc(PRESET_SCOPE_KEY[p.key]) : p.label}</Text></View></Glass>
                     )}
                   </Pressable>
                 ))}
@@ -410,7 +419,7 @@ export default function MapScreen({ navigation }) {
                     <Pressable onPress={() => setCountryOpen(true)}>
                       <Text style={styles.filterSummaryText} numberOfLines={1}>{country.name} · {shownCount}</Text>
                     </Pressable>
-                    <Pressable onPress={() => selectCountry(null)} accessibilityLabel="Clear country">
+                    <Pressable onPress={() => selectCountry(null)} accessibilityLabel={t('clearCountry')}>
                       <Ionicons name="close-circle" size={16} color={colors.textMuted} />
                     </Pressable>
                   </View>
@@ -420,7 +429,7 @@ export default function MapScreen({ navigation }) {
                 <Glass radius={14} shadow={false} style={styles.filterSummaryWrap}>
                   <View style={styles.filterSummary}>
                     <Text style={styles.filterSummaryText} numberOfLines={1}>{selectedTags.slice(0, 3).join(', ')}{tagCount > 3 ? ` +${tagCount - 3}` : ''} · {shownCount}</Text>
-                    <Pressable onPress={() => applyTags([])} accessibilityLabel="Clear tag filter">
+                    <Pressable onPress={() => applyTags([])} accessibilityLabel={t('clearTagFilter')}>
                       <Ionicons name="close-circle" size={16} color={colors.textMuted} />
                     </Pressable>
                   </View>
@@ -428,14 +437,14 @@ export default function MapScreen({ navigation }) {
               ) : null}
             </View>
             <View style={styles.controls} pointerEvents="box-none">
-              <Pressable onPress={refreshLocation} disabled={refreshing} accessibilityLabel="Refresh location">
+              <Pressable onPress={refreshLocation} disabled={refreshing} accessibilityLabel={t('refreshLocation')}>
                 <Glass radius={22} style={styles.circleBtn} shadow={false}>
                   <View style={styles.iconCenter}>
                     {refreshing ? <ActivityIndicator size="small" color={colors.text} /> : <Ionicons name="refresh" size={20} color={colors.text} />}
                   </View>
                 </Glass>
               </Pressable>
-              <Pressable onPress={() => setCountryOpen(true)} accessibilityLabel="Choose a country">
+              <Pressable onPress={() => setCountryOpen(true)} accessibilityLabel={t('chooseCountry')}>
                 <Glass radius={22} style={styles.circleBtn} shadow={false}>
                   <View style={styles.iconCenter}>
                     <Ionicons name={country ? 'globe' : 'globe-outline'} size={20} color={country ? colors.magenta : colors.text} />
@@ -443,11 +452,11 @@ export default function MapScreen({ navigation }) {
                 </Glass>
               </Pressable>
               <Glass radius={22} style={{ width: 44 }} shadow={false}>
-                <Pressable onPress={() => mapRef.current?.zoomIn()} style={styles.zoomBtn} accessibilityLabel="Zoom in">
+                <Pressable onPress={() => mapRef.current?.zoomIn()} style={styles.zoomBtn} accessibilityLabel={t('zoomIn')}>
                   <Ionicons name="add" size={22} color={colors.text} />
                 </Pressable>
                 <View style={styles.zoomDivider} />
-                <Pressable onPress={() => mapRef.current?.zoomOut()} style={styles.zoomBtn} accessibilityLabel="Zoom out">
+                <Pressable onPress={() => mapRef.current?.zoomOut()} style={styles.zoomBtn} accessibilityLabel={t('zoomOut')}>
                   <Ionicons name="remove" size={22} color={colors.text} />
                 </Pressable>
               </Glass>
@@ -458,7 +467,7 @@ export default function MapScreen({ navigation }) {
           visible={countryOpen}
           value={country?.code ?? null}
           allowAll
-          title="Show people in"
+          title={t('showPeopleIn')}
           onSelect={(c) => selectCountry(c)}
           onClose={() => setCountryOpen(false)}
         />

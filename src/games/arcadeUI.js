@@ -9,6 +9,8 @@ import { LinearGradient } from 'expo-linear-gradient'
 import { Ionicons } from '@expo/vector-icons'
 import { useFocusEffect } from '@react-navigation/native'
 import { FONT, ST, stType, useStudioFonts, withAlpha } from './studio'
+import { useT } from '../i18n'
+import AM from '../i18n/strings/arcadeMisc'
 
 // Fixed palette (same keys as before, studio values): dark in both light and dark mode.
 export const AC = {
@@ -205,7 +207,9 @@ export const gameIcon = (id) => GAME_ICONS[id] || 'game-controller'
 
 // Big call-to-action: flat role-colour fill, Chakra caps label. `colors` (an array, as
 // before) picks the fill from its first stop.
-export function PlayButton({ title = 'Play', icon = 'play', onPress, disabled, busy, style, colors = AC.play, small }) {
+export function PlayButton({ title: titleProp, icon = 'play', onPress, disabled, busy, style, colors = AC.play, small }) {
+  const t = useT(AM)
+  const title = titleProp ?? t('play')
   const fill = (Array.isArray(colors) ? colors[0] : colors) || ST.friendly
   const fg = inkOn(fill)
   return (
@@ -219,7 +223,7 @@ export function PlayButton({ title = 'Play', icon = 'play', onPress, disabled, b
     >
       <View style={[s.play, small && s.playSmall, { backgroundColor: fill, borderColor: fill }]}>
         {icon ? <Ionicons name={busy ? 'hourglass' : icon} size={small ? 14 : 17} color={fg} style={{ marginRight: 8 }} /> : null}
-        <Text style={[s.playText, small && { fontSize: 13 }, { color: fg }]} numberOfLines={1}>{busy ? 'Please wait…' : title}</Text>
+        <Text style={[s.playText, small && { fontSize: 13 }, { color: fg }]} numberOfLines={1}>{busy ? t('please_wait') : title}</Text>
       </View>
     </Pressable>
   )
@@ -247,9 +251,10 @@ export function GhostButton({ title, icon, onPress, disabled, style, small }) {
 // Standard arcade page header: back button, title (+ optional kicker) and right-side items.
 // Place it inside a View with paddingTop = useArcadeInsets().top + 10.
 export function ArcadeHeader({ title, kicker, onBack, right, style }) {
+  const t = useT(AM)
   return (
     <View style={[s.header, style]}>
-      {onBack ? <IconCircle icon="chevron-back" label="Back" onPress={onBack} size={40} /> : null}
+      {onBack ? <IconCircle icon="chevron-back" label={t('back')} onPress={onBack} size={40} /> : null}
       <View style={{ flex: 1, minWidth: 0 }}>
         {kicker ? <Text style={s.headerKicker} numberOfLines={1}>{kicker}</Text> : null}
         <Text style={s.headerTitle} numberOfLines={1}>{title}</Text>
@@ -309,11 +314,12 @@ export function ArcadeBox({ children, style, padding = 14 }) {
 
 // Button replacement (MultiplayerUI Btn props).
 export function ArcadeBtn({ title, onPress, disabled, variant = 'glass', size = 'md', style, busy }) {
+  const t = useT(AM)
   const small = size === 'sm'
   if (variant === 'primary' || variant === 'danger') {
     return <PlayButton title={title} icon={null} onPress={onPress} disabled={disabled} busy={busy} small={small} style={style} colors={variant === 'danger' ? [ST.enemy, ST.enemy] : AC.play} />
   }
-  return <GhostButton title={busy ? 'Please wait…' : title} onPress={onPress} disabled={disabled || busy} small={small} style={style} />
+  return <GhostButton title={busy ? t('please_wait') : title} onPress={onPress} disabled={disabled || busy} small={small} style={style} />
 }
 
 export function StatTile({ label, value, accent }) {

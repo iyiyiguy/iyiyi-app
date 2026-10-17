@@ -16,6 +16,11 @@ import { colors as themeColors } from '../../theme'
 import { HUD } from './HudPro'
 import { withAlpha } from '../GameMap'
 import { FONT, ST, useStudioFonts } from '../studio'
+import { translate, useT } from '../../i18n'
+import L from '../../i18n/strings/laserLobby'
+import { teamName } from '../../lib/games'
+
+const tr = (k, v) => translate(L, k, v)
 
 // Lobby panels use the always-dark arcade look.
 const type = arcadeType
@@ -31,15 +36,16 @@ export function laserCanStart(info, roster) {
   const teams = info.teams || {}
   const count = { A: 0, B: 0 }
   for (const p of roster) if (teams[p.id]) count[teams[p.id]] += 1
-  if (roster.length >= 2 && (count.A === 0 || count.B === 0)) return { ok: false, reason: 'Both teams need at least one player.' }
+  if (roster.length >= 2 && (count.A === 0 || count.B === 0)) return { ok: false, reason: tr('need_both_teams') }
   const sites = (info.settings?.sites || []).filter((x) => x && isValidCoord(x.lat, x.lng))
-  if (mode === 'snd' && !sites.length) return { ok: false, reason: 'Waiting for a bomb site — set the play area, tap "Set A here", or tap the map to drop one.' }
-  if (mode === 'snd' && sites.length >= 2 && distanceMeters(sites[0], sites[1]) < MIN_SITE_GAP_M) return { ok: false, reason: `Bomb sites A and B overlap — move one at least ${formatDistance(MIN_SITE_GAP_M)} away.` }
+  if (mode === 'snd' && !sites.length) return { ok: false, reason: tr('wait_site') }
+  if (mode === 'snd' && sites.length >= 2 && distanceMeters(sites[0], sites[1]) < MIN_SITE_GAP_M) return { ok: false, reason: tr('sites_overlap', { d: formatDistance(MIN_SITE_GAP_M) }) }
   return { ok: true }
 }
 
 export function LaserTagSetup({ room, snap }) {
   useStudioFonts()
+  const t = useT(L)
   const info = snap.info
   const settings = info.settings || {}
   const mode = settings.mode || 'ffa'
@@ -158,7 +164,7 @@ export function LaserTagSetup({ room, snap }) {
     const gap = other ? distanceMeters(other, coord) : Infinity
     if (gap < MIN_SITE_GAP_M) {
       buzz('error')
-      setSiteMsg({ text: `Too close to site ${other.id} (${formatDistance(gap)}). Sites must be at least ${formatDistance(MIN_SITE_GAP_M)} apart.`, bad: true })
+      setSiteMsg({ text: tr('too_close', { id: other.id, d: formatDistance(gap), min: formatDistance(MIN_SITE_GAP_M) }), bad: true })
       return false
     }
     genToken.current += 1 // a street lookup still running must not overwrite this
@@ -169,7 +175,7 @@ export function LaserTagSetup({ room, snap }) {
     const outside = area && distanceMeters(area, coord) > area.r
     const weak = Number.isFinite(acc) && acc > 25
     setSiteMsg({
-      text: `Site ${id} set${Number.isFinite(acc) ? ` (GPS ±${formatDistance(acc)})` : ''}.${outside ? ' It’s outside the play area.' : ''}${weak ? ' GPS is weak here — the marker may be off; check it on the map.' : ''}`,
+      text: [Number.isFinite(acc) ? tr('site_set_acc', { id, d: formatDistance(acc) }) : tr('site_set', { id }), outside ? tr('site_outside') : null, weak ? tr('site_weak') : null].filter(Boolean).join(' '),
       bad: !!(outside || weak),
     })
     buzz('success')
@@ -184,7 +190,7 @@ export function LaserTagSetup({ room, snap }) {
     buzz('medium')
     try {
       const perm = await Location.requestForegroundPermissionsAsync()
-      if (perm.status !== 'granted') { setSiteMsg({ text: 'Turn on location to set a site where you stand, or tap the map.', bad: true }); return }
+      if (perm.status !== 'granted') { setSiteMsg({ text: tr('loc_for_site'), bad: true }); return }
       let timer = null
       const pos = await Promise.race([
         Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Highest }),
@@ -196,7 +202,7 @@ export function LaserTagSetup({ room, snap }) {
       const lng = pos?.coords?.longitude
       if (!isValidCoord(lat, lng)) {
         buzz('error')
-        setSiteMsg({ text: 'No GPS fix yet — step into the open, wait a few seconds and try again, or tap the map.', bad: true })
+        setSiteMsg({ text: tr('no_fix_site'), bad: true })
         return
       }
       placeSite(id, { lat, lng }, pos.coords.accuracy)
@@ -213,9 +219,9 @@ export function LaserTagSetup({ room, snap }) {
   const circles = []
   if (area) circles.push({ id: 'area', lat: area.lat, lng: area.lng, radius: area.r, color: HUD.accent })
   if (mode === 'snd') for (const x of sites) circles.push({ id: `site-${x.id}`, lat: x.lat, lng: x.lng, radius: x.r || SITE_RADIUS_M, color: HUD.gold })
-  const markers = mode === 'snd' ? sites.map((x) => ({ id: x.id, lat: x.lat, lng: x.lng, label: `SITE ${x.id}`, color: HUD.gold })) : []
+  const markers = mode === 'snd' ? sites.map((x) => ({ id: x.id, lat: x.lat, lng: x.lng, label: t('site_label', { id: x.id }), color: HUD.gold })) : []
   const mapCenter = area || sites[0] || null
-  const hint = !isHost ? null : tapMode === 'area' ? 'Tap the map to move the play area' : `Tap the map to place site ${tapMode}`
+  const hint = !isHost ? null : tapMode === 'area' ? t('hint_move_area') : t('hint_place_site', { id: tapMode })
   const siteA = sites.find((x) => x.id === 'A')
   const siteB = sites.find((x) => x.id === 'B')
   const siteGap = siteA && siteB ? distanceMeters(siteA, siteB) : null
@@ -224,8 +230,8 @@ export function LaserTagSetup({ room, snap }) {
     <>
       <Card>
         <View style={styles.headRow}>
-          <Text style={type.label}>Play area</Text>
-          {area && <Text style={type.caption}>{AREA_PRESETS[area.preset]?.label || formatDistance(area.r)} radius</Text>}
+          <Text style={type.label}>{t('play_area')}</Text>
+          {area && <Text style={type.caption}>{t('radius', { d: AREA_PRESETS[area.preset]?.label || formatDistance(area.r) })}</Text>}
         </View>
         <View style={styles.chipRow}>
           {Object.values(AREA_PRESETS).map((p) => {
@@ -246,7 +252,7 @@ export function LaserTagSetup({ room, snap }) {
         </View>
         {isHost && mode === 'snd' && (
           <View style={[styles.chipRow, { marginTop: 0 }]}>
-            {[['area', 'Move area'], ['A', 'Tap map: A'], ['B', 'Tap map: B']].map(([id, label]) => (
+            {[['area', t('tap_move_area')], ['A', t('tap_map_a')], ['B', t('tap_map_b')]].map(([id, label]) => (
               <Pressable key={id} onPress={() => setTapMode(id)} style={[styles.chipSm, tapMode === id && styles.chipOn]} accessibilityRole="button" accessibilityState={{ selected: tapMode === id }}>
                 <Text style={[styles.chipText, tapMode === id && { color: HUD.bg }]}>{label}</Text>
               </Pressable>
@@ -265,45 +271,45 @@ export function LaserTagSetup({ room, snap }) {
         <Text style={[type.caption, { marginTop: 8 }]}>
           {area
             ? isHost
-              ? 'Everyone plays inside the circle. Players get a warning if they wander out.'
-              : 'The host set the play area. Stay inside the circle.'
+              ? t('area_host')
+              : t('area_guest')
             : isHost
-              ? (locError ? 'Turn on location to set the play area, or tap the map.' : 'Finding your location…')
-              : 'The host is setting the play area.'}
+              ? t(locError ? 'area_loc_off' : 'finding_loc')
+              : t('area_hosting')}
         </Text>
 
         {mode === 'snd' && (
           <View style={styles.sitesBox}>
             <View style={styles.headRow}>
-              <Text style={type.label}>Bomb sites</Text>
+              <Text style={type.label}>{t('bomb_sites')}</Text>
               {generating && <ActivityIndicator size="small" color={colors.textMuted} />}
             </View>
             <Text style={type.caption}>
               {generating
-                ? 'Finding a spot on a street or sidewalk…'
+                ? t('finding_street')
                 : sites.length
-                  ? `${sites.map((x) => x.id).join(' & ')} · ${formatDistance(SITE_RADIUS_M)} radius${siteGap != null ? ` · ${formatDistance(siteGap)} apart` : ''}${siteSource === 'fallback' ? ' · placed at the area centre (map data unavailable)' : siteSource === 'streets' ? ' · on a street or sidewalk' : ''}. Everyone sees the sites on the map and compass.`
-                  : isHost ? 'Sites are generated when the play area is set.' : 'The host is placing the bomb sites.'}
+                  ? `${[t('sites_line', { ids: sites.map((x) => x.id).join(' & '), d: formatDistance(SITE_RADIUS_M) }), siteGap != null ? t('sites_apart', { d: formatDistance(siteGap) }) : null, siteSource === 'fallback' ? t('sites_fallback') : siteSource === 'streets' ? t('sites_streets') : null].filter(Boolean).join(' · ')}. ${t('sites_everyone')}`
+                  : t(isHost ? 'sites_generated' : 'sites_hosting')}
             </Text>
             {isHost && !generating && (
               <Text style={[type.caption, { marginTop: 4 }]}>
-                To choose them yourself: stand at the spot and tap “Set A here” (then walk to B), or pick “Tap map: A/B” and tap the map. Keep sites at least {formatDistance(MIN_SITE_GAP_M)} apart, outdoors, somewhere safe to stand.
+                {t('sites_howto', { d: formatDistance(MIN_SITE_GAP_M) })}
               </Text>
             )}
             {siteGap != null && siteGap < MIN_SITE_GAP_M && (
-              <Text style={[type.caption, { marginTop: 4, color: HUD.red }]}>Sites A and B overlap — move one at least {formatDistance(MIN_SITE_GAP_M)} away.</Text>
+              <Text style={[type.caption, { marginTop: 4, color: HUD.red }]}>{t('sites_overlap_short', { d: formatDistance(MIN_SITE_GAP_M) })}</Text>
             )}
             {!!siteMsg && <Text style={[type.caption, { marginTop: 4, color: siteMsg.bad ? HUD.gold : HUD.green }]}>{siteMsg.text}</Text>}
-            {area && area.r > 150 && <Text style={[type.caption, { marginTop: 4 }]}>For big areas, generated sites go within about 500 ft of the area’s centre so both are in walking distance.</Text>}
+            {area && area.r > 150 && <Text style={[type.caption, { marginTop: 4 }]}>{t('big_area_note')}</Text>}
             {isHost && (
               <>
                 <View style={{ flexDirection: 'row', gap: 8, marginTop: 10 }}>
-                  <Btn title={placing === 'A' ? 'Locating…' : 'Set A here'} size="sm" disabled={!!placing} onPress={() => setHere('A')} style={{ flex: 1 }} />
-                  <Btn title={placing === 'B' ? 'Locating…' : 'Set B here'} size="sm" disabled={!!placing} onPress={() => setHere('B')} style={{ flex: 1 }} />
+                  <Btn title={placing === 'A' ? t('locating') : t('set_a_here')} size="sm" disabled={!!placing} onPress={() => setHere('A')} style={{ flex: 1 }} />
+                  <Btn title={placing === 'B' ? t('locating') : t('set_b_here')} size="sm" disabled={!!placing} onPress={() => setHere('B')} style={{ flex: 1 }} />
                 </View>
                 <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
-                  <Btn title={generating ? 'Rolling…' : 'Re-roll sites'} size="sm" disabled={generating || !area} onPress={() => { buzz('medium'); setSiteMsg(null); regenerate() }} style={{ flex: 1 }} />
-                  {sites.some((x) => x.id === 'B') && <Btn title="Remove B" size="sm" onPress={() => { setSiteMsg(null); patchSettings({ sites: sites.filter((x) => x.id !== 'B') }) }} />}
+                  <Btn title={generating ? t('rolling') : t('reroll')} size="sm" disabled={generating || !area} onPress={() => { buzz('medium'); setSiteMsg(null); regenerate() }} style={{ flex: 1 }} />
+                  {sites.some((x) => x.id === 'B') && <Btn title={t('remove_b')} size="sm" onPress={() => { setSiteMsg(null); patchSettings({ sites: sites.filter((x) => x.id !== 'B') }) }} />}
                 </View>
               </>
             )}
@@ -314,13 +320,13 @@ export function LaserTagSetup({ room, snap }) {
       {mode !== 'ffa' && (
         <Card>
           <View style={styles.headRow}>
-            <Text style={type.label}>Teams</Text>
+            <Text style={type.label}>{t('teams')}</Text>
             {isHost ? (
               <View style={styles.lockRow}>
-                <Text style={type.caption}>Lock teams</Text>
+                <Text style={type.caption}>{t('lock_teams')}</Text>
                 <Switch value={locked} onValueChange={(v) => room.setInfo({ teamsLocked: v })} trackColor={{ false: 'rgba(255,255,255,0.14)', true: HUD.accent }} thumbColor="#fff" ios_backgroundColor="rgba(255,255,255,0.14)" />
               </View>
-            ) : locked ? <Text style={type.caption}>Teams locked by host</Text> : null}
+            ) : locked ? <Text style={type.caption}>{t('teams_locked')}</Text> : null}
           </View>
           <View style={styles.teams}>
             {['A', 'B'].map((t) => {
@@ -329,11 +335,11 @@ export function LaserTagSetup({ room, snap }) {
                 <View key={t} style={[styles.teamCol, { borderTopColor: TEAMS[t].color, backgroundColor: withAlpha(TEAMS[t].color, 0.1) }, teams[meId] === t && styles.teamColMine]}>
                   <View style={styles.teamHead}>
                     <View style={[styles.teamDot, { backgroundColor: TEAMS[t].color }]} />
-                    <Text style={[styles.teamName, { color: TEAMS[t].color }]}>{TEAMS[t].name}</Text>
-                    {teams[meId] === t ? <Text style={styles.yourTeam}>YOUR TEAM</Text> : null}
+                    <Text style={[styles.teamName, { color: TEAMS[t].color }]}>{teamName(t)}</Text>
+                    {teams[meId] === t ? <Text style={styles.yourTeam}>{tr('your_team')}</Text> : null}
                     <Text style={styles.teamCount}>{members.length}</Text>
                   </View>
-                  {members.length === 0 && <Text style={styles.emptyTeam}>EMPTY</Text>}
+                  {members.length === 0 && <Text style={styles.emptyTeam}>{tr('empty')}</Text>}
                   {members.map((p) => (
                     <Pressable
                       key={p.id}
@@ -341,11 +347,11 @@ export function LaserTagSetup({ room, snap }) {
                       onPress={() => move(p.id, t === 'A' ? 'B' : 'A')}
                       style={({ pressed }) => [styles.member, pressed && isHost && { backgroundColor: 'rgba(255,255,255,0.08)' }]}
                       accessibilityRole={isHost ? 'button' : undefined}
-                      accessibilityHint={isHost ? 'Moves this player to the other team' : undefined}
+                      accessibilityHint={isHost ? tr('move_player_hint') : undefined}
                     >
                       <Avatar uri={p.avatar} name={p.username} size={24} />
                       <Text style={[type.caption, { color: colors.text, marginLeft: 6, flex: 1 }]} numberOfLines={1}>
-                        {p.username}{p.id === meId ? ' (you)' : ''}
+                        {p.username}{p.id === meId ? tr('you_suffix') : ''}
                       </Text>
                     </Pressable>
                   ))}
@@ -354,14 +360,14 @@ export function LaserTagSetup({ room, snap }) {
             })}
           </View>
           {!locked && teams[meId] && (
-            <Btn title={`Switch to ${TEAMS[teams[meId] === 'A' ? 'B' : 'A'].name}`} size="sm" onPress={() => move(meId, teams[meId] === 'A' ? 'B' : 'A')} style={{ marginTop: 10 }} />
+            <Btn title={t('switch_to', { team: teamName(teams[meId] === 'A' ? 'B' : 'A') })} size="sm" onPress={() => move(meId, teams[meId] === 'A' ? 'B' : 'A')} style={{ marginTop: 10 }} />
           )}
           {isHost && (
             <View style={{ flexDirection: 'row', gap: 8, marginTop: 10 }}>
-              <Btn title="Shuffle teams" size="sm" onPress={() => room.setInfo({ teams: balanceTeams(snap.roster.map((p) => p.id)) })} style={{ flex: 1 }} />
+              <Btn title={t('shuffle_teams')} size="sm" onPress={() => room.setInfo({ teams: balanceTeams(snap.roster.map((p) => p.id)) })} style={{ flex: 1 }} />
             </View>
           )}
-          {isHost && <Text style={styles.hint}>TAP A PLAYER TO MOVE THEM</Text>}
+          {isHost && <Text style={styles.hint}>{t('tap_to_move')}</Text>}
         </Card>
       )}
     </>

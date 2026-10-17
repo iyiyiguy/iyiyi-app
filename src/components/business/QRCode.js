@@ -2,17 +2,20 @@ import { useMemo } from 'react'
 import { View, Text } from 'react-native'
 import Svg, { Path, Rect } from 'react-native-svg'
 import { encodeQR, qrPath } from '../../lib/qr'
+import { useT } from '../../i18n'
+import strings from '../../i18n/strings/business'
 
 // A real, scannable QR code drawn on the device (src/lib/qr.js + react-native-svg).
 // Always black on white with a 4-module quiet zone, which every scanner reads reliably.
 export default function QRCode({ value, size = 220, accessibilityLabel }) {
+  const t = useT(strings)
   const qr = useMemo(() => {
     try { return encodeQR(value) } catch { return null }
   }, [value])
   if (!qr) {
     return (
       <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center', backgroundColor: '#fff' }}>
-        <Text style={{ color: '#111', textAlign: 'center', padding: 12 }}>This link is too long for a QR code.</Text>
+        <Text style={{ color: '#111', textAlign: 'center', padding: 12 }}>{t('qr_too_long')}</Text>
       </View>
     )
   }

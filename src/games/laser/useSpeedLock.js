@@ -5,12 +5,18 @@
 // Tag is played on foot in a small area. A short sprint doesn't trip it (sustained 5 s).
 import { useEffect, useRef, useState } from 'react'
 import { TransitTracker } from '../royale/useTransit'
+import { translate } from '../../i18n'
+import H from '../../i18n/strings/laserHud'
+
+const tr = (k, v) => translate(H, k, v)
 
 export const SPEED_LOCK_ENTER_MPS = 15 / 3.6 // 15 km/h
 export const SPEED_LOCK_ENTER_MS = 5000
 export const SPEED_LOCK_EXIT_MPS = 9 / 3.6 // back under a jog
 export const SPEED_LOCK_EXIT_MS = 5000
 export const SPEED_LOCK_TEXT = 'Moving too fast — stop to play'
+/** SPEED_LOCK_TEXT in the viewer's language. */
+export const speedLockText = () => tr('speed_lock')
 
 export function createSpeedLockTracker() {
   return new TransitTracker({ enterMps: SPEED_LOCK_ENTER_MPS, enterMs: SPEED_LOCK_ENTER_MS, exitMps: SPEED_LOCK_EXIT_MPS, exitMs: SPEED_LOCK_EXIT_MS })

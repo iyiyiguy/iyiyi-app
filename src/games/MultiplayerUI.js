@@ -6,6 +6,10 @@ import { Ionicons } from '@expo/vector-icons'
 import GameFollowButton from '../components/GameFollowButton'
 import { useMyUserId } from '../lib/profileNav'
 import { FONT, ST, stType, withAlpha } from './studio'
+import { translate } from '../i18n'
+import R from '../i18n/strings/gameRoom'
+
+const tr = (k, v) => translate(R, k, v)
 
 // Kept for callers that still pass a tint; game surfaces are dark whatever the system theme.
 export function useTint() {
@@ -70,7 +74,7 @@ export function PlayerTap({ player, children, style }) {
       onPress={() => onTap(player)}
       style={({ pressed }) => [style, pressed && { opacity: 0.7 }]}
       accessibilityRole="button"
-      accessibilityLabel={`View ${player.username || 'player'}’s profile`}
+      accessibilityLabel={tr('view_profile', { name: player.username || tr('a_player') })}
       hitSlop={4}
     >
       {children}
@@ -105,10 +109,10 @@ export function ConnectionBanner({ status, error }) {
   if (status === 'connected' || status === 'closed') return null
   const isErr = status === 'error'
   const text = isErr
-    ? (error || 'Connection failed.')
+    ? (error || tr('conn_failed'))
     : status === 'reconnecting'
-      ? 'Connection lost — reconnecting…'
-      : 'Connecting…'
+      ? tr('conn_lost')
+      : tr('connecting')
   const tone = isErr ? ST.enemy : ST.objective
   return (
     <View style={[s.banner, { borderLeftColor: tone }]} accessibilityLiveRegion="polite">
@@ -138,13 +142,14 @@ function pillInk(c) {
 }
 
 // Shown while a location-based game can't get the player's position.
-export function LocationGate({ status, onExit, what = 'This game' }) {
+export function LocationGate({ status, onExit, what }) {
+  const whatText = what || tr('this_game')
   if (status === 'granted') return null
   if (status === 'pending') {
     return (
       <View style={s.gate}>
         <ActivityIndicator color={ST.friendly} />
-        <Text style={[stType.label, { marginTop: 12 }]}>Getting your location…</Text>
+        <Text style={[stType.label, { marginTop: 12 }]}>{tr('getting_loc')}</Text>
       </View>
     )
   }
@@ -152,28 +157,28 @@ export function LocationGate({ status, onExit, what = 'This game' }) {
     <View style={s.gate}>
       <View style={s.gatePanel}>
         <View style={s.gateIcon}><Ionicons name="location" size={22} color={ST.objective} /></View>
-        <Text style={[stType.kicker, { color: ST.objective, textAlign: 'center' }]}>GPS required</Text>
-        <Text style={[stType.title, { textAlign: 'center', marginTop: 2 }]}>Location needed</Text>
+        <Text style={[stType.kicker, { color: ST.objective, textAlign: 'center' }]}>{tr('gps_required')}</Text>
+        <Text style={[stType.title, { textAlign: 'center', marginTop: 2 }]}>{tr('location_needed')}</Text>
         <Text style={[stType.body, { textAlign: 'center', marginVertical: 12 }]}>
-          {what} is played in the real world, so it needs your location to know how close other players are. Your exact location is only shared with players in this match while you play.
+          {tr('location_why', { what: whatText })}
         </Text>
-        {status === 'denied' && <Btn title="Open Settings" variant="primary" onPress={() => Linking.openSettings().catch(() => {})} />}
-        {status === 'error' && <Text style={[stType.small, { textAlign: 'center' }]}>Couldn’t read your location. Make sure Location Services are on.</Text>}
-        <Btn title="Leave game" onPress={onExit} style={{ marginTop: 10 }} />
+        {status === 'denied' && <Btn title={tr('open_settings')} variant="primary" onPress={() => Linking.openSettings().catch(() => {})} />}
+        {status === 'error' && <Text style={[stType.small, { textAlign: 'center' }]}>{tr('loc_read_fail')}</Text>}
+        <Btn title={tr('leave_game')} onPress={onExit} style={{ marginTop: 10 }} />
       </View>
     </View>
   )
 }
 
 // Late joiners watch until the next round.
-export function Spectating({ text = 'A round is in progress. You’ll be in the next one.' }) {
+export function Spectating({ text }) {
   return (
     <View style={s.gate}>
       <View style={s.gatePanel}>
         <View style={s.gateIcon}><Ionicons name="eye" size={22} color={ST.friendly} /></View>
-        <Text style={[stType.kicker, { textAlign: 'center' }]}>Spectating</Text>
-        <Text style={[stType.title, { textAlign: 'center', marginTop: 2 }]}>Round in progress</Text>
-        <Text style={[stType.body, { textAlign: 'center', marginTop: 10 }]}>{text}</Text>
+        <Text style={[stType.kicker, { textAlign: 'center' }]}>{tr('spectating')}</Text>
+        <Text style={[stType.title, { textAlign: 'center', marginTop: 2 }]}>{tr('round_in_progress')}</Text>
+        <Text style={[stType.body, { textAlign: 'center', marginTop: 10 }]}>{text || tr('spectating_default')}</Text>
       </View>
     </View>
   )

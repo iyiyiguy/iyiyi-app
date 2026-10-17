@@ -9,6 +9,10 @@ import { memo, useEffect, useRef } from 'react'
 import { Animated, Easing, StyleSheet, Text, View } from 'react-native'
 import { FONT, ST } from '../studio'
 import { apparentSize, projectDirection } from './sceneDepth'
+import { translate } from '../../i18n'
+import H from '../../i18n/strings/laserHud'
+
+const tr = (k, v) => translate(H, k, v)
 
 export const SCORCH_MS = 3000
 export const SPARK_MS = 800
@@ -59,7 +63,7 @@ function Spark({ id, size, onDone }) {
         )
       })}
       <View style={[st.round, { width: 6, height: 6, borderRadius: 3, backgroundColor: '#fff' }]} />
-      <Text style={[st.coverTag, { top: s / 2 + 6 }]} numberOfLines={1}>COVER</Text>
+      <Text style={[st.coverTag, { top: s / 2 + 6 }]} numberOfLines={1}>{tr('cover')}</Text>
     </Animated.View>
   )
 }

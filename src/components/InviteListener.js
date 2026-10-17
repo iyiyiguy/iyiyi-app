@@ -11,6 +11,9 @@ import { getMyUserId } from '../lib/profileNav'
 import { INVITE_EVENT, inboxTopic, parseInvite } from '../lib/invites'
 import { MP_GAMES, getCurrentRoom } from '../lib/multiplayer'
 import { fetchUnseenBystanderTags, markBystanderTagsSeen } from '../lib/bystanderTags'
+import { useT } from '../i18n'
+import strings from '../i18n/strings/arcadeSocial'
+import { mpGameName } from '../lib/games'
 
 const SHOW_MS = 30000
 const TAG_SHOW_MS = 12000
@@ -18,6 +21,7 @@ const TAG_SHOW_MS = 12000
 // Mounted once while signed in (App.js). Listens on this user's inbox channel while the
 // app is in the foreground and shows a glass banner for incoming game challenges.
 export default function InviteListener({ navRef }) {
+  const t = useT(strings)
   const [myId, setMyId] = useState(null)
   const [foreground, setForeground] = useState(AppState.currentState !== 'background')
   const [invite, setInvite] = useState(null)
@@ -127,7 +131,7 @@ export default function InviteListener({ navRef }) {
     if (!navRef?.isReady?.()) return
     const current = getCurrentRoom()
     if (current?.info?.phase === 'playing') {
-      Alert.alert('You’re in a match', 'Finish or leave your current game first, then head to Laser Tag to fight back.')
+      Alert.alert(t('in_match_title'), t('fight_in_match_msg'))
       return
     }
     const open = () => {
@@ -135,9 +139,9 @@ export default function InviteListener({ navRef }) {
       else navRef.navigate('LaserTagLobby')
     }
     if (current) {
-      Alert.alert('Leave your current lobby?', 'Fighting back will leave the lobby you’re in.', [
-        { text: 'Stay', style: 'cancel' },
-        { text: 'Fight back', onPress: open },
+      Alert.alert(t('leave_lobby_title'), t('fight_leave_msg'), [
+        { text: t('stay'), style: 'cancel' },
+        { text: t('fight_back'), onPress: open },
       ])
       return
     }
@@ -157,13 +161,13 @@ export default function InviteListener({ navRef }) {
     }
     const current = getCurrentRoom()
     if (current?.info?.phase === 'playing') {
-      Alert.alert('You’re in a match', `Finish or leave your current game first, then join ${inv.fromName} from Arcade › Join game with code ${inv.code}.`)
+      Alert.alert(t('in_match_title'), t('join_in_match_msg', { name: inv.fromName, code: inv.code }))
       return
     }
     if (current) {
-      Alert.alert('Leave your current lobby?', `Joining ${inv.fromName}’s ${MP_GAMES[inv.gameId]?.name ?? 'game'} will leave the lobby you’re in.`, [
-        { text: 'Stay', style: 'cancel' },
-        { text: 'Join', onPress: () => go(inv) },
+      Alert.alert(t('leave_lobby_title'), t('join_leave_msg', { name: inv.fromName, game: MP_GAMES[inv.gameId] ? mpGameName(inv.gameId, MP_GAMES[inv.gameId].name) : t('game') }), [
+        { text: t('stay'), style: 'cancel' },
+        { text: t('join'), onPress: () => go(inv) },
       ])
       return
     }
@@ -184,17 +188,17 @@ export default function InviteListener({ navRef }) {
             )}
             <Text style={[type.body, { flex: 1 }]} numberOfLines={3}>
               {invite.kind === 'lt-tag' ? (
-                <>🎯 <Text style={{ fontWeight: '700' }}>{invite.fromName}</Text> tagged you in Laser Tag! Join and fight back</>
+                <>🎯 <Text style={{ fontWeight: '700' }}>{invite.fromName}</Text>{t('inv_tagged')}</>
               ) : invite.kind === 'event' ? (
-                <><Text style={{ fontWeight: '700' }}>{invite.fromName}</Text> invited you to <Text style={{ fontWeight: '700' }}>{invite.title}</Text> 🎉</>
+                <><Text style={{ fontWeight: '700' }}>{invite.fromName}</Text>{t('inv_event')}<Text style={{ fontWeight: '700' }}>{invite.title}</Text> 🎉</>
               ) : (
-                <><Text style={{ fontWeight: '700' }}>{invite.fromName}</Text> challenged you to {game?.name ?? 'a game'} {game?.icon}</>
+                <><Text style={{ fontWeight: '700' }}>{invite.fromName}</Text>{t('inv_challenge')}{game ? mpGameName(invite.gameId, game.name) : t('a_game')} {game?.icon}</>
               )}
             </Text>
           </View>
           <View style={styles.buttons}>
-            <GlassButton size="sm" onPress={dismiss}>{invite.kind === 'lt-tag' ? 'Dismiss' : 'Decline'}</GlassButton>
-            <GlassButton size="sm" variant="primary" onPress={join}>{invite.kind === 'event' ? 'View' : invite.kind === 'lt-tag' ? 'Fight back' : 'Join'}</GlassButton>
+            <GlassButton size="sm" onPress={dismiss}>{invite.kind === 'lt-tag' ? t('dismiss') : t('decline')}</GlassButton>
+            <GlassButton size="sm" variant="primary" onPress={join}>{invite.kind === 'event' ? t('view') : invite.kind === 'lt-tag' ? t('fight_back') : t('join')}</GlassButton>
           </View>
         </View>
       </GlassPanel>

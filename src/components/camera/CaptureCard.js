@@ -3,6 +3,8 @@ import { Animated, Easing, Image, Pressable, StyleSheet, Text, View } from 'reac
 import { Ionicons } from '@expo/vector-icons'
 import * as Haptics from 'expo-haptics'
 import { useVideoPlayer, VideoView } from 'expo-video'
+import { useT } from '../../i18n'
+import camStrings from '../../i18n/strings/camera'
 
 export const CARD_W = 64
 export const CARD_H = 86
@@ -23,6 +25,7 @@ function VideoThumb({ uri }) {
 // drains over `durationMs`, then the card flies up and away and onExpire fires (that's when
 // the upload starts). The X cancels just this one.
 export default function CaptureCard({ item, durationMs = 5000, onExpire, onCancel, onEdit }) {
+  const t = useT(camStrings)
   // Tap a video to edit it, or a photo to add a description, before it posts.
   const editable = !!onEdit && (item.type === 'video' || item.type === 'photo')
   const progress = useRef(new Animated.Value(0)).current
@@ -113,7 +116,7 @@ export default function CaptureCard({ item, durationMs = 5000, onExpire, onCance
           <View style={[styles.stackEdge, { transform: [{ translateX: 2.5 }, { translateY: -2.5 }, { rotate: '2.5deg' }] }]} />
         </>
       )}
-      <Pressable onPress={editable ? edit : undefined} disabled={!editable} style={styles.card} accessibilityRole={editable ? 'button' : undefined} accessibilityLabel={editable ? (item.type === 'video' ? 'Edit this video' : 'Add a description') : undefined}>
+      <Pressable onPress={editable ? edit : undefined} disabled={!editable} style={styles.card} accessibilityRole={editable ? 'button' : undefined} accessibilityLabel={editable ? (item.type === 'video' ? t('editVideo') : t('addDescription')) : undefined}>
         {item.type === 'video'
           ? <VideoThumb key={item.previewUri || item.uri} uri={item.previewUri || item.uri} />
           : <Image source={{ uri: item.previewUri || item.uri }} style={StyleSheet.absoluteFill} resizeMode="cover" />}
@@ -136,7 +139,7 @@ export default function CaptureCard({ item, durationMs = 5000, onExpire, onCance
         {editable ? (
           <View style={styles.editBadge} pointerEvents="none">
             <Ionicons name="color-wand" size={10} color="#fff" />
-            <Text style={styles.kindText}>Edit</Text>
+            <Text style={styles.kindText}>{t('edit')}</Text>
           </View>
         ) : null}
 
@@ -150,7 +153,7 @@ export default function CaptureCard({ item, durationMs = 5000, onExpire, onCance
         hitSlop={10}
         style={styles.cancel}
         accessibilityRole="button"
-        accessibilityLabel={isBurst ? 'Cancel this burst' : 'Cancel this post'}
+        accessibilityLabel={isBurst ? t('cancelBurst') : t('cancelPost')}
       >
         <Ionicons name="close" size={13} color="#fff" />
       </Pressable>

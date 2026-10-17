@@ -10,28 +10,24 @@ import { FadeIn, Press } from '../lib/motion'
 import { apiJson, post } from '../lib/api'
 import useBusinessAccess from '../lib/useBusinessAccess'
 import { BusinessGate, StateCard } from '../components/business/BusinessStates'
-import { useT } from '../i18n'
+import { translate, useT } from '../i18n'
 import strings from '../i18n/strings/business'
 
 // Business Pro promotions. Only the server's own list is shown (no demo promotions): a failed
 // load shows an error with Retry. Viewers see promoted cards labelled "Promoted".
 
+const tb = (k, v) => translate(strings, k, v)
 const RADIUS_OPTIONS = [
-  { label: '500 ft', value: 500, unit: 'ft' },
-  { label: '¼ mile', value: 1320, unit: 'ft' },
-  { label: '1 mile', value: 5280, unit: 'ft' },
-  { label: '5 miles', value: 26400, unit: 'ft' },
+  { get label() { return tb('pr_r_500ft') }, value: 500, unit: 'ft' },
+  { get label() { return tb('pr_r_quarter') }, value: 1320, unit: 'ft' },
+  { get label() { return tb('pr_r_1mi') }, value: 5280, unit: 'ft' },
+  { get label() { return tb('pr_r_5mi') }, value: 26400, unit: 'ft' },
 ]
 
-const DURATION_OPTIONS = [
-  { label: '1 day', days: 1 },
-  { label: '3 days', days: 3 },
-  { label: '7 days', days: 7 },
-  { label: '14 days', days: 14 },
-  { label: '30 days', days: 30 },
-]
+const DURATION_OPTIONS = [1, 3, 7, 14, 30].map((days) => ({ days, get label() { return tb(days === 1 ? 'pr_day_one' : 'pr_days', { n: days }) } }))
 
 function PromotionCard({ promo, onToggle }) {
+  const t = useT(strings)
   const active = promo.status === 'active'
   const endDate = promo.ends_at ? new Date(promo.ends_at).toLocaleDateString() : null
   return (
@@ -39,11 +35,11 @@ function PromotionCard({ promo, onToggle }) {
       <View style={styles.promoCard}>
         <View style={styles.promoHeader}>
           <View style={{ flex: 1 }}>
-            <View style={styles.promotedTag}><Text style={styles.promotedTagText}>PROMOTED</Text></View>
-            <Text style={type.headline} numberOfLines={1}>{promo.headline || 'Promoted placement'}</Text>
+            <View style={styles.promotedTag}><Text style={styles.promotedTagText}>{t('pr_promoted_caps')}</Text></View>
+            <Text style={type.headline} numberOfLines={1}>{promo.headline || t('pr_placement')}</Text>
             <Text style={type.caption}>
-              {RADIUS_OPTIONS.find((r) => r.value === promo.radius)?.label ?? `${promo.radius} ft`} radius
-              {endDate ? ` · ends ${endDate}` : ''}
+              {t('pr_radius_x', { r: RADIUS_OPTIONS.find((r) => r.value === promo.radius)?.label ?? `${promo.radius} ft` })}
+              {endDate ? ` · ${t('pr_ends', { date: endDate })}` : ''}
             </Text>
           </View>
           <View style={[styles.statusDot, active ? styles.statusActive : styles.statusPaused]} />
@@ -51,20 +47,20 @@ function PromotionCard({ promo, onToggle }) {
         <View style={styles.promoStats}>
           <View style={styles.promoStat}>
             <Text style={styles.promoStatVal}>{promo.impressions?.toLocaleString() ?? '0'}</Text>
-            <Text style={type.caption}>views</Text>
+            <Text style={type.caption}>{t('pr_views')}</Text>
           </View>
           <View style={styles.promoStat}>
             <Text style={styles.promoStatVal}>{promo.taps?.toLocaleString() ?? '0'}</Text>
-            <Text style={type.caption}>taps</Text>
+            <Text style={type.caption}>{t('pr_taps')}</Text>
           </View>
           <View style={styles.promoStat}>
             <Text style={styles.promoStatVal}>{promo.follows?.toLocaleString() ?? '0'}</Text>
-            <Text style={type.caption}>follows</Text>
+            <Text style={type.caption}>{t('pr_follows')}</Text>
           </View>
         </View>
         <View style={styles.promoToggle}>
-          <Text style={type.subhead}>{active ? 'Active' : promo.status === 'pending' ? 'Waiting for approval' : 'Paused'}</Text>
-          <Switch value={active} disabled={promo.status === 'pending'} onValueChange={() => onToggle(promo.id, !active)} trackColor={{ true: '#10b981' }} accessibilityLabel={promo.headline || 'Promotion'} />
+          <Text style={type.subhead}>{active ? t('pr_active') : promo.status === 'pending' ? t('pr_pending') : t('pr_paused')}</Text>
+          <Switch value={active} disabled={promo.status === 'pending'} onValueChange={() => onToggle(promo.id, !active)} trackColor={{ true: '#10b981' }} accessibilityLabel={promo.headline || t('pr_promotion')} />
         </View>
       </View>
     </GlassPanel>
@@ -116,12 +112,12 @@ function Promotions({ navigation }) {
       await post(`/api/business/promotions/${id}/toggle`, { active })
       setPromotions((prev) => prev.map((p) => (p.id === id ? { ...p, status: active ? 'active' : 'paused' } : p)))
     } catch (e) {
-      Alert.alert('Error', e?.message || 'Could not update promotion.')
+      Alert.alert(t('error'), e?.message || t('pr_update_failed'))
     }
   }
 
   const createPromo = async () => {
-    if (!headline.trim()) { Alert.alert('Missing headline', 'Add a headline for your promotion.'); return }
+    if (!headline.trim()) { Alert.alert(t('pr_missing_headline'), t('pr_missing_headline_msg')); return }
     setCreating(true)
     try {
       await post('/api/business/promotions', { headline: headline.trim(), description: description.trim(), radius, duration_days: duration })
@@ -131,7 +127,7 @@ function Promotions({ navigation }) {
       setTab('active')
       loadPromos()
     } catch (e) {
-      Alert.alert('Error', e?.message || 'Could not create promotion.')
+      Alert.alert(t('error'), e?.message || t('pr_create_failed'))
     } finally {
       setCreating(false)
     }
@@ -189,33 +185,33 @@ function Promotions({ navigation }) {
           <FadeIn index={1}>
             <GlassPanel radius={radii.lg} lite animateIn={false} style={{ marginTop: 4 }}>
               <View style={styles.form}>
-                <Text style={type.headline}>Create a promotion</Text>
+                <Text style={type.headline}>{t('pr_create')}</Text>
                 <Text style={[type.caption, { marginBottom: 16 }]}>
-                  Your business will be pinned to the top of the nearby feed for everyone in your radius. {t('promo_label_note')}
+                  {t('pr_create_body')} {t('promo_label_note')}
                 </Text>
 
-                <Text style={type.label}>Headline</Text>
+                <Text style={type.label}>{t('pr_headline')}</Text>
                 <TextInput
                   style={styles.input}
                   value={headline}
                   onChangeText={setHeadline}
-                  placeholder="e.g. Grand Opening — 20% off!"
+                  placeholder={t('pr_headline_ph')}
                   placeholderTextColor={colors.textFaint}
                   maxLength={80}
                 />
 
-                <Text style={[type.label, { marginTop: 14 }]}>Description (optional)</Text>
+                <Text style={[type.label, { marginTop: 14 }]}>{t('pr_description')}</Text>
                 <TextInput
                   style={[styles.input, styles.inputMulti]}
                   value={description}
                   onChangeText={setDescription}
-                  placeholder="Tell people what to expect..."
+                  placeholder={t('pr_description_ph')}
                   placeholderTextColor={colors.textFaint}
                   multiline
                   maxLength={280}
                 />
 
-                <Text style={[type.label, { marginTop: 14 }]}>Radius</Text>
+                <Text style={[type.label, { marginTop: 14 }]}>{t('pr_radius')}</Text>
                 <View style={styles.optionRow}>
                   {RADIUS_OPTIONS.map((r) => (
                     <Pressable key={r.value} onPress={() => setRadius(r.value)} style={[styles.optionBtn, radius === r.value && styles.optionActive]}>
@@ -224,7 +220,7 @@ function Promotions({ navigation }) {
                   ))}
                 </View>
 
-                <Text style={[type.label, { marginTop: 14 }]}>Duration</Text>
+                <Text style={[type.label, { marginTop: 14 }]}>{t('pr_duration')}</Text>
                 <View style={styles.optionRow}>
                   {DURATION_OPTIONS.map((d) => (
                     <Pressable key={d.days} onPress={() => setDuration(d.days)} style={[styles.optionBtn, duration === d.days && styles.optionActive]}>
@@ -234,7 +230,7 @@ function Promotions({ navigation }) {
                 </View>
 
                 <Text style={[type.caption, { marginTop: 16, textAlign: 'center' }]}>
-                  Included with your Business Pro subscription — no extra charge.
+                  {t('pr_included')}
                 </Text>
 
                 <Press onPress={createPromo} disabled={creating} haptic="light" style={{ marginTop: 16 }}>
@@ -242,7 +238,7 @@ function Promotions({ navigation }) {
                     {creating ? <ActivityIndicator color="#fff" /> : (
                       <>
                         <Ionicons name="megaphone" size={18} color="#fff" />
-                        <Text style={styles.submitText}>Launch promotion</Text>
+                        <Text style={styles.submitText}>{t('pr_launch')}</Text>
                       </>
                     )}
                   </LinearGradient>

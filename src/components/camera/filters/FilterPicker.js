@@ -5,6 +5,8 @@ import { LinearGradient } from 'expo-linear-gradient'
 import * as Haptics from 'expo-haptics'
 import { FILTERS, filterLabel } from '../../../lib/cameraFilters'
 import { IY_LOGO } from './FilterArt'
+import { useT } from '../../../i18n'
+import camStrings from '../../../i18n/strings/camera'
 
 const GAP = 8
 const MIN_SIZE = 30
@@ -55,6 +57,8 @@ function Thumb({ id, size }) {
 // None / iY Logo / Name Tag / I love you. Tap one, or swipe up/down on the strip to step through.
 // Sizes itself to the room between `top` and `bottom` (px from the card's top / bottom edges).
 export default function FilterPicker({ value, onChange, disabled, top, bottom, note }) {
+  const t = useT(camStrings)
+  const fname = (id) => (id === 'none' ? t('none') : filterLabel(id) ? t(`lens_${id}`) : '')
   const [avail, setAvail] = useState(0)
   const n = FILTERS.length
   const room = avail - (note ? 32 : 0)
@@ -67,7 +71,7 @@ export default function FilterPicker({ value, onChange, disabled, top, bottom, n
   // Flash the filter's name beside the strip when it changes.
   useEffect(() => {
     if (first.current) { first.current = false; return undefined }
-    setShownLabel(filterLabel(value))
+    setShownLabel(fname(value))
     label.setValue(0)
     const anim = Animated.sequence([
       Animated.timing(label, { toValue: 1, duration: 160, useNativeDriver: true }),
@@ -118,7 +122,7 @@ export default function FilterPicker({ value, onChange, disabled, top, bottom, n
               onPress={() => select(f.id)}
               hitSlop={4}
               accessibilityRole="button"
-              accessibilityLabel={`${f.label} filter`}
+              accessibilityLabel={t('filterA11y', { name: fname(f.id) })}
               accessibilityState={{ selected: active }}
               style={[
                 styles.thumb,

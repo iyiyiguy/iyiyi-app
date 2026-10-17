@@ -20,6 +20,7 @@ import strings from '../i18n/strings/business'
 const MAX_MEMBERS = TEAM_STAFF_SEATS
 
 function MemberCard({ member, onRemove }) {
+  const t = useT(strings)
   return (
     <GlassPanel radius={radii.lg} lite animateIn={false}>
       <View style={styles.memberCard}>
@@ -33,8 +34,8 @@ function MemberCard({ member, onRemove }) {
         <View style={{ flex: 1 }}>
           <Text style={type.headline} numberOfLines={1}>{member.username || member.email}</Text>
           <Text style={type.caption}>
-            {member.role === 'owner' ? 'Owner' : member.status === 'pending' ? 'Invite pending' : 'Team member'}
-            {member.joined_at ? ` · joined ${new Date(member.joined_at).toLocaleDateString()}` : ''}
+            {member.role === 'owner' ? t('tm_owner') : member.status === 'pending' ? t('tm_pending') : t('tm_member')}
+            {member.joined_at ? ` · ${t('tm_joined', { date: new Date(member.joined_at).toLocaleDateString() })}` : ''}
           </Text>
         </View>
         {member.role !== 'owner' && (
@@ -44,7 +45,7 @@ function MemberCard({ member, onRemove }) {
         )}
         {member.role === 'owner' && (
           <View style={styles.ownerBadge}>
-            <Text style={styles.ownerText}>OWNER</Text>
+            <Text style={styles.ownerText}>{t('tm_owner_caps')}</Text>
           </View>
         )}
       </View>
@@ -91,21 +92,21 @@ function Team({ navigation }) {
   const invite = async () => {
     const email = inviteEmail.trim().toLowerCase()
     if (!email || !email.includes('@')) {
-      Alert.alert('Invalid email', 'Enter a valid email address.')
+      Alert.alert(t('tm_invalid_email'), t('tm_invalid_email_msg'))
       return
     }
     if (staff.length >= MAX_MEMBERS) {
-      Alert.alert('Team full', `Business Pro includes up to ${MAX_MEMBERS} staff accounts besides you.`)
+      Alert.alert(t('tm_full'), t('tm_full_msg', { n: MAX_MEMBERS }))
       return
     }
     setInviting(true)
     try {
       await post('/api/business/team/invite', { email })
-      Alert.alert('Invite sent', `We sent an invite to ${email}. They show as pending until they accept.`)
+      Alert.alert(t('tm_invite_sent'), t('tm_invite_sent_msg', { email }))
       setInviteEmail('')
       loadMembers()
     } catch (e) {
-      Alert.alert('Error', e?.message || 'Could not send invite.')
+      Alert.alert(t('error'), e?.message || t('tm_invite_failed'))
     } finally {
       setInviting(false)
     }
@@ -113,19 +114,19 @@ function Team({ navigation }) {
 
   const removeMember = (member) => {
     Alert.alert(
-      'Remove team member',
-      `Remove ${member.username || member.email} from your business team? They'll lose access to your business profile.`,
+      t('tm_remove_title'),
+      t('tm_remove_msg', { name: member.username || member.email }),
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: t('cancel'), style: 'cancel' },
         {
-          text: 'Remove',
+          text: t('remove'),
           style: 'destructive',
           onPress: async () => {
             try {
               await del(`/api/business/team/${member.id}`)
               setMembers((prev) => prev.filter((m) => m.id !== member.id))
             } catch (e) {
-              Alert.alert('Error', e?.message || 'Could not remove member.')
+              Alert.alert(t('error'), e?.message || t('tm_remove_failed'))
             }
           },
         },
@@ -164,16 +165,16 @@ function Team({ navigation }) {
               <FadeIn index={members.length + 1} style={{ marginTop: 20 }}>
                 <GlassPanel radius={radii.lg} lite animateIn={false}>
                   <View style={styles.addSection}>
-                    <Text style={type.headline}>Add a team member</Text>
+                    <Text style={type.headline}>{t('tm_add')}</Text>
                     <Text style={[type.caption, { marginTop: 4, marginBottom: 14 }]}>
-                      {spotsLeft} staff seat{spotsLeft === 1 ? '' : 's'} left. They'll be able to post, manage promotions, and respond on behalf of your business.
+                      {t(spotsLeft === 1 ? 'tm_seats_left_one' : 'tm_seats_left', { n: spotsLeft })}
                     </Text>
                     <View style={styles.inviteRow}>
                       <TextInput
                         style={styles.input}
                         value={inviteEmail}
                         onChangeText={setInviteEmail}
-                        placeholder="team@example.com"
+                        placeholder={t('tm_email_ph')}
                         placeholderTextColor={colors.textFaint}
                         keyboardType="email-address"
                         autoCapitalize="none"
@@ -197,14 +198,14 @@ function Team({ navigation }) {
             <FadeIn index={members.length + 2} style={{ marginTop: 16 }}>
               <GlassPanel radius={radii.lg} lite animateIn={false}>
                 <View style={{ padding: 18 }}>
-                  <Text style={[type.label, { marginBottom: 10 }]}>Team member permissions</Text>
+                  <Text style={[type.label, { marginBottom: 10 }]}>{t('tm_perms')}</Text>
                   {[
-                    { icon: 'checkmark-circle', text: 'View analytics dashboard' },
-                    { icon: 'checkmark-circle', text: 'Create and manage promotions' },
-                    { icon: 'checkmark-circle', text: 'Post to the feed' },
-                    { icon: 'checkmark-circle', text: 'Respond to nearby visitors' },
-                    { icon: 'close-circle', text: 'Change subscription or billing', no: true },
-                    { icon: 'close-circle', text: 'Remove the account owner', no: true },
+                    { icon: 'checkmark-circle', text: t('tm_perm_analytics') },
+                    { icon: 'checkmark-circle', text: t('tm_perm_promos') },
+                    { icon: 'checkmark-circle', text: t('tm_perm_post') },
+                    { icon: 'checkmark-circle', text: t('tm_perm_respond') },
+                    { icon: 'close-circle', text: t('tm_perm_billing'), no: true },
+                    { icon: 'close-circle', text: t('tm_perm_owner'), no: true },
                   ].map((perm, i) => (
                     <View key={i} style={styles.permRow}>
                       <Ionicons name={perm.icon} size={18} color={perm.no ? colors.textFaint : '#10b981'} />

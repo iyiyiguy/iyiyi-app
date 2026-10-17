@@ -2,15 +2,19 @@
 // drawn radar minimap and the large map overlay is unavailable.
 import React from 'react'
 import { Minimap } from './Hud'
+import { translate } from '../../i18n'
+import H from '../../i18n/strings/laserHud'
+
+const tr = (k, v) => translate(H, k, v)
 
 export const MAP_RANGES = [
   { id: '150ft', label: '150 ft', r: 45.72 },
   { id: '1mi', label: '1 mi', r: 1609.34 },
   { id: '2mi', label: '2 mi', r: 3218.69 },
   { id: '5mi', label: '5 mi', r: 8046.72 },
-  { id: 'city', label: 'City', r: 16000 },
-  { id: 'state', label: 'State', r: 250000 },
-  { id: 'nation', label: 'Nation', r: 2500000 },
+  { id: 'city', get label() { return tr('range_city') }, r: 16000 },
+  { id: 'state', get label() { return tr('range_state') }, r: 250000 },
+  { id: 'nation', get label() { return tr('range_nation') }, r: 2500000 },
 ]
 export const DEFAULT_MAP_RANGE = '150ft'
 export function allowedRanges({ endless, areaR }) {

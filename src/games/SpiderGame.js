@@ -17,6 +17,13 @@ import {
   StBanner, StFeed, StHero, StLocationGate, StMvp, StPlayerRow, StResultsFooter, StReveal, StRing,
   StScreen, StSection, StSpectating, StStats, StTag,
 } from './beside/studioKit'
+import { translate, useT } from '../i18n'
+import P from '../i18n/strings/partyGames'
+
+// Host lines carry a key (k) and values (v) so every phone shows them in its own language;
+// the English text stays for older clients.
+const line = (id, k, v, text) => ({ id, text, k, v })
+const localLine = (text, f) => (f?.k ? translate(P, f.k, f.v) : text)
 
 const TAG_RANGE_M = 10
 const HEAD_START_MS = 15000
@@ -51,7 +58,7 @@ function initialState(roster, info, now) {
     players,
     winners: [],
     reason: null,
-    feed: [{ id: `start-${now}`, text: `${players[spider].name} is the spider!` }],
+    feed: [line(`start-${now}`, 'sp_feed_spider', { name: players[spider].name }, `${players[spider].name} is the spider!`)],
   }
 }
 
@@ -67,7 +74,7 @@ function evaluate(state, presentIds, now) {
     return {
       ...state,
       players: { ...state.players, [pick]: { ...state.players[pick], spider: true } },
-      feed: [{ id: `respawn-${now}`, text: `The spider left. ${state.players[pick].name} is the new spider!` }, ...state.feed].slice(0, 8),
+      feed: [line(`respawn-${now}`, 'sp_feed_new_spider', { name: state.players[pick].name }, `The spider left. ${state.players[pick].name} is the new spider!`), ...state.feed].slice(0, 8),
     }
   }
   const end = (winners, reason) => withMvp({ ...state, phase: 'ended', endedAt: now, winners, reason, tagging: {} })
@@ -111,7 +118,7 @@ function processTagging(state, now, posOf, presentIds) {
     if (d > tagAllowance(a, b) + BREAK_MARGIN_M) { broken.push(spiderId); continue }
     if (now - startedAt >= TAG_HOLD_MS && d <= tagAllowance(a, b)) {
       players = { ...players, [target]: { ...victim, spider: true, taggedAt: now, taggedBy: spiderId } }
-      feed = [{ id: `tag-${target}-${now}`, text: `${spider.name} tagged ${victim.name}!` }, ...feed].slice(0, 8)
+      feed = [line(`tag-${target}-${now}`, 'sp_feed_tagged', { a: spider.name, b: victim.name }, `${spider.name} tagged ${victim.name}!`), ...feed].slice(0, 8)
     } else {
       nextTagging[spiderId] = tagging[spiderId]
     }
@@ -126,12 +133,12 @@ function startTag(s, from, target, t, posOf) {
   const tagger = s.players[from]
   const victim = s.players[target]
   if (!tagger?.spider || !victim || victim.spider || target === from) return {}
-  if (t < s.tagOpensAt) return { notice: 'Head start — you can tag in a moment.' }
+  if (t < s.tagOpensAt) return { notice: { text: 'Head start — you can tag in a moment.', k: 'sp_n_head_start' } }
   const a = posOf(from)
   const b = posOf(target)
-  if (!a || !b) return { notice: 'Waiting for both locations — try again.' }
+  if (!a || !b) return { notice: { text: 'Waiting for both locations — try again.', k: 'sp_n_wait_locs' } }
   const d = distanceMeters(a, b)
-  if (d > tagAllowance(a, b)) return { notice: `Too far — ${formatDistance(d)} away. Get closer!` }
+  if (d > tagAllowance(a, b)) return { notice: { text: `Too far — ${formatDistance(d)} away. Get closer!`, k: 'sp_n_too_far', v: { d: formatDistance(d) } } }
   if (s.tagging?.[from]?.target === target) return {}
   return { state: { ...s, tagging: { ...(s.tagging || {}), [from]: { target, startedAt: t } } } }
 }
@@ -152,6 +159,7 @@ const roleColor = (spider) => (spider ? ST.enemy : ST.friendly)
 
 export function SpiderGame({ room, onExit }) {
   useStudioFonts()
+  const t = useT(P)
   const snap = useRoomSnapshot(room)
   const positions = useRoomPositions(room)
   const now = useRoomClock(room, 200)
@@ -173,7 +181,7 @@ export function SpiderGame({ room, onExit }) {
 
   useEffect(() => {
     if (!room) return undefined
-    return room.onMessage('notice', (data) => flash(String(data?.text || '')))
+    return room.onMessage('notice', (data) => flash(data?.k ? translate(P, data.k, data.v) : String(data?.text || '')))
   }, [room])
 
   // Feedback when I get tagged.
@@ -182,7 +190,7 @@ export function SpiderGame({ room, onExit }) {
   useEffect(() => {
     if (amSpider && !wasSpider.current && state?.players?.[meId]?.taggedBy) {
       buzz('error')
-      flash('You were tagged. Now you’re a spider — go catch someone.')
+      flash(t('sp_you_tagged'))
     }
     wasSpider.current = amSpider
   }, [amSpider, state, meId])
@@ -195,34 +203,35 @@ export function SpiderGame({ room, onExit }) {
   }, [state?.phase, state?.winners, state?.players, room, meId])
 
   // ---- host logic ----
-  const notify = (to, text) => {
-    if (to === meId) flash(text)
-    else room.send('notice', { text }, { to })
+  // n: { text, k, v } (English text for older clients, key + values for everyone else).
+  const notify = (to, n) => {
+    if (to === meId) flash(translate(P, n.k, n.v))
+    else room.send('notice', n, { to })
   }
   useHostLoop(room, isHost, {
     onTick: () => {
       const s = room.getState()
-      const t = room.now()
+      const tNow = room.now()
       const roundNo = room.info.round || 0
       if (roundNo > 0 && (!s || s.game !== 'spider' || s.round !== roundNo)) {
-        if (room.roster.length >= 1) room.publishState(initialState(room.roster, room.info, t))
+        if (room.roster.length >= 1) room.publishState(initialState(room.roster, room.info, tNow))
         return
       }
       if (!s) return
       const presentIds = room.presentIds()
       let next = s
       if (s.phase === 'playing') {
-        const r = processTagging(s, t, (id) => room.freshPosition(id), presentIds)
+        const r = processTagging(s, tNow, (id) => room.freshPosition(id), presentIds)
         next = r.state
-        for (const spiderId of r.broken) notify(spiderId, 'Tag broken — they got out of range.')
+        for (const spiderId of r.broken) notify(spiderId, { text: 'Tag broken — they got out of range.', k: 'sp_n_broken' })
       }
-      next = evaluate(next, presentIds, t) || next
+      next = evaluate(next, presentIds, tNow) || next
       if (next !== s) room.publishState(next)
     },
     onAction: (action, from) => {
       const s = room.getState()
       if (!s || s.game !== 'spider' || s.phase !== 'playing') return
-      const t = room.now()
+      const tNow = room.now()
       if (action?.type === 'tag_cancel') {
         if (s.tagging?.[from]) {
           const { [from]: _gone, ...rest } = s.tagging
@@ -231,7 +240,7 @@ export function SpiderGame({ room, onExit }) {
         return
       }
       if (action?.type !== 'tag_start') return
-      const r = startTag(s, from, action.target, t, (id) => room.freshPosition(id))
+      const r = startTag(s, from, action.target, tNow, (id) => room.freshPosition(id))
       if (r.notice) notify(from, r.notice)
       if (r.state) room.publishState(r.state)
     },
@@ -270,20 +279,20 @@ export function SpiderGame({ room, onExit }) {
 
   // ---- render ----
   if (!room || !snap) return null
-  if (loc.status !== 'granted') return <StLocationGate status={loc.status} onExit={onExit} what="Spider Spider 123" />
-  if (!state) return <StSpectating title="Starting" text="Picking the first spider…" />
+  if (loc.status !== 'granted') return <StLocationGate status={loc.status} onExit={onExit} what={t('sp_name')} />
+  if (!state) return <StSpectating title={t('starting')} text={t('sp_picking')} />
   if (!state.players[meId]) return <StSpectating />
 
   const avatarOf = (id) => snap.roster.find((r) => r.id === id)?.avatar
-  const nameOf = (id) => state.players[id]?.name || 'someone'
+  const nameOf = (id) => state.players[id]?.name || t('someone')
   const ft = Math.round(TAG_RANGE_M * 3.28)
 
   if (state.phase === 'ended') {
     const iWon = state.winners.includes(meId)
-    const reason = state.reason === 'time' ? 'Time’s up — the free players survived'
-      : state.reason === 'last' ? 'Last player standing'
-        : state.reason === 'all' ? 'The spiders caught everyone'
-          : 'Not enough players left'
+    const reason = state.reason === 'time' ? t('sp_r_time')
+      : state.reason === 'last' ? t('sp_r_last')
+        : state.reason === 'all' ? t('sp_r_all')
+          : t('sp_r_left')
     const mine = state.players[meId]
     const myTags = state.tags?.[meId] || 0
     const survivedMs = Math.max(0, (mine.taggedAt || state.endedAt || now) - state.startedAt)
@@ -293,31 +302,31 @@ export function SpiderGame({ room, onExit }) {
     return (
       <StScreen>
         <StHero
-          kicker={`Spider Spider 123 · ${reason}`}
-          title={iWon ? 'Victory' : mine.spider && mine.taggedBy ? 'Caught' : 'Round over'}
-          sub={iWon ? 'You’re on the winning side.' : state.winners.length ? `${state.winners.map(nameOf).join(', ')} won.` : 'No winner this round.'}
+          kicker={`${t('sp_name')} · ${reason}`}
+          title={iWon ? t('victory') : mine.spider && mine.taggedBy ? t('sp_caught') : t('round_over')}
+          sub={iWon ? t('winning_side') : state.winners.length ? t('x_won', { names: state.winners.map(nameOf).join(', ') }) : t('no_winner')}
           color={iWon ? ST.health : ST.enemy}
           big
         />
         <StStats items={[
-          { label: 'Your tags', value: String(myTags), color: myTags ? ST.enemy : ST.text },
-          { label: mine.taggedBy ? 'Free for' : 'Survived', value: formatClock(survivedMs) },
-          { label: 'Caught', value: `${caught}/${Math.max(0, Object.keys(state.players).length - 1)}` },
+          { label: t('sp_your_tags'), value: String(myTags), color: myTags ? ST.enemy : ST.text },
+          { label: mine.taggedBy ? t('sp_free_for') : t('sp_survived'), value: formatClock(survivedMs) },
+          { label: t('sp_caught'), value: `${caught}/${Math.max(0, Object.keys(state.players).length - 1)}` },
         ]} />
         {state.mvp && state.players[state.mvp] ? (
           <StMvp
             player={{ id: state.mvp, username: state.players[state.mvp].name, avatar: avatarOf(state.mvp) }}
-            line={`${state.tags?.[state.mvp] || 0} tag${state.tags?.[state.mvp] === 1 ? '' : 's'}`}
+            line={t(state.tags?.[state.mvp] === 1 ? 'sp_n_tag_one' : 'sp_n_tags', { n: state.tags?.[state.mvp] || 0 })}
           />
         ) : null}
-        <StSection label="Played with · follow on iYiYi">
+        <StSection label={t('played_with')}>
           {rows.map(([id, p]) => (
             <StPlayerRow
               key={id}
-              player={{ id, username: id === meId ? `${p.name} (you)` : p.name, avatar: avatarOf(id) }}
+              player={{ id, username: id === meId ? t('name_you', { name: p.name }) : p.name, avatar: avatarOf(id) }}
               color={roleColor(p.spider)}
-              subtitle={`${p.taggedBy ? `Tagged by ${nameOf(p.taggedBy)} at ${formatClock(p.taggedAt - state.startedAt)}` : p.spider ? 'Started as the spider' : 'Never caught'} · ${state.tags?.[id] || 0} tags`}
-              right={state.winners.includes(id) ? <StTag text="Win" color={ST.health} /> : null}
+              subtitle={`${p.taggedBy ? t('sp_tagged_by_at', { name: nameOf(p.taggedBy), time: formatClock(p.taggedAt - state.startedAt) }) : p.spider ? t('sp_started_spider') : t('sp_never_caught')} · ${t('sp_n_tags', { n: state.tags?.[id] || 0 })}`}
+              right={state.winners.includes(id) ? <StTag text={t('win')} color={ST.health} /> : null}
             />
           ))}
         </StSection>
@@ -329,13 +338,13 @@ export function SpiderGame({ room, onExit }) {
   if (state.phase === 'countdown') {
     return (
       <StReveal
-        kicker="Spider Spider 123 · you are"
-        title={amSpider ? 'The spider' : 'Free'}
+        kicker={t('sp_you_are')}
+        title={amSpider ? t('sp_the_spider') : t('sp_free')}
         color={roleColor(amSpider)}
         icon={amSpider ? 'bug-outline' : 'walk-outline'}
         body={amSpider
-          ? `Everyone gets a ${HEAD_START_MS / 1000} s head start. Then get within about ${ft} ft of someone and stay there for 3 seconds to tag them.`
-          : 'Run. After the head start a spider has to stay next to you for 3 seconds to tag you. Last one free wins.'}
+          ? t('sp_reveal_spider', { s: HEAD_START_MS / 1000, ft })
+          : t('sp_reveal_free')}
         count={Math.max(0, Math.ceil((state.startsAt - now) / 1000))}
       />
     )
@@ -346,14 +355,14 @@ export function SpiderGame({ room, onExit }) {
   const spiderCount = Object.keys(state.players).filter((id) => state.players[id].spider && presentIds.has(id)).length
   const headStart = Math.max(0, state.tagOpensAt - now)
   const myColor = roleColor(amSpider)
-  const holdOf = (t) => Math.min(TAG_HOLD_MS, Math.max(0, now - t.startedAt))
+  const holdOf = (x) => Math.min(TAG_HOLD_MS, Math.max(0, now - x.startedAt))
 
   return (
     <StScreen>
       <StHero
-        kicker={`Spider Spider 123 · ${amSpider ? 'you are a spider' : 'you are free'}`}
+        kicker={`${t('sp_name')} · ${amSpider ? t('sp_you_spider') : t('sp_you_free')}`}
         title={state.endsAt ? formatClock(state.endsAt - now) : formatClock(now - state.startedAt)}
-        sub={`${freeLeft} free player${freeLeft === 1 ? '' : 's'} left · ${spiderCount} spider${spiderCount === 1 ? '' : 's'}`}
+        sub={`${t(freeLeft === 1 ? 'sp_free_left_one' : 'sp_free_left', { n: freeLeft })} · ${t(spiderCount === 1 ? 'sp_spiders_one' : 'sp_spiders', { n: spiderCount })}`}
         color={myColor}
       />
 
@@ -361,17 +370,17 @@ export function SpiderGame({ room, onExit }) {
         <StBanner
           icon="timer-outline"
           color={ST.objective}
-          text={amSpider ? `Head start · you can tag in ${Math.ceil(headStart / 1000)} s` : `Head start · ${Math.ceil(headStart / 1000)} s to get away`}
+          text={amSpider ? t('sp_head_tag_in', { n: Math.ceil(headStart / 1000) }) : t('sp_head_get_away', { n: Math.ceil(headStart / 1000) })}
         />
       ) : null}
 
       {beingTagged ? (
         <View style={[styles.tagCard, { backgroundColor: withAlpha(ST.enemy, 0.16), borderColor: ST.enemy }]}>
-          <StRing size={84} color={ST.enemy} progress={holdOf(tagOnMe[1]) / TAG_HOLD_MS} value={(holdOf(tagOnMe[1]) / 1000).toFixed(1)} unit="of 3 s" />
+          <StRing size={84} color={ST.enemy} progress={holdOf(tagOnMe[1]) / TAG_HOLD_MS} value={(holdOf(tagOnMe[1]) / 1000).toFixed(1)} unit={t('sp_of_3s')} />
           <View style={{ flex: 1, marginLeft: 14 }}>
-            <Text style={[stType.label, { color: ST.enemy }]}>Being tagged</Text>
-            <Text style={[stType.name, { fontSize: 18 }]} numberOfLines={1}>Run · {nameOf(tagOnMe[0])} is on you</Text>
-            <Text style={[stType.small, { marginTop: 2 }]}>Get more than about {ft} ft away to break it.</Text>
+            <Text style={[stType.label, { color: ST.enemy }]}>{t('sp_being_tagged')}</Text>
+            <Text style={[stType.name, { fontSize: 18 }]} numberOfLines={1}>{t('sp_run_on_you', { name: nameOf(tagOnMe[0]) })}</Text>
+            <Text style={[stType.small, { marginTop: 2 }]}>{t('sp_break_it', { ft })}</Text>
           </View>
         </View>
       ) : null}
@@ -380,45 +389,45 @@ export function SpiderGame({ room, onExit }) {
 
       {myTagging ? (
         <View style={styles.tagCenter}>
-          <StRing size={96} color={ST.enemy} progress={holdOf(myTagging) / TAG_HOLD_MS} value={(holdOf(myTagging) / 1000).toFixed(1)} unit="of 3 s" />
+          <StRing size={96} color={ST.enemy} progress={holdOf(myTagging) / TAG_HOLD_MS} value={(holdOf(myTagging) / 1000).toFixed(1)} unit={t('sp_of_3s')} />
           <Text style={[stType.name, { letterSpacing: 1, marginTop: 8, textTransform: 'uppercase', textAlign: 'center' }]} numberOfLines={1}>
-            Tagging {nameOf(myTagging.target)} · stay close
+            {t('sp_tagging_stay', { name: nameOf(myTagging.target) })}
           </Text>
-          <StButton title="Cancel tag" tone="ghost" height={38} onPress={() => room.sendAction({ type: 'tag_cancel' })} style={{ marginTop: 8, minWidth: 150 }} />
+          <StButton title={t('sp_cancel_tag')} tone="ghost" height={38} onPress={() => room.sendAction({ type: 'tag_cancel' })} style={{ marginTop: 8, minWidth: 150 }} />
         </View>
       ) : null}
 
       <Text style={[stType.small, { textAlign: 'center', marginBottom: 10 }]}>
-        {myPos ? `GPS ±${Math.round(myPos.acc ?? 10)} m · the host confirms every tag` : 'Waiting for GPS…'}
-        {myPos?.acc > 25 ? ' · weak signal, move into the open' : ''}
+        {myPos ? t('sp_gps_line', { n: Math.round(myPos.acc ?? 10) }) : t('wait_gps')}
+        {myPos?.acc > 25 ? ` · ${t('sp_weak_signal')}` : ''}
       </Text>
 
       {!!notice && <StBanner text={notice} color={ST.objective} icon="information-circle-outline" />}
 
-      <StSection label="Players" right={amSpider ? `Tag range ~${ft} ft` : 'Nearest first'}>
+      <StSection label={t('players')} right={amSpider ? t('sp_tag_range', { ft }) : t('sp_nearest_first')}>
         {others.map((o) => {
           const canTag = amSpider && !o.spider && o.present && headStart === 0 && o.pos && myPos && o.distance <= tagAllowance(myPos, o.pos)
-          const status = o.spider ? 'Spider' : 'Free'
+          const status = o.spider ? t('sp_spider') : t('sp_free')
           return (
             <StPlayerRow
               key={o.id}
               player={{ id: o.id, username: o.name, avatar: avatarOf(o.id) }}
               color={roleColor(o.spider)}
               dim={!o.present}
-              subtitle={!o.present ? 'Disconnected' : o.pos ? `${status} · ${formatDistance(o.distance)} ${o.dir || ''}` : `${status} · no location yet`}
+              subtitle={!o.present ? t('disconnected') : o.pos ? `${status} · ${formatDistance(o.distance)} ${o.dir || ''}` : `${status} · ${t('no_location_yet')}`}
               subtitleColor={o.present && o.spider && !amSpider && o.distance < 30 ? ST.enemy : undefined}
               right={amSpider && !o.spider && o.present
                 ? myTagging?.target === o.id
-                  ? <StTag text="Tagging" color={ST.enemy} solid />
-                  : <StButton title="Tag" tone="danger" height={34} disabled={!canTag} style={{ minWidth: 64, paddingHorizontal: 10 }} onPress={() => { buzz('medium'); room.sendAction({ type: 'tag_start', target: o.id }) }} />
+                  ? <StTag text={t('sp_tagging')} color={ST.enemy} solid />
+                  : <StButton title={t('sp_tag')} tone="danger" height={34} disabled={!canTag} style={{ minWidth: 64, paddingHorizontal: 10 }} onPress={() => { buzz('medium'); room.sendAction({ type: 'tag_start', target: o.id }) }} />
                 : null}
             />
           )
         })}
-        {others.length === 0 ? <Text style={stType.small}>No one else is here.</Text> : null}
+        {others.length === 0 ? <Text style={stType.small}>{t('no_one_else')}</Text> : null}
       </StSection>
 
-      <StFeed items={state.feed} />
+      <StFeed items={state.feed} localize={localLine} />
     </StScreen>
   )
 }
@@ -427,6 +436,7 @@ export function SpiderGame({ room, onExit }) {
 // red circle is the tag range. Outer ring = RADAR_M; anyone further sits on the edge.
 const RADAR_M = 50
 function Radar({ me, amSpider, others, focusId }) {
+  const t = useT(P)
   const { width } = useWindowDimensions()
   const size = Math.max(200, Math.min(width - 48, 300))
   const r = size / 2
@@ -435,7 +445,7 @@ function Radar({ me, amSpider, others, focusId }) {
   const nearestLabel = others.find((o) => (amSpider ? !o.spider : o.spider))
   const meColor = amSpider ? ST.enemy : ST.friendly
   return (
-    <View style={[styles.radarWrap, { height: size + 8 }]} accessibilityLabel={`Radar: ${others.length} players nearby`}>
+    <View style={[styles.radarWrap, { height: size + 8 }]} accessibilityLabel={t('sp_radar_a11y', { n: others.length })}>
       <View style={{ width: size, height: size }}>
         <View style={[styles.ring, { width: size, height: size, borderRadius: r, borderColor: 'rgba(255,255,255,0.2)' }]} />
         <View style={[styles.ring, { left: r / 2, top: r / 2, width: r, height: r, borderRadius: r / 2, borderColor: 'rgba(255,255,255,0.12)' }]} />

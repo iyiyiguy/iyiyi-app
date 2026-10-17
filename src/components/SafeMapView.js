@@ -2,6 +2,8 @@ import { forwardRef, useImperativeHandle, useState } from 'react'
 import { Platform, StyleSheet, Text, View } from 'react-native'
 import Constants from 'expo-constants'
 import MapView from 'react-native-maps'
+import { useT } from '../i18n'
+import mapStrings from '../i18n/strings/map'
 
 // Android's maps need a Google Maps API key baked into the build (app.config.js reads it from
 // GOOGLE_MAPS_ANDROID_API_KEY). Without one, Google's map would crash the app the moment it
@@ -11,6 +13,7 @@ export const mapsAvailable = Platform.OS !== 'android' || !!Constants.expoConfig
 
 const noop = () => {}
 const MapPlaceholder = forwardRef(function MapPlaceholder({ style }, ref) {
+  const t = useT(mapStrings)
   useImperativeHandle(ref, () => ({
     animateToRegion: noop,
     animateCamera: noop,
@@ -27,7 +30,7 @@ const MapPlaceholder = forwardRef(function MapPlaceholder({ style }, ref) {
   return (
     <View style={[style, styles.box]} onLayout={(e) => setSmall(e.nativeEvent.layout.width < 180)}>
       <Text style={[styles.icon, small && { fontSize: 20, marginBottom: 0 }]}>🗺️</Text>
-      {small ? null : <Text style={styles.text}>Map unavailable in this build</Text>}
+      {small ? null : <Text style={styles.text}>{t('mapUnavailable')}</Text>}
     </View>
   )
 })

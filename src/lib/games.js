@@ -1,6 +1,11 @@
 // Arcade game catalogue. Ids match arcadeStats game ids; `mpId` is the multiplayer id
 // GameLobby / MP_GAMES use ('lasertag' | 'spider-spider' | 'beside-them' | 'chess').
 import { loadArcadeStats } from './arcadeStats'
+import { translate } from '../i18n'
+import gameStrings from '../i18n/strings/games'
+import mpStrings from '../i18n/strings/mpGames'
+import { getLanguage } from '../i18n'
+import { LASER_MODES, howToPlay } from './multiplayer'
 
 export const ARCADE_CATEGORIES = [
   { id: 'all', name: 'All' },
@@ -162,7 +167,7 @@ export const GAMES = [
   {
     id: 'studio',
     route: 'Studio',
-    name: 'Studio',
+    name: 'The Lab',
     type: 'music',
     kind: 'solo',
     categories: ['music'],
@@ -170,10 +175,10 @@ export const GAMES = [
     minPlayers: 1,
     maxPlayers: 1,
     tagline: 'Drum machine & sampler. Make a beat in seconds.',
-    description: '16 pads, 4 original kits, step sequencer, Auto beats and a sampler that chops any sound. Export your beat as a sound for videos.',
+    description: '16 pads, 8 original kits, step sequencer, Auto beats and a sampler that chops any sound. Export your beat as a sound for videos.',
     color: '#ffb21e',
     accent: ['#ff4fa3', '#ffb21e'],
-    cover: require('../../assets/game-covers/studio.jpg'),
+    cover: require('../../assets/game-covers/the-lab.jpg'),
     featured: true,
   },
 ]
@@ -184,8 +189,38 @@ export const getGame = (id) => GAMES.find((g) => g.id === id || g.mpId === id) |
 
 export const playersLabel = (game) =>
   !game ? '' : game.minPlayers === game.maxPlayers
-    ? `${game.minPlayers} player${game.minPlayers === 1 ? '' : 's'}`
-    : `${game.minPlayers}–${game.maxPlayers} players`
+    ? translate(gameStrings, game.minPlayers === 1 ? 'players_one' : 'players_many', { n: game.minPlayers })
+    : translate(gameStrings, 'players_range', { min: game.minPlayers, max: game.maxPlayers })
+
+// Translated text for a catalogue field ('name' | 'tagline' | 'description') in the current
+// language; falls back to the English value in GAMES. Call at render time.
+export const gameText = (game, field) => {
+  if (!game) return ''
+  const key = `${field}:${game.id}`
+  const s = translate(gameStrings, key)
+  return s === key ? game[field] : s
+}
+
+// Translated arcade rank name (rank from arcadeStats.rankFor / RANKS).
+export const rankName = (rank) => {
+  if (!rank) return ''
+  const key = `rank:${rank.id}`
+  const s = translate(gameStrings, key)
+  return s === key ? rank.name : s
+}
+
+// Translated name for a multiplayer game id (MP_GAMES key such as 'chess', 'lasertag').
+export const mpGameName = (mpId, fallback) => {
+  const g = getGame(mpId)
+  return g ? gameText(g, 'name') : (fallback ?? mpId)
+}
+
+// Translated category name ('action', 'party', ... and 'all').
+export const categoryName = (id) => {
+  const key = `cat:${id}`
+  const s = translate(gameStrings, key)
+  return s === key ? (ARCADE_CATEGORIES.find((c) => c.id === id)?.name ?? id) : s
+}
 
 /**
  * Real local stats for one game (from arcadeStats). `userId` is accepted for
@@ -200,4 +235,79 @@ export async function getUserGameStats(_userId, gameId) {
   return gameId === 'chess'
     ? { ...g, rating: s.chess.rating, onlineRating: s.chess.online?.games > 0 ? s.chess.online.rating : null }
     : { ...g }
+}
+
+// ---- Multiplayer texts (lib/multiplayer.js) in the current language; call at render time ----
+const mpT = (key, fallback, vars) => {
+  const s = translate(mpStrings, key, vars)
+  return s === key ? fallback : s
+}
+
+// Lobby blurb for an MP_GAMES entry.
+export const mpBlurb = (game) => (game ? mpT(`blurb:${game.id}`, game.blurb) : '')
+
+// Label of a lobby setting (MP_GAMES[id].settings[key]).
+export const settingLabel = (gameId, key, def) =>
+  mpT(`set:${gameId}:${key}`, null) ?? mpT(`set:${key}`, def?.label ?? key)
+
+// Label of one option of a lobby setting.
+export const optionLabel = (key, def, o) => {
+  const t = mpT(`opt:${key}:${o}`, null)
+  if (t != null) return t
+  const label = def?.labels?.[o]
+  // '5 min' style labels and plain minute / second units use the translated unit.
+  const mins = typeof label === 'string' ? /^(\d+) min$/.exec(label) : null
+  if (mins) return mpT('unit_min', label, { n: mins[1] })
+  if (label != null) return label
+  if (def?.unit === 'min') return mpT('unit_min', `${o} min`, { n: o })
+  if (def?.unit === 's') return mpT('unit_s', `${o} s`, { n: o })
+  return `${o}${def?.unit ? ` ${def.unit}` : ''}`
+}
+
+// Laser Tag mode texts: field 'name' | 'short' | 'blurb'.
+export const laserMode = (id, field = 'name') => {
+  const m = LASER_MODES[id]
+  if (!m) return ''
+  const key = field === 'name' ? `mode:${id}` : field === 'short' ? `modeshort:${id}` : `modeblurb:${id}`
+  return mpT(key, m[field])
+}
+
+// Team name ('A' Red / 'B' Blue).
+export const teamName = (team) => (team ? mpT(`team:${team.id ?? team}`, team.name ?? team) : '')
+
+// howToPlay(gameId, settings) from lib/multiplayer, translated: { title, steps }.
+export function howToPlayText(gameId, settings = {}) {
+  const base = howToPlay(gameId, settings)
+  if (getLanguage() === 'en') return base
+  const lines = (key) => {
+    const s = translate(mpStrings, key)
+    return s === key ? null : s.split('\n')
+  }
+  const safety = mpT('safety', null)
+  let steps = null
+  let title = base.title
+  if (gameId === 'lasertag') {
+    const mode = LASER_MODES[settings?.mode] ? settings.mode : 'ffa'
+    const aim = lines('how_lt_aim')
+    const gear = lines('how_lt_gear')
+    const by = lines(`how_lt_${mode}`)
+    const ffa = lines('how_lt_ffa')
+    if (aim && gear && by && ffa && safety) {
+      if (settings?.endless) {
+        title = mpT('how_lt_arena_title', base.title)
+        steps = [safety, mpT('how_lt_arena_intro', ''), ...aim, ...gear, ...ffa.slice(0, 2), mpT('how_lt_arena_outro', '')]
+      } else {
+        title = `Laser Tag · ${laserMode(mode)}`
+        steps = [safety, ...aim, ...gear, ...by]
+      }
+    }
+  } else {
+    const KEY = { royale: 'how_royale', chess: 'how_chess', 'spider-spider': 'how_spider', mafia: 'how_mafia', 'heads-up': 'how_headsup' }[gameId] || 'how_beside'
+    const own = lines(KEY)
+    const withSafety = gameId === 'royale' || gameId === 'spider-spider' || KEY === 'how_beside'
+    if (own && (!withSafety || safety)) steps = withSafety ? [safety, ...own] : own
+    if (gameId === 'chess') title = mpT('how_chess_title', base.title)
+  }
+  // Only use the translation when it lines up with the English steps.
+  return steps && steps.length === base.steps.length ? { title, steps } : base
 }

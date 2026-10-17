@@ -107,11 +107,14 @@ export function shareGrid(scores) {
  *   (blank line)
  *   grid rows...
  */
-export function shareText({ key, scores, won, max = DAILY_MAX_GUESSES, streak }) {
+// labels: optional translated { head(n), streak(n), play } (English by default; this file stays
+// free of React / i18n so it can be tested headless).
+export function shareText({ key, scores, won, max = DAILY_MAX_GUESSES, streak, labels }) {
   const tries = won ? String((scores || []).length) : 'X'
-  const head = `What's the Word #${puzzleNumber(key)} ${tries}/${max}`
-  const tail = streak > 1 ? `\nStreak ${streak}` : ''
-  return `${head}\n\n${shareGrid(scores)}${tail}\n\nPlay on iYiYi`
+  const n = puzzleNumber(key)
+  const head = `${labels?.head ? labels.head(n) : `What's the Word #${n}`} ${tries}/${max}`
+  const tail = streak > 1 ? `\n${labels?.streak ? labels.streak(streak) : `Streak ${streak}`}` : ''
+  return `${head}\n\n${shareGrid(scores)}${tail}\n\n${labels?.play || 'Play on iYiYi'}`
 }
 
 // ---- Stats -----------------------------------------------------------------------------

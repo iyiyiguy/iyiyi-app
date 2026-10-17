@@ -12,6 +12,10 @@ import { Circle, Marker } from 'react-native-maps'
 import { Ionicons } from '@expo/vector-icons'
 import { MAP_MAX_CLUSTERS, MAP_MAX_DOTS, MAP_MAX_LOOT, ROYALE_COLORS } from './constants'
 import { dist, isValidCoord, validPos } from './geo'
+import { translate } from '../../i18n'
+import S from '../../i18n/strings/royale'
+
+const tr = (k, v) => translate(S, k, v)
 import { FONT, ST, withAlpha } from '../studio'
 
 const CAMERA_EVERY_MS = 1000
@@ -160,7 +164,7 @@ export const RoyaleMap = memo(function RoyaleMap({ me, focus, zone, players, loo
   }, [loot, Math.round((lat || 0) * 500), Math.round((lng || 0) * 500)]) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!initial) {
-    return <View style={[style, s.noFix]}><Text style={s.noFixText}>Waiting for GPS…</Text></View>
+    return <View style={[style, s.noFix]}><Text style={s.noFixText}>{tr('waiting_gps')}</Text></View>
   }
   const cur = zone?.current && validPos(zone.current) && zone.current.r > 0 ? zone.current : null
   const next = zone?.next && validPos(zone.next) && zone.next.r > 0 ? zone.next : null
@@ -232,7 +236,7 @@ export const RoyaleMap = memo(function RoyaleMap({ me, focus, zone, players, loo
           style={s.recenter}
           hitSlop={8}
           accessibilityRole="button"
-          accessibilityLabel="Recenter map"
+          accessibilityLabel={tr('recenter')}
         >
           <Ionicons name="locate" size={18} color="#fff" />
         </Pressable>

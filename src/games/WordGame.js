@@ -25,6 +25,8 @@ import { ANSWERS, isValidWord } from '../lib/wordRaceWords'
 import { loadArcadeStats, recordWordRace } from '../lib/arcadeStats'
 import { buzz } from '../lib/gamePrefs'
 import { playSfx } from '../lib/gunAudio'
+import { translate, useT } from '../i18n'
+import W from '../i18n/strings/wordGame'
 import {
   DAILY_MAX_GUESSES, applyDailyResult, currentStreakFor, dailyAnswer, dateKey, emptyDailyStats, formatCountdown,
   msUntilNextDay, normalizeDailyStats, puzzleNumber, shareText, winPercent,
@@ -59,14 +61,16 @@ const SKIN = {
 
 const CONFETTI = [SUCCESS, ST.objective, ST.friendly, '#ffffff', WORD_COLORS.present]
 
-const PRAISE = ['', 'GENIUS', 'MAGNIFICENT', 'IMPRESSIVE', 'SPLENDID', 'GREAT', 'PHEW']
+// Praise by number of tries (index 1–6), in the viewer's language.
+const PRAISE_KEYS = ['', 'praise_1', 'praise_2', 'praise_3', 'praise_4', 'praise_5', 'praise_6']
+const praise = (tries) => (PRAISE_KEYS[tries] ? translate(W, PRAISE_KEYS[tries]) : null)
 
 const TUTORIAL_STEPS = [
-  { icon: '⏱️', title: 'Race the clock', description: 'You start with 2 minutes. Solve as many hidden 5-letter words as you can before time runs out.' },
-  { icon: '🟩', title: 'Green = right spot', description: 'The letter is in the word and in the correct position.' },
-  { icon: '🟨', title: 'Yellow = wrong spot', description: 'The letter is in the word but somewhere else.' },
-  { icon: '⬛', title: 'Gray = not in word', description: 'That letter is not in the word. Guesses must be real English words.' },
-  { icon: '⚡', title: 'Bonuses', description: 'Each solve adds 15 seconds. Fewer guesses and solve streaks score more. Skipping costs 10 seconds.' },
+  { icon: '⏱️', get title() { return translate(W, 'tut1_t') }, get description() { return translate(W, 'tut1_d') } },
+  { icon: '🟩', get title() { return translate(W, 'tut2_t') }, get description() { return translate(W, 'tut2_d') } },
+  { icon: '🟨', get title() { return translate(W, 'tut3_t') }, get description() { return translate(W, 'tut3_d') } },
+  { icon: '⬛', get title() { return translate(W, 'tut4_t') }, get description() { return translate(W, 'tut4_d') } },
+  { icon: '⚡', get title() { return translate(W, 'tut5_t') }, get description() { return translate(W, 'tut5_d') } },
 ]
 
 // Two-pass scoring so repeated letters are coloured correctly (greens first, then
@@ -187,6 +191,7 @@ function TileFace({ skin, size, letter }) {
 }
 
 const Tile = memo(function Tile({ letter, state, size, index, win, sound }) {
+  const tw = useT(W)
   const pop = useRef(new Animated.Value(1)).current
   const flip = useRef(new Animated.Value(state ? 1 : 0)).current
   const jump = useRef(new Animated.Value(0)).current
@@ -237,7 +242,7 @@ const Tile = memo(function Tile({ letter, state, size, index, win, sound }) {
     <Animated.View
       style={{ width: size, height: size, transform: [{ perspective: 600 }, { translateY }, { rotateX }, { scale: pop }] }}
       accessible
-      accessibilityLabel={letter ? `${letter}${state ? `, ${state === 'correct' ? 'correct' : state === 'present' ? 'wrong spot' : 'not in word'}` : ''}` : 'empty'}
+      accessibilityLabel={letter ? `${letter}${state ? `, ${tw(state === 'correct' ? 'st_correct' : state === 'present' ? 'st_wrong_spot' : 'st_not_in_word')}` : ''}` : tw('st_empty')}
     >
       <Animated.View style={[StyleSheet.absoluteFill, { opacity: frontOpacity }]}>
         <TileFace skin={letter ? 'filled' : 'empty'} size={size} letter={letter} />
@@ -373,6 +378,7 @@ const Floater = memo(function Floater({ text, color }) {
 // re-render 10x a second. Not running: shows `frozenMs` (time left when the run ended) or
 // the full start time before a run.
 function TimerBar({ endAtRef, running, paused, pausedMs, frozenMs, bump, onPause, canPause }) {
+  const t = useT(W)
   const [left, setLeft] = useState(START_MS)
   const pulse = useRef(new Animated.Value(1)).current
   useEffect(() => {
@@ -408,19 +414,19 @@ function TimerBar({ endAtRef, running, paused, pausedMs, frozenMs, bump, onPause
           onPress={onPause}
           disabled={!canPause}
           accessibilityRole="button"
-          accessibilityLabel={paused ? 'Resume' : 'Pause'}
+          accessibilityLabel={paused ? t('resume') : t('pause')}
           hitSlop={8}
           style={({ pressed }) => [styles.pauseBtn, { opacity: canPause ? (pressed ? 0.7 : 1) : 0.35 }]}
         >
           <Ionicons name={paused ? 'play' : 'pause'} size={14} color={ST.text} />
-          <Text allowFontScaling={false} style={styles.pauseText}>{paused ? 'Resume' : 'Pause'}</Text>
+          <Text allowFontScaling={false} style={styles.pauseText}>{paused ? t('resume') : t('pause')}</Text>
         </Pressable>
         <View style={{ flex: 1 }} />
         {bump ? <View style={styles.floaterAnchor} pointerEvents="none"><Floater key={bump.id} text={bump.text} color={bump.color} /></View> : null}
         <Animated.Text
           allowFontScaling={false}
           accessibilityRole="timer"
-          accessibilityLabel={`${formatClock(left)} left`}
+          accessibilityLabel={t('time_left', { time: formatClock(left) })}
           style={[styles.timerText, low && { color: ST.enemy }, { transform: [{ scale: pulse }] }]}
         >
           {formatClock(left)}
@@ -445,13 +451,14 @@ function HudStat({ label, value, pop, color, align = 'flex-start' }) {
 // Keyboard
 
 const Key = memo(function Key({ k, label, icon, state, width, height, onKey, accent }) {
+  const t = useT(W)
   const bg = accent ? ST.friendly : state ? WORD_COLORS[state] : WORD_COLORS.key
   const fg = accent ? ST.ink : state === 'absent' ? 'rgba(242,244,247,0.55)' : ST.text
   return (
     <Pressable
       onPress={() => onKey(k)}
       accessibilityRole="button"
-      accessibilityLabel={k === 'DEL' ? 'Delete' : k === 'ENTER' ? 'Enter' : `${k}${state ? `, ${state === 'correct' ? 'correct' : state === 'present' ? 'in word' : 'not in word'}` : ''}`}
+      accessibilityLabel={k === 'DEL' ? t('key_delete') : k === 'ENTER' ? t('key_enter') : `${k}${state ? `, ${t(state === 'correct' ? 'st_correct' : state === 'present' ? 'st_in_word' : 'st_not_in_word')}` : ''}`}
       style={({ pressed }) => [styles.key, { width, height, backgroundColor: bg, opacity: pressed ? 0.7 : 1 }, pressed && { transform: [{ scale: 0.95 }] }]}
       hitSlop={{ top: 3, bottom: 3, left: 1, right: 1 }}
     >
@@ -520,6 +527,7 @@ function HowLine({ left, text }) {
 // Game
 
 export function WordGame({ onExit, onRecorded, bottomInset = 0, initialMode }) {
+  const t = useT(W)
   useStudioFonts()
   const [dailyOpen, setDailyOpen] = useState(initialMode === 'daily')
   const daily = useDailySummary(dailyOpen)
@@ -758,8 +766,8 @@ export function WordGame({ onExit, onRecorded, bottomInset = 0, initialMode }) {
   }
 
   const submit = () => {
-    if (current.length < WORD_LEN) return invalid('Not enough letters')
-    if (!isValidWord(current)) return invalid('Not in word list')
+    if (current.length < WORD_LEN) return invalid(t('not_enough'))
+    if (!isValidWord(current)) return invalid(t('not_in_list'))
     const sc = scoreGuess(current, target)
     const nextGuesses = [...guesses, { word: current, score: sc }]
     const rowIdx = nextGuesses.length - 1
@@ -784,8 +792,8 @@ export function WordGame({ onExit, onRecorded, bottomInset = 0, initialMode }) {
         setBurst((b) => b + 1)
         setCallout({
           id: Date.now(),
-          title: PRAISE[tries] || 'NICE',
-          sub: newStreak >= 2 ? `+${pts.total}  ·  STREAK ×${newStreak}  +${pts.streakBonus}` : `+${pts.total}  ·  +${SOLVE_BONUS_MS / 1000}S`,
+          title: praise(tries) || t('nice'),
+          sub: newStreak >= 2 ? `+${pts.total}  ·  ${t('streak_caps')} ×${newStreak}  +${pts.streakBonus}` : `+${pts.total}  ·  +${SOLVE_BONUS_MS / 1000}S`,
           tone: tries <= 2 ? 'gold' : 'good',
         })
         buzz('success')
@@ -797,7 +805,7 @@ export function WordGame({ onExit, onRecorded, bottomInset = 0, initialMode }) {
       setStreak(0)
       setMissed((l) => [...l, target])
       later(() => {
-        setCallout({ id: Date.now(), title: 'THE WORD WAS', word: target, tone: 'bad' })
+        setCallout({ id: Date.now(), title: t('word_was_caps'), word: target, tone: 'bad' })
         buzz('warning')
         playSfx('wordFail', { volume: 0.8 })
       }, REVEAL_MS + 60)
@@ -815,7 +823,7 @@ export function WordGame({ onExit, onRecorded, bottomInset = 0, initialMode }) {
     setMissed((l) => [...l, target])
     buzz('warning')
     playSfx('wordWrong', { volume: 0.5 })
-    setCallout({ id: Date.now(), title: 'SKIPPED', word: target, tone: 'neutral' })
+    setCallout({ id: Date.now(), title: t('skipped_caps'), word: target, tone: 'neutral' })
     endAtRef.current -= SKIP_PENALTY_MS
     setBump({ id: Date.now(), text: `−${SKIP_PENALTY_MS / 1000}s`, color: ST.enemy })
     if (endAtRef.current - Date.now() <= 0) { finish('time'); return }
@@ -887,39 +895,39 @@ export function WordGame({ onExit, onRecorded, bottomInset = 0, initialMode }) {
       <View style={styles.container}>
         <ScrollView contentContainerStyle={[styles.startScroll, { paddingBottom: bottomInset + 24 }]} showsVerticalScrollIndicator={false}>
           <View style={[styles.startInner, { maxWidth: 460 }]}>
-            <Text allowFontScaling={false} style={[stType.kicker, { color: SUCCESS, marginBottom: 12 }]}>What's the</Text>
+            <Text allowFontScaling={false} style={[stType.kicker, { color: SUCCESS, marginBottom: 12 }]}>{t('whats_the')}</Text>
             <View style={styles.titleRow}>
               {['W', 'O', 'R', 'D'].map((ch, i) => (
                 <TitleTile key={ch} letter={ch} index={i} size={titleSize} skin={['correct', 'present', 'correct', 'filled'][i]} />
               ))}
             </View>
-            <Text style={[stType.body, { marginBottom: 20, textAlign: 'center' }]}>One shared word a day, or race the clock.</Text>
+            <Text style={[stType.body, { marginBottom: 20, textAlign: 'center' }]}>{t('tagline')}</Text>
 
             <DailyPanel summary={daily} onOpen={() => { buzz('medium'); setDailyOpen(true) }} />
 
-            <Text style={[stType.label, { alignSelf: 'stretch', marginTop: 22, marginBottom: 8 }]}>Timed run</Text>
+            <Text style={[stType.label, { alignSelf: 'stretch', marginTop: 22, marginBottom: 8 }]}>{t('timed_run')}</Text>
             <StPanel style={styles.howCard}>
-              <Text style={stType.label}>How it works</Text>
-              <HowLine left={<MiniTile letter="A" skin="correct" />} text="Green: right letter, right spot." />
-              <HowLine left={<MiniTile letter="B" skin="present" />} text="Amber: in the word, wrong spot." />
-              <HowLine left={<MiniTile letter="C" skin="absent" />} text="Slate: not in the word." />
+              <Text style={stType.label}>{t('how_it_works')}</Text>
+              <HowLine left={<MiniTile letter="A" skin="correct" />} text={t('how_green')} />
+              <HowLine left={<MiniTile letter="B" skin="present" />} text={t('how_amber')} />
+              <HowLine left={<MiniTile letter="C" skin="absent" />} text={t('how_slate')} />
               <HowLine
                 left={<View style={styles.howClock}><Ionicons name="timer-outline" size={18} color={ST.objective} /></View>}
-                text={`${formatClock(START_MS)} on the clock. Every solve adds +${SOLVE_BONUS_MS / 1000}s, skipping costs ${SKIP_PENALTY_MS / 1000}s.`}
+                text={t('how_clock', { time: formatClock(START_MS), bonus: SOLVE_BONUS_MS / 1000, skip: SKIP_PENALTY_MS / 1000 })}
               />
             </StPanel>
 
             <View style={styles.bigStats}>
-              <StStat label="Best score" value={best != null ? best.toLocaleString() : '—'} color={ST.objective} />
-              <StStat label="Best words" value={wr?.bestWords ? wr.bestWords : '—'} color={SUCCESS} />
-              <StStat label="Best streak" value={wr?.bestStreak ? `×${wr.bestStreak}` : '—'} />
+              <StStat label={t('best_score')} value={best != null ? best.toLocaleString() : '—'} color={ST.objective} />
+              <StStat label={t('best_words')} value={wr?.bestWords ? wr.bestWords : '—'} color={SUCCESS} />
+              <StStat label={t('best_streak')} value={wr?.bestStreak ? `×${wr.bestStreak}` : '—'} />
             </View>
 
-            <StButton title="Play timed run" tone="outline" color={SUCCESS} onPress={start} style={styles.playBtn} height={50} />
-            <StButton title="How to play" tone="ghost" height={44} onPress={() => setShowTutorial(true)} style={{ marginTop: 10, alignSelf: 'stretch' }} />
+            <StButton title={t('play_timed')} tone="outline" color={SUCCESS} onPress={start} style={styles.playBtn} height={50} />
+            <StButton title={t('how_to_play')} tone="ghost" height={44} onPress={() => setShowTutorial(true)} style={{ marginTop: 10, alignSelf: 'stretch' }} />
           </View>
         </ScrollView>
-        {showTutorial && <GameTutorial steps={TUTORIAL_STEPS} onComplete={closeTutorial} gameTitle="What's The Word" />}
+        {showTutorial && <GameTutorial steps={TUTORIAL_STEPS} onComplete={closeTutorial} gameTitle={t('game_name')} />}
       </View>
     )
   }
@@ -939,9 +947,9 @@ export function WordGame({ onExit, onRecorded, bottomInset = 0, initialMode }) {
       <View style={[styles.playInner, { maxWidth: 520, paddingBottom: bottomInset + (compact ? 6 : 10) }]}>
         {/* HUD */}
         <View style={styles.hud}>
-          <HudStat label="Score" value={scoreShown.toLocaleString()} pop={scorePop} />
-          <HudStat label="Streak" value={`×${streak}`} pop={streakPop} color={streak > 0 ? ST.objective : ST.muted} align="center" />
-          <HudStat label="Solved" value={solved.length} pop={solvedPop} align="flex-end" />
+          <HudStat label={t('score')} value={scoreShown.toLocaleString()} pop={scorePop} />
+          <HudStat label={t('streak')} value={`×${streak}`} pop={streakPop} color={streak > 0 ? ST.objective : ST.muted} align="center" />
+          <HudStat label={t('solved')} value={solved.length} pop={solvedPop} align="flex-end" />
         </View>
         <TimerBar
           endAtRef={endAtRef}
@@ -985,11 +993,11 @@ export function WordGame({ onExit, onRecorded, bottomInset = 0, initialMode }) {
 
           {paused ? (
             <StPanel strong accent={ST.friendly} style={styles.pauseCard}>
-              <Text style={stType.kicker}>Clock stopped</Text>
-              <Text style={[stType.display, { fontSize: 40, lineHeight: 46 }]}>Paused</Text>
-              <Text style={[stType.small, { textAlign: 'center', marginTop: 4 }]}>The board is hidden until you resume.</Text>
-              <StButton title="Resume" onPress={resume} style={{ alignSelf: 'stretch', marginTop: 18 }} />
-              <StButton title="End run" tone="ghost" height={44} onPress={endRun} style={{ alignSelf: 'stretch', marginTop: 8 }} />
+              <Text style={stType.kicker}>{t('clock_stopped')}</Text>
+              <Text style={[stType.display, { fontSize: 40, lineHeight: 46 }]}>{t('paused')}</Text>
+              <Text style={[stType.small, { textAlign: 'center', marginTop: 4 }]}>{t('board_hidden')}</Text>
+              <StButton title={t('resume')} onPress={resume} style={{ alignSelf: 'stretch', marginTop: 18 }} />
+              <StButton title={t('end_run')} tone="ghost" height={44} onPress={endRun} style={{ alignSelf: 'stretch', marginTop: 8 }} />
             </StPanel>
           ) : null}
 
@@ -1007,7 +1015,7 @@ export function WordGame({ onExit, onRecorded, bottomInset = 0, initialMode }) {
         <View style={styles.hintRow}>
           {showHint ? (
             <View style={styles.hint}>
-              <Text allowFontScaling={false} style={styles.hintText}>+{SOLVE_BONUS_MS / 1000} S · SOLVE IN {nextTries} FOR +{hintPts}</Text>
+              <Text allowFontScaling={false} style={styles.hintText}>{t('hint_line', { s: SOLVE_BONUS_MS / 1000, n: nextTries, pts: hintPts })}</Text>
             </View>
           ) : <View style={[styles.hint, { opacity: 0 }]}><Text style={styles.hintText}> </Text></View>}
         </View>
@@ -1016,11 +1024,11 @@ export function WordGame({ onExit, onRecorded, bottomInset = 0, initialMode }) {
             onPress={skip}
             disabled={!playing || paused || roundLocked}
             accessibilityRole="button"
-            accessibilityLabel={`Skip word, minus ${SKIP_PENALTY_MS / 1000} seconds`}
+            accessibilityLabel={t('skip_a11y', { n: SKIP_PENALTY_MS / 1000 })}
             style={({ pressed }) => [styles.actionBtn, { opacity: !playing || paused || roundLocked ? 0.38 : pressed ? 0.7 : 1 }]}
           >
             <Ionicons name="play-skip-forward" size={13} color={ST.text} />
-            <Text style={styles.actionText}>Skip</Text>
+            <Text style={styles.actionText}>{t('skip')}</Text>
             <Text style={[styles.actionText, { color: ST.enemy }]}>−{SKIP_PENALTY_MS / 1000}s</Text>
           </Pressable>
           <Pressable
@@ -1030,7 +1038,7 @@ export function WordGame({ onExit, onRecorded, bottomInset = 0, initialMode }) {
             style={({ pressed }) => [styles.actionBtn, { opacity: playing ? (pressed ? 0.7 : 1) : 0.38 }]}
           >
             <Ionicons name="flag" size={13} color={ST.text} />
-            <Text style={styles.actionText}>End run</Text>
+            <Text style={styles.actionText}>{t('end_run')}</Text>
           </Pressable>
         </View>
 
@@ -1038,7 +1046,7 @@ export function WordGame({ onExit, onRecorded, bottomInset = 0, initialMode }) {
         <View style={[styles.keyboard, { gap: compact ? 6 : 7 }]}>
           {KEY_ROWS.map((r, ri) => (
             <View key={r} style={[styles.keyRow, { gap: keyGap }]}>
-              {ri === 2 && <Key k="ENTER" label="ENTER" accent onKey={handleKey} width={Math.floor(keyW * 1.5 + keyGap / 2)} height={keyH} />}
+              {ri === 2 && <Key k="ENTER" label={t('enter_caps')} accent onKey={handleKey} width={Math.floor(keyW * 1.5 + keyGap / 2)} height={keyH} />}
               {r.split('').map((k) => (
                 <Key key={k} k={k} state={keyStates[k]} onKey={handleKey} width={keyW} height={keyH} />
               ))}
@@ -1066,7 +1074,7 @@ export function WordGame({ onExit, onRecorded, bottomInset = 0, initialMode }) {
         />
       ) : null}
 
-      {showTutorial && <GameTutorial steps={TUTORIAL_STEPS} onComplete={closeTutorial} gameTitle="What's The Word" />}
+      {showTutorial && <GameTutorial steps={TUTORIAL_STEPS} onComplete={closeTutorial} gameTitle={t('game_name')} />}
     </View>
   )
 }
@@ -1117,6 +1125,7 @@ function useDailySummary(paused) {
 
 // Ticks once a second; calls onRollover when the local day changes.
 function NextWordIn({ onRollover, style }) {
+  const t = useT(W)
   const [ms, setMs] = useState(() => msUntilNextDay())
   const rollRef = useRef(onRollover)
   rollRef.current = onRollover
@@ -1130,39 +1139,40 @@ function NextWordIn({ onRollover, style }) {
     return () => clearInterval(id)
   }, [])
   return (
-    <View style={[styles.nextWord, style]} accessibilityLabel={`Next word in ${formatCountdown(ms)}`}>
-      <Text style={stType.label}>Next word in</Text>
+    <View style={[styles.nextWord, style]} accessibilityLabel={t('next_word_a11y', { time: formatCountdown(ms) })}>
+      <Text style={stType.label}>{t('next_word_in')}</Text>
       <Text allowFontScaling={false} style={styles.nextWordClock}>{formatCountdown(ms)}</Text>
     </View>
   )
 }
 
 function DailyPanel({ summary, onOpen }) {
+  const t = useT(W)
   const { key, data, status, reload } = summary
   const stats = data?.stats
   const streak = stats ? currentStreakFor(stats, key) : 0
   const tries = data?.board?.guesses?.length || 0
   const done = status === 'won' || status === 'lost'
   const line = !data ? ' '
-    : status === 'won' ? `Solved in ${tries}/${DAILY_MAX_GUESSES}`
-      : status === 'lost' ? 'Missed today’s word'
-        : status === 'playing' ? `In progress · ${tries}/${DAILY_MAX_GUESSES} guesses`
-          : 'Same word for everyone today. One try.'
+    : status === 'won' ? t('solved_in', { n: tries, max: DAILY_MAX_GUESSES })
+      : status === 'lost' ? t('missed_today')
+        : status === 'playing' ? t('in_progress', { n: tries, max: DAILY_MAX_GUESSES })
+          : t('same_word')
   return (
     <StPanel strong accent={SUCCESS} style={styles.dailyCard}>
       <View style={styles.dailyTop}>
         <View style={{ flex: 1, minWidth: 0 }}>
-          <Text style={[stType.kicker, { color: SUCCESS }]}>Daily word · #{puzzleNumber(key)}</Text>
+          <Text style={[stType.kicker, { color: SUCCESS }]}>{t('daily_no', { n: puzzleNumber(key) })}</Text>
           <Text style={[stType.body, { marginTop: 4 }]} numberOfLines={2}>{line}</Text>
         </View>
         <View style={{ alignItems: 'flex-end' }}>
-          <Text style={stType.label}>Streak</Text>
+          <Text style={stType.label}>{t('streak')}</Text>
           <Text allowFontScaling={false} style={[stType.num, { fontSize: 24, color: streak > 0 ? ST.objective : ST.muted }]}>{streak}</Text>
         </View>
       </View>
       {done ? <NextWordIn onRollover={reload} style={{ marginTop: 10 }} /> : null}
       <StButton
-        title={done ? 'See results' : status === 'playing' ? 'Continue' : 'Play today’s word'}
+        title={done ? t('see_results') : status === 'playing' ? t('continue') : t('play_today')}
         tone={done ? 'ghost' : 'primary'}
         color={SUCCESS}
         height={done ? 44 : 52}
@@ -1174,6 +1184,7 @@ function DailyPanel({ summary, onOpen }) {
 }
 
 function DailyWord({ onClose, onTimed, bottomInset = 0 }) {
+  const t = useT(W)
   const { width: winW, height: winH } = useWindowDimensions()
   const compact = winH < 700
   const contentW = Math.min(winW, 520)
@@ -1245,9 +1256,9 @@ function DailyWord({ onClose, onTimed, bottomInset = 0 }) {
   }
 
   const submit = () => {
-    if (current.length < WORD_LEN) return invalid('Not enough letters')
-    if (!isValidWord(current)) return invalid('Not in word list')
-    if (guesses.includes(current)) return invalid('Already guessed')
+    if (current.length < WORD_LEN) return invalid(t('not_enough'))
+    if (!isValidWord(current)) return invalid(t('not_in_list'))
+    if (guesses.includes(current)) return invalid(t('already_guessed'))
     const next = [...guesses, current]
     const solvedNow = current === answer
     const finished = solvedNow || next.length >= DAILY_MAX_GUESSES
@@ -1265,14 +1276,14 @@ function DailyWord({ onClose, onTimed, bottomInset = 0 }) {
       later(() => {
         setWinRow(next.length - 1)
         setBurst((b) => b + 1)
-        setCallout({ id: Date.now(), title: PRAISE[next.length] || 'NICE', tone: next.length <= 2 ? 'gold' : 'good' })
+        setCallout({ id: Date.now(), title: praise(next.length) || t('nice'), tone: next.length <= 2 ? 'gold' : 'good' })
         buzz('success')
         playSfx('wordCorrect')
       }, REVEAL_MS + 60)
       later(() => setShowResults(true), REVEAL_MS + 1500)
     } else {
       later(() => {
-        setCallout({ id: Date.now(), title: 'THE WORD WAS', word: answer, tone: 'bad' })
+        setCallout({ id: Date.now(), title: t('word_was_caps'), word: answer, tone: 'bad' })
         buzz('warning')
         playSfx('wordFail', { volume: 0.8 })
       }, REVEAL_MS + 60)
@@ -1316,7 +1327,8 @@ function DailyWord({ onClose, onTimed, bottomInset = 0 }) {
   const share = async () => {
     buzz('select')
     try {
-      await Share.share({ message: shareText({ key: dayKey, scores: scored.map((g) => g.score), won, streak: currentStreakFor(stats, dayKey) }) })
+      const labels = { head: (n) => t('share_head', { n }), streak: (n) => t('share_streak', { n }), play: t('share_play') }
+      await Share.share({ message: shareText({ key: dayKey, scores: scored.map((g) => g.score), won, streak: currentStreakFor(stats, dayKey), labels }) })
     } catch { /* dismissed */ }
   }
 
@@ -1330,11 +1342,11 @@ function DailyWord({ onClose, onTimed, bottomInset = 0 }) {
       <View style={[styles.playInner, { maxWidth: 520, paddingBottom: bottomInset + (compact ? 6 : 10) }]}>
         <View style={styles.hud}>
           <View style={styles.hudStat}>
-            <Text allowFontScaling={false} style={[stType.label, { color: SUCCESS }]}>Daily word</Text>
+            <Text allowFontScaling={false} style={[stType.label, { color: SUCCESS }]}>{t('daily_word')}</Text>
             <Text allowFontScaling={false} style={styles.hudValue}>#{puzzleNumber(dayKey)}</Text>
           </View>
-          <HudStat label="Streak" value={currentStreakFor(stats, dayKey)} color={currentStreakFor(stats, dayKey) > 0 ? ST.objective : ST.muted} align="center" />
-          <HudStat label="Guess" value={`${Math.min(DAILY_MAX_GUESSES, guesses.length + (done ? 0 : 1))}/${DAILY_MAX_GUESSES}`} align="flex-end" />
+          <HudStat label={t('streak')} value={currentStreakFor(stats, dayKey)} color={currentStreakFor(stats, dayKey) > 0 ? ST.objective : ST.muted} align="center" />
+          <HudStat label={t('guess')} value={`${Math.min(DAILY_MAX_GUESSES, guesses.length + (done ? 0 : 1))}/${DAILY_MAX_GUESSES}`} align="flex-end" />
         </View>
 
         <View style={styles.boardArea} onLayout={(e) => {
@@ -1372,18 +1384,18 @@ function DailyWord({ onClose, onTimed, bottomInset = 0 }) {
         </View>
 
         <View style={styles.actions}>
-          <Pressable onPress={onClose} accessibilityRole="button" accessibilityLabel="Back to menu" style={({ pressed }) => [styles.actionBtn, { opacity: pressed ? 0.7 : 1 }]}>
+          <Pressable onPress={onClose} accessibilityRole="button" accessibilityLabel={t('back_menu')} style={({ pressed }) => [styles.actionBtn, { opacity: pressed ? 0.7 : 1 }]}>
             <Ionicons name="chevron-back" size={13} color={ST.text} />
-            <Text style={styles.actionText}>Menu</Text>
+            <Text style={styles.actionText}>{t('menu')}</Text>
           </Pressable>
           {done ? (
             <Pressable onPress={() => setShowResults(true)} accessibilityRole="button" style={({ pressed }) => [styles.actionBtn, { opacity: pressed ? 0.7 : 1 }]}>
               <Ionicons name="podium-outline" size={13} color={ST.text} />
-              <Text style={styles.actionText}>Results</Text>
+              <Text style={styles.actionText}>{t('results')}</Text>
             </Pressable>
           ) : (
             <View style={styles.actionBtn}>
-              <Text style={[styles.actionText, { color: ST.muted }]}>No timer · one try today</Text>
+              <Text style={[styles.actionText, { color: ST.muted }]}>{t('no_timer')}</Text>
             </View>
           )}
         </View>
@@ -1391,7 +1403,7 @@ function DailyWord({ onClose, onTimed, bottomInset = 0 }) {
         <View style={[styles.keyboard, { gap: compact ? 6 : 7, opacity: done ? 0.5 : 1 }]}>
           {KEY_ROWS.map((r, ri) => (
             <View key={r} style={[styles.keyRow, { gap: keyGap }]}>
-              {ri === 2 && <Key k="ENTER" label="ENTER" accent onKey={handleKey} width={Math.floor(keyW * 1.5 + keyGap / 2)} height={keyH} />}
+              {ri === 2 && <Key k="ENTER" label={t('enter_caps')} accent onKey={handleKey} width={Math.floor(keyW * 1.5 + keyGap / 2)} height={keyH} />}
               {r.split('').map((k) => (
                 <Key key={k} k={k} state={keyStates[k]} onKey={handleKey} width={keyW} height={keyH} />
               ))}
@@ -1422,6 +1434,7 @@ function DailyWord({ onClose, onTimed, bottomInset = 0 }) {
 }
 
 function DailyResults({ dayKey, answer, scored, won, stats, burst, bottomInset, onShare, onClose, onMenu, onTimed, onRollover }) {
+  const t = useT(W)
   const enter = useRef(new Animated.Value(0)).current
   useEffect(() => {
     Animated.spring(enter, { toValue: 1, friction: 7, tension: 70, useNativeDriver: ND }).start()
@@ -1441,11 +1454,11 @@ function DailyResults({ dayKey, answer, scored, won, stats, burst, bottomInset, 
       <ScrollView contentContainerStyle={[styles.resultsScroll, { paddingBottom: bottomInset + 24 }]} showsVerticalScrollIndicator={false}>
         <Animated.View style={[styles.resultsInner, { opacity: enter, transform: [{ translateY: enter.interpolate({ inputRange: [0, 1], outputRange: [40, 0] }) }] }]}>
           <View style={{ alignItems: 'center', gap: 4 }}>
-            <Text style={[stType.label, { color: wash }]}>Daily word · #{puzzleNumber(dayKey)}</Text>
+            <Text style={[stType.label, { color: wash }]}>{t('daily_no', { n: puzzleNumber(dayKey) })}</Text>
             <Text allowFontScaling={false} style={[stType.display, { fontSize: 44, lineHeight: 50 }]} numberOfLines={1} adjustsFontSizeToFit>
-              {won ? PRAISE[tries] || 'Solved' : 'Not today'}
+              {won ? praise(tries) || t('solved') : t('not_today')}
             </Text>
-            <Text style={[stType.body, { fontSize: 13 }]}>{won ? `Solved in ${tries}/${DAILY_MAX_GUESSES}` : 'The word was'}</Text>
+            <Text style={[stType.body, { fontSize: 13 }]}>{won ? t('solved_in', { n: tries, max: DAILY_MAX_GUESSES }) : t('word_was')}</Text>
             {!won ? (
               <View style={[styles.calloutWord, { marginTop: 6 }]}>
                 {answer.split('').map((ch, i) => (
@@ -1456,7 +1469,7 @@ function DailyResults({ dayKey, answer, scored, won, stats, burst, bottomInset, 
           </View>
 
           {/* Spoiler-free grid: what the share sheet sends, drawn as tiles. */}
-          <View style={styles.shareGrid} accessibilityLabel={`Your grid, ${tries} rows`}>
+          <View style={styles.shareGrid} accessibilityLabel={t('grid_a11y', { n: tries })}>
             {scored.map((g, r) => (
               <View key={r} style={styles.shareRow}>
                 {g.score.map((st, i) => <View key={i} style={[styles.shareSq, { backgroundColor: WORD_COLORS[st] }, st === 'absent' && styles.shareSqAbsent]} />)}
@@ -1464,21 +1477,21 @@ function DailyResults({ dayKey, answer, scored, won, stats, burst, bottomInset, 
             ))}
           </View>
 
-          <StButton title="Share result" color={SUCCESS} onPress={onShare} style={{ marginTop: 16 }} left={<Ionicons name="share-outline" size={18} color={ST.ink} />} />
+          <StButton title={t('share_result')} color={SUCCESS} onPress={onShare} style={{ marginTop: 16 }} left={<Ionicons name="share-outline" size={18} color={ST.ink} />} />
 
           <View style={styles.resultStats}>
-            <ResultStat label="Played" value={String(stats?.played || 0)} />
-            <ResultStat label="Win %" value={String(winPercent(stats))} />
-            <ResultStat label="Streak" value={String(streak)} color={streak > 0 ? ST.objective : undefined} />
-            <ResultStat label="Max" value={String(stats?.maxStreak || 0)} />
+            <ResultStat label={t('played')} value={String(stats?.played || 0)} />
+            <ResultStat label={t('win_pct')} value={String(winPercent(stats))} />
+            <ResultStat label={t('streak')} value={String(streak)} color={streak > 0 ? ST.objective : undefined} />
+            <ResultStat label={t('max')} value={String(stats?.maxStreak || 0)} />
           </View>
 
-          <Text style={[stType.label, { marginTop: 18, marginBottom: 8 }]}>Guess distribution</Text>
+          <Text style={[stType.label, { marginTop: 18, marginBottom: 8 }]}>{t('guess_dist')}</Text>
           <View style={{ gap: 4 }}>
             {dist.map((n, i) => {
               const today = won && tries === i + 1
               return (
-                <View key={i} style={styles.distRow} accessibilityLabel={`${i + 1} guesses: ${n}`}>
+                <View key={i} style={styles.distRow} accessibilityLabel={t('dist_a11y', { i: i + 1, n })}>
                   <Text allowFontScaling={false} style={styles.distLabel}>{i + 1}</Text>
                   <View style={{ flex: 1 }}>
                     <View style={[styles.distBar, { width: `${Math.max(8, (n / maxDist) * 100)}%`, backgroundColor: today ? SUCCESS : WORD_COLORS.key }]}>
@@ -1493,9 +1506,9 @@ function DailyResults({ dayKey, answer, scored, won, stats, burst, bottomInset, 
           <NextWordIn onRollover={onRollover} style={{ marginTop: 18 }} />
 
           <View style={{ flexDirection: 'row', gap: 8, marginTop: 18 }}>
-            <StButton title="Timed run" tone="ghost" height={44} onPress={onTimed} style={{ flex: 1 }} />
-            <StButton title="Board" tone="ghost" height={44} onPress={onClose} style={{ flex: 1 }} />
-            <StButton title="Menu" tone="ghost" height={44} onPress={onMenu} style={{ flex: 1 }} />
+            <StButton title={t('timed_run')} tone="ghost" height={44} onPress={onTimed} style={{ flex: 1 }} />
+            <StButton title={t('board')} tone="ghost" height={44} onPress={onClose} style={{ flex: 1 }} />
+            <StButton title={t('menu')} tone="ghost" height={44} onPress={onMenu} style={{ flex: 1 }} />
           </View>
         </Animated.View>
       </ScrollView>
@@ -1505,6 +1518,7 @@ function DailyResults({ dayKey, answer, scored, won, stats, burst, bottomInset, 
 
 // 3-2-1-GO overlay.
 function Countdown({ count }) {
+  const t = useT(W)
   const v = useRef(new Animated.Value(0)).current
   useEffect(() => {
     v.setValue(0)
@@ -1515,9 +1529,9 @@ function Countdown({ count }) {
     <View style={styles.countdown} pointerEvents="auto">
       <Animated.View style={{ alignItems: 'center', opacity: v, transform: [{ scale: v.interpolate({ inputRange: [0, 1], outputRange: [2.2, 1] }) }] }}>
         <Text allowFontScaling={false} style={[styles.countText, go && { color: SUCCESS }]}>
-          {go ? 'GO' : count}
+          {go ? t('go') : count}
         </Text>
-        {!go ? <Text style={[stType.kicker, { color: ST.muted }]}>Get ready</Text> : null}
+        {!go ? <Text style={[stType.kicker, { color: ST.muted }]}>{t('get_ready')}</Text> : null}
       </Animated.View>
     </View>
   )
@@ -1525,6 +1539,7 @@ function Countdown({ count }) {
 
 // Run summary (studio Summary style).
 function Results({ score, solved, missed, bestStreak, summary, burst, endReason, bottomInset, onPlayAgain, onExit, onMenu }) {
+  const t = useT(W)
   const enter = useRef(new Animated.Value(0)).current
   const badge = useRef(new Animated.Value(0)).current
   const shown = useCountUp(score, 1200, 0)
@@ -1554,32 +1569,32 @@ function Results({ score, solved, missed, bestStreak, summary, burst, endReason,
       <ScrollView contentContainerStyle={[styles.resultsScroll, { paddingBottom: bottomInset + 24 }]} showsVerticalScrollIndicator={false}>
         <Animated.View style={[styles.resultsInner, { opacity: enter, transform: [{ translateY: enter.interpolate({ inputRange: [0, 1], outputRange: [40, 0] }) }] }]}>
           <View style={{ alignItems: 'center', gap: 4 }}>
-            <Text style={[stType.label, { color: wash }]}>{endReason === 'ended' ? 'Run ended' : 'Time’s up'} · Word race</Text>
+            <Text style={[stType.label, { color: wash }]}>{endReason === 'ended' ? t('run_ended') : t('times_up')} · {t('word_race')}</Text>
             <Text allowFontScaling={false} style={[stType.display, { fontSize: 64, lineHeight: 70 }]} numberOfLines={1} adjustsFontSizeToFit>{shown.toLocaleString()}</Text>
             <Text style={[stType.body, { fontSize: 13 }]}>
-              {solved.length} {solved.length === 1 ? 'word' : 'words'} cracked{summary?.previousBest != null && !isNewBest ? ` · best ${summary.previousBest.toLocaleString()}` : ''}
+              {t(solved.length === 1 ? 'cracked_one' : 'cracked', { n: solved.length })}{summary?.previousBest != null && !isNewBest ? ` · ${t('best_x', { n: summary.previousBest.toLocaleString() })}` : ''}
             </Text>
           </View>
 
           <View style={styles.resultStats}>
-            <ResultStat label="Words" value={String(solved.length)} color={SUCCESS} />
-            <ResultStat label="Accuracy" value={accuracy} />
-            <ResultStat label="Streak" value={`×${bestStreak}`} color={bestStreak > 0 ? ST.objective : undefined} />
-            <ResultStat label="Avg tries" value={avg} />
+            <ResultStat label={t('words')} value={String(solved.length)} color={SUCCESS} />
+            <ResultStat label={t('accuracy')} value={accuracy} />
+            <ResultStat label={t('streak')} value={`×${bestStreak}`} color={bestStreak > 0 ? ST.objective : undefined} />
+            <ResultStat label={t('avg_tries')} value={avg} />
           </View>
 
           {isNewBest ? (
             <Animated.View style={[styles.newBest, { opacity: badge, transform: [{ scale: badge.interpolate({ inputRange: [0, 1], outputRange: [0.85, 1] }) }] }]}>
               <Ionicons name="star-outline" size={30} color={ST.objective} />
               <View style={{ flex: 1 }}>
-                <Text style={[stType.label, { color: ST.objective }]}>New personal best</Text>
-                <Text style={styles.newBestText}>{score.toLocaleString()} points{summary ? ` · +${summary.pointsEarned} arcade` : ''}</Text>
+                <Text style={[stType.label, { color: ST.objective }]}>{t('new_best')}</Text>
+                <Text style={styles.newBestText}>{t('n_points', { n: score.toLocaleString() })}{summary ? ` · ${t('plus_arcade', { n: summary.pointsEarned })}` : ''}</Text>
               </View>
             </Animated.View>
           ) : summary ? (
             <View style={[styles.newBest, { borderColor: ST.line, backgroundColor: ST.panel }]}>
               <View style={{ flex: 1 }}>
-                <Text style={stType.label}>Arcade points</Text>
+                <Text style={stType.label}>{t('arcade_points')}</Text>
                 <Text style={[styles.newBestText, { color: ST.objective }]}>+{summary.pointsEarned}</Text>
               </View>
             </View>
@@ -1587,7 +1602,7 @@ function Results({ score, solved, missed, bestStreak, summary, burst, endReason,
 
           {words.length ? (
             <View style={{ marginTop: 16 }}>
-              <Text style={[stType.label, { marginBottom: 6 }]}>This run</Text>
+              <Text style={[stType.label, { marginBottom: 6 }]}>{t('this_run')}</Text>
               <View style={styles.wordChips}>
                 {words.slice(0, 24).map((x, i) => (
                   <View key={`${x.w}-${i}`} style={[styles.wordChip, x.ok ? styles.wordChipOk : styles.wordChipMiss]}>
@@ -1598,15 +1613,15 @@ function Results({ score, solved, missed, bestStreak, summary, burst, endReason,
               </View>
             </View>
           ) : (
-            <Text style={[stType.small, { textAlign: 'center', marginTop: 16 }]}>No words this time. Try a starter like CRANE or SLATE.</Text>
+            <Text style={[stType.small, { textAlign: 'center', marginTop: 16 }]}>{t('no_words')}</Text>
           )}
 
           <View style={{ flexDirection: 'row', gap: 8, marginTop: 22 }}>
-            <StButton title="Play again" onPress={onPlayAgain} style={{ flex: 1 }} />
+            <StButton title={t('play_again')} onPress={onPlayAgain} style={{ flex: 1 }} />
             {onExit ? (
-              <StButton title="Arcade" tone="ghost" onPress={onExit} style={{ width: 130 }} />
+              <StButton title={t('arcade')} tone="ghost" onPress={onExit} style={{ width: 130 }} />
             ) : (
-              <StButton title="Menu" tone="ghost" onPress={onMenu} style={{ width: 130 }} />
+              <StButton title={t('menu')} tone="ghost" onPress={onMenu} style={{ width: 130 }} />
             )}
           </View>
         </Animated.View>

@@ -4,6 +4,10 @@ import React, { memo, useEffect, useState } from 'react'
 import { Alert, StyleSheet, Text, View } from 'react-native'
 import { getTaggable, markTaggablePrompted, setTaggable, shouldPromptTaggable } from '../../lib/bystanderTags'
 import { FONT, ST } from '../studio'
+import { translate } from '../../i18n'
+import H from '../../i18n/strings/laserHud'
+
+const tr = (k, v) => translate(H, k, v)
 
 const TEAL = '#1fc8c8'
 const W = 240 // max marker width (centred on x)
@@ -18,7 +22,7 @@ export const BystanderMarkers = memo(function BystanderMarkers({ markers }) {
           <View style={s.pill}>
             <View style={s.badge}><Text style={s.badgeText} allowFontScaling={false}>iY</Text></View>
             <View style={{ flexShrink: 1 }}>
-              <Text style={s.kicker} numberOfLines={1}>iYiYi user</Text>
+              <Text style={s.kicker} numberOfLines={1}>{tr('iyiyi_user')}</Text>
               <Text style={s.name} numberOfLines={1}>@{m.username}</Text>
             </View>
           </View>
@@ -39,10 +43,10 @@ export function useTaggablePrompt(active) {
         if (!alive || !(await shouldPromptTaggable()) || !alive) return
         Alert.alert(
           'Laser Tag',
-          'Let other players tag you when you’re not in a game? You’ll get an alert to join and fight back.',
+          tr('tag_prompt'),
           [
-            { text: 'Keep off', style: 'cancel', onPress: () => { markTaggablePrompted() } },
-            { text: 'Turn on', onPress: () => { setTaggable(true).then((ok) => { if (!ok) markTaggablePrompted() }) } },
+            { text: tr('keep_off'), style: 'cancel', onPress: () => { markTaggablePrompted() } },
+            { text: tr('turn_on'), onPress: () => { setTaggable(true).then((ok) => { if (!ok) markTaggablePrompted() }) } },
           ],
           { cancelable: true, onDismiss: () => { markTaggablePrompted() } },
         )
@@ -70,14 +74,14 @@ export function LaserTaggableSetting({ SwitchRow }) {
     setBusy(false)
     if (!ok) {
       setOn(!v)
-      Alert.alert("Couldn't save", 'Check your connection and try again.')
+      Alert.alert(tr('couldnt_save'), tr('check_conn'))
     }
   }
   if (!SwitchRow) return null
   return (
     <SwitchRow
-      label="Let Laser Tag players tag me"
-      description="When you’re not in a game, Laser Tag players nearby can tag you on camera. You’ll get an alert to join and fight back."
+      label={tr('taggable_label')}
+      description={tr('taggable_desc')}
       value={on}
       disabled={busy}
       onChange={change}

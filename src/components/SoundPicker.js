@@ -7,18 +7,21 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons'
 import { searchSounds, savedSounds, mySounds, setSaved, soundTags, recordPlay, formatCount as fmt } from '../lib/sounds'
 import { useSoundPreview } from '../lib/soundPreview'
+import { useT, translate } from '../i18n'
+import strings from '../i18n/strings/music'
 
 const C = {
   bg: '#0d0f14', panel: '#161a22', line: 'rgba(255,255,255,0.08)', text: '#f2f4f7', muted: 'rgba(242,244,247,0.6)', faint: 'rgba(242,244,247,0.35)', accent: '#ff4fa3',
 }
 const TABS = [
-  { key: 'trending', label: 'Trending' },
-  { key: 'discover', label: 'Discover' },
-  { key: 'saved', label: 'Saved' },
-  { key: 'mine', label: 'My sounds' },
+  { key: 'trending', label: 'tabTrending' },
+  { key: 'discover', label: 'tabDiscover' },
+  { key: 'saved', label: 'tabSaved' },
+  { key: 'mine', label: 'mySounds' },
 ]
 
 export default function SoundPicker({ visible, onClose, onPick, onMakeBeat, selectedId }) {
+  const t = useT(strings)
   const insets = useSafeAreaInsets()
   const [tab, setTab] = useState('trending')
   const [tag, setTag] = useState(null)
@@ -46,7 +49,7 @@ export default function SoundPicker({ visible, onClose, onPick, onMakeBeat, sele
       }
     } catch (e) {
       setLists((l) => ({ ...l, [which]: [] }))
-      setError(e?.message || 'Sounds aren’t available right now.')
+      setError(e?.message || translate(strings, 'soundsUnavailableNow'))
     }
   }, [q, tag])
 
@@ -87,18 +90,18 @@ export default function SoundPicker({ visible, onClose, onPick, onMakeBeat, sele
     <Modal visible={visible} animationType="slide" onRequestClose={close} presentationStyle={Platform.OS === 'ios' ? 'pageSheet' : undefined}>
       <View style={[st.screen, { paddingTop: Platform.OS === 'ios' ? 14 : insets.top + 8 }]}>
         <View style={st.header}>
-          <Text style={st.title}>Sounds</Text>
-          <Pressable onPress={close} hitSlop={10} accessibilityLabel="Close"><Ionicons name="close" size={24} color={C.text} /></Pressable>
+          <Text style={st.title}>{t('tabSounds')}</Text>
+          <Pressable onPress={close} hitSlop={10} accessibilityLabel={t('close')}><Ionicons name="close" size={24} color={C.text} /></Pressable>
         </View>
         <View style={st.search}>
           <Ionicons name="search" size={16} color={C.muted} />
-          <TextInput value={q} onChangeText={onSearch} placeholder="Search sounds or creators" placeholderTextColor={C.faint} style={st.searchInput} returnKeyType="search" autoCorrect={false} />
+          <TextInput value={q} onChangeText={onSearch} placeholder={t('searchSoundsCreators')} placeholderTextColor={C.faint} style={st.searchInput} returnKeyType="search" autoCorrect={false} />
           {q ? <Pressable onPress={() => onSearch('')} hitSlop={8}><Ionicons name="close-circle" size={16} color={C.muted} /></Pressable> : null}
         </View>
         <View style={st.tabs}>
-          {TABS.map((t) => (
-            <Pressable key={t.key} onPress={() => setTab(t.key)} style={[st.tab, tab === t.key && st.tabOn]} accessibilityRole="tab" accessibilityState={{ selected: tab === t.key }}>
-              <Text style={[st.tabText, tab === t.key && { color: C.bg }]}>{t.label}</Text>
+          {TABS.map((tb) => (
+            <Pressable key={tb.key} onPress={() => setTab(tb.key)} style={[st.tab, tab === tb.key && st.tabOn]} accessibilityRole="tab" accessibilityState={{ selected: tab === tb.key }}>
+              <Text style={[st.tabText, tab === tb.key && { color: C.bg }]}>{t(tb.label)}</Text>
             </Pressable>
           ))}
         </View>
@@ -118,8 +121,8 @@ export default function SoundPicker({ visible, onClose, onPick, onMakeBeat, sele
           <Pressable onPress={() => { close(); onMakeBeat() }} style={st.make} accessibilityRole="button">
             <View style={st.makeIcon}><Ionicons name="grid" size={18} color="#ffb21e" /></View>
             <View style={{ flex: 1 }}>
-              <Text style={st.rowTitle}>Make a beat in Studio</Text>
-              <Text style={st.rowSub}>Drum machine & sampler. Export it and it shows up here.</Text>
+              <Text style={st.rowTitle}>{t('makeBeatStudio')}</Text>
+              <Text style={st.rowSub}>{t('makeBeatStudioSub')}</Text>
             </View>
             <Ionicons name="chevron-forward" size={18} color={C.muted} />
           </Pressable>
@@ -134,7 +137,7 @@ export default function SoundPicker({ visible, onClose, onPick, onMakeBeat, sele
             keyboardShouldPersistTaps="handled"
             ListEmptyComponent={
               <Text style={st.empty}>
-                {error ? 'Sounds are being set up, check back soon.' : tab === 'saved' ? 'Bookmark sounds to find them here.' : tab === 'mine' ? 'Export a beat from Studio to use it on your videos.' : q ? 'No sounds match that search.' : 'No public sounds yet. Make the first one in Studio!'}
+                {error ? t('pickerEmptySetup') : tab === 'saved' ? t('pickerEmptySaved') : tab === 'mine' ? t('pickerEmptyMine') : q ? t('pickerEmptySearch') : t('pickerEmptyAll')}
               </Text>
             }
             renderItem={({ item: s }) => {
@@ -142,20 +145,20 @@ export default function SoundPicker({ visible, onClose, onPick, onMakeBeat, sele
               const picked = selectedId === s.id
               return (
                 <View style={[st.row, picked && { borderColor: C.accent }]}>
-                  <Pressable onPress={() => { if (!playing) recordPlay(s.id); preview.toggle(s) }} style={st.play} accessibilityLabel={playing ? `Pause ${s.title}` : `Preview ${s.title}`}>
+                  <Pressable onPress={() => { if (!playing) recordPlay(s.id); preview.toggle(s) }} style={st.play} accessibilityLabel={playing ? t('pauseName', { name: s.title }) : t('previewName', { name: s.title })}>
                     <Ionicons name={playing ? 'pause' : 'play'} size={18} color={C.text} />
                   </Pressable>
                   <View style={{ flex: 1 }}>
                     <Text style={st.rowTitle} numberOfLines={1}>{s.title}</Text>
                     <Text style={st.rowSub} numberOfLines={1}>
-                      {s.profiles?.username ? `@${s.profiles.username}` : 'iYiYi member'} · {Math.round(s.duration_s || 0)}s{s.play_count ? ` · ${fmt(s.play_count)} plays` : ''}{s.use_count ? ` · ${fmt(s.use_count)} videos` : ''}{s.status === 'private' ? ' · only you' : ''}
+                      {s.profiles?.username ? `@${s.profiles.username}` : t('iyiyiMember')} · {Math.round(s.duration_s || 0)}s{s.play_count ? t('playsSuffix', { n: fmt(s.play_count) }) : ''}{s.use_count ? t('videosSuffix', { n: fmt(s.use_count) }) : ''}{s.status === 'private' ? t('onlyYouSuffix') : ''}
                     </Text>
                   </View>
-                  <Pressable onPress={() => toggleSave(s)} hitSlop={8} accessibilityLabel={savedIds.has(s.id) ? 'Unsave' : 'Save'}>
+                  <Pressable onPress={() => toggleSave(s)} hitSlop={8} accessibilityLabel={savedIds.has(s.id) ? t('unsave') : t('save')}>
                     <Ionicons name={savedIds.has(s.id) ? 'bookmark' : 'bookmark-outline'} size={19} color={savedIds.has(s.id) ? '#ffb21e' : C.muted} />
                   </Pressable>
-                  <Pressable onPress={() => { preview.stop(); onPick?.(s) }} style={st.use} accessibilityRole="button" accessibilityLabel={`Use ${s.title}`}>
-                    <Text style={st.useText}>{picked ? 'Using' : 'Use'}</Text>
+                  <Pressable onPress={() => { preview.stop(); onPick?.(s) }} style={st.use} accessibilityRole="button" accessibilityLabel={t('useName', { name: s.title })}>
+                    <Text style={st.useText}>{picked ? t('using') : t('use')}</Text>
                   </Pressable>
                 </View>
               )

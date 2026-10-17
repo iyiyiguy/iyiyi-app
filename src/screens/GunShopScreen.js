@@ -5,9 +5,11 @@ import { LinearGradient } from 'expo-linear-gradient'
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons'
 import GunSpinViewer from '../components/GunSpinViewer'
 import {
-  GUNS, GUN_CATEGORIES, RARITIES, FEATURED_GUN_IDS, setEquippedGun, ensureOwnerUnlocks, gunRatings, fireRateLabel,
-  getGunById, isPaidGun, tagStats, cycleMs, SIDE_GRADE_TEXT,
+  GUNS, GUN_CATEGORIES, RARITIES, FEATURED_GUN_IDS, setEquippedGun, ensureOwnerUnlocks, gunRatings,
+  getGunById, isPaidGun, tagStats, cycleMs, pullsPerSecond, FIRE_MODE_LABELS,
 } from '../lib/guns'
+import { translate, useT } from '../i18n'
+import G from '../i18n/strings/gunShop'
 import { loadArcadeStats, subscribeArcadeStats } from '../lib/arcadeStats'
 import { buzz } from '../lib/gamePrefs'
 import {
@@ -28,7 +30,8 @@ import { isReviewAccount } from '../lib/reviewAccount'
 // Kept for existing importers (e.g. the Laser Tag lobby).
 export { GUNS }
 
-const FIRE_MODE = { single: 'Semi-auto', burst: 'Burst', automatic: 'Full-auto' }
+const FIRE_MODE = FIRE_MODE_LABELS
+const tg = (k, v) => translate(G, k, v)
 const PAD = 20
 const GAP = 12
 const HERO_MS = 5000
@@ -46,6 +49,7 @@ const safeFrames = (gun) => { try { return gunSpinFrames(gun) } catch { return n
 // { onGunSelected(gunId), selectedGunId }.
 export default function GunShopScreen({ navigation, route }) {
   const { onGunSelected } = route?.params || {}
+  const t = useT(G)
   const insets = useArcadeInsets()
   const { width } = useWindowDimensions()
   const [stats, setStats] = useState(null)
@@ -87,8 +91,8 @@ export default function GunShopScreen({ navigation, route }) {
   useEffect(() => subscribeArcadeStats(setStats), [])
   useEffect(() => {
     if (!toast) return undefined
-    const t = setTimeout(() => setToast(null), 2600)
-    return () => clearTimeout(t)
+    const tm = setTimeout(() => setToast(null), 2600)
+    return () => clearTimeout(tm)
   }, [toast])
 
   const unlocked = stats?.unlockedGuns ?? ['pistol', 'uzi']
@@ -109,7 +113,7 @@ export default function GunShopScreen({ navigation, route }) {
       const ok = await setEquippedGun(gun.id)
       if (ok) {
         buzz('success')
-        setToast(`${gun.name} equipped`)
+        setToast(t('x_equipped', { name: gun.name }))
         setDetail(null)
         if (onGunSelected) {
           onGunSelected(gun.id)
@@ -137,12 +141,12 @@ export default function GunShopScreen({ navigation, route }) {
     setBusy(true)
     try {
       const res = await purchaseGun(gun.id)
-      if (res.status === 'purchased') await afterUnlock(gun, `${gun.name} unlocked & equipped`)
-      else Alert.alert('Purchase pending', 'Your purchase is waiting for approval. The gun unlocks as soon as it goes through.')
+      if (res.status === 'purchased') await afterUnlock(gun, t('x_unlocked', { name: gun.name }))
+      else Alert.alert(t('pending_title'), t('pending_gun'))
     } catch (e) {
       if (!isUserCancelled(e)) {
         buzz('error')
-        Alert.alert('Purchase didn’t go through', 'You weren’t charged. Please try again.')
+        Alert.alert(t('failed_title'), t('not_charged_retry'))
       }
     } finally {
       setBusy(false)
@@ -154,7 +158,7 @@ export default function GunShopScreen({ navigation, route }) {
     try {
       const ids = await restoreGunPurchases()
       setStats(await loadArcadeStats())
-      Alert.alert(ids.length ? 'Purchases restored' : 'Nothing to restore', ids.length ? `Restored ${ids.length} gun${ids.length === 1 ? '' : 's'}.` : 'No guns were bought with this Apple ID or Google account.')
+      Alert.alert(ids.length ? t('restored_title') : t('nothing_restore'), ids.length ? t(ids.length === 1 ? 'restored_one' : 'restored_n', { n: ids.length }) : t('no_guns_bought'))
     } finally {
       setBusy(false)
     }
@@ -165,7 +169,7 @@ export default function GunShopScreen({ navigation, route }) {
     if (owns(gun)) { equip(gun); return }
     const price = prices[gun.id]
     if (!price) {
-      Alert.alert('Not available yet', `${gun.name} isn’t available in the store right now. Please try again later.`)
+      Alert.alert(t('not_available'), t('not_in_store', { name: gun.name }))
       return
     }
     buzz('medium')
@@ -179,11 +183,11 @@ export default function GunShopScreen({ navigation, route }) {
     setBusy(true)
     try {
       const res = await stickyBombStore.buy()
-      if (res.ok) { buzz('success'); setToast(`${res.count} sticky bombs added`) }
-      else if (res.pending) Alert.alert('Purchase pending', 'Your purchase is waiting for approval. The sticky bombs are added as soon as it goes through.')
+      if (res.ok) { buzz('success'); setToast(t('sticky_added', { n: res.count })) }
+      else if (res.pending) Alert.alert(t('pending_title'), t('pending_sticky'))
       else if (res.cancelled) { /* noop */ }
-      else if (res.error) Alert.alert('Purchase failed', res.error)
-    } catch { Alert.alert('Error', 'Something went wrong. You weren\'t charged.') }
+      else if (res.error) Alert.alert(t('purchase_failed'), res.error)
+    } catch { Alert.alert(t('error'), t('went_wrong')) }
     setBusy(false)
   }
 
@@ -192,11 +196,11 @@ export default function GunShopScreen({ navigation, route }) {
     setBusy(true)
     try {
       const res = await landMineStore.buy()
-      if (res.ok) { buzz('success'); setToast(`${res.count} land mines added`) }
-      else if (res.pending) Alert.alert('Purchase pending', 'Your purchase is waiting for approval. The land mines are added as soon as it goes through.')
+      if (res.ok) { buzz('success'); setToast(t('mines_added', { n: res.count })) }
+      else if (res.pending) Alert.alert(t('pending_title'), t('pending_mines'))
       else if (res.cancelled) { /* noop */ }
-      else if (res.error) Alert.alert('Purchase failed', res.error)
-    } catch { Alert.alert('Error', 'Something went wrong. You weren\'t charged.') }
+      else if (res.error) Alert.alert(t('purchase_failed'), res.error)
+    } catch { Alert.alert(t('error'), t('went_wrong')) }
     setBusy(false)
   }
 
@@ -206,14 +210,14 @@ export default function GunShopScreen({ navigation, route }) {
     const res = await grenadeStore.buy()
     if (res?.ok) {
       buzz('success')
-      setToast(`${res.count || GRENADE_PACK.count} grenades added`)
+      setToast(t('grenades_added', { n: res.count || GRENADE_PACK.count }))
     } else if (res?.cancelled) {
       // silent
     } else if (res?.pending) {
-      Alert.alert('Purchase pending', 'Your purchase is waiting for approval. The grenades are added as soon as it goes through.')
+      Alert.alert(t('pending_title'), t('pending_grenades'))
     } else if (res?.error) {
       buzz('error')
-      Alert.alert('Purchase didn’t go through', res.error)
+      Alert.alert(t('failed_title'), res.error)
     }
   }
 
@@ -234,10 +238,10 @@ export default function GunShopScreen({ navigation, route }) {
         <View style={styles.pad}>
           {/* Header */}
           <View style={styles.header}>
-            <IconCircle icon="chevron-back" label="Back" onPress={() => navigation.goBack()} />
+            <IconCircle icon="chevron-back" label={t('back')} onPress={() => navigation.goBack()} />
             <View style={{ flex: 1, minWidth: 0, marginLeft: 12 }}>
-              <Text style={styles.headerKicker} numberOfLines={1}>ARMORY</Text>
-              <Text style={styles.headerTitle} numberOfLines={1}>Shop</Text>
+              <Text style={styles.headerKicker} numberOfLines={1}>{t('armory')}</Text>
+              <Text style={styles.headerTitle} numberOfLines={1}>{t('shop')}</Text>
             </View>
             <View style={styles.headerRight}>
               <GrenadePill balance={grenades.balance} owner={grenades.owner || owner} onPress={toEquipment} />
@@ -248,7 +252,7 @@ export default function GunShopScreen({ navigation, route }) {
           {owner && (
             <View style={styles.ownerBanner}>
               <Ionicons name="key" size={18} color={ST.objective} />
-              <Text style={styles.ownerText}>Owner access — every weapon is unlocked on this account.</Text>
+              <Text style={styles.ownerText}>{t('owner_access')}</Text>
             </View>
           )}
 
@@ -266,18 +270,18 @@ export default function GunShopScreen({ navigation, route }) {
           )}
 
           {/* Loadout strip */}
-          <Pressable onPress={() => navigation.navigate('MyEquip')} accessibilityRole="button" accessibilityLabel={`My Equipment. Equipped: ${equippedGun.name}`} style={({ pressed }) => pressed && { opacity: 0.85 }}>
+          <Pressable onPress={() => navigation.navigate('MyEquip')} accessibilityRole="button" accessibilityLabel={t('my_equip_a11y', { name: equippedGun.name })} style={({ pressed }) => pressed && { opacity: 0.85 }}>
             <View style={styles.loadout}>
               <View style={[styles.loadoutIcon, { borderColor: rarityOf(equippedGun).color + '66' }]}>
                 <Image source={gunArt(equippedGun)} style={styles.loadoutImg} resizeMode="contain" fadeDuration={0} />
               </View>
               <View style={{ flex: 1, minWidth: 0 }}>
-                <Text style={styles.loadoutLabel}>EQUIPPED</Text>
+                <Text style={styles.loadoutLabel}>{t('equipped_caps')}</Text>
                 <Text style={styles.loadoutName} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>{equippedGun.name}</Text>
               </View>
               <View style={styles.ownedBox}>
                 <Text style={styles.ownedNum}>{ownedCount}<Text style={styles.ownedOf}>/{GUNS.length}</Text></Text>
-                <Text style={styles.ownedLabel}>OWNED</Text>
+                <Text style={styles.ownedLabel}>{t('owned_caps')}</Text>
               </View>
               <Ionicons name="chevron-forward" size={18} color={AC.faint} style={{ marginLeft: 4 }} />
             </View>
@@ -285,9 +289,9 @@ export default function GunShopScreen({ navigation, route }) {
         </View>
 
         {/* Category tabs */}
-        <SectionHeader title="Weapons" style={styles.pad} />
+        <SectionHeader title={t('weapons')} style={styles.pad} />
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabs}>
-          {[...GUN_CATEGORIES, { id: 'owned', name: 'Owned' }].map((c) => {
+          {[...GUN_CATEGORIES, { id: 'owned', name: t('owned') }].map((c) => {
             const active = category === c.id
             return (
               <Pressable
@@ -319,11 +323,11 @@ export default function GunShopScreen({ navigation, route }) {
             />
           ))}
         </View>
-        {list.length === 0 && <Text style={[arcadeText.caption, { textAlign: 'center', marginTop: 8 }]}>Nothing here yet.</Text>}
+        {list.length === 0 && <Text style={[arcadeText.caption, { textAlign: 'center', marginTop: 8 }]}>{t('nothing_yet')}</Text>}
 
         {/* Equipment */}
         <View onLayout={(e) => { equipY.current = e.nativeEvent.layout.y }}>
-          <SectionHeader title="Equipment" action="Arcade Store" onAction={toStore} style={styles.pad} />
+          <SectionHeader title={t('equipment')} action={t('arcade_store')} onAction={toStore} style={styles.pad} />
           <View style={styles.pad}>
             <UavShopCard balance={uav.balance} owner={uav.owner || owner} onOpenStore={toStore} />
             <GrenadeCard
@@ -351,10 +355,10 @@ export default function GunShopScreen({ navigation, route }) {
         <View style={[styles.pad, { marginTop: 18 }]}>
           <Pressable onPress={restore} disabled={busy} hitSlop={10} accessibilityRole="button" style={({ pressed }) => [styles.restore, (pressed || busy) && { opacity: 0.6 }]}>
             <Ionicons name="refresh" size={14} color={AC.text} />
-            <Text style={styles.restoreText}>Restore Purchases</Text>
+            <Text style={styles.restoreText}>{t('restore')}</Text>
           </Pressable>
-          <Text style={styles.footer}>{SIDE_GRADE_TEXT}</Text>
-          <Text style={styles.footer}>Each gun is a one-time purchase and stays unlocked on your Apple ID or Google account. Prices come from the App Store / Google Play.</Text>
+          <Text style={styles.footer}>{t('side_grade')}</Text>
+          <Text style={styles.footer}>{t('one_time')}</Text>
         </View>
       </ScrollView>
 
@@ -391,14 +395,14 @@ function rarityPanel(gun, strength = 1) {
 }
 
 function priceLabel({ gun, price, owned, equipped, loading }) {
-  if (equipped) return { text: 'Equipped', kind: 'equipped' }
-  if (owned) return { text: 'Owned', kind: 'owned' }
+  if (equipped) return { text: tg('equipped'), kind: 'equipped' }
+  if (owned) return { text: tg('owned'), kind: 'owned' }
   // Store-sold guns (gun.iap, e.g. the Rocket Launcher with unlockPoints 0, and every other
   // paid gun) are never "Free": the store price, '…' while it loads, else "Coming soon".
-  if (gun.iap || isPaidGun(gun)) return price ? { text: price, kind: 'price' } : loading ? { text: '…', kind: 'soon' } : { text: 'Coming soon', kind: 'soon' }
-  if (!gun.unlockPoints) return { text: 'Free', kind: 'owned' }
+  if (gun.iap || isPaidGun(gun)) return price ? { text: price, kind: 'price' } : loading ? { text: '…', kind: 'soon' } : { text: tg('coming_soon'), kind: 'soon' }
+  if (!gun.unlockPoints) return { text: tg('free'), kind: 'owned' }
   if (price) return { text: price, kind: 'price' }
-  return { text: 'Coming soon', kind: 'soon' }
+  return { text: tg('coming_soon'), kind: 'soon' }
 }
 
 function PricePill({ gun, price, owned, equipped, large, loading }) {
@@ -446,8 +450,9 @@ function Glow({ color, size, style }) {
 }
 
 function GrenadePill({ balance, owner, onPress }) {
+  const t = useT(G)
   return (
-    <Pressable onPress={onPress} hitSlop={6} style={({ pressed }) => [styles.gPill, pressed && { opacity: 0.8 }]} accessibilityRole="button" accessibilityLabel={`Grenades: ${owner ? 'unlimited' : balance}`}>
+    <Pressable onPress={onPress} hitSlop={6} style={({ pressed }) => [styles.gPill, pressed && { opacity: 0.8 }]} accessibilityRole="button" accessibilityLabel={t('grenades_a11y', { n: owner ? t('unlimited_lc') : balance })}>
       <MaterialCommunityIcons name="bomb" size={15} color={ST.objective} />
       {owner ? <MaterialCommunityIcons name="infinity" size={16} color={ST.text} /> : <Text style={styles.gPillText}>{Number(balance || 0).toLocaleString()}</Text>}
     </Pressable>
@@ -518,17 +523,18 @@ function HeroCarousel({ guns, width, prices, loading, owns, equippedId, onOpen }
 }
 
 function HeroSlide({ gun, width, height, price, loading, owned, equipped, onOpen }) {
+  const t = useT(G)
   const r = rarityOf(gun)
   const imgW = Math.min(width - 24, 420)
   return (
-    <Pressable onPress={onOpen} accessibilityRole="button" accessibilityLabel={`${gun.name}. Inspect`} style={{ width, height }}>
+    <Pressable onPress={onOpen} accessibilityRole="button" accessibilityLabel={t('inspect_a11y', { name: gun.name })} style={{ width, height }}>
       <LinearGradient colors={rarityPanel(gun, 1.5)} start={{ x: 0, y: 0 }} end={{ x: 0.7, y: 1 }} style={StyleSheet.absoluteFill} />
       <Glow color={r.color} size={width * 0.9} style={{ top: -width * 0.12, height: width * 0.75 }} />
       <View style={[styles.heroStripe, { backgroundColor: r.color }]} />
       <View style={styles.heroTop}>
         <View style={styles.heroKickerRow}>
           <Ionicons name="flame" size={12} color={r.color} />
-          <Text style={[styles.heroKicker, { color: r.color }]}>FEATURED</Text>
+          <Text style={[styles.heroKicker, { color: r.color }]}>{t('featured_caps')}</Text>
         </View>
         <RarityTag gun={gun} solid />
       </View>
@@ -544,7 +550,7 @@ function HeroSlide({ gun, width, height, price, loading, owned, equipped, onOpen
           <PricePill gun={gun} price={price} loading={loading} owned={owned} equipped={equipped} large />
           <View style={styles.inspectBtn}>
             <Ionicons name="cube-outline" size={15} color={ST.text} />
-            <Text style={styles.inspectText}>Inspect</Text>
+            <Text style={styles.inspectText}>{t('inspect')}</Text>
           </View>
         </View>
       </View>
@@ -553,13 +559,14 @@ function HeroSlide({ gun, width, height, price, loading, owned, equipped, onOpen
 }
 
 function WeaponCard({ gun, width, price, loading, owned, equipped, onPress }) {
+  const t = useT(G)
   const r = rarityOf(gun)
   const artH = Math.round(width * 0.62)
   return (
     <Pressable
       onPress={onPress}
       accessibilityRole="button"
-      accessibilityLabel={`${gun.name}, ${r.name}. ${priceLabel({ gun, price, owned, equipped, loading }).text}${gun.weakness ? `. Trade-off: ${gun.weakness}` : ''}`}
+      accessibilityLabel={`${gun.name}, ${r.name}. ${priceLabel({ gun, price, owned, equipped, loading }).text}${gun.weakness ? `. ${t('tradeoff', { text: gun.weakness })}` : ''}`}
       style={({ pressed }) => [{ width, marginBottom: GAP }, pressed && { transform: [{ scale: 0.97 }] }]}
     >
       <View style={[styles.card, { borderColor: equipped ? ST.health : r.color + '55' }]}>
@@ -593,6 +600,7 @@ function WeaponCard({ gun, width, price, loading, owned, equipped, onPress }) {
 }
 
 function GrenadeCard({ balance, owner, store, onBuy }) {
+  const t = useT(G)
   const count = GRENADE_PACK?.count || 10
   return (
     <View style={[styles.gCard]}>
@@ -602,18 +610,18 @@ function GrenadeCard({ balance, owner, store, onBuy }) {
         <View style={[styles.gBadge, { backgroundColor: ST.objective }]}><Text style={styles.gBadgeText}>×{count}</Text></View>
       </View>
       <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
-        <Text style={styles.gTitle}>{count} Grenades</Text>
-        <Text style={styles.gMeta}>Throw grenades in Laser Tag to flush enemies out of cover. Use up to {GRENADES_PER_MATCH} per match; the rest stay in your balance.</Text>
-        <Text style={styles.gBal}>{owner ? 'Unlimited (owner)' : `Balance: ${Number(balance || 0).toLocaleString()}`}</Text>
+        <Text style={styles.gTitle}>{t('n_grenades', { n: count })}</Text>
+        <Text style={styles.gMeta}>{t('grenades_meta', { n: GRENADES_PER_MATCH })}</Text>
+        <Text style={styles.gBal}>{owner ? t('unlimited_owner') : t('balance', { n: Number(balance || 0).toLocaleString() })}</Text>
         <View style={{ marginTop: 6, alignSelf: 'flex-start' }}>
           {owner ? (
-            <GhostButton title="Unlimited" icon="infinite" small disabled />
+            <GhostButton title={t('unlimited')} icon="infinite" small disabled />
           ) : store.status === 'ready' ? (
-            <PlayButton title={store.displayPrice ? `Buy · ${store.displayPrice}` : 'Buy'} icon="cart" small busy={store.busy} onPress={onBuy} colors={[ST.objective]} />
+            <PlayButton title={store.displayPrice ? t('buy_price', { price: store.displayPrice }) : t('buy')} icon="cart" small busy={store.busy} onPress={onBuy} colors={[ST.objective]} />
           ) : store.status === 'loading' ? (
-            <GhostButton title="Loading…" icon="hourglass-outline" small disabled />
+            <GhostButton title={t('loading')} icon="hourglass-outline" small disabled />
           ) : (
-            <GhostButton title="Coming soon" icon="time-outline" small disabled />
+            <GhostButton title={t('coming_soon')} icon="time-outline" small disabled />
           )}
         </View>
       </View>
@@ -622,6 +630,7 @@ function GrenadeCard({ balance, owner, store, onBuy }) {
 }
 
 function StickyBombCard({ balance, owner, store, onBuy }) {
+  const t = useT(G)
   const count = STICKY_BOMB_PACK?.count || 5
   return (
     <View style={[styles.gCard, { borderLeftColor: ST.epic }]}>
@@ -631,18 +640,18 @@ function StickyBombCard({ balance, owner, store, onBuy }) {
         <View style={[styles.gBadge, { backgroundColor: ST.epic }]}><Text style={styles.gBadgeText}>×{count}</Text></View>
       </View>
       <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
-        <Text style={styles.gTitle}>{count} Sticky Bombs</Text>
-        <Text style={styles.gMeta}>Place on any surface — detonate remotely when enemies are near. Use up to {STICKY_BOMBS_PER_MATCH} per match; the rest stay in your balance.</Text>
-        <Text style={[styles.gBal, { color: ST.epic }]}>{owner ? 'Unlimited (owner)' : `Balance: ${Number(balance || 0).toLocaleString()}`}</Text>
+        <Text style={styles.gTitle}>{t('n_sticky', { n: count })}</Text>
+        <Text style={styles.gMeta}>{t('sticky_meta', { n: STICKY_BOMBS_PER_MATCH })}</Text>
+        <Text style={[styles.gBal, { color: ST.epic }]}>{owner ? t('unlimited_owner') : t('balance', { n: Number(balance || 0).toLocaleString() })}</Text>
         <View style={{ marginTop: 6, alignSelf: 'flex-start' }}>
           {owner ? (
-            <GhostButton title="Unlimited" icon="infinite" small disabled />
+            <GhostButton title={t('unlimited')} icon="infinite" small disabled />
           ) : store.status === 'ready' ? (
-            <PlayButton title={store.displayPrice ? `Buy · ${store.displayPrice}` : 'Buy'} icon="cart" small busy={store.busy} onPress={onBuy} colors={[ST.epic]} />
+            <PlayButton title={store.displayPrice ? t('buy_price', { price: store.displayPrice }) : t('buy')} icon="cart" small busy={store.busy} onPress={onBuy} colors={[ST.epic]} />
           ) : store.status === 'loading' ? (
-            <GhostButton title="Loading…" icon="hourglass-outline" small disabled />
+            <GhostButton title={t('loading')} icon="hourglass-outline" small disabled />
           ) : (
-            <GhostButton title="Coming soon" icon="time-outline" small disabled />
+            <GhostButton title={t('coming_soon')} icon="time-outline" small disabled />
           )}
         </View>
       </View>
@@ -651,6 +660,7 @@ function StickyBombCard({ balance, owner, store, onBuy }) {
 }
 
 function LandMineCard({ balance, owner, store, onBuy }) {
+  const t = useT(G)
   const count = LAND_MINE_PACK?.count || 5
   return (
     <View style={[styles.gCard, { borderLeftColor: ST.health }]}>
@@ -660,18 +670,18 @@ function LandMineCard({ balance, owner, store, onBuy }) {
         <View style={[styles.gBadge, { backgroundColor: ST.health }]}><Text style={styles.gBadgeText}>×{count}</Text></View>
       </View>
       <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
-        <Text style={styles.gTitle}>{count} Land Mines</Text>
-        <Text style={styles.gMeta}>Place on the ground — detonates when an enemy walks within 3 ft. Persists until triggered. Use up to {LAND_MINES_PER_MATCH} per match; the rest stay in your balance.</Text>
-        <Text style={[styles.gBal, { color: ST.health }]}>{owner ? 'Unlimited (owner)' : `Balance: ${Number(balance || 0).toLocaleString()}`}</Text>
+        <Text style={styles.gTitle}>{t('n_mines', { n: count })}</Text>
+        <Text style={styles.gMeta}>{t('mines_meta', { n: LAND_MINES_PER_MATCH })}</Text>
+        <Text style={[styles.gBal, { color: ST.health }]}>{owner ? t('unlimited_owner') : t('balance', { n: Number(balance || 0).toLocaleString() })}</Text>
         <View style={{ marginTop: 6, alignSelf: 'flex-start' }}>
           {owner ? (
-            <GhostButton title="Unlimited" icon="infinite" small disabled />
+            <GhostButton title={t('unlimited')} icon="infinite" small disabled />
           ) : store.status === 'ready' ? (
-            <PlayButton title={store.displayPrice ? `Buy · ${store.displayPrice}` : 'Buy'} icon="cart" small busy={store.busy} onPress={onBuy} colors={[ST.health]} />
+            <PlayButton title={store.displayPrice ? t('buy_price', { price: store.displayPrice }) : t('buy')} icon="cart" small busy={store.busy} onPress={onBuy} colors={[ST.health]} />
           ) : store.status === 'loading' ? (
-            <GhostButton title="Loading…" icon="hourglass-outline" small disabled />
+            <GhostButton title={t('loading')} icon="hourglass-outline" small disabled />
           ) : (
-            <GhostButton title="Coming soon" icon="time-outline" small disabled />
+            <GhostButton title={t('coming_soon')} icon="time-outline" small disabled />
           )}
         </View>
       </View>
@@ -682,15 +692,16 @@ function LandMineCard({ balance, owner, store, onBuy }) {
 // One stat bar. `base` (0-1) draws a white marker for the free Starter Pistol so every bar
 // reads as a trade-off: above the marker = better than the free gun, below = worse.
 function StatBar({ label, value, color, base }) {
+  const t = useT(G)
   const pct = Math.round(Math.max(0, Math.min(1, value || 0)) * 100)
   const basePct = Number.isFinite(base) ? Math.round(Math.max(0, Math.min(1, base)) * 100) : null
   const diff = basePct == null ? 0 : pct - basePct
   return (
-    <View style={styles.bar} accessible accessibilityLabel={`${label} ${pct}${basePct != null ? `, Starter Pistol ${basePct}` : ''}`}>
+    <View style={styles.bar} accessible accessibilityLabel={`${label} ${pct}${basePct != null ? `, ${t('starter_pistol_x', { n: basePct })}` : ''}`}>
       <Text style={styles.barLabel}>{label}</Text>
       <View style={styles.barTrack}>
         <View style={[styles.barFill, { width: `${pct}%`, backgroundColor: color }]} />
-        {[0.25, 0.5, 0.75].map((t) => <View key={t} style={[styles.barTick, { left: `${t * 100}%` }]} />)}
+        {[0.25, 0.5, 0.75].map((tk) => <View key={tk} style={[styles.barTick, { left: `${tk * 100}%` }]} />)}
         {basePct != null ? <View style={[styles.barBase, { left: `${Math.min(98, basePct)}%` }]} /> : null}
       </View>
       <Text style={[styles.barValue, basePct != null && diff !== 0 && { color: diff > 0 ? ST.health : ST.enemy }]}>{basePct != null && Math.abs(diff) >= 3 ? (diff > 0 ? '▲' : '▼') : ''}{pct}</Text>
@@ -699,6 +710,7 @@ function StatBar({ label, value, color, base }) {
 }
 
 function InspectModal({ gun, owned, equipped, price, loading, onMoney, onAct, busy, onClose, insets }) {
+  const t = useT(G)
   const { height } = useWindowDimensions()
   const g = gun
   const r = rarityOf(g)
@@ -711,8 +723,6 @@ function InspectModal({ gun, owned, equipped, price, loading, onMoney, onAct, bu
   try { ttk = g ? tagStats(g) : null } catch { ttk = null }
   let cycle = 0
   try { cycle = g ? cycleMs(g) : 0 } catch { cycle = 0 }
-  let rate = ''
-  try { rate = g ? fireRateLabel(g) : '' } catch { rate = '' }
   const frames = useMemo(() => (g ? safeFrames(g) : null), [g])
 
   return (
@@ -721,9 +731,9 @@ function InspectModal({ gun, owned, equipped, price, loading, onMoney, onAct, bu
         <View style={styles.inspect}>
           <LinearGradient colors={[r.color + '22', ST.ground, ST.ground]} locations={[0, 0.5, 1]} style={StyleSheet.absoluteFill} />
           <View style={[styles.inspectTop, { paddingTop: insets.top + 8 }]}>
-            <IconCircle icon="close" label="Close" onPress={onClose} />
+            <IconCircle icon="close" label={t('close')} onPress={onClose} />
             <View style={{ flex: 1, alignItems: 'center' }}>
-              <Text style={styles.inspectKicker}>INSPECT</Text>
+              <Text style={styles.inspectKicker}>{t('inspect_caps')}</Text>
             </View>
             <View style={{ width: 42, alignItems: 'flex-end' }} />
           </View>
@@ -756,48 +766,48 @@ function InspectModal({ gun, owned, equipped, price, loading, onMoney, onAct, bu
             ) : null}
 
             <View style={styles.inspectPanel}>
-              <StatBar label="Power" value={ratings.power} base={base?.power} color={r.color} />
-              <StatBar label="Fire rate" value={ratings.fireRate} base={base?.fireRate} color={r.color} />
-              <StatBar label="Hip aim" value={ratings.accuracy} base={base?.accuracy} color={r.color} />
-              <StatBar label="Range" value={ratings.range} base={base?.range} color={r.color} />
+              <StatBar label={t('stat_power')} value={ratings.power} base={base?.power} color={r.color} />
+              <StatBar label={t('stat_fire_rate')} value={ratings.fireRate} base={base?.fireRate} color={r.color} />
+              <StatBar label={t('stat_hip_aim')} value={ratings.accuracy} base={base?.accuracy} color={r.color} />
+              <StatBar label={t('stat_range')} value={ratings.range} base={base?.range} color={r.color} />
               {base ? (
                 <View style={styles.legend}>
                   <View style={styles.legendMark} />
-                  <Text style={styles.legendText}>Free Starter Pistol</Text>
+                  <Text style={styles.legendText}>{t('free_starter')}</Text>
                 </View>
               ) : null}
             </View>
 
             <View style={styles.specs}>
-              <Spec label="Mode" value={FIRE_MODE[g.fireMode]} />
-              <Spec label={g.fireMode === 'automatic' ? 'Rate' : cycle > 0 ? 'Cycle' : 'Per tap'} value={g.fireMode === 'automatic' ? rate.replace(' held', '') : cycle > 0 ? `${Math.round(cycle / 100) / 10} s` : `${g.shotsPerClick || 1}×`} />
-              <Spec label="Tag-out" value={ttk ? `${ttk.hitsBody} hit${ttk.hitsBody === 1 ? '' : 's'}` : '—'} />
-              <Spec label="Range" value={`${g.range} m`} />
+              <Spec label={t('spec_mode')} value={FIRE_MODE[g.fireMode]} />
+              <Spec label={g.fireMode === 'automatic' ? t('spec_rate') : cycle > 0 ? t('spec_cycle') : t('spec_per_tap')} value={g.fireMode === 'automatic' ? t('rate_short', { n: Math.round(pullsPerSecond(g) * 10) / 10 }) : cycle > 0 ? `${Math.round(cycle / 100) / 10} s` : `${g.shotsPerClick || 1}×`} />
+              <Spec label={t('spec_tagout')} value={ttk ? t(ttk.hitsBody === 1 ? 'n_hit' : 'n_hits', { n: ttk.hitsBody }) : '—'} />
+              <Spec label={t('stat_range')} value={`${g.range} m`} />
             </View>
             {ttk ? (
               <Text style={styles.specNote}>
-                {`Body: ${ttk.hitsBody} hit${ttk.hitsBody === 1 ? '' : 's'} (${ttk.ttkBody.toFixed(1)} s) · Head: ${ttk.hitsHead} (${ttk.ttkHead.toFixed(1)} s), every hit landing within 20 m.${g.blastRadius ? ` Plus a ${g.blastRadius} m splash.` : ''} Unlimited ammo.`}
+                {`${t('ttk_note', { body: ttk.hitsBody, bs: ttk.ttkBody.toFixed(1), head: ttk.hitsHead, hs: ttk.ttkHead.toFixed(1) })}${g.blastRadius ? ` ${t('plus_splash', { n: g.blastRadius })}` : ''} ${t('unlimited_ammo')}`}
               </Text>
             ) : null}
-            <Text style={styles.specNote}>{SIDE_GRADE_TEXT}</Text>
+            <Text style={styles.specNote}>{t('side_grade')}</Text>
           </ScrollView>
 
           <View style={[styles.actionBar, { paddingBottom: insets.bottom + 12 }]}>
             <View style={{ flex: 1, minWidth: 0 }}>
-              <Text style={styles.actionLabel}>{equipped ? 'IN YOUR LOADOUT' : owned ? 'OWNED' : 'PRICE'}</Text>
-              <Text style={styles.actionPrice} numberOfLines={1} adjustsFontSizeToFit>{equipped ? 'Equipped' : owned ? 'Ready to equip' : price || (loading ? 'Loading…' : 'Coming soon')}</Text>
+              <Text style={styles.actionLabel}>{equipped ? t('in_loadout') : owned ? t('owned_caps') : t('price_caps')}</Text>
+              <Text style={styles.actionPrice} numberOfLines={1} adjustsFontSizeToFit>{equipped ? t('equipped') : owned ? t('ready_equip') : price || (loading ? t('loading') : t('coming_soon'))}</Text>
             </View>
             <View style={{ flex: 1.4 }}>
               {equipped ? (
-                <GhostButton title="Equipped" icon="checkmark-circle" disabled />
+                <GhostButton title={t('equipped')} icon="checkmark-circle" disabled />
               ) : owned ? (
-                <PlayButton title="Equip" icon="flash" onPress={onAct} busy={busy} />
+                <PlayButton title={t('equip')} icon="flash" onPress={onAct} busy={busy} />
               ) : price ? (
-                <PlayButton title={`Buy for ${price}`} icon="cart" onPress={onMoney} busy={busy} colors={['#ffc94d', '#ff8a3c']} />
+                <PlayButton title={t('buy_for', { price })} icon="cart" onPress={onMoney} busy={busy} colors={['#ffc94d', '#ff8a3c']} />
               ) : loading ? (
-                <GhostButton title="Loading…" icon="hourglass-outline" disabled />
+                <GhostButton title={t('loading')} icon="hourglass-outline" disabled />
               ) : (
-                <GhostButton title="Coming soon" icon="time-outline" disabled />
+                <GhostButton title={t('coming_soon')} icon="time-outline" disabled />
               )}
             </View>
           </View>

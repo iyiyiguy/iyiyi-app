@@ -27,6 +27,12 @@ import {
   StBanner, StFeed, StGrid, StHero, StPlayerRow, StPlayerTile, StResultsFooter, StReveal, StRing, StScreen,
   StLabel, StSection, StSpectating, StStats, StTag,
 } from './beside/studioKit'
+import { translate, useT } from '../i18n'
+import P from '../i18n/strings/partyGames'
+
+// Host lines carry a key (k) and values (v) for each phone's language; text is the English
+// fallback for older clients.
+const localLine = (text, f) => (f?.k ? translate(P, f.k, f.v) : text)
 
 // ─── Timing ───────────────────────────────────────────────────────────────────
 const COUNTDOWN_MS = 5000
@@ -91,11 +97,11 @@ function pickAction(s, sec, from, target) {
   if (s.phase !== 'picking' || !s.players[from]?.isPicker || sec.picks[from]) return { replies }
   if (!s.players[target] || s.players[target].isPicker) return { replies }
   if (Object.values(sec.picks).includes(target)) {
-    replies.push({ to: from, type: 'notice', data: { text: `Someone already tapped ${s.players[target].name}. Pick someone else.`, retry: true } })
+    replies.push({ to: from, type: 'notice', data: { text: `Someone already tapped ${s.players[target].name}. Pick someone else.`, k: 'hu_n_already', v: { name: s.players[target].name }, retry: true } })
     return { replies }
   }
   sec.picks[from] = target
-  replies.push({ to: from, type: 'notice', data: { text: `You tapped ${s.players[target].name}. Keep a straight face.` } })
+  replies.push({ to: from, type: 'notice', data: { text: `You tapped ${s.players[target].name}. Keep a straight face.`, k: 'hu_n_tapped', v: { name: s.players[target].name } } })
   return { state: { ...s, players: { ...s.players, [from]: { ...s.players[from], pickedTarget: true } } }, replies }
 }
 
@@ -156,15 +162,15 @@ function resolveGuesses(s, sec) {
     if (correct) {
       correctCount += 1
       nextPickers[nextPickers.indexOf(pickerId)] = targetId // swap places
-      feed.push({ id: `correct-${targetId}`, text: `${sitter.name} caught ${players[pickerId].name} and swaps in.` })
+      feed.push({ id: `correct-${targetId}`, text: `${sitter.name} caught ${players[pickerId].name} and swaps in.`, k: 'hu_f_caught', v: { a: sitter.name, b: players[pickerId].name } })
     } else {
-      feed.push({ id: `wrong-${targetId}`, text: sitter.guess
-        ? `${sitter.name} guessed ${players[sitter.guess]?.name || '?'} — it was ${players[pickerId].name}.`
-        : `${sitter.name} didn’t guess — it was ${players[pickerId].name}.` })
+      feed.push(sitter.guess
+        ? { id: `wrong-${targetId}`, text: `${sitter.name} guessed ${players[sitter.guess]?.name || '?'} — it was ${players[pickerId].name}.`, k: 'hu_f_wrong', v: { a: sitter.name, g: players[sitter.guess]?.name || '?', b: players[pickerId].name } }
+        : { id: `wrong-${targetId}`, text: `${sitter.name} didn’t guess — it was ${players[pickerId].name}.`, k: 'hu_f_none', v: { a: sitter.name, b: players[pickerId].name } })
     }
   }
   const tappedCount = Object.keys(tappedBy).length
-  feed.unshift({ id: `summary-${s.roundNumber}`, text: `Round ${s.roundNumber}: ${correctCount}/${tappedCount} caught their picker.` })
+  feed.unshift({ id: `summary-${s.roundNumber}`, text: `Round ${s.roundNumber}: ${correctCount}/${tappedCount} caught their picker.`, k: 'hu_f_summary', v: { r: s.roundNumber, n: correctCount, total: tappedCount } })
   return { ...s, phase: 'reveal', players, results: { correctCount, tappedCount }, feed: feed.slice(0, 20), scores, nextPickers }
 }
 
@@ -174,6 +180,7 @@ export const headsUpEngine = { pickerCountFor, initialState, pickAction, allPick
 // ─── Component ────────────────────────────────────────────────────────────────
 export function HeadsUp7UpGame({ room, onExit }) {
   useStudioFonts()
+  const t = useT(P)
   const snap = useRoomSnapshot(room)
   const now = useRoomClock(room, 500)
   const [myInfo, setMyInfo] = useState(null) // { round, isPicker }
@@ -205,10 +212,10 @@ export function HeadsUp7UpGame({ room, onExit }) {
       }),
       room.onMessage('notice', (d) => {
         buzz('warning')
-        flash(String(d?.text || ''))
+        flash(d?.k ? translate(P, d.k, d.v) : String(d?.text || ''))
         if (d?.retry) setMyTap(null) // the host turned the pick down: pick again
       }),
-      room.onMessage('tapped', () => { buzz('heavy'); flash('Someone tapped you. Heads up — guess who.') }),
+      room.onMessage('tapped', () => { buzz('heavy'); flash(translate(P, 'hu_someone_tapped')) }),
     ]
     return () => offs.forEach((off) => off())
   }, [room])
@@ -233,9 +240,9 @@ export function HeadsUp7UpGame({ room, onExit }) {
   }, [state?.phase]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Host logic ──
-  const notify = (to, t, data) => {
-    if (to === meId) room.emitter.emit(`msg:${t}`, data, meId)
-    else room.send(t, data, { to })
+  const notify = (to, type_, data) => {
+    if (to === meId) room.emitter.emit(`msg:${type_}`, data, meId)
+    else room.send(type_, data, { to })
   }
   const send = (replies) => { for (const r of replies) notify(r.to, r.type, r.data) }
 
@@ -259,10 +266,10 @@ export function HeadsUp7UpGame({ room, onExit }) {
   useHostLoop(room, isHost, {
     onTick: () => {
       const s = room.getState()
-      const t = room.now()
+      const tNow = room.now()
       const roundNo = room.info.round || 0
       if (roundNo > 0 && (!s || s.game !== 'heads-up' || s.round !== roundNo)) {
-        const next = initialState(room.roster, room.info, t)
+        const next = initialState(room.roster, room.info, tNow)
         secret.current = { round: roundNo, picks: {} }
         room.publishState(next)
         for (const id of Object.keys(next.players)) notify(id, 'role_hu', { round: roundNo, isPicker: next.players[id].isPicker })
@@ -276,15 +283,15 @@ export function HeadsUp7UpGame({ room, onExit }) {
           secret.current = { round: s.round, picks: {} }
           const players = {}
           for (const [id, p] of Object.entries(s.players)) players[id] = { ...p, pickedTarget: null }
-          room.publishState({ ...s, players, pickUntil: s.phase === 'picking' ? t + PICK_MS : s.pickUntil })
+          room.publishState({ ...s, players, pickUntil: s.phase === 'picking' ? tNow + PICK_MS : s.pickUntil })
           return
         }
         // Guessing: pickers know their own tap.
-        if (recovery.current.round !== s.round) recovery.current = { round: s.round, since: t, picks: {} }
+        if (recovery.current.round !== s.round) recovery.current = { round: s.round, since: tNow, picks: {} }
         if (myTap?.round === s.round) recovery.current.picks[meId] = myTap.target
         const present = room.presentIds()
         const pickers = Object.keys(s.players).filter((id) => s.players[id].isPicker && present.has(id))
-        if (pickers.every((id) => recovery.current.picks[id]) || t - recovery.current.since > RECOVER_MS) {
+        if (pickers.every((id) => recovery.current.picks[id]) || tNow - recovery.current.since > RECOVER_MS) {
           secret.current = { round: s.round, picks: { ...recovery.current.picks } }
         } else {
           room.send('hu_whois', { round: s.round })
@@ -294,21 +301,21 @@ export function HeadsUp7UpGame({ room, onExit }) {
       const sec = secret.current
 
       // Countdown → picking
-      if (s.phase === 'countdown' && t >= s.startsAt) {
-        room.publishState({ ...s, phase: 'picking', pickUntil: t + PICK_MS })
+      if (s.phase === 'countdown' && tNow >= s.startsAt) {
+        room.publishState({ ...s, phase: 'picking', pickUntil: tNow + PICK_MS })
         return
       }
 
       // Picking → guessing (auto-pick for any picker who didn't choose)
-      if (s.phase === 'picking' && (t >= s.pickUntil || allPicked(s, sec, room.presentIds()))) {
-        const r = revealTaps(s, sec, t)
+      if (s.phase === 'picking' && (tNow >= s.pickUntil || allPicked(s, sec, room.presentIds()))) {
+        const r = revealTaps(s, sec, tNow)
         room.publishState(r.state)
         send(r.replies)
         return
       }
 
       // Guessing → reveal
-      if (s.phase === 'guessing' && (t >= s.guessUntil || allGuessed(s, room.presentIds()))) {
+      if (s.phase === 'guessing' && (tNow >= s.guessUntil || allGuessed(s, room.presentIds()))) {
         room.publishState(resolveGuesses(s, sec))
       }
     },
@@ -340,31 +347,31 @@ export function HeadsUp7UpGame({ room, onExit }) {
 
   // ── Render ──
   if (!room || !snap) return null
-  if (!state) return <StSpectating title="Starting" text="Choosing the pickers…" />
+  if (!state) return <StSpectating title={t('starting')} text={t('hu_choosing')} />
   const me = state.players[meId]
   if (!me) return <StSpectating />
 
   const avatarOf = (id) => snap.roster.find((r) => r.id === id)?.avatar
   const nameOf = (id) => state.players[id]?.name || '?'
-  const playerOf = (id) => ({ id, username: id === meId ? `${nameOf(id)} (you)` : nameOf(id), avatar: avatarOf(id) })
+  const playerOf = (id) => ({ id, username: id === meId ? t('name_you', { name: nameOf(id) }) : nameOf(id), avatar: avatarOf(id) })
   const isPicker = myInfo?.round === round ? myInfo.isPicker : me.isPicker
   const ids = Object.keys(state.players)
   const pickers = ids.filter((id) => state.players[id].isPicker)
   const sitters = ids.filter((id) => !state.players[id].isPicker)
   const myScore = state.scores?.[meId] || 0
-  const kicker = `Round ${state.roundNumber}`
+  const kicker = t('round_n', { n: state.roundNumber })
 
   // ── Countdown ──
   if (state.phase === 'countdown') {
     return (
       <StReveal
-        kicker={`Heads Up 7 Up · ${kicker} · you are`}
-        title={isPicker ? 'A picker' : 'Heads down'}
+        kicker={`${t('hu_name')} · ${kicker} · ${t('you_are')}`}
+        title={isPicker ? t('hu_a_picker') : t('hu_heads_down')}
         color={isPicker ? ST.objective : ST.friendly}
         icon={isPicker ? 'hand-left-outline' : 'eye-off-outline'}
-        body={isPicker ? 'You’ll secretly tap one person. Don’t let them guess it was you.' : 'Put your head down and your phone face-down. Someone might tap you.'}
+        body={isPicker ? t('hu_reveal_picker') : t('hu_reveal_sitter')}
         count={Math.max(0, Math.ceil((state.startsAt - now) / 1000))}
-        foot={`${state.pickerCount} picker${state.pickerCount === 1 ? '' : 's'} · ${sitters.length} heads down`}
+        foot={`${t(state.pickerCount === 1 ? 'hu_pickers_one' : 'hu_pickers', { n: state.pickerCount })} · ${t('hu_n_heads_down', { n: sitters.length })}`}
       />
     )
   }
@@ -378,20 +385,20 @@ export function HeadsUp7UpGame({ room, onExit }) {
       const sel = pick?.key === 'pick' ? pick.id : null
       return (
         <StScreen>
-          <StHero kicker={`${kicker} · you are a picker`} color={ST.objective} title="Tap someone" sub="Pick one person with their head down. They’ll try to guess it was you." />
+          <StHero kicker={`${kicker} · ${t('hu_you_picker')}`} color={ST.objective} title={t('hu_tap_someone')} sub={t('hu_tap_sub')} />
           <View style={styles.ringRow}>{ring}</View>
           {alreadyPicked ? (
-            <StBanner icon="checkmark" color={ST.objective} text={myTap?.round === round ? `You tapped ${nameOf(myTap.target)}.` : 'You’ve made your pick.'} sub="Keep a straight face. Waiting for the other pickers…" />
+            <StBanner icon="checkmark" color={ST.objective} text={myTap?.round === round ? t('hu_you_tapped', { name: nameOf(myTap.target) }) : t('hu_made_pick')} sub={t('hu_straight_wait')} />
           ) : (
             <>
-              <StLabel>Heads down · {sitters.length}</StLabel>
+              <StLabel>{t('hu_heads_down')} · {sitters.length}</StLabel>
               <StGrid cols={2} style={{ marginTop: 6 }}>
                 {sitters.map((id) => (
                   <StPlayerTile key={id} compact player={playerOf(id)} color={ST.objective} selected={sel === id} onPress={() => setPick({ key: 'pick', id })} />
                 ))}
               </StGrid>
               <StButton
-                title={sel ? `Tap ${nameOf(sel)}` : 'Choose someone'}
+                title={sel ? t('hu_tap_name', { name: nameOf(sel) }) : t('hu_choose_someone')}
                 tone="objective"
                 disabled={!sel}
                 style={{ marginTop: 8, marginBottom: 10 }}
@@ -400,7 +407,7 @@ export function HeadsUp7UpGame({ room, onExit }) {
             </>
           )}
           {!!notice && <StBanner text={notice} color={ST.objective} icon="information-circle-outline" />}
-          <Text style={[stType.small, { color: 'rgba(242,244,247,0.55)' }]}>Long-press a player for their iYiYi profile.</Text>
+          <Text style={[stType.small, { color: 'rgba(242,244,247,0.55)' }]}>{t('hu_longpress')}</Text>
         </StScreen>
       )
     }
@@ -408,9 +415,9 @@ export function HeadsUp7UpGame({ room, onExit }) {
     return (
       <StScreen scroll={false} style={styles.center}>
         <Ionicons name="eye-off-outline" size={44} color={ST.friendly} />
-        <Text style={[stType.kicker, { marginTop: 14 }]}>{kicker} · heads down</Text>
-        <Text style={[stType.display, { textAlign: 'center' }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.5}>Heads down</Text>
-        <Text style={[stType.body, { textAlign: 'center', marginTop: 8, maxWidth: 320 }]}>The pickers are choosing. Phone face-down, eyes closed — you’ll feel a buzz if you’re tapped.</Text>
+        <Text style={[stType.kicker, { marginTop: 14 }]}>{kicker} · {t('hu_heads_down_lc')}</Text>
+        <Text style={[stType.display, { textAlign: 'center' }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.5}>{t('hu_heads_down')}</Text>
+        <Text style={[stType.body, { textAlign: 'center', marginTop: 8, maxWidth: 320 }]}>{t('hu_pickers_choosing')}</Text>
         <View style={{ marginTop: 22 }}>{ring}</View>
       </StScreen>
     )
@@ -426,16 +433,16 @@ export function HeadsUp7UpGame({ room, onExit }) {
     return (
       <StScreen>
         <StHero
-          kicker={wasTapped ? `${kicker} · you were tapped` : isPicker ? `${kicker} · you are a picker` : `${kicker} · heads up`}
+          kicker={`${kicker} · ${wasTapped ? t('hu_you_were_tapped') : isPicker ? t('hu_you_picker') : t('hu_heads_up')}`}
           color={ST.objective}
-          title={wasTapped ? 'Who tapped you?' : isPicker ? 'Straight face' : 'Not tapped'}
-          sub={wasTapped ? 'Guess right and you swap in as a picker.' : isPicker ? 'The tapped players are guessing. Don’t give it away.' : 'You weren’t tapped this round. Watch the guesses.'}
+          title={wasTapped ? t('hu_who_tapped') : isPicker ? t('hu_straight_face') : t('hu_not_tapped')}
+          sub={wasTapped ? t('hu_guess_right') : isPicker ? t('hu_dont_give') : t('hu_watch_guesses')}
         />
         <View style={styles.ringRow}><StRing size={74} progress={timeLeft / GUESS_MS} color={ST.objective} value={Math.ceil(timeLeft / 1000)} /></View>
 
         {wasTapped && !hasGuessed ? (
           <>
-            <StLabel>The {pickers.length} picker{pickers.length === 1 ? '' : 's'}</StLabel>
+            <StLabel>{t(pickers.length === 1 ? 'hu_the_pickers_one' : 'hu_the_pickers', { n: pickers.length })}</StLabel>
             <StGrid cols={2} style={{ marginTop: 6 }}>
               {pickers.map((id) => (
                 <StPlayerTile key={id} compact player={playerOf(id)} color={ST.objective} selected={sel === id} onPress={() => setPick({ key: 'guess', id })} />
@@ -444,24 +451,24 @@ export function HeadsUp7UpGame({ room, onExit }) {
           </>
         ) : null}
         <StStats style={{ marginTop: 10 }} items={[
-          { label: 'Your pts', value: String(myScore) },
-          { label: 'Guessing', value: `${tappedIds.filter((id) => state.players[id].guess).length}/${tappedIds.length}` },
-          { label: 'Players', value: String(ids.length) },
+          { label: t('hu_your_pts'), value: String(myScore) },
+          { label: t('hu_guessing'), value: `${tappedIds.filter((id) => state.players[id].guess).length}/${tappedIds.length}` },
+          { label: t('players'), value: String(ids.length) },
         ]} />
         {wasTapped && !hasGuessed ? (
           <StButton
-            title={sel ? `Lock in ${nameOf(sel)}` : 'Pick a picker'}
+            title={sel ? t('hu_lock_in', { name: nameOf(sel) }) : t('hu_pick_picker')}
             tone="objective"
             disabled={!sel}
             style={{ marginBottom: 10 }}
             onPress={() => { buzz('select'); room.sendAction({ type: 'guess', target: sel }) }}
           />
         ) : null}
-        {wasTapped && hasGuessed ? <StBanner icon="lock-closed-outline" color={ST.objective} text={`You guessed ${nameOf(me.guess)}.`} sub="Waiting for the others…" /> : null}
+        {wasTapped && hasGuessed ? <StBanner icon="lock-closed-outline" color={ST.objective} text={t('hu_you_guessed', { name: nameOf(me.guess) })} sub={t('hu_wait_others')} /> : null}
         {!wasTapped ? (
-          <StSection label="Tapped players">
+          <StSection label={t('hu_tapped_players')}>
             {tappedIds.map((id) => (
-              <StPlayerRow key={id} player={playerOf(id)} subtitle={state.players[id].guess ? `Guessed ${nameOf(state.players[id].guess)}` : 'Thinking…'} right={state.players[id].guess ? <StTag text="Locked" color={ST.objective} /> : null} />
+              <StPlayerRow key={id} player={playerOf(id)} subtitle={state.players[id].guess ? t('hu_guessed_x', { name: nameOf(state.players[id].guess) }) : t('hu_thinking')} right={state.players[id].guess ? <StTag text={t('hu_locked')} color={ST.objective} /> : null} />
             ))}
           </StSection>
         ) : null}
@@ -486,44 +493,44 @@ export function HeadsUp7UpGame({ room, onExit }) {
     return (
       <StScreen>
         <StHero
-          kicker={`Heads Up 7 Up · ${kicker} results`}
+          kicker={`${t('hu_name')} · ${t('hu_results_kicker', { round: kicker })}`}
           color={ST.objective}
-          title={r ? `${r.correctCount}/${r.tappedCount} caught` : 'Results'}
-          sub={me.score > 0 ? (me.isPicker ? 'You weren’t caught. +1' : 'You caught your picker. +1') : me.tappedBy ? 'Not this time.' : me.isPicker ? 'You got caught.' : 'You weren’t tapped this round.'}
+          title={r ? t('hu_n_caught', { n: r.correctCount, total: r.tappedCount }) : t('hu_results')}
+          sub={me.score > 0 ? (me.isPicker ? t('hu_not_caught_pt') : t('hu_caught_pt')) : me.tappedBy ? t('hu_not_this_time') : me.isPicker ? t('hu_got_caught') : t('hu_not_tapped_round')}
           big
         />
-        <StSection label="This round">
+        <StSection label={t('hu_this_round')}>
           {pairs.map(({ pid, target, caught }) => (
             <StPlayerRow
               key={pid}
               player={playerOf(pid)}
               color={caught ? ST.enemy : ST.health}
-              subtitle={target ? `Tapped ${nameOf(target)} · ${state.players[target]?.guess ? `guessed ${nameOf(state.players[target].guess)}` : 'no guess'}` : 'Didn’t tap anyone'}
-              right={target ? <StTag text={caught ? 'Caught' : 'Fooled'} color={caught ? ST.enemy : ST.health} /> : null}
+              subtitle={target ? `${t('hu_tapped_x', { name: nameOf(target) })} · ${state.players[target]?.guess ? t('hu_guessed_lc', { name: nameOf(state.players[target].guess) }) : t('hu_no_guess')}` : t('hu_didnt_tap')}
+              right={target ? <StTag text={caught ? t('sp_caught') : t('hu_fooled')} color={caught ? ST.enemy : ST.health} /> : null}
             />
           ))}
         </StSection>
         {next?.length ? (
-          <StSection label="Next round’s pickers">
+          <StSection label={t('hu_next_pickers')}>
             <Text style={stType.body}>{next.map(nameOf).join(' · ')}</Text>
           </StSection>
         ) : null}
-        <StSection label="Scoreboard · follow on iYiYi">
+        <StSection label={t('hu_scoreboard')}>
           {sortedScores.map((sc) => (
             <StPlayerRow
               key={sc.id}
               player={playerOf(sc.id)}
-              subtitle={sc.score === top && top > 0 ? 'Leading' : null}
+              subtitle={sc.score === top && top > 0 ? t('hu_leading') : null}
               subtitleColor={ST.objective}
               right={<Text style={[stType.num, styles.score, sc.score === top && top > 0 && { color: ST.objective }]}>{sc.score}</Text>}
             />
           ))}
         </StSection>
-        <StFeed items={state.feed} label="Guesses" max={20} />
+        <StFeed items={state.feed} label={t('hu_guesses')} max={20} localize={localLine} />
         <StResultsFooter
           isHost={isHost}
-          againTitle="Next round"
-          waiting="Waiting for the host to start the next round…"
+          againTitle={t('next_round')}
+          waiting={t('wait_next_round')}
           onAgain={() => room.setInfo({ round: (snap.info.round || 0) + 1, _scores: state.scores, _pickers: next || undefined })}
           onExit={onExit}
         />

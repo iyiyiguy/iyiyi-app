@@ -5,10 +5,15 @@ import { View, Text, Pressable, StyleSheet, Modal, TextInput, ScrollView, Alert,
 import { Ionicons } from '@expo/vector-icons'
 import { myPlaylists, createPlaylist, addToPlaylist, reportSound, soundLink } from '../lib/sounds'
 import { MC } from './SoundRow'
+import { useT, translate } from '../i18n'
+import strings from '../i18n/strings/music'
 
 export async function shareSound(sound) {
-  const by = sound.profiles?.username ? ` by @${sound.profiles.username}` : ''
-  try { await Share.share({ message: `Listen to "${sound.title}"${by} on iYiYi ${soundLink(sound.id)}` }) } catch {}
+  const user = sound.profiles?.username
+  const message = user
+    ? translate(strings, 'shareMsgBy', { title: sound.title, user, link: soundLink(sound.id) })
+    : translate(strings, 'shareMsg', { title: sound.title, link: soundLink(sound.id) })
+  try { await Share.share({ message }) } catch {}
 }
 
 function Sheet({ visible, onClose, title, children }) {
@@ -25,6 +30,7 @@ function Sheet({ visible, onClose, title, children }) {
 }
 
 export function PlaylistSheet({ visible, sound, onClose }) {
+  const t = useT(strings)
   const [lists, setLists] = useState(null)
   const [name, setName] = useState('')
   const [pub, setPub] = useState(false)
@@ -37,21 +43,21 @@ export function PlaylistSheet({ visible, sound, onClose }) {
     try {
       await addToPlaylist(pl.id, sound.id)
       onClose()
-      Alert.alert('Added', `"${sound.title}" is in ${pl.title}.`)
+      Alert.alert(t('added'), t('addedMsg', { title: sound.title, list: pl.title }))
     } catch (e) {
-      Alert.alert('Couldn’t add it', e?.message || 'Please try again.')
+      Alert.alert(t('addFailed'), e?.message || t('tryAgain'))
     }
   }
   const create = async () => {
     try {
-      const pl = await createPlaylist(name.trim() || 'My playlist', pub ? 'public' : 'private')
+      const pl = await createPlaylist(name.trim() || t('myPlaylist'), pub ? 'public' : 'private')
       await add(pl)
     } catch (e) {
-      Alert.alert('Couldn’t create it', e?.message || 'Please try again.')
+      Alert.alert(t('createFailed'), e?.message || t('tryAgain'))
     }
   }
   return (
-    <Sheet visible={visible} onClose={onClose} title="Add to playlist">
+    <Sheet visible={visible} onClose={onClose} title={t('addToPlaylist')}>
       {lists == null ? <ActivityIndicator color={MC.accent} /> : (
         <ScrollView style={{ maxHeight: 260 }}>
           {lists.map((pl) => (
@@ -61,49 +67,50 @@ export function PlaylistSheet({ visible, sound, onClose }) {
               <Text style={st.muted}>{pl.playlist_items?.[0]?.count ?? 0}</Text>
             </Pressable>
           ))}
-          {!lists.length ? <Text style={[st.note, { marginBottom: 8 }]}>No playlists yet. Make one:</Text> : null}
+          {!lists.length ? <Text style={[st.note, { marginBottom: 8 }]}>{t('noPlaylists')}</Text> : null}
         </ScrollView>
       )}
       <View style={st.newRow}>
-        <TextInput value={name} onChangeText={setName} placeholder="New playlist name" placeholderTextColor={MC.faint} style={st.input} maxLength={60} />
+        <TextInput value={name} onChangeText={setName} placeholder={t('newPlaylistName')} placeholderTextColor={MC.faint} style={st.input} maxLength={60} />
       </View>
       <View style={st.switchRow}>
-        <Text style={st.itemText}>Show on my profile</Text>
+        <Text style={st.itemText}>{t('showOnMyProfile')}</Text>
         <Switch value={pub} onValueChange={setPub} />
       </View>
-      <Pressable onPress={create} style={st.primary}><Text style={st.primaryText}>Create & add</Text></Pressable>
+      <Pressable onPress={create} style={st.primary}><Text style={st.primaryText}>{t('createAdd')}</Text></Pressable>
     </Sheet>
   )
 }
 
 export function ReportSheet({ visible, sound, onClose }) {
+  const t = useT(strings)
   const [reason, setReason] = useState('')
   const [email, setEmail] = useState('')
   const [owns, setOwns] = useState(true)
   const [busy, setBusy] = useState(false)
   useEffect(() => { if (visible) { setReason(''); setBusy(false) } }, [visible])
   const send = async () => {
-    if (reason.trim().length < 10) { Alert.alert('Add a little more', 'Tell us which song or work this copies.'); return }
+    if (reason.trim().length < 10) { Alert.alert(t('addMore'), t('addMoreMsg')); return }
     setBusy(true)
     try {
       await reportSound({ soundId: sound.id, reason: reason.trim(), contactEmail: email.trim(), ownsWork: owns })
       onClose()
-      Alert.alert('Report sent', 'Thanks. We review copyright reports within 12 hours; the sound is muted after that until it’s resolved.')
+      Alert.alert(t('reportSent'), t('reportSentMsg'))
     } catch (e) {
       setBusy(false)
-      Alert.alert('Couldn’t send', e?.message || 'Please sign in and try again.')
+      Alert.alert(t('sendFailed'), e?.message || t('signInRetry'))
     }
   }
   return (
-    <Sheet visible={visible} onClose={busy ? () => {} : onClose} title="Report copyright">
-      <Text style={st.note}>Which song, beat or recording does "{sound?.title}" copy?</Text>
-      <TextInput value={reason} onChangeText={setReason} placeholder="Song title, artist, link…" placeholderTextColor={MC.faint} style={[st.input, { minHeight: 80, textAlignVertical: 'top', marginTop: 8 }]} multiline maxLength={1000} />
-      <TextInput value={email} onChangeText={setEmail} placeholder="Your email (so we can follow up)" placeholderTextColor={MC.faint} style={[st.input, { marginTop: 8 }]} keyboardType="email-address" autoCapitalize="none" maxLength={120} />
+    <Sheet visible={visible} onClose={busy ? () => {} : onClose} title={t('reportCopyright')}>
+      <Text style={st.note}>{t('reportQuestion', { title: sound?.title ?? '' })}</Text>
+      <TextInput value={reason} onChangeText={setReason} placeholder={t('reasonPlaceholder')} placeholderTextColor={MC.faint} style={[st.input, { minHeight: 80, textAlignVertical: 'top', marginTop: 8 }]} multiline maxLength={1000} />
+      <TextInput value={email} onChangeText={setEmail} placeholder={t('emailPlaceholder')} placeholderTextColor={MC.faint} style={[st.input, { marginTop: 8 }]} keyboardType="email-address" autoCapitalize="none" maxLength={120} />
       <View style={st.switchRow}>
-        <Text style={[st.itemText, { flex: 1 }]}>I own this work or represent the owner</Text>
+        <Text style={[st.itemText, { flex: 1 }]}>{t('ownWork')}</Text>
         <Switch value={owns} onValueChange={setOwns} />
       </View>
-      <Pressable onPress={send} disabled={busy} style={[st.primary, busy && { opacity: 0.6 }]}><Text style={st.primaryText}>{busy ? 'Sending…' : 'Send report'}</Text></Pressable>
+      <Pressable onPress={send} disabled={busy} style={[st.primary, busy && { opacity: 0.6 }]}><Text style={st.primaryText}>{busy ? t('sending') : t('sendReport')}</Text></Pressable>
     </Sheet>
   )
 }

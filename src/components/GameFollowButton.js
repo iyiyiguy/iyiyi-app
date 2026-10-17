@@ -5,22 +5,25 @@ import { Pressable, Text, StyleSheet } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { useFollow } from '../lib/followCache'
 import { ST, FONT } from '../games/studio'
+import { useT } from '../i18n'
+import strings from '../i18n/strings/arcadeMisc'
 
 const ACCENT = ST.friendly
 
 function GameFollowButton({ userId, name, size = 'md', style }) {
+  const t = useT(strings)
   const { status, toggle } = useFollow(userId)
   if (!userId) return null
   const on = status === 'accepted'
   const pending = status === 'pending'
-  const label = on ? 'FOLLOWING' : pending ? 'REQUESTED' : 'FOLLOW'
+  const label = on ? t('following') : pending ? t('requested') : t('follow')
   const small = size === 'sm'
   return (
     <Pressable
       onPress={toggle}
       hitSlop={8}
       accessibilityRole="button"
-      accessibilityLabel={`${on ? 'Unfollow' : pending ? 'Cancel follow request for' : 'Follow'} ${name || 'player'}`}
+      accessibilityLabel={t(on ? 'unfollow_a11y' : pending ? 'cancel_req_a11y' : 'follow_a11y', { name: name || t('player') })}
       style={({ pressed }) => [
         s.btn, small && s.sm,
         on || pending ? s.on : s.off,

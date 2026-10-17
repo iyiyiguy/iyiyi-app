@@ -16,19 +16,22 @@ import SoundRow, { MC } from '../components/SoundRow'
 import MiniPlayer from '../components/MiniPlayer'
 import TagPicker from '../components/TagPicker'
 import { PlaylistSheet, shareSound } from '../components/SoundSheets'
+import { useT } from '../i18n'
+import strings from '../i18n/strings/music'
 
 const MY_TABS = [
-  { key: 'trending', label: 'Trending' },
-  { key: 'library', label: 'My music' },
-  { key: 'saved', label: 'Saved' },
-  { key: 'playlists', label: 'Playlists' },
+  { key: 'trending', label: 'tabTrending' },
+  { key: 'library', label: 'tabLibrary' },
+  { key: 'saved', label: 'tabSaved' },
+  { key: 'playlists', label: 'tabPlaylists' },
 ]
 const THEIR_TABS = [
-  { key: 'sounds', label: 'Sounds' },
-  { key: 'playlists', label: 'Playlists' },
+  { key: 'sounds', label: 'tabSounds' },
+  { key: 'playlists', label: 'tabPlaylists' },
 ]
 
 export default function MusicScreen({ navigation, route }) {
+  const t = useT(strings)
   const insets = useSafeAreaInsets()
   const userId = route?.params?.userId || null
   const username = route?.params?.username || null
@@ -94,10 +97,10 @@ export default function MusicScreen({ navigation, route }) {
       const res = await DocumentPicker.getDocumentAsync({ type: ['audio/*'], copyToCacheDirectory: true, multiple: false })
       if (res.canceled || !res.assets?.[0]) return
       const a = res.assets[0]
-      if (a.size && a.size > 40 * 1024 * 1024) { Alert.alert('File too big', 'Songs can be up to 40 MB.'); return }
+      if (a.size && a.size > 40 * 1024 * 1024) { Alert.alert(t('fileTooBig'), t('fileTooBigMsg')); return }
       setUpload({ file: a, title: (a.name || 'Song').replace(/\.[^.]+$/, '').slice(0, 80), visibility: 'private', tags: [], busy: false })
     } catch (e) {
-      Alert.alert('Couldn’t open that file', e?.message || 'Try another one.')
+      Alert.alert(t('openFileFailed'), e?.message || t('tryAnother'))
     }
   }
   const doUpload = async () => {
@@ -108,11 +111,11 @@ export default function MusicScreen({ navigation, route }) {
       setUpload(null)
       setTab('library')
       load('library')
-      if (s?.status === 'blocked') Alert.alert('Kept private', 'It matched a commercial song, so it can only be private. You can still play it in your library.')
-      else if (s?.status === 'public') Alert.alert('Uploaded', 'Your song is public on your profile.')
+      if (s?.status === 'blocked') Alert.alert(t('keptPrivate'), t('keptPrivateSong'))
+      else if (s?.status === 'public') Alert.alert(t('uploaded'), t('uploadedMsg'))
     } catch (e) {
       setUpload((u) => (u ? { ...u, busy: false } : u))
-      Alert.alert('Upload failed', e?.message || 'Please try again.')
+      Alert.alert(t('uploadFailed'), e?.message || t('tryAgain'))
     }
   }
 
@@ -120,22 +123,22 @@ export default function MusicScreen({ navigation, route }) {
   const isMine = (s) => !userId && tab === 'library' && !openList ? true : false
   const menuActions = (s) => {
     const acts = [
-      { label: 'Open sound page', icon: 'open-outline', run: () => navigation.navigate('Sound', { soundId: s.id, sound: s }) },
-      { label: 'Add to playlist', icon: 'add-circle-outline', run: () => setPlFor(s) },
-      { label: 'Send to someone', icon: 'paper-plane-outline', run: () => shareSound(s) },
+      { label: t('openSoundPage'), icon: 'open-outline', run: () => navigation.navigate('Sound', { soundId: s.id, sound: s }) },
+      { label: t('addToPlaylist'), icon: 'add-circle-outline', run: () => setPlFor(s) },
+      { label: t('sendToSomeone'), icon: 'paper-plane-outline', run: () => shareSound(s) },
     ]
-    if (openList && !userId) acts.push({ label: 'Remove from playlist', icon: 'remove-circle-outline', run: () => removeFromPlaylist(openList.id, s.id).then(() => setListSounds((l) => l.filter((x) => x.id !== s.id))) })
+    if (openList && !userId) acts.push({ label: t('removeFromPlaylist'), icon: 'remove-circle-outline', run: () => removeFromPlaylist(openList.id, s.id).then(() => setListSounds((l) => l.filter((x) => x.id !== s.id))) })
     if (isMine(s)) {
-      if (s.status !== 'blocked') acts.push({ label: s.status === 'public' ? 'Make private' : 'Make public', icon: s.status === 'public' ? 'lock-closed-outline' : 'globe-outline', run: async () => {
+      if (s.status !== 'blocked') acts.push({ label: s.status === 'public' ? t('makePrivate') : t('makePublic'), icon: s.status === 'public' ? 'lock-closed-outline' : 'globe-outline', run: async () => {
         try {
           const next = await setSoundVisibility(s, s.status === 'public' ? 'private' : 'public')
-          if (next?.status === 'blocked') Alert.alert('Kept private', 'It matched a copyrighted song, so it can’t be public.')
-        } catch (e) { Alert.alert('Couldn’t change it', e?.message) }
+          if (next?.status === 'blocked') Alert.alert(t('keptPrivate'), t('cantBePublic'))
+        } catch (e) { Alert.alert(t('changeFailed'), e?.message) }
         load('library')
       } })
-      acts.push({ label: 'Delete', icon: 'trash-outline', danger: true, run: () => Alert.alert(`Delete "${s.title}"?`, 'Videos using it will lose this sound.', [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Delete', style: 'destructive', onPress: () => deleteSound(s).then(() => load('library')).catch((e) => Alert.alert('Couldn’t delete', e?.message)) },
+      acts.push({ label: t('delete'), icon: 'trash-outline', danger: true, run: () => Alert.alert(t('deleteQ', { name: s.title }), t('deleteSongMsg'), [
+        { text: t('cancel'), style: 'cancel' },
+        { text: t('delete'), style: 'destructive', onPress: () => deleteSound(s).then(() => load('library')).catch((e) => Alert.alert(t('deleteFailed'), e?.message)) },
       ]) })
     }
     return acts
@@ -147,7 +150,7 @@ export default function MusicScreen({ navigation, route }) {
         <>
           <View style={st.search}>
             <Ionicons name="search" size={16} color={MC.muted} />
-            <TextInput value={q} onChangeText={onSearch} placeholder="Search sounds, songs, creators, #tags" placeholderTextColor={MC.faint} style={st.searchInput} autoCorrect={false} autoCapitalize="none" />
+            <TextInput value={q} onChangeText={onSearch} placeholder={t('searchPlaceholder')} placeholderTextColor={MC.faint} style={st.searchInput} autoCorrect={false} autoCapitalize="none" />
           </View>
           {tags.length ? (
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6, paddingVertical: 10 }}>
@@ -165,25 +168,25 @@ export default function MusicScreen({ navigation, route }) {
       ) : null}
       {tab === 'library' && !openList ? (
         <View style={st.libActions}>
-          <Pressable onPress={pickSong} style={[st.action, { backgroundColor: MC.accent }]}><Ionicons name="cloud-upload-outline" size={17} color="#fff" /><Text style={[st.actionText, { color: '#fff' }]}>Upload song</Text></Pressable>
-          <Pressable onPress={() => navigation.navigate('Studio')} style={st.action}><Ionicons name="grid-outline" size={17} color={MC.gold} /><Text style={st.actionText}>Make a beat</Text></Pressable>
+          <Pressable onPress={pickSong} style={[st.action, { backgroundColor: MC.accent }]}><Ionicons name="cloud-upload-outline" size={17} color="#fff" /><Text style={[st.actionText, { color: '#fff' }]}>{t('uploadSong')}</Text></Pressable>
+          <Pressable onPress={() => navigation.navigate('Studio')} style={st.action}><Ionicons name="grid-outline" size={17} color={MC.gold} /><Text style={st.actionText}>{t('makeABeat')}</Text></Pressable>
         </View>
       ) : null}
       {openList ? (
         <View style={st.plHead}>
           <Text style={st.h1} numberOfLines={2}>{openList.title}</Text>
-          <Text style={st.muted}>{openList.visibility === 'public' ? 'On your profile' : 'Private'} · {listSounds?.length ?? 0} tracks{userId && username ? ` · @${username}` : ''}</Text>
+          <Text style={st.muted}>{openList.visibility === 'public' ? t('onYourProfile') : t('private')} · {t('tracksN', { n: listSounds?.length ?? 0 })}{userId && username ? ` · @${username}` : ''}</Text>
           <View style={st.libActions}>
-            <Pressable disabled={!listSounds?.length} onPress={() => playQueue(listSounds, 0)} style={[st.action, { backgroundColor: MC.accent }]}><Ionicons name="play" size={17} color="#fff" /><Text style={[st.actionText, { color: '#fff' }]}>Play all</Text></Pressable>
+            <Pressable disabled={!listSounds?.length} onPress={() => playQueue(listSounds, 0)} style={[st.action, { backgroundColor: MC.accent }]}><Ionicons name="play" size={17} color="#fff" /><Text style={[st.actionText, { color: '#fff' }]}>{t('playAll')}</Text></Pressable>
             {!userId ? (
               <>
                 <Pressable onPress={async () => { const v = openList.visibility === 'public' ? 'private' : 'public'; await updatePlaylist(openList.id, { visibility: v }).catch(() => {}); setOpenList({ ...openList, visibility: v }); load('playlists') }} style={st.action}>
                   <Ionicons name={openList.visibility === 'public' ? 'lock-closed-outline' : 'globe-outline'} size={17} color={MC.text} />
-                  <Text style={st.actionText}>{openList.visibility === 'public' ? 'Make private' : 'Show on profile'}</Text>
+                  <Text style={st.actionText}>{openList.visibility === 'public' ? t('makePrivate') : t('showOnProfile')}</Text>
                 </Pressable>
-                <Pressable onPress={() => Alert.alert(`Delete "${openList.title}"?`, 'The songs stay; only the playlist is removed.', [
-                  { text: 'Cancel', style: 'cancel' },
-                  { text: 'Delete', style: 'destructive', onPress: () => deletePlaylist(openList.id).then(() => { setOpenList(null); load('playlists') }) },
+                <Pressable onPress={() => Alert.alert(t('deleteQ', { name: openList.title }), t('deletePlaylistMsg'), [
+                  { text: t('cancel'), style: 'cancel' },
+                  { text: t('delete'), style: 'destructive', onPress: () => deletePlaylist(openList.id).then(() => { setOpenList(null); load('playlists') }) },
                 ])} style={st.iconAction}><Ionicons name="trash-outline" size={17} color={MC.bad} /></Pressable>
               </>
             ) : null}
@@ -191,34 +194,34 @@ export default function MusicScreen({ navigation, route }) {
         </View>
       ) : null}
       {tab === 'playlists' && !openList && !userId ? (
-        <Pressable onPress={() => setNewList(true)} style={[st.action, { alignSelf: 'flex-start', marginBottom: 10 }]}><Ionicons name="add" size={17} color={MC.text} /><Text style={st.actionText}>New playlist</Text></Pressable>
+        <Pressable onPress={() => setNewList(true)} style={[st.action, { alignSelf: 'flex-start', marginBottom: 10 }]}><Ionicons name="add" size={17} color={MC.text} /><Text style={st.actionText}>{t('newPlaylist')}</Text></Pressable>
       ) : null}
     </View>
   )
 
   const showingPlaylists = tab === 'playlists' && !openList
-  const emptyText = data[`${tab}Err`] && !openList ? 'Music is being set up, check back soon.'
-    : openList ? 'No tracks yet. Add songs from any sound’s menu.'
-      : tab === 'trending' ? (q || tag ? 'Nothing matches that yet.' : 'No public sounds yet. Be the first!')
-        : tab === 'library' ? 'Upload a song or export a beat from Studio and it shows up here.'
-          : tab === 'saved' ? 'Bookmark sounds to keep them here.'
-            : tab === 'sounds' ? 'No public sounds yet.'
-              : userId ? 'No public playlists yet.' : 'Make a playlist to group your favorite songs.'
+  const emptyText = data[`${tab}Err`] && !openList ? t('emptySetup')
+    : openList ? t('emptyList')
+      : tab === 'trending' ? (q || tag ? t('emptyNoMatch') : t('emptyTrending'))
+        : tab === 'library' ? t('emptyLibrary')
+          : tab === 'saved' ? t('emptySaved')
+            : tab === 'sounds' ? t('emptySounds')
+              : userId ? t('emptyTheirPlaylists') : t('emptyMyPlaylists')
 
   return (
     <View style={[st.screen, { paddingTop: Platform.OS === 'web' ? 12 : insets.top + 4 }]}>
       <View style={st.top}>
-        <Pressable onPress={back} hitSlop={10} accessibilityLabel="Back"><Ionicons name="chevron-back" size={26} color={MC.text} /></Pressable>
-        <Text style={st.topTitle}>{userId ? `${username ? `@${username}` : 'Their'} music` : 'Music'}</Text>
+        <Pressable onPress={back} hitSlop={10} accessibilityLabel={t('back')}><Ionicons name="chevron-back" size={26} color={MC.text} /></Pressable>
+        <Text style={st.topTitle}>{userId ? (username ? t('userMusic', { name: `@${username}` }) : t('theirMusic')) : t('music')}</Text>
         {admin ? (
-          <Pressable onPress={() => navigation.navigate('CopyrightReview')} hitSlop={10} accessibilityLabel="Copyright reports"><Ionicons name="shield-checkmark-outline" size={22} color={MC.text} /></Pressable>
+          <Pressable onPress={() => navigation.navigate('CopyrightReview')} hitSlop={10} accessibilityLabel={t('copyrightReports')}><Ionicons name="shield-checkmark-outline" size={22} color={MC.text} /></Pressable>
         ) : <View style={{ width: 26 }} />}
       </View>
       {!openList ? (
         <View style={st.tabs}>
-          {tabs.map((t) => (
-            <Pressable key={t.key} onPress={() => setTab(t.key)} style={[st.tab, tab === t.key && st.tabOn]} accessibilityRole="tab" accessibilityState={{ selected: tab === t.key }}>
-              <Text style={[st.tabText, tab === t.key && { color: MC.bg }]}>{t.label}</Text>
+          {tabs.map((tb) => (
+            <Pressable key={tb.key} onPress={() => setTab(tb.key)} style={[st.tab, tab === tb.key && st.tabOn]} accessibilityRole="tab" accessibilityState={{ selected: tab === tb.key }}>
+              <Text style={[st.tabText, tab === tb.key && { color: MC.bg }]}>{t(tb.label)}</Text>
             </Pressable>
           ))}
         </View>
@@ -236,7 +239,7 @@ export default function MusicScreen({ navigation, route }) {
               <View style={st.plArt}><Ionicons name="albums" size={20} color={MC.gold} /></View>
               <View style={{ flex: 1 }}>
                 <Text style={st.plTitle} numberOfLines={1}>{item.title}</Text>
-                <Text style={st.muted}>{item.playlist_items?.[0]?.count ?? 0} tracks · {item.visibility === 'public' ? 'On profile' : 'Private'}</Text>
+                <Text style={st.muted}>{t('tracksN', { n: item.playlist_items?.[0]?.count ?? 0 })} · {item.visibility === 'public' ? t('onProfile') : t('private')}</Text>
               </View>
               <Ionicons name="chevron-forward" size={18} color={MC.muted} />
             </Pressable>
@@ -256,7 +259,7 @@ export default function MusicScreen({ navigation, route }) {
 
       <ActionMenu sound={menu} actions={menu ? menuActions(menu) : []} onClose={() => setMenu(null)} />
       <PlaylistSheet visible={!!plFor} sound={plFor} onClose={() => { setPlFor(null); if (tab === 'playlists') load('playlists') }} />
-      <NewPlaylistSheet visible={newList} onClose={() => setNewList(false)} onCreate={async (title, vis) => { setNewList(false); try { await createPlaylist(title, vis); load('playlists') } catch (e) { Alert.alert('Couldn’t create it', e?.message) } }} />
+      <NewPlaylistSheet visible={newList} onClose={() => setNewList(false)} onCreate={async (title, vis) => { setNewList(false); try { await createPlaylist(title, vis); load('playlists') } catch (e) { Alert.alert(t('createFailed'), e?.message) } }} />
       <UploadSheet upload={upload} setUpload={setUpload} onSubmit={doUpload} />
     </View>
   )
@@ -286,41 +289,43 @@ function ActionMenu({ sound, actions, onClose }) {
 }
 
 function NewPlaylistSheet({ visible, onClose, onCreate }) {
+  const t = useT(strings)
   const [title, setTitle] = useState('')
   const [pub, setPub] = useState(false)
   useEffect(() => { if (visible) { setTitle(''); setPub(false) } }, [visible])
   return (
     <BottomSheet visible={visible} onClose={onClose}>
-      <Text style={st.sheetTitle}>New playlist</Text>
-      <TextInput value={title} onChangeText={setTitle} placeholder="Playlist name" placeholderTextColor={MC.faint} style={st.input} maxLength={60} autoFocus />
-      <View style={st.switchRow}><Text style={st.menuText}>Show on my profile</Text><Switch value={pub} onValueChange={setPub} /></View>
-      <Pressable onPress={() => onCreate(title.trim() || 'My playlist', pub ? 'public' : 'private')} style={st.primary}><Text style={st.primaryText}>Create</Text></Pressable>
+      <Text style={st.sheetTitle}>{t('newPlaylist')}</Text>
+      <TextInput value={title} onChangeText={setTitle} placeholder={t('playlistName')} placeholderTextColor={MC.faint} style={st.input} maxLength={60} autoFocus />
+      <View style={st.switchRow}><Text style={st.menuText}>{t('showOnMyProfile')}</Text><Switch value={pub} onValueChange={setPub} /></View>
+      <Pressable onPress={() => onCreate(title.trim() || t('myPlaylist'), pub ? 'public' : 'private')} style={st.primary}><Text style={st.primaryText}>{t('create')}</Text></Pressable>
     </BottomSheet>
   )
 }
 
 function UploadSheet({ upload, setUpload, onSubmit }) {
+  const t = useT(strings)
   const u = upload
   return (
     <BottomSheet visible={!!u} onClose={() => (u?.busy ? null : setUpload(null))}>
       {u ? (
         <ScrollView keyboardShouldPersistTaps="handled" style={{ maxHeight: 520 }}>
-          <Text style={st.sheetTitle}>Upload song</Text>
-          <Text style={st.label}>Title</Text>
+          <Text style={st.sheetTitle}>{t('uploadSong')}</Text>
+          <Text style={st.label}>{t('title')}</Text>
           <TextInput value={u.title} onChangeText={(v) => setUpload({ ...u, title: v })} style={st.input} maxLength={80} />
-          <Text style={st.label}>Who can hear it</Text>
+          <Text style={st.label}>{t('whoCanHear')}</Text>
           <View style={{ flexDirection: 'row', gap: 8 }}>
-            {[['private', 'Only me'], ['public', 'Public']].map(([k, l]) => (
+            {[['private', t('onlyMe')], ['public', t('public')]].map(([k, l]) => (
               <Pressable key={k} onPress={() => setUpload({ ...u, visibility: k })} style={[st.tab, u.visibility === k && st.tabOn]}>
                 <Text style={[st.tabText, u.visibility === k && { color: MC.bg }]}>{l}</Text>
               </Pressable>
             ))}
           </View>
-          <Text style={[st.muted, { marginTop: 6 }]}>{u.visibility === 'public' ? 'Public songs show on your profile and anyone can use them on videos. We check them for commercial music first, so upload music you made or own.' : 'Private songs are just for you: play them here and add them to playlists.'}</Text>
-          <Text style={st.label}>Tags</Text>
+          <Text style={[st.muted, { marginTop: 6 }]}>{u.visibility === 'public' ? t('publicSongInfo') : t('privateSongInfo')}</Text>
+          <Text style={st.label}>{t('tags')}</Text>
           <TagPicker value={u.tags} onChange={(tg) => setUpload({ ...u, tags: tg })} />
           <Pressable onPress={onSubmit} disabled={u.busy} style={[st.primary, u.busy && { opacity: 0.6 }]}>
-            <Text style={st.primaryText}>{u.busy ? (u.visibility === 'public' ? 'Uploading & checking…' : 'Uploading…') : 'Upload'}</Text>
+            <Text style={st.primaryText}>{u.busy ? (u.visibility === 'public' ? t('uploadingChecking') : t('uploading')) : t('upload')}</Text>
           </Pressable>
         </ScrollView>
       ) : null}

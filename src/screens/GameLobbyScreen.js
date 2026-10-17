@@ -13,9 +13,11 @@ import { CodeEntry, NearbyRoomsList } from './JoinGameScreen'
 import { NeedPlayersPanel } from '../games/NeedPlayersPanel'
 import { formatOnlineRating } from '../lib/chessMatchmaking'
 import {
-  LASER_MODES, MP_GAMES, gameIdFromCode, howToPlay, openRoom, resolveGameId, statsIdFor, useLiveCounts, useRoomSnapshot,
+  LASER_MODES, MP_GAMES, gameIdFromCode, openRoom, resolveGameId, statsIdFor, useLiveCounts, useRoomSnapshot,
 } from '../lib/multiplayer'
-import { getGame, playersLabel } from '../lib/games'
+import { categoryName, gameText, getGame, howToPlayText, laserMode, mpBlurb, mpGameName, optionLabel, playersLabel, settingLabel } from '../lib/games'
+import { translate, useT } from '../i18n'
+import R from '../i18n/strings/gameRoom'
 import { loadArcadeStats } from '../lib/arcadeStats'
 import { buzz, setPref, useGamePrefs } from '../lib/gamePrefs'
 import { LaserTagSetup, laserCanStart } from '../games/laser/Setup'
@@ -27,6 +29,7 @@ import { FONT, ST, stType, withAlpha } from '../games/studio'
 
 // The lobby is always the dark studio look, whatever the system appearance.
 const type = arcadeType
+const tr = (k, v) => translate(R, k, v)
 const colors = { text: ST.text, textMuted: ST.muted, textFaint: ST.faint, hairline: ST.line, magenta: ST.friendly, violet: ST.epic, success: ST.health, onBrand: ST.ink }
 const Card = ArcadeBox
 const Btn = ArcadeBtn
@@ -52,8 +55,10 @@ function PlayerRow({ player, right, subtitle, dim }) {
 // arrival; autoInvite also opens the invite sheet.
 export default function GameLobbyScreen({ navigation, route }) {
   const { gameId: rawGameId, code: initialCode, mode: initialMode, autoHost, autoInvite } = route.params || {}
+  const t = useT(R)
   const gameId = resolveGameId(rawGameId)
   const game = MP_GAMES[gameId]
+  const gameName = game ? mpGameName(gameId, game.name) : ''
   const meta = getGame(gameId)
   // Battle Royale's lobby (map + area setup) lives in the game screen; invites/codes land here.
   useEffect(() => {
@@ -92,7 +97,7 @@ export default function GameLobbyScreen({ navigation, route }) {
           navigation.replace('GameLobby', { gameId: other, code })
           return
         }
-        throw new Error('That code doesn’t match a game.')
+        throw new Error(tr('code_mismatch'))
       }
       const r = await openRoom({ gameId, code, mode })
       if (mode === 'host' && initialMode && gameId === 'lasertag') {
@@ -102,7 +107,7 @@ export default function GameLobbyScreen({ navigation, route }) {
       setRoom(r)
       if (invite) setInviteOpen(true)
     } catch (e) {
-      setOpenError(e?.message || 'Couldn’t open the game. Try again.')
+      setOpenError(e?.message || tr('open_failed'))
     } finally {
       setBusy(false)
     }
@@ -188,12 +193,12 @@ export default function GameLobbyScreen({ navigation, route }) {
     if (!room) return
     const n = snap.roster.length
     if (n < game.minPlayers) {
-      Alert.alert('Not enough players', `${game.name} needs at least ${game.minPlayers} players. Invite someone to join.`)
+      Alert.alert(t('not_enough_title'), t('not_enough_msg', { game: gameName, n: game.minPlayers }))
       return
     }
     const check = canStart(gameId, snap.info, snap.roster)
     if (!check.ok) {
-      Alert.alert('Almost ready', check.reason)
+      Alert.alert(t('almost_ready'), check.reason)
       return
     }
     buzz('heavy')
@@ -205,8 +210,8 @@ export default function GameLobbyScreen({ navigation, route }) {
       <View style={styles.screen}>
         <ArcadeBackground />
         <View style={[styles.center, { paddingTop: insets.top }]}>
-          <Text style={type.title}>This game isn’t available.</Text>
-          <Btn title="Back" onPress={() => navigation.goBack()} style={{ marginTop: 16 }} />
+          <Text style={type.title}>{t('unavailable')}</Text>
+          <Btn title={t('back')} onPress={() => navigation.goBack()} style={{ marginTop: 16 }} />
         </View>
       </View>
     )
@@ -220,8 +225,8 @@ export default function GameLobbyScreen({ navigation, route }) {
   // Chess lobbies are games against people, so the hero shows the ONLINE rating ("?" while
   // provisional); the vs-AI rating lives on the chess screen / records.
   const third = gameId === 'chess'
-    ? { label: 'Online', value: stats?.chess?.online?.games > 0 ? formatOnlineRating(stats.chess.online.rating, stats.chess.online.games) ?? '—' : '—' }
-    : { label: 'Best', value: myStats?.bestScore ?? '—' }
+    ? { label: t('stat_online'), value: stats?.chess?.online?.games > 0 ? formatOnlineRating(stats.chess.online.rating, stats.chess.online.games) ?? '—' : '—' }
+    : { label: t('stat_best'), value: myStats?.bestScore ?? '—' }
   const visibility = snap?.info?.settings?.visibility
   // Covers are square: show the whole thing, a little smaller once you're in a room.
   const heroArtH = Math.max(140, Math.min(inRoom ? 190 : 270, Math.round((winW || 375) - 80)))
@@ -236,17 +241,17 @@ export default function GameLobbyScreen({ navigation, route }) {
         <CoverArt game={meta || { icon: game.icon }} style={styles.hero} artStyle={{ height: heroArtH, marginTop: insets.top + HERO_BAR_H }} glyphSize={Math.round(heroArtH * 0.5)}>
           <LinearGradient pointerEvents="none" colors={[withAlpha(ST.ground, 0), withAlpha(ST.ground, 0.8), ST.ground]} locations={[0, 0.45, 1]} style={[styles.heroShade, { top: insets.top + HERO_BAR_H + heroArtH - 10 }]} />
           <View style={[styles.heroBar, { top: insets.top + 6 }]}>
-            <IconCircle icon="chevron-back" label="Back" onPress={() => navigation.goBack()} />
+            <IconCircle icon="chevron-back" label={t('back')} onPress={() => navigation.goBack()} />
             <LiveBadge count={live[gameId] || 0} />
           </View>
           <View style={styles.heroInfo}>
-            <Text style={styles.heroCat} numberOfLines={1}>{(meta?.categories || []).map((c) => c.toUpperCase()).join(' · ')}{meta ? ' · ' : ''}{(meta ? playersLabel(meta) : `${game.minPlayers}–${game.maxPlayers} players`).toUpperCase()}</Text>
-            <Text style={styles.heroTitle} numberOfLines={1}>{game.name}</Text>
-            {!!meta?.tagline && <Text style={styles.heroTag} numberOfLines={2}>{meta.tagline}</Text>}
+            <Text style={styles.heroCat} numberOfLines={1}>{(meta?.categories || []).map((c) => categoryName(c).toUpperCase()).join(' · ')}{meta ? ' · ' : ''}{(meta ? playersLabel(meta) : `${game.minPlayers}–${game.maxPlayers}`).toUpperCase()}</Text>
+            <Text style={styles.heroTitle} numberOfLines={1}>{gameName}</Text>
+            {!!meta?.tagline && <Text style={styles.heroTag} numberOfLines={2}>{gameText(meta, 'tagline')}</Text>}
             {!inRoom && (
               <View style={styles.statRow}>
-                <HeroStat label="Played" value={myStats?.played ?? 0} />
-                <HeroStat label="Wins" value={myStats?.wins ?? 0} />
+                <HeroStat label={t('stat_played')} value={myStats?.played ?? 0} />
+                <HeroStat label={t('stat_wins')} value={myStats?.wins ?? 0} />
                 <HeroStat label={third.label} value={third.value} />
               </View>
             )}
@@ -259,18 +264,18 @@ export default function GameLobbyScreen({ navigation, route }) {
               {(openError || snap?.status === 'error') && (
                 <ConnectionBanner status="error" error={openError || snap?.error} />
               )}
-              <PlayButton title="Play Now" icon="play" busy={busy} onPress={() => { buzz('medium'); enter('host') }} />
-              <GhostButton title="Invite friends" icon="person-add" style={{ marginTop: 10 }} disabled={busy} onPress={() => enter('host', null, { invite: true })} />
-              <Text style={[type.caption, { textAlign: 'center', marginTop: 8 }]}>You host a lobby; invite people nearby, people you follow or your followers.</Text>
+              <PlayButton title={t('play_now')} icon="play" busy={busy} onPress={() => { buzz('medium'); enter('host') }} />
+              <GhostButton title={t('invite_friends')} icon="person-add" style={{ marginTop: 10 }} disabled={busy} onPress={() => enter('host', null, { invite: true })} />
+              <Text style={[type.caption, { textAlign: 'center', marginTop: 8 }]}>{t('host_note')}</Text>
 
               <Card style={{ marginTop: 20 }}>
-                <Text style={[type.body, { marginBottom: 10 }]}>{game.blurb}</Text>
+                <Text style={[type.body, { marginBottom: 10 }]}>{mpBlurb(game)}</Text>
                 {gameId === 'lasertag' && (
                   <View style={{ marginBottom: 10 }}>
-                    <Text style={[type.label, { marginBottom: 6 }]}>Modes</Text>
+                    <Text style={[type.label, { marginBottom: 6 }]}>{t('modes')}</Text>
                     {Object.values(LASER_MODES).map((m) => (
                       <Text key={m.id} style={[type.caption, { marginBottom: 4 }]}>
-                        <Text style={{ color: colors.text, fontFamily: FONT.ui }}>{m.name}</Text> — {m.blurb}
+                        <Text style={{ color: colors.text, fontFamily: FONT.ui }}>{laserMode(m.id)}</Text> — {laserMode(m.id, 'blurb')}
                       </Text>
                     ))}
                   </View>
@@ -287,38 +292,38 @@ export default function GameLobbyScreen({ navigation, route }) {
               <ConnectionBanner status={snap.status} error={snap.error} />
               <Card>
                 <View style={styles.codeHead}>
-                  <Text style={type.label}>Game code</Text>
+                  <Text style={type.label}>{t('game_code')}</Text>
                   {visibility && (
-                    <Pill text={visibility === 'private' ? 'PRIVATE' : 'PUBLIC'} color={visibility === 'private' ? ST.objective : ST.health} />
+                    <Pill text={t(visibility === 'private' ? 'private_caps' : 'public_caps')} color={visibility === 'private' ? ST.objective : ST.health} />
                   )}
                 </View>
                 <View style={styles.codeRow}>
                   <Text style={styles.code} selectable>{room.code}</Text>
-                  <Btn title="Share" size="sm" onPress={share} />
+                  <Btn title={t('share')} size="sm" onPress={share} />
                 </View>
-                <PlayButton title="Invite friends" icon="person-add" onPress={() => { buzz('select'); setInviteOpen(true) }} />
-                <GhostButton title="Invite by text" icon="chatbubble-ellipses" style={{ marginTop: 10 }} onPress={textInvite} />
+                <PlayButton title={t('invite_friends')} icon="person-add" onPress={() => { buzz('select'); setInviteOpen(true) }} />
+                <GhostButton title={t('invite_text')} icon="chatbubble-ellipses" style={{ marginTop: 10 }} onPress={textInvite} />
                 <Text style={[type.caption, { marginTop: 8 }]}>
                   {visibility === 'private'
-                    ? 'Private lobby — only people with the code or an invite can join.'
-                    : 'Invite people nearby, people you follow or your followers. Players nearby can also find this game under Join.'}
+                    ? t('private_note')
+                    : t('public_note')}
                 </Text>
               </Card>
 
               {roster.length > 0 && (
-                <NeedPlayersPanel gameId={gameId} count={roster.length} code={room.code} gameName={game.name} onInvite={() => setInviteOpen(true)} onText={textInvite} />
+                <NeedPlayersPanel gameId={gameId} count={roster.length} code={room.code} gameName={gameName} onInvite={() => setInviteOpen(true)} onText={textInvite} />
               )}
               <Card>
-                <Text style={[type.label, { marginBottom: 4 }]}>Players ({roster.length}/{game.maxPlayers})</Text>
-                {roster.length === 0 && <Text style={type.caption}>Connecting…</Text>}
+                <Text style={[type.label, { marginBottom: 4 }]}>{t('players_count', { n: roster.length, max: game.maxPlayers })}</Text>
+                {roster.length === 0 && <Text style={type.caption}>{t('connecting')}</Text>}
                 {roster.map((p) => (
                   <PlayerRow
                     key={p.id}
                     player={p}
                     right={
                       <View style={{ flexDirection: 'row' }}>
-                        {p.id === snap.hostId && <Pill text="HOST" color={ST.objective} />}
-                        {p.id === snap.me.id && <Pill text="YOU" color={ST.friendly} />}
+                        {p.id === snap.hostId && <Pill text={t('host_pill')} color={ST.objective} />}
+                        {p.id === snap.me.id && <Pill text={t('you_pill')} color={ST.friendly} />}
                       </View>
                     }
                   />
@@ -333,9 +338,9 @@ export default function GameLobbyScreen({ navigation, route }) {
               <Card><HowTo gameId={gameId} settings={snap.info.settings} /></Card>
               <FeedbackPrefs laser={gameId === 'lasertag'} />
 
-              {!snap.isHost && <Text style={[type.caption, { textAlign: 'center', marginVertical: 8 }]}>Waiting for the host to start…</Text>}
+              {!snap.isHost && <Text style={[type.caption, { textAlign: 'center', marginVertical: 8 }]}>{t('waiting_host')}</Text>}
               <View style={{ height: 12 }} />
-              <Btn title="Leave lobby" onPress={leave} />
+              <Btn title={t('leave_lobby')} onPress={leave} />
             </>
           )}
         </View>
@@ -344,12 +349,12 @@ export default function GameLobbyScreen({ navigation, route }) {
       {inRoom && snap.isHost && (
         <View style={[styles.startBar, { paddingBottom: insets.bottom + 10 }]}>
           <View style={{ flex: 1, minWidth: 0 }}>
-            <Text style={styles.startKicker}>{roster.length}/{game.maxPlayers} PLAYERS{visibility ? `  ·  ${visibility.toUpperCase()}` : ''}</Text>
+            <Text style={styles.startKicker}>{t('n_players_caps', { n: roster.length, max: game.maxPlayers })}{visibility ? `  ·  ${t(visibility === 'private' ? 'private_caps' : 'public_caps')}` : ''}</Text>
             <Text style={styles.startNote} numberOfLines={1}>
-              {!enough ? `Need ${game.minPlayers - roster.length} more player${game.minPlayers - roster.length === 1 ? '' : 's'}` : readiness && !readiness.ok ? readiness.reason : snap.status !== 'connected' ? 'Connecting…' : 'Ready to start'}
+              {!enough ? t(game.minPlayers - roster.length === 1 ? 'need_more_one' : 'need_more', { n: game.minPlayers - roster.length }) : readiness && !readiness.ok ? readiness.reason : snap.status !== 'connected' ? t('connecting') : t('ready')}
             </Text>
           </View>
-          <HudCta title="Start" icon="flag" compact disabled={!enough || snap.status !== 'connected' || (readiness && !readiness.ok)} onPress={start} style={{ minWidth: 130 }} />
+          <HudCta title={t('start')} icon="flag" compact disabled={!enough || snap.status !== 'connected' || (readiness && !readiness.ok)} onPress={start} style={{ minWidth: 130 }} />
         </View>
       )}
       {/* Keeps scrolled content from running under the clock / Dynamic Island. */}
@@ -370,19 +375,20 @@ export default function GameLobbyScreen({ navigation, route }) {
 
 // Personal (per-device) feedback settings, shared with the in-game menu.
 function FeedbackPrefs({ laser }) {
+  const t = useT(R)
   const prefs = useGamePrefs()
   return (
     <Card>
-      <Text style={[type.label, { marginBottom: 4 }]}>Your settings</Text>
+      <Text style={[type.label, { marginBottom: 4 }]}>{t('your_settings')}</Text>
       <View style={styles.prefRow}>
-        <Text style={type.body}>Vibration</Text>
+        <Text style={type.body}>{t('vibration')}</Text>
         <Switch value={!!prefs.haptics} onValueChange={(v) => { setPref('haptics', v); if (v) buzz('medium') }} trackColor={{ true: ST.friendly, false: 'rgba(255,255,255,0.18)' }} thumbColor="#ffffff" ios_backgroundColor="rgba(255,255,255,0.18)" />
       </View>
       <View style={styles.prefRow}>
-        <Text style={type.body}>Sound effects</Text>
+        <Text style={type.body}>{t('sound_fx')}</Text>
         <Switch value={!!prefs.sound} onValueChange={(v) => setPref('sound', v)} trackColor={{ true: ST.friendly, false: 'rgba(255,255,255,0.18)' }} thumbColor="#ffffff" ios_backgroundColor="rgba(255,255,255,0.18)" />
       </View>
-      {laser && <Text style={type.caption}>Rumble and sound effects when you fire and when you get hit. Also in the in-game menu.</Text>}
+      {laser && <Text style={type.caption}>{t('feedback_note')}</Text>}
     </Card>
   )
 }
@@ -403,14 +409,15 @@ function canStart(gameId, info, roster) {
 }
 
 function HowTo({ gameId, settings, bare }) {
+  const t = useT(R)
   const [open, setOpen] = useState(false)
-  const h = howToPlay(gameId, settings)
+  const h = howToPlayText(gameId, settings)
   return (
     <View>
       <Pressable onPress={() => setOpen((v) => !v)} style={styles.howHead} accessibilityRole="button" accessibilityState={{ expanded: open }}>
-        <Text style={type.label}>How to play</Text>
+        <Text style={type.label}>{t('how_to_play')}</Text>
         <View style={styles.howToggle}>
-          <Text style={styles.howToggleText}>{open ? 'Hide' : 'Show'}</Text>
+          <Text style={styles.howToggleText}>{t(open ? 'hide' : 'show')}</Text>
           <Ionicons name={open ? 'chevron-up' : 'chevron-down'} size={13} color={ST.friendly} />
         </View>
       </Pressable>
@@ -425,6 +432,7 @@ function HowTo({ gameId, settings, bare }) {
 }
 
 function Settings({ game, info, editable, onChange }) {
+  const t = useT(R)
   const defs = game.settings || {}
   const current = { ...Object.fromEntries(Object.keys(defs).map((k) => [k, defs[k].default])), ...(info?.settings || {}) }
   const keys = Object.keys(defs).filter((k) => !defs[k].when || defs[k].when(current))
@@ -437,7 +445,7 @@ function Settings({ game, info, editable, onChange }) {
         if (game.id === 'lasertag' && k === 'mode') {
           return (
             <View key={k} style={idx > 0 && { marginTop: 14 }}>
-              <Text style={[type.label, { marginBottom: 8 }]}>{d.label}</Text>
+              <Text style={[type.label, { marginBottom: 8 }]}>{settingLabel(game.id, k, d)}</Text>
               {d.options.map((o) => {
                 const active = o === value
                 return (
@@ -453,8 +461,8 @@ function Settings({ game, info, editable, onChange }) {
                       {active && <View style={styles.radioDot} />}
                     </View>
                     <View style={{ flex: 1 }}>
-                      <Text style={styles.modeName}>{LASER_MODES[o]?.name ?? d.labels?.[o]}</Text>
-                      <Text style={type.caption}>{LASER_MODES[o]?.blurb}</Text>
+                      <Text style={styles.modeName}>{LASER_MODES[o] ? laserMode(o) : d.labels?.[o]}</Text>
+                      <Text style={type.caption}>{LASER_MODES[o] ? laserMode(o, 'blurb') : ''}</Text>
                     </View>
                   </Pressable>
                 )
@@ -464,7 +472,7 @@ function Settings({ game, info, editable, onChange }) {
         }
         return (
           <View key={k} style={idx > 0 && { marginTop: 14 }}>
-            <Text style={[type.label, { marginBottom: 8 }]}>{d.label}</Text>
+            <Text style={[type.label, { marginBottom: 8 }]}>{settingLabel(game.id, k, d)}</Text>
             <View style={styles.optRow}>
               {d.options.map((o) => {
                 const active = o === value
@@ -477,7 +485,7 @@ function Settings({ game, info, editable, onChange }) {
                     accessibilityRole="button"
                     accessibilityState={{ selected: active, disabled: !editable }}
                   >
-                    <Text style={[styles.optText, { color: active ? ST.ink : ST.text }]}>{d.labels?.[o] ?? `${o}${d.unit ? ` ${d.unit}` : ''}`}</Text>
+                    <Text style={[styles.optText, { color: active ? ST.ink : ST.text }]}>{optionLabel(k, d, o)}</Text>
                   </Pressable>
                 )
               })}
@@ -485,7 +493,7 @@ function Settings({ game, info, editable, onChange }) {
           </View>
         )
       })}
-      {!editable && <Text style={[type.caption, { marginTop: 10 }]}>The host chooses the settings.</Text>}
+      {!editable && <Text style={[type.caption, { marginTop: 10 }]}>{t('host_chooses')}</Text>}
     </Card>
   )
 }

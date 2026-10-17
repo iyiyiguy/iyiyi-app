@@ -11,8 +11,11 @@ import { UAV_DURATION_MS, useUavInventory } from '../lib/uav'
 import { useEffect, useState } from 'react'
 import { loadArcadeStats, subscribeArcadeStats } from '../lib/arcadeStats'
 import { FONT, ST, stType } from '../games/studio'
+import { useT } from '../i18n'
+import strings from '../i18n/strings/arcadeMisc'
 
 export default function ArcadeStoreScreen({ navigation }) {
+  const t = useT(strings)
   const insets = useArcadeInsets()
   useArcadeStatusBar()
   const uav = useUavInventory()
@@ -29,8 +32,8 @@ export default function ArcadeStoreScreen({ navigation }) {
       <ArcadeBackground />
       <ScrollView contentContainerStyle={{ paddingTop: insets.top + 10, paddingBottom: insets.bottom + 40, paddingHorizontal: 20 }} showsVerticalScrollIndicator={false}>
         <ArcadeHeader
-          kicker="Arcade"
-          title="Store"
+          kicker={t('store_kicker')}
+          title={t('store_title')}
           onBack={() => (navigation?.canGoBack?.() ? navigation.goBack() : navigation?.navigate?.('Tabs'))}
           right={<CoinPill value={coins} compact onPress={() => navigation?.navigate?.('GunShop')} />}
         />
@@ -38,8 +41,8 @@ export default function ArcadeStoreScreen({ navigation }) {
         <View style={styles.hero}>
           <View style={{ flex: 1 }}>
             <Text style={styles.heroKicker}>LASER TAG · BATTLE ROYALE</Text>
-            <Text style={styles.heroTitle}>UAV Recon</Text>
-            <Text style={styles.heroSub}>{`See every enemy on your map for ${Math.round(UAV_DURATION_MS / 1000)} seconds. Call one in when it counts — you can also earn them with tag streaks.`}</Text>
+            <Text style={styles.heroTitle}>{t('uav_title')}</Text>
+            <Text style={styles.heroSub}>{t('uav_sub', { n: Math.round(UAV_DURATION_MS / 1000) })}</Text>
           </View>
           <SatelliteArt size={108} accent={ST.enemy} glow="rgba(255,61,82,0.35)" />
         </View>

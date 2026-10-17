@@ -13,19 +13,29 @@ import { DIFFICULTIES, DIFFICULTY_LABELS } from '../lib/chessAI'
 import { loadArcadeStats, CHESS_AI_RATINGS } from '../lib/arcadeStats'
 import { SLOW_SEARCH_MS, useChessMatchmaking } from '../lib/chessMatchmaking'
 import { buzz } from '../lib/gamePrefs'
+import { translate, useT } from '../i18n'
+import C from '../i18n/strings/chess'
 
 const COLOR_OPTIONS = [
-  { key: 'w', label: 'White' },
-  { key: 'b', label: 'Black' },
-  { key: 'random', label: 'Random' },
+  { key: 'w', get label() { return translate(C, 'white') } },
+  { key: 'b', get label() { return translate(C, 'black') } },
+  { key: 'random', get label() { return translate(C, 'random') } },
 ]
 
 const SEARCHING = ['connecting', 'searching', 'proposing', 'joining']
+// Matchmaking notices arrive in English (lib/chessMatchmaking); show the known ones translated.
+const MM_TEXT = {
+  'No one is searching right now. Try again in a bit, or invite a friend.': 'mm_no_one',
+  'Search paused while the app was in the background.': 'mm_paused',
+  'Matchmaking failed.': 'mm_failed',
+}
+const mmText = (s) => (MM_TEXT[s] ? translate(C, MM_TEXT[s]) : s)
 
 // Route params (all optional): { mode: 'ai'|'local'|'online', difficulty, color: 'w'|'b'|'random' }.
 // With mode 'ai' / 'local' the game starts immediately; otherwise the lobby is shown.
 export default function ChessScreen({ navigation, route }) {
   useArcadeStatusBar()
+  const t = useT(C)
   const insets = useArcadeInsets()
   const params = route?.params || {}
   const [offlineMode, setOfflineMode] = useState(params.mode === 'local' ? 'local' : 'ai')
@@ -56,12 +66,12 @@ export default function ChessScreen({ navigation, route }) {
     if (mm.status !== 'matched' || !code || handled.current === code) return undefined
     handled.current = code
     buzz('success')
-    const t = setTimeout(() => {
+    const tm = setTimeout(() => {
       const room = mm.takeRoom()
       if (!room) return
-      navigation.navigate('GamePlayScreen', { gameId: 'chess', gameName: 'Chess', code })
+      navigation.navigate('GamePlayScreen', { gameId: 'chess', gameName: translate(C, 'chess'), code })
     }, 900)
-    return () => clearTimeout(t)
+    return () => clearTimeout(tm)
   }, [mm.status, code]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const findOpponent = () => {
@@ -90,10 +100,10 @@ export default function ChessScreen({ navigation, route }) {
   const onlineRating = online?.games > 0 ? `${online.rating}${online.games < 5 ? '?' : ''}` : '—'
   const header = (
     <View style={[styles.header, { paddingTop: insets.top + 6 }]}>
-      <IconCircle icon="chevron-back" label="Back" onPress={() => navigation.goBack()} size={40} />
-      <Text style={styles.headerTitle} numberOfLines={1}>{config ? (config.mode === 'ai' ? `vs ${DIFFICULTY_LABELS[config.difficulty]} AI` : 'Pass & Play') : 'Chess'}</Text>
+      <IconCircle icon="chevron-back" label={t('back')} onPress={() => navigation.goBack()} size={40} />
+      <Text style={styles.headerTitle} numberOfLines={1}>{config ? (config.mode === 'ai' ? t('vs_x_ai', { level: DIFFICULTY_LABELS[config.difficulty] }) : t('pass_play')) : t('chess')}</Text>
       {stats ? (
-        <View style={styles.headerRating} accessibilityLabel={config ? `Rating vs AI ${stats.chess.rating}` : `Online rating ${onlineRating}`}>
+        <View style={styles.headerRating} accessibilityLabel={config ? `${t('rating_vs_ai')} ${stats.chess.rating}` : `${t('online_rating')} ${onlineRating}`}>
           <Ionicons name={config ? 'hardware-chip' : 'globe-outline'} size={12} color={AC.gold} />
           <Text style={styles.headerRatingText}>{config ? stats.chess.rating : onlineRating}</Text>
         </View>
@@ -120,10 +130,10 @@ export default function ChessScreen({ navigation, route }) {
           <View style={styles.hero}>
             <View style={styles.liveRow}>
               <View style={styles.liveDot} />
-              <Text style={styles.liveText}>ONLINE</Text>
+              <Text style={styles.liveText}>{t('online_caps')}</Text>
             </View>
-            <Text style={styles.heroTitle}>Play anyone, anywhere</Text>
-            <Text style={styles.heroBody}>We’ll match you with a player near your rating. See their profile, chat and video call during the game.</Text>
+            <Text style={styles.heroTitle}>{t('play_anyone')}</Text>
+            <Text style={styles.heroBody}>{t('match_body')}</Text>
 
             {searching ? (
               <SearchPanel mm={mm} rating={online?.games > 0 ? onlineRating : null} onCancel={mm.cancel} onInvite={inviteFriends} />
@@ -131,47 +141,47 @@ export default function ChessScreen({ navigation, route }) {
               <View style={styles.found}>
                 <PlayerAvatar uri={mm.match.opponent?.avatar} name={mm.match.opponent?.name} size={52} ring={ST.health} />
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.foundLabel}>OPPONENT FOUND</Text>
-                  <Text style={styles.foundName} numberOfLines={1}>{mm.match.opponent?.name || 'Opponent'}</Text>
-                  <Text style={styles.caption}>Setting up the board…</Text>
+                  <Text style={styles.foundLabel}>{t('opp_found')}</Text>
+                  <Text style={styles.foundName} numberOfLines={1}>{mm.match.opponent?.name || t('opponent')}</Text>
+                  <Text style={styles.caption}>{t('setting_up_dots')}</Text>
                 </View>
               </View>
             ) : (
               <>
-                <PlayButton title="Find opponent" icon="flash" onPress={findOpponent} style={{ marginTop: 18 }} />
-                {mm.status === 'error' && mm.error ? <Text style={styles.error}>{mm.error}</Text> : null}
-                {mm.notice ? <Text style={styles.notice}>{mm.notice}</Text> : null}
+                <PlayButton title={t('find_opponent')} icon="flash" onPress={findOpponent} style={{ marginTop: 18 }} />
+                {mm.status === 'error' && mm.error ? <Text style={styles.error}>{mmText(mm.error)}</Text> : null}
+                {mm.notice ? <Text style={styles.notice}>{mmText(mm.notice)}</Text> : null}
               </>
             )}
 
             <View style={styles.heroLinks}>
-              <GhostButton title="Invite friends" icon="person-add" small onPress={inviteFriends} style={{ flex: 1 }} />
-              <GhostButton title="Join with code" icon="keypad" small onPress={joinWithCode} style={{ flex: 1 }} />
+              <GhostButton title={t('invite_friends')} icon="person-add" small onPress={inviteFriends} style={{ flex: 1 }} />
+              <GhostButton title={t('join_code')} icon="keypad" small onPress={joinWithCode} style={{ flex: 1 }} />
             </View>
           </View>
 
           {stats && (
             <>
               <View style={styles.statsRow}>
-                <StatTile label="Online" value={onlineRating} accent={AC.gold} />
-                <StatTile label="vs AI" value={stats.chess.rating} />
-                <StatTile label="Online games" value={online?.games || 0} />
+                <StatTile label={t('online')} value={onlineRating} accent={AC.gold} />
+                <StatTile label={t('vs_ai')} value={stats.chess.rating} />
+                <StatTile label={t('online_games')} value={online?.games || 0} />
               </View>
               <Text style={[styles.caption, { marginTop: 6 }]}>
-                Online (this device){online?.games > 0 ? `: ${online.w}W ${online.l}L ${online.d}D · peak ${online.peakRating}` : ': play an online game to get one'}. vs AI: peak {stats.chess.peakRating} over {stats.chess.ratedGames} games.
+                {online?.games > 0 ? t('online_summary', { w: online.w, l: online.l, d: online.d, peak: online.peakRating }) : t('online_summary_none')} {t('ai_summary', { peak: stats.chess.peakRating, n: stats.chess.ratedGames })}
               </Text>
             </>
           )}
 
-          <SectionHeader title="Play offline" />
+          <SectionHeader title={t('play_offline')} />
           <View style={styles.modeRow}>
-            <ModeCard active={offlineMode === 'ai'} onPress={() => setOfflineMode('ai')} icon="hardware-chip" title="vs Computer" body="Rated games vs the engine" />
-            <ModeCard active={offlineMode === 'local'} onPress={() => setOfflineMode('local')} icon="people" title="Pass & Play" body="Two players, one phone" />
+            <ModeCard active={offlineMode === 'ai'} onPress={() => setOfflineMode('ai')} icon="hardware-chip" title={t('vs_computer')} body={t('rated_vs_engine')} />
+            <ModeCard active={offlineMode === 'local'} onPress={() => setOfflineMode('local')} icon="people" title={t('pass_play')} body={t('two_players_phone')} />
           </View>
 
           {offlineMode === 'ai' ? (
             <View style={styles.options}>
-              <Text style={styles.label}>Difficulty</Text>
+              <Text style={styles.label}>{t('difficulty')}</Text>
               <View style={styles.segment}>
                 {DIFFICULTIES.map((d) => (
                   <Segment key={d} on={difficulty === d} onPress={() => setDifficulty(d)} label={DIFFICULTY_LABELS[d]} sub={`~${CHESS_AI_RATINGS[d]}`} />
@@ -179,21 +189,21 @@ export default function ChessScreen({ navigation, route }) {
               </View>
               {stats?.chess?.vsAI?.[difficulty] ? (
                 <Text style={[styles.caption, { marginTop: 8 }]}>
-                  Record vs {DIFFICULTY_LABELS[difficulty]}: {stats.chess.vsAI[difficulty].w}W · {stats.chess.vsAI[difficulty].l}L · {stats.chess.vsAI[difficulty].d}D
+                  {t('record_vs', { level: DIFFICULTY_LABELS[difficulty], w: stats.chess.vsAI[difficulty].w, l: stats.chess.vsAI[difficulty].l, d: stats.chess.vsAI[difficulty].d })}
                 </Text>
               ) : null}
-              <Text style={[styles.label, { marginTop: 16 }]}>Play as</Text>
+              <Text style={[styles.label, { marginTop: 16 }]}>{t('play_as')}</Text>
               <View style={styles.chips}>
                 {COLOR_OPTIONS.map((o) => <Chip key={o.key} label={o.label} active={colorChoice === o.key} onPress={() => setColorChoice(o.key)} />)}
               </View>
             </View>
           ) : (
             <View style={styles.options}>
-              <Text style={styles.caption}>White moves first. After each move, hand the phone to the other player.</Text>
+              <Text style={styles.caption}>{t('pass_hint')}</Text>
             </View>
           )}
 
-          <GhostButton title={offlineMode === 'ai' ? 'Start vs Computer' : 'Start Pass & Play'} icon="play" onPress={startOffline} style={{ marginTop: 12 }} />
+          <GhostButton title={offlineMode === 'ai' ? t('start_vs_computer') : t('start_pass_play')} icon="play" onPress={startOffline} style={{ marginTop: 12 }} />
         </ScrollView>
       )}
     </View>
@@ -201,21 +211,22 @@ export default function ChessScreen({ navigation, route }) {
 }
 
 function SearchPanel({ mm, rating, onCancel, onInvite }) {
+  const t = useT(C)
   const [now, setNow] = useState(Date.now())
   const pulse = useRef(new Animated.Value(0)).current
   useEffect(() => {
-    const t = setInterval(() => setNow(Date.now()), 1000)
+    const iv = setInterval(() => setNow(Date.now()), 1000)
     const loop = Animated.loop(Animated.timing(pulse, { toValue: 1, duration: 1600, easing: Easing.out(Easing.quad), useNativeDriver: true }))
     loop.start()
-    return () => { clearInterval(t); loop.stop() }
+    return () => { clearInterval(iv); loop.stop() }
   }, [pulse])
   const elapsed = Math.max(0, now - (mm.startedAt || now))
   const secs = Math.floor(elapsed / 1000)
   const clock = `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`
   const slow = elapsed > SLOW_SEARCH_MS
-  const label = mm.status === 'connecting' ? 'Joining the queue…'
-    : mm.status === 'proposing' || mm.status === 'joining' ? 'Opponent found — connecting…'
-      : slow ? 'Still searching…' : 'Finding an opponent…'
+  const label = mm.status === 'connecting' ? t('joining_queue')
+    : mm.status === 'proposing' || mm.status === 'joining' ? t('found_connecting')
+      : slow ? t('still_searching') : t('finding_opponent')
   const scale = pulse.interpolate({ inputRange: [0, 1], outputRange: [0.6, 1.6] })
   const opacity = pulse.interpolate({ inputRange: [0, 1], outputRange: [0.55, 0] })
 
@@ -230,19 +241,19 @@ function SearchPanel({ mm, rating, onCancel, onInvite }) {
           <Text style={styles.searchTitle}>{label}</Text>
           <Text style={styles.caption}>
             {clock}
-            {mm.waitingCount > 0 ? ` · ${mm.waitingCount} other${mm.waitingCount === 1 ? '' : 's'} searching` : ''}
-            {rating ? ` · online rating ${rating}` : ''}
+            {mm.waitingCount > 0 ? ` · ${t(mm.waitingCount === 1 ? 'others_searching_one' : 'others_searching', { n: mm.waitingCount })}` : ''}
+            {rating ? ` · ${t('online_rating_lc', { r: rating })}` : ''}
           </Text>
         </View>
       </View>
       {slow ? (
         <View style={styles.slow}>
-          <Text style={styles.slowText}>Not many players online right now. Keep waiting, or invite a friend to play.</Text>
-          <GhostButton title="Invite friends instead" icon="person-add" small onPress={onInvite} style={{ marginTop: 10 }} />
+          <Text style={styles.slowText}>{t('not_many_online')}</Text>
+          <GhostButton title={t('invite_instead')} icon="person-add" small onPress={onInvite} style={{ marginTop: 10 }} />
         </View>
       ) : null}
       <Pressable onPress={onCancel} style={({ pressed }) => [styles.cancel, pressed && { opacity: 0.7 }]} accessibilityRole="button">
-        <Text style={styles.cancelText}>Cancel search</Text>
+        <Text style={styles.cancelText}>{t('cancel_search')}</Text>
       </Pressable>
     </View>
   )

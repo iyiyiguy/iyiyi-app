@@ -3,9 +3,12 @@
 import { useState } from 'react'
 import { View, Text, Pressable, TextInput, StyleSheet, ScrollView } from 'react-native'
 import { SUGGESTED_TAGS, cleanTags } from '../lib/sounds'
+import { useT } from '../i18n'
+import strings from '../i18n/strings/music'
 
 export default function TagPicker({ value = [], onChange, colors = {} }) {
   const c = { text: '#f2f4f7', muted: 'rgba(242,244,247,0.6)', line: 'rgba(255,255,255,0.14)', panel: 'rgba(255,255,255,0.06)', accent: '#ff4fa3', ...colors }
+  const tr = useT(strings)
   const [draft, setDraft] = useState('')
   const set = new Set(value)
   const toggle = (t) => onChange?.(cleanTags(set.has(t) ? value.filter((x) => x !== t) : [...value, t]))
@@ -32,7 +35,7 @@ export default function TagPicker({ value = [], onChange, colors = {} }) {
           value={draft}
           onChangeText={setDraft}
           onSubmitEditing={addDraft}
-          placeholder="Add your own tag"
+          placeholder={tr('addOwnTag')}
           placeholderTextColor={c.muted}
           style={[st.input, { color: c.text }]}
           autoCapitalize="none"
@@ -40,9 +43,9 @@ export default function TagPicker({ value = [], onChange, colors = {} }) {
           maxLength={24}
           returnKeyType="done"
         />
-        {draft.trim() ? <Pressable onPress={addDraft} hitSlop={8}><Text style={[st.add, { color: c.accent }]}>Add</Text></Pressable> : null}
+        {draft.trim() ? <Pressable onPress={addDraft} hitSlop={8}><Text style={[st.add, { color: c.accent }]}>{tr('add')}</Text></Pressable> : null}
       </View>
-      <Text style={[st.hint, { color: c.muted }]}>{value.length}/8 tags</Text>
+      <Text style={[st.hint, { color: c.muted }]}>{tr('tagCount', { n: value.length })}</Text>
     </View>
   )
 }

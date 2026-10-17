@@ -6,12 +6,15 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons'
 import EditedVideo from './EditedVideo'
 import { CaptionLayer } from '../lib/videoEdit'
+import { useT } from '../i18n'
+import strings from '../i18n/strings/editor'
 
 const C = { bg: '#0d0f14', panel: '#161a22', line: 'rgba(255,255,255,0.1)', text: '#f2f4f7', muted: 'rgba(242,244,247,0.6)', faint: 'rgba(242,244,247,0.35)', accent: '#ff4fa3', gold: '#ffb21e' }
 const MAX = 2200
 const QUICK_TAGS = ['#iyiyi', '#nearby', '#fyp', '#vibes', '#music', '#dance', '#funny', '#local']
 
 export default function PostDetails({ visible, item, edit, sound, location, onBack, onPost }) {
+  const t = useT(strings)
   const insets = useSafeAreaInsets()
   const [text, setText] = useState('')
   const [busy, setBusy] = useState(false)
@@ -36,8 +39,8 @@ export default function PostDetails({ visible, item, edit, sound, location, onBa
     <Modal visible={visible} animationType="slide" onRequestClose={onBack} statusBarTranslucent>
       <KeyboardAvoidingView style={[st.screen, { paddingTop: insets.top + 6 }]} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <View style={st.top}>
-          <Pressable onPress={onBack} hitSlop={10} style={st.topBtn} accessibilityLabel="Back to editing"><Ionicons name="chevron-back" size={24} color={C.text} /></Pressable>
-          <Text style={st.topTitle}>New post</Text>
+          <Pressable onPress={onBack} hitSlop={10} style={st.topBtn} accessibilityLabel={t('backToEditing')}><Ionicons name="chevron-back" size={24} color={C.text} /></Pressable>
+          <Text style={st.topTitle}>{t('newPost')}</Text>
           <View style={st.topBtn} />
         </View>
         <ScrollView contentContainerStyle={st.body} keyboardShouldPersistTaps="handled">
@@ -45,7 +48,7 @@ export default function PostDetails({ visible, item, edit, sound, location, onBa
             <TextInput
               value={text}
               onChangeText={(v) => setText(v.slice(0, MAX))}
-              placeholder={item.type === 'photo' ? 'Describe your photo… add #hashtags and @mention people' : 'Describe your video… add #hashtags and @mention people'}
+              placeholder={item.type === 'photo' ? t('describePhoto') : t('describeVideo')}
               placeholderTextColor={C.faint}
               style={st.input}
               multiline
@@ -72,7 +75,7 @@ export default function PostDetails({ visible, item, edit, sound, location, onBa
 
           <View style={st.info}>
             <Ionicons name="musical-notes" size={18} color={C.gold} />
-            <Text style={st.infoText} numberOfLines={1}>{sound ? sound.title : item.type === 'photo' ? 'Photo' : 'Original sound'}</Text>
+            <Text style={st.infoText} numberOfLines={1}>{sound ? sound.title : item.type === 'photo' ? t('photo') : t('originalSound')}</Text>
           </View>
           {location ? (
             <View style={st.info}>
@@ -82,14 +85,14 @@ export default function PostDetails({ visible, item, edit, sound, location, onBa
           ) : null}
           <View style={st.info}>
             <Ionicons name="people-outline" size={18} color={C.text} />
-            <Text style={st.infoText}>People nearby who allow tagging are tagged automatically</Text>
+            <Text style={st.infoText}>{t('autoTag')}</Text>
           </View>
         </ScrollView>
         <View style={[st.footer, { paddingBottom: insets.bottom + 12 }]}>
-          <Pressable onPress={onBack} style={[st.btn, st.btnGhost]}><Text style={st.btnGhostText}>{item.type === 'photo' ? 'Discard' : 'Edit'}</Text></Pressable>
+          <Pressable onPress={onBack} style={[st.btn, st.btnGhost]}><Text style={st.btnGhostText}>{item.type === 'photo' ? t('discard') : t('edit')}</Text></Pressable>
           <Pressable onPress={post} disabled={busy} style={[st.btn, st.btnMain, busy && { opacity: 0.6 }]} accessibilityRole="button">
             <Ionicons name="arrow-up-circle" size={20} color="#fff" />
-            <Text style={st.btnMainText}>{busy ? 'Posting…' : 'Post'}</Text>
+            <Text style={st.btnMainText}>{busy ? t('posting') : t('post')}</Text>
           </Pressable>
         </View>
       </KeyboardAvoidingView>

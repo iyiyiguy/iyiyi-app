@@ -27,6 +27,10 @@ import { minShotGapMs, playShot, useWeaponTrigger } from './weaponsAdapter'
 import { cameraTanHalf } from '../laser/arGround'
 import { meleeBoxOk, meleeGpsOk } from './melee'
 import { LootAR, lootMarkers } from './LootAR'
+import { translate } from '../../i18n'
+import S from '../../i18n/strings/royale'
+
+const tr = (k, v) => translate(S, k, v)
 
 const COMPASS_SLACK = { 3: 4, 2: 8, 1: 12, 0: 15 }
 
@@ -184,7 +188,7 @@ export const CombatView = memo(function CombatView({ room, weapon, myPos, oppone
     if (h.weapon?.melee) {
       let tanV
       try { tanV = cameraTanHalf(viewRef.current).tanV } catch { tanV = undefined }
-      if (!meleeBoxOk(hit.body, tanV)) { onFlash?.('Too far to punch — get within arm’s reach', false); return }
+      if (!meleeBoxOk(hit.body, tanV)) { onFlash?.(tr('too_far_punch'), false); return }
     }
     const picked = pickVisionTarget({
       opponents: (h.opponents || []).map((o) => ({ ...o, alive: true })),
@@ -194,7 +198,7 @@ export const CombatView = memo(function CombatView({ room, weapon, myPos, oppone
       body: angularBody(hit.body, viewRef.current),
       tolerance: aimTolerance,
     })
-    if (!picked) { onFlash?.('That’s not a player in this match', false); return }
+    if (!picked) { onFlash?.(tr('not_player'), false); return }
     send(picked.target.id, hit.zone, beams, 'vision')
   }
 
@@ -209,14 +213,14 @@ export const CombatView = memo(function CombatView({ room, weapon, myPos, oppone
     if (!w.automatic) {
       const t = Date.now()
       const last = lastPullRef.current
-      if (last.id === w.id && t - last.at < minShotGapMs(w)) { onFlash?.(w.blastRadius > 0 ? 'Rocket reloading…' : 'Cycling…', false); return }
+      if (last.id === w.id && t - last.at < minShotGapMs(w)) { onFlash?.(tr(w.blastRadius > 0 ? 'rocket_reloading' : 'cycling'), false); return }
       lastPullRef.current = { id: w.id, at: t }
     }
     const beams = w.automatic ? 1 : w.shotsPerClick
     playShot(w)
     buzz(w.automatic ? 'light' : 'medium')
     onShot?.(beams)
-    if (!h.myPos || !h.heading) { onFlash?.('No GPS/compass fix yet', false); return }
+    if (!h.myPos || !h.heading) { onFlash?.(tr('no_fix'), false); return }
     if (h.visionAim) { fireVision(beams, tapAimRef.current).catch(() => {}); return }
     const target = h.inSights
     if (!target) return
@@ -248,7 +252,7 @@ export const CombatView = memo(function CombatView({ room, weapon, myPos, oppone
         <View style={[StyleSheet.absoluteFill, s.noCam]}>
           {cameraOn && (
             <Pressable onPress={() => requestCamPerm().catch(() => {})} style={({ pressed }) => [s.allow, pressed && { opacity: 0.8 }]} accessibilityRole="button">
-              <Text style={s.allowText}>ALLOW THE CAMERA TO AIM</Text>
+              <Text style={s.allowText}>{tr('allow_camera')}</Text>
             </Pressable>
           )}
         </View>
@@ -265,7 +269,7 @@ export const CombatView = memo(function CombatView({ room, weapon, myPos, oppone
           onPressOut={() => { trigger.onPressOut(); tapAimRef.current = null }}
           disabled={!canFire}
           accessibilityRole="button"
-          accessibilityLabel={weapon.automatic ? 'Fire. Hold for continuous fire' : 'Fire. Every tap fires'}
+          accessibilityLabel={tr(weapon.automatic ? 'fire_a11y_auto' : 'fire_a11y_semi')}
         />
       )}
       {/* Classic camera aim: tapping a target bracket fires at that person (same trigger rules
@@ -286,7 +290,7 @@ export const CombatView = memo(function CombatView({ room, weapon, myPos, oppone
             trigger.onPressOut()
             tapAimRef.current = null
           }}
-          accessibilityLabel="Tap a target to fire at it"
+          accessibilityLabel={tr('tap_target_a11y')}
         />
       ) : null}
 
@@ -316,12 +320,12 @@ export const CombatView = memo(function CombatView({ room, weapon, myPos, oppone
             {!canFire
               ? ''
               : weapon.melee && !inSights && !locked
-                ? 'Fists · get within arm’s reach (~3 m)'
+                ? tr('fists_hint')
                 : visionAim
-                ? (locked ? 'Target locked' : opponents?.length ? 'Camera aim' : 'No players nearby')
+                ? tr(locked ? 'target_locked' : opponents?.length ? 'camera_aim' : 'no_players_near')
                 : inSights
                   ? `${inSights.name} · ${formatDistance(inSights.d)} · ~${Math.round(inSights.chance * 100)}%`
-                  : topMode ? 'Point the top edge at a player · tap to fire' : 'No one in your sights'}
+                  : tr(topMode ? 'point_top' : 'no_one_sights')}
           </Text>
         </View>
       )}
@@ -333,9 +337,9 @@ export const CombatView = memo(function CombatView({ room, weapon, myPos, oppone
           disabled={!canFire}
           style={({ pressed }) => [s.fire, fireButtonStyle, { opacity: !canFire ? 0.4 : pressed ? 0.75 : 1 }, pressed && { transform: [{ scale: 0.96 }] }]}
           accessibilityRole="button"
-          accessibilityLabel="Fire"
+          accessibilityLabel={tr('fire')}
         >
-          <Text style={s.fireText}>FIRE</Text>
+          <Text style={s.fireText}>{tr('fire_caps')}</Text>
         </Pressable>
       )}
     </View>

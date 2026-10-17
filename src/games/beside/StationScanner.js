@@ -9,9 +9,12 @@ import * as Location from 'expo-location'
 import { FONT, ST, StButton, stShadow, stType } from '../studio'
 import { makeThumbnail, uploadStationPhoto } from '../../lib/arcadeMedia'
 import { distanceMeters } from '../../lib/multiplayer'
+import { useT } from '../../i18n'
+import B from '../../i18n/strings/besideThem'
 
 // onSave({ station, thumb }) — station: { id, name, lat, lng, url, by }
 export function StationScanner({ visible, onClose, onSave, area, meId }) {
+  const t = useT(B)
   const [perm] = useCameraGate(visible)
   const cam = useRef(null)
   const [name, setName] = useState('')
@@ -32,7 +35,7 @@ export function StationScanner({ visible, onClose, onSave, area, meId }) {
       ])
       const where = { lat: pos.coords.latitude, lng: pos.coords.longitude }
       if (area && distanceMeters(where, area) > area.r + 15) {
-        setError('You’re outside the play area. Stations must be inside it.')
+        setError(t('outside_area'))
         setBusy(false)
         return
       }
@@ -44,11 +47,11 @@ export function StationScanner({ visible, onClose, onSave, area, meId }) {
         console.warn('station upload failed; sharing thumbnail only', e?.message ?? e)
       }
       const id = `st-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`
-      onSave({ station: { id, name: name.trim().slice(0, 40) || 'Station', lat: where.lat, lng: where.lng, url, by: meId }, thumb })
+      onSave({ station: { id, name: name.trim().slice(0, 40) || t('station_default'), lat: where.lat, lng: where.lng, url, by: meId }, thumb })
       reset()
       onClose()
     } catch (e) {
-      setError(e?.message || 'Couldn’t save the station. Try again.')
+      setError(e?.message || t('save_failed'))
       setBusy(false)
     }
   }
@@ -60,15 +63,15 @@ export function StationScanner({ visible, onClose, onSave, area, meId }) {
           <CameraView ref={cam} style={StyleSheet.absoluteFill} facing="back" />
         ) : (
           <View style={[StyleSheet.absoluteFill, styles.center]}>
-            {perm && !perm.granted && perm.status === 'denied' ? <CameraOff what="scanning task stations" compact /> : null}
+            {perm && !perm.granted && perm.status === 'denied' ? <CameraOff what={t('cam_what_task')} compact /> : null}
           </View>
         )}
         <SafeAreaView style={styles.overlay} edges={['top', 'bottom']} pointerEvents="box-none">
           <View>
-            <Text style={[stType.kicker, { color: ST.objective }, stShadow]}>Beside Them · new station</Text>
-            <Text style={[stType.title, stShadow]}>Scan a task station</Text>
+            <Text style={[stType.kicker, { color: ST.objective }, stShadow]}>{t('new_station_kicker')}</Text>
+            <Text style={[stType.title, stShadow]}>{t('scan_task_station')}</Text>
             <Text style={[stType.small, { color: ST.text, marginTop: 4 }, stShadow]}>
-              Stand right next to a real object (a bench, door, sign, tree…) and fill the frame with it. Players will need to find and match it.
+              {t('scanner_hint')}
             </Text>
           </View>
           <View style={styles.frame} pointerEvents="none" />
@@ -76,15 +79,15 @@ export function StationScanner({ visible, onClose, onSave, area, meId }) {
             <TextInput
               value={name}
               onChangeText={setName}
-              placeholder="Name it (e.g. Red bench)"
+              placeholder={t('name_it')}
               placeholderTextColor={ST.faint}
               style={styles.input}
               maxLength={40}
             />
             {!!error && <Text style={[stType.small, { color: ST.objective, marginBottom: 8 }, stShadow]}>{error}</Text>}
             <View style={{ flexDirection: 'row', gap: 10 }}>
-              <StButton title="Cancel" tone="ghost" onPress={close} style={{ flex: 1, backgroundColor: ST.panelStrong }} />
-              <StButton title={busy ? 'Saving…' : 'Capture'} tone="objective" disabled={!perm?.granted || busy} onPress={capture} style={{ flex: 2 }} />
+              <StButton title={t('cancel')} tone="ghost" onPress={close} style={{ flex: 1, backgroundColor: ST.panelStrong }} />
+              <StButton title={busy ? t('saving') : t('capture')} tone="objective" disabled={!perm?.granted || busy} onPress={capture} style={{ flex: 2 }} />
             </View>
             {busy && <ActivityIndicator color={ST.objective} style={{ marginTop: 8 }} />}
           </View>

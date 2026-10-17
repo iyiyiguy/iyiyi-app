@@ -1,5 +1,7 @@
 export default {
   en: {
+    recNoMatch: "No profiles match that search or those tags.",
+    recEmpty: "No profiles to show yet.",
     likeTitle: "Sign up to like posts",
     likeSub: "Create a free account to like, save and comment on posts.",
     commentTitle: "Join the conversation",
@@ -52,6 +54,8 @@ export default {
     clearMatchMany: "Clear · {n} matches",
   },
   es: {
+    recNoMatch: "Ningún perfil coincide con esa búsqueda o esas etiquetas.",
+    recEmpty: "Aún no hay perfiles para mostrar.",
     likeTitle: "Regístrate para dar me gusta",
     likeSub: "Crea una cuenta gratis para dar me gusta, guardar y comentar publicaciones.",
     commentTitle: "Únete a la conversación",
@@ -104,6 +108,8 @@ export default {
     clearMatchMany: "Borrar · {n} resultados",
   },
   zh: {
+    recNoMatch: "没有符合该搜索或标签的主页。",
+    recEmpty: "暂时还没有可显示的主页。",
     likeTitle: "注册后即可点赞",
     likeSub: "创建免费账号，即可点赞、收藏和评论帖子。",
     commentTitle: "加入讨论",
@@ -156,6 +162,8 @@ export default {
     clearMatchMany: "清除 · {n} 个结果",
   },
   ja: {
+    recNoMatch: "その検索やタグに一致するプロフィールはありません。",
+    recEmpty: "まだ表示できるプロフィールはありません。",
     likeTitle: "登録して投稿にいいねしよう",
     likeSub: "無料アカウントを作成すると、投稿へのいいね・保存・コメントができます。",
     commentTitle: "会話に参加しよう",
@@ -208,6 +216,8 @@ export default {
     clearMatchMany: "クリア · {n} 件",
   },
   ko: {
+    recNoMatch: "검색어나 태그와 일치하는 프로필이 없어요.",
+    recEmpty: "아직 보여줄 프로필이 없어요.",
     likeTitle: "가입하고 게시물에 좋아요 누르기",
     likeSub: "무료 계정을 만들고 게시물에 좋아요, 저장, 댓글을 남겨 보세요.",
     commentTitle: "대화에 참여하세요",
@@ -260,6 +270,8 @@ export default {
     clearMatchMany: "지우기 · {n}개 일치",
   },
   fr: {
+    recNoMatch: "Aucun profil ne correspond à cette recherche ou à ces tags.",
+    recEmpty: "Aucun profil à afficher pour le moment.",
     likeTitle: "Inscrivez-vous pour aimer les publications",
     likeSub: "Créez un compte gratuit pour aimer, enregistrer et commenter des publications.",
     commentTitle: "Rejoignez la conversation",
@@ -312,6 +324,8 @@ export default {
     clearMatchMany: "Effacer · {n} résultats",
   },
   de: {
+    recNoMatch: "Keine Profile passen zu dieser Suche oder diesen Tags.",
+    recEmpty: "Noch keine Profile zum Anzeigen.",
     likeTitle: "Registriere dich, um Beiträge zu liken",
     likeSub: "Erstelle ein kostenloses Konto, um Beiträge zu liken, zu speichern und zu kommentieren.",
     commentTitle: "Mach mit bei der Unterhaltung",
@@ -364,6 +378,8 @@ export default {
     clearMatchMany: "Löschen · {n} Treffer",
   },
   pt: {
+    recNoMatch: "Nenhum perfil corresponde a essa busca ou a essas tags.",
+    recEmpty: "Ainda não há perfis para mostrar.",
     likeTitle: "Cadastre-se para curtir posts",
     likeSub: "Crie uma conta grátis para curtir, salvar e comentar posts.",
     commentTitle: "Participe da conversa",
@@ -416,6 +432,8 @@ export default {
     clearMatchMany: "Limpar · {n} resultados",
   },
   ar: {
+    recNoMatch: "لا توجد ملفات تطابق هذا البحث أو هذه الوسوم.",
+    recEmpty: "لا توجد ملفات لعرضها بعد.",
     likeTitle: "سجّل لتعجب بالمنشورات",
     likeSub: "أنشئ حسابًا مجانيًا لتعجب بالمنشورات وتحفظها وتعلّق عليها.",
     commentTitle: "انضم إلى المحادثة",
@@ -468,6 +486,8 @@ export default {
     clearMatchMany: "مسح · {n} نتائج",
   },
   hi: {
+    recNoMatch: "उस खोज या उन टैग से कोई प्रोफ़ाइल मेल नहीं खाती।",
+    recEmpty: "अभी दिखाने के लिए कोई प्रोफ़ाइल नहीं है।",
     likeTitle: "पोस्ट लाइक करने के लिए साइन अप करें",
     likeSub: "पोस्ट लाइक, सेव और कमेंट करने के लिए मुफ़्त अकाउंट बनाएँ।",
     commentTitle: "बातचीत में शामिल हों",
@@ -520,6 +540,8 @@ export default {
     clearMatchMany: "साफ़ करें · {n} मिले",
   },
   tl: {
+    recNoMatch: "Walang profile na tugma sa paghahanap o mga tag na iyon.",
+    recEmpty: "Wala pang profile na maipapakita.",
     likeTitle: "Mag-sign up para mag-like ng post",
     likeSub: "Gumawa ng libreng account para mag-like, mag-save at mag-comment sa mga post.",
     commentTitle: "Sumali sa usapan",

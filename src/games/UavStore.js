@@ -8,12 +8,16 @@ import { LinearGradient } from 'expo-linear-gradient'
 import { MaterialCommunityIcons } from '@expo/vector-icons'
 import { AC } from './arcadeUI'
 import { buzz } from '../lib/gamePrefs'
-import { UAV_DURATION_MS, UAV_RULES_TEXT, useUavStore } from '../lib/uav'
+import { UAV_DURATION_MS, useUavStore } from '../lib/uav'
 import { FONT, ST, stType, withAlpha } from './studio'
+import { translate, useT } from '../i18n'
+import G from '../i18n/strings/gunShop'
+import { uavRulesText } from './laser/uavText'
 
-export const FINE_PRINT = Platform.OS === 'android'
-  ? 'Payment charged to your Google Play account. Consumable — not restorable.'
-  : 'Payment charged to your Apple ID. Consumable — not restorable.'
+const finePrint = () => translate(G, Platform.OS === 'android' ? 'fine_android' : 'fine_ios')
+// Pack ribbons come from lib/iap in English.
+const RIBBON_KEYS = { 'Most popular': 'ribbon_popular', 'Best value': 'ribbon_value' }
+const ribbonText = (r) => (RIBBON_KEYS[r] ? translate(G, RIBBON_KEYS[r]) : r)
 
 // Per-tier studio role colour (accent) + a soft glow for the satellite art.
 const TIERS = {
@@ -103,10 +107,11 @@ function Shine({ width, delay = 0 }) {
 // ---------------------------------------------------------------------------
 
 export function UavPackCard({ pack, busy, disabled, onBuy, compact, index = 0, style }) {
+  const t = useT(G)
   const tier = tierOf(pack.id)
   const [w, setW] = useState(0)
   const ready = pack.status === 'ready'
-  const priceText = pack.status === 'loading' ? '…' : ready ? pack.displayPrice : 'Coming soon'
+  const priceText = pack.status === 'loading' ? '…' : ready ? pack.displayPrice : t('coming_soon')
   const highlight = !!pack.ribbon
   return (
     <Pressable
@@ -115,25 +120,25 @@ export function UavPackCard({ pack, busy, disabled, onBuy, compact, index = 0, s
       onLayout={(e) => setW(e.nativeEvent.layout.width)}
       style={({ pressed }) => [st.cardOuter, pressed && { opacity: 0.9, transform: [{ scale: 0.98 }] }, style]}
       accessibilityRole="button"
-      accessibilityLabel={`${pack.count} UAVs, ${ready ? pack.displayPrice : 'coming soon'}${pack.ribbon ? `, ${pack.ribbon}` : ''}`}
+      accessibilityLabel={`${t('n_uavs', { n: pack.count })}, ${ready ? pack.displayPrice : t('coming_soon_lc')}${pack.ribbon ? `, ${ribbonText(pack.ribbon)}` : ''}`}
       accessibilityState={{ disabled: !ready || !!disabled, busy: !!busy }}
     >
       <View style={[st.card, { borderColor: highlight ? tier.accent : ST.line, borderTopColor: tier.accent }, compact && st.cardCompact]}>
         <Shine width={w} delay={index * 450} />
         {!!pack.ribbon && (
           <View style={[st.ribbon, { backgroundColor: tier.accent }]}>
-            <Text style={[st.ribbonText, { color: tier.accent === ST.enemy ? '#ffffff' : ST.ink }]} numberOfLines={1}>{pack.ribbon.toUpperCase()}</Text>
+            <Text style={[st.ribbonText, { color: tier.accent === ST.enemy ? '#ffffff' : ST.ink }]} numberOfLines={1}>{ribbonText(pack.ribbon).toUpperCase()}</Text>
           </View>
         )}
         <View style={st.artWrap}>
           <SatelliteArt size={compact ? 64 : 84} accent={tier.accent} glow={tier.glow} />
         </View>
         <Text style={[st.count, compact && { fontSize: 24 }]}>{pack.count}</Text>
-        <Text style={[st.unit, { color: tier.accent }]}>UAVs</Text>
+        <Text style={[st.unit, { color: tier.accent }]}>{t('uavs')}</Text>
         <View style={st.metaRow}>
-          {pack.savePct > 0 ? <View style={[st.save, { borderColor: tier.accent }]}><Text style={[st.saveText, { color: tier.accent }]}>SAVE {pack.savePct}%</Text></View> : <View style={st.savePlaceholder} />}
+          {pack.savePct > 0 ? <View style={[st.save, { borderColor: tier.accent }]}><Text style={[st.saveText, { color: tier.accent }]}>{t('save_pct', { n: pack.savePct })}</Text></View> : <View style={st.savePlaceholder} />}
         </View>
-        <Text style={st.per} numberOfLines={1}>{pack.perUav ? `${pack.perUav} per UAV` : ' '}</Text>
+        <Text style={st.per} numberOfLines={1}>{pack.perUav ? t('per_uav', { price: pack.perUav }) : ' '}</Text>
         <View style={[st.priceBtn, ready ? { backgroundColor: tier.accent } : st.priceBtnOff]}>
           {busy ? <ActivityIndicator size="small" color={ST.ink} /> : <Text style={[st.priceText, { color: tier.accent === ST.enemy ? '#ffffff' : ST.ink }, !ready && { color: AC.muted }]} numberOfLines={1}>{priceText}</Text>}
         </View>
@@ -156,14 +161,14 @@ export function useUavBuyFlow() {
     const res = await store.buy(pack.sku)
     if (res.ok) {
       buzz('success')
-      setNote({ good: true, text: `+${res.count || pack.count} UAVs added` })
+      setNote({ good: true, text: translate(G, 'uavs_added', { n: res.count || pack.count }) })
     } else if (res.pending) {
-      setNote({ text: 'Purchase pending approval — your UAVs arrive as soon as it’s approved.' })
+      setNote({ text: translate(G, 'uav_pending') })
     } else if (res.unknown) {
-      setNote({ text: 'Still waiting on the store. If it goes through, your UAVs are added automatically.' })
+      setNote({ text: translate(G, 'uav_unknown') })
     } else if (res.error) {
       buzz('error')
-      Alert.alert('Purchase failed', res.error)
+      Alert.alert(translate(G, 'purchase_failed'), res.error)
     }
   }
   return { ...store, note, run }
@@ -171,14 +176,15 @@ export function useUavBuyFlow() {
 
 /** Balance header used on the store page and the sheet. */
 export function UavBalanceHeader({ balance, owner, freeLeft, compact }) {
+  const t = useT(G)
   return (
     <View style={[st.balance, compact && { paddingVertical: 10 }]}>
       <View style={st.balanceIcon}><MaterialCommunityIcons name="satellite-variant" size={compact ? 20 : 24} color={ST.enemy} /></View>
       <View style={{ flex: 1 }}>
-        <Text style={st.balanceLabel}>YOUR UAVS</Text>
-        <Text style={[st.balanceValue, compact && { fontSize: 22 }]}>{owner ? 'Unlimited' : Number(balance || 0).toLocaleString()}</Text>
+        <Text style={st.balanceLabel}>{t('your_uavs')}</Text>
+        <Text style={[st.balanceValue, compact && { fontSize: 22 }]}>{owner ? t('unlimited') : Number(balance || 0).toLocaleString()}</Text>
       </View>
-      {!owner && freeLeft > 0 && <View style={st.freeTag}><Text style={st.freeText}>+{freeLeft} free this match</Text></View>}
+      {!owner && freeLeft > 0 && <View style={st.freeTag}><Text style={st.freeText}>{t('free_this_match', { n: freeLeft })}</Text></View>}
     </View>
   )
 }
@@ -187,6 +193,7 @@ export function UavBalanceHeader({ balance, owner, freeLeft, compact }) {
  * The UAV store body. variant 'screen' (full page grid) | 'sheet' (in-match, compact).
  */
 export function UavStorePanel({ variant = 'screen', balance, owner, freeLeft = 0 }) {
+  const t = useT(G)
   const flow = useUavBuyFlow()
   const compact = variant === 'sheet'
   return (
@@ -194,12 +201,12 @@ export function UavStorePanel({ variant = 'screen', balance, owner, freeLeft = 0
       <UavBalanceHeader balance={balance} owner={owner} freeLeft={freeLeft} compact={compact} />
       {!compact && (
         <Text style={st.blurb}>
-          Call in a UAV in any Laser Tag mode or Battle Royale to reveal enemies on your map for {Math.round(UAV_DURATION_MS / 1000)} seconds. {UAV_RULES_TEXT} Packs top up your balance for future matches; they don’t lift the per-match limit.
+          {t('uav_blurb', { n: Math.round(UAV_DURATION_MS / 1000) })} {uavRulesText()} {t('uav_packs_note')}
         </Text>
       )}
-      {compact && <Text style={st.fine}>{UAV_RULES_TEXT}</Text>}
+      {compact && <Text style={st.fine}>{uavRulesText()}</Text>}
       {owner ? (
-        <Text style={st.ownerNote}>Owner account — UAVs are unlimited and never charged (the per-match limits still apply).</Text>
+        <Text style={st.ownerNote}>{t('uav_owner')}</Text>
       ) : (
         <View style={st.grid}>
           {flow.packs.map((p, i) => (
@@ -217,16 +224,17 @@ export function UavStorePanel({ variant = 'screen', balance, owner, freeLeft = 0
         </View>
       )}
       {!!flow.note && <Text style={[st.note, flow.note.good && { color: AC.live }]}>{flow.note.text}</Text>}
-      {!owner && flow.packs.every((p) => p.status === 'unavailable') && <Text style={st.note}>Coming soon: UAV packs aren’t available in the store yet.</Text>}
-      {!owner && <Text style={st.fine}>{FINE_PRINT}</Text>}
+      {!owner && flow.packs.every((p) => p.status === 'unavailable') && <Text style={st.note}>{t('uav_soon')}</Text>}
+      {!owner && <Text style={st.fine}>{finePrint()}</Text>}
     </View>
   )
 }
 
 /** Compact satellite + count pill for top bars (Arcade hub, Laser Tag lobby). */
 export const UavBalancePill = memo(function UavBalancePill({ balance, owner, onPress }) {
+  const t = useT(G)
   return (
-    <Pressable onPress={onPress} hitSlop={6} style={({ pressed }) => [st.pill, pressed && { opacity: 0.8 }]} accessibilityRole="button" accessibilityLabel={`UAVs: ${owner ? 'unlimited' : balance}. Open the store`}>
+    <Pressable onPress={onPress} hitSlop={6} style={({ pressed }) => [st.pill, pressed && { opacity: 0.8 }]} accessibilityRole="button" accessibilityLabel={t('uav_pill_a11y', { n: owner ? t('unlimited_lc') : balance })}>
       <MaterialCommunityIcons name="satellite-variant" size={15} color={ST.enemy} />
       {owner ? <MaterialCommunityIcons name="infinity" size={16} color={ST.text} /> : <Text style={st.pillText}>{Number(balance || 0).toLocaleString()}</Text>}
       <View style={st.pillPlus}><MaterialCommunityIcons name="plus" size={14} color="#ffffff" /></View>

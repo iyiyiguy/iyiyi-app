@@ -70,7 +70,8 @@ import { laserCover, rocketImpactWithCover } from './laser/sceneDepth'
 import { useSceneDepth } from './laser/useSceneDepth'
 import { CoverEffects } from './laser/CoverEffects'
 import { round6 } from './laser/geo'
-import { SPEED_LOCK_TEXT, useSpeedLock } from './laser/useSpeedLock'
+import { speedLockText, useSpeedLock } from './laser/useSpeedLock'
+import { localizeUavAlert } from './laser/uavText'
 import { useBattleEffects, directionToAngle } from './laser/BattleEffects'
 import Svg, { Path, Rect } from 'react-native-svg'
 import GunViewModel, { muzzlePoint } from './laser/GunViewModel'
@@ -79,17 +80,25 @@ import { spendGrenade, useGrenadeInventory } from '../lib/grenades'
 import { spendStickyBomb, useStickyBombInventory } from '../lib/stickyBombs'
 import { spendLandMine, useLandMineInventory } from '../lib/landMines'
 import { matchCheck } from '../lib/matchLimits'
+import { translate, useT } from '../i18n'
+import S from '../i18n/strings/laserTag'
+
+// Call-time lookup for callbacks and helpers outside render.
+const tr = (k, v) => translate(S, k, v)
+// "Ana −25, Ben −10"
+const hitList = (hits) => hits.map((h) => `${h.name} −${h.damage}`).join(', ')
 
 // Tagged-out screen (studio "Down" board): red dim, who got you (with Follow), the respawn
 // countdown, and a shortcut to the weapon wheel while you wait.
 function DeathOverlay({ respawnSecs, snd, killer, onChangeWeapon }) {
+  const t = useT(S)
   const fade = useRef(new Animated.Value(0)).current
   useEffect(() => {
     Animated.timing(fade, { toValue: 1, duration: 260, easing: Easing.out(Easing.quad), useNativeDriver: true }).start()
   }, [fade])
   const total = engine.RESPAWN_MS / 1000
   const pct = respawnSecs != null ? Math.max(0, Math.min(1, 1 - respawnSecs / total)) : 0
-  const sub = killer ? [killer.weapon, killer.where, Number.isFinite(killer.hpLeft) ? `${killer.hpLeft} HP left` : null].filter(Boolean).join(' · ') : ''
+  const sub = killer ? [killer.weapon, killer.where, Number.isFinite(killer.hpLeft) ? t('hp_left', { n: killer.hpLeft }) : null].filter(Boolean).join(' · ') : ''
   return (
     <Animated.View style={[StyleSheet.absoluteFill, { opacity: fade }]} pointerEvents="box-none">
       <View style={[StyleSheet.absoluteFill, styles.deadDim]} pointerEvents="none" />
@@ -97,7 +106,7 @@ function DeathOverlay({ respawnSecs, snd, killer, onChangeWeapon }) {
       <View style={styles.deadBody} pointerEvents="box-none">
         {killer?.name ? (
           <View style={{ alignItems: 'center', gap: 10 }} pointerEvents="box-none">
-            <Text style={styles.deadLabel}>TAGGED OUT BY</Text>
+            <Text style={styles.deadLabel}>{t('tagged_out_by')}</Text>
             <PlayerTap player={killer.id ? { id: killer.id, username: killer.name } : null} style={styles.killerCard}>
               <View style={styles.killerAvatar}><Text style={styles.killerInitial}>{String(killer.name).slice(0, 1).toUpperCase()}</Text></View>
               <View style={{ flexShrink: 1 }}>
@@ -107,25 +116,25 @@ function DeathOverlay({ respawnSecs, snd, killer, onChangeWeapon }) {
             </PlayerTap>
           </View>
         ) : (
-          <Text style={[stType.display, stShadow, { fontSize: 40, lineHeight: 44, color: '#fff' }]}>TAGGED OUT</Text>
+          <Text style={[stType.display, stShadow, { fontSize: 40, lineHeight: 44, color: '#fff' }]}>{t('tagged_out')}</Text>
         )}
         <View style={{ alignItems: 'center', gap: 8 }} pointerEvents="none">
-          <Text style={styles.deadLabel}>{snd ? 'BACK NEXT ROUND' : 'BACK IN'}</Text>
+          <Text style={styles.deadLabel}>{snd ? t('back_next_round') : t('back_in')}</Text>
           {snd ? (
-            <Text style={[stType.body, stShadow, { textAlign: 'center' }]}>No respawns in Search & Destroy. Watch your team.</Text>
+            <Text style={[stType.body, stShadow, { textAlign: 'center' }]}>{t('snd_no_respawn')}</Text>
           ) : (
             <>
               <Text style={styles.deadCount}>{respawnSecs ?? ''}</Text>
               <View style={styles.deadTrack}><View style={[styles.deadFill, { width: `${pct * 100}%` }]} /></View>
-              <Text style={[stType.small, { color: 'rgba(242,244,247,0.8)' }]}>{Math.round(engine.SPAWN_PROTECT_MS / 1000)} s of spawn shield when you’re back</Text>
+              <Text style={[stType.small, { color: 'rgba(242,244,247,0.8)' }]}>{t('spawn_shield', { n: Math.round(engine.SPAWN_PROTECT_MS / 1000) })}</Text>
             </>
           )}
         </View>
         <View style={styles.deadButtons} pointerEvents="box-none">
           {onChangeWeapon ? (
-            <Pressable onPress={onChangeWeapon} style={({ pressed }) => [styles.deadBtn, pressed && { opacity: 0.8 }]} accessibilityRole="button" accessibilityLabel="Change weapon">
+            <Pressable onPress={onChangeWeapon} style={({ pressed }) => [styles.deadBtn, pressed && { opacity: 0.8 }]} accessibilityRole="button" accessibilityLabel={t('change_weapon_a11y')}>
               <Svg width={16} height={16} viewBox="0 0 24 24" fill="none"><Path d="M12 3v18M3 12h18" stroke="#fff" strokeWidth={2} /><Rect x={3} y={3} width={18} height={18} rx={9} stroke="#fff" strokeWidth={2} /></Svg>
-              <Text style={styles.deadBtnText}>CHANGE WEAPON</Text>
+              <Text style={styles.deadBtnText}>{t('change_weapon')}</Text>
             </Pressable>
           ) : null}
           {killer?.id ? <GameFollowButton userId={killer.id} name={killer.name} style={styles.deadFollow} /> : null}
@@ -142,13 +151,14 @@ function relativeWhere(myPos, headingDeg, pos) {
     const d = distanceMeters(myPos, pos)
     if (!Number.isFinite(d)) return null
     const a = directionToAngle(myPos, headingDeg, pos)
-    const dir = a < 45 || a >= 315 ? 'in front of you' : a < 135 ? 'to your right' : a < 225 ? 'behind you' : 'to your left'
-    return `${formatDistance(d)} ${dir}`
+    const dir = a < 45 || a >= 315 ? 'dir_front' : a < 135 ? 'dir_right' : a < 225 ? 'dir_behind' : 'dir_left'
+    return tr(dir, { d: formatDistance(d) })
   } catch { return null }
 }
 
 // "Tagged out" marker left where the enemy stood (studio "Kill" board), fades out.
 function TagOutMark({ x, y }) {
+  const t = useT(S)
   const a = useRef(new Animated.Value(1)).current
   useEffect(() => {
     Animated.sequence([Animated.delay(700), Animated.timing(a, { toValue: 0, duration: 500, useNativeDriver: true })]).start()
@@ -159,7 +169,7 @@ function TagOutMark({ x, y }) {
         <Path d="M5 5l14 14M19 5L5 19" stroke={ST.enemy} strokeWidth={2} />
         <Rect x={2} y={2} width={20} height={20} transform="rotate(45 12 12)" stroke={ST.enemy} strokeWidth={1.4} />
       </Svg>
-      <Text style={styles.tagOutText}>TAGGED OUT</Text>
+      <Text style={styles.tagOutText}>{t('tagged_out')}</Text>
     </Animated.View>
   )
 }
@@ -236,6 +246,7 @@ export function LaserTagGame({ room, onExit }) {
   // (Android then drops the connection).
   useKeepAwake(undefined, { suppressDeactivateWarnings: true })
   useStudioFonts()
+  const t = useT(S)
   const insets = useArcadeInsets()
   const snap = useRoomSnapshot(room)
   const positions = useRoomPositions(room)
@@ -309,15 +320,15 @@ export function LaserTagGame({ room, onExit }) {
           const perm = await MediaLibrary.requestPermissionsAsync(true)
           if (perm?.granted) {
             await MediaLibrary.saveToLibraryAsync(uri)
-            flash('Gameplay saved to Photos', true)
+            flash(tr('rec_saved'), true)
           } else {
-            flash('Allow Photos access to save recordings', false)
+            flash(tr('rec_perm'), false)
           }
         }
       }
     } catch (e) {
       setRecAt(null)
-      flash(String(e?.message || 'Recording failed').slice(0, 60), false)
+      flash(tr('rec_failed'), false)
     } finally {
       recBusy.current = false
     }
@@ -497,7 +508,7 @@ export function LaserTagGame({ room, onExit }) {
     canUse: playing,
     kills: state?.players?.[meId]?.kills,
     deaths: state?.players?.[meId]?.deaths,
-    alert: showAlert,
+    alert: (a, ms) => showAlert(localizeUavAlert(a), ms),
     onBeforeCall: () => triggerRef.current?.stop(),
     payload: () => ({ name: uavStateRef.current.state?.players?.[uavStateRef.current.meId]?.name || null }),
     classify: (from) => {
@@ -528,9 +539,9 @@ export function LaserTagGame({ room, onExit }) {
       setStreak(streakRef.current)
       const s = streakRef.current
       const payback = killerRef.current?.name && names.includes(killerRef.current.name)
-      if (n >= 2) battle.addMedal({ title: n === 2 ? 'Double tag' : n === 3 ? 'Triple tag' : 'Multi tag', sub: `${n} tag-outs in 4 seconds` })
-      else if (payback) battle.addMedal({ title: 'Payback', sub: `You got ${killerRef.current.name} back` })
-      else if (s === 3 || s === 5 || s === 10) battle.addMedal({ title: s === 3 ? 'On a roll' : s === 5 ? 'Unstoppable' : 'Untouchable', sub: `${s} tag-outs without being tagged` })
+      if (n >= 2) battle.addMedal({ title: tr(n === 2 ? 'medal_double' : n === 3 ? 'medal_triple' : 'medal_multi'), sub: tr('medal_multi_sub', { n }) })
+      else if (payback) battle.addMedal({ title: tr('medal_payback'), sub: tr('medal_payback_sub', { name: killerRef.current.name }) })
+      else if (s === 3 || s === 5 || s === 10) battle.addMedal({ title: tr(s === 3 ? 'medal_roll' : s === 5 ? 'medal_unstoppable' : 'medal_untouchable'), sub: tr('medal_streak_sub', { n: s }) })
       const marks = []
       for (const nm of names) {
         const m = enemyMarkersRef.current.find((e) => e.label === nm) || plateMarkersRef.current.find((e) => e.name === nm && e.inView)
@@ -567,12 +578,12 @@ export function LaserTagGame({ room, onExit }) {
         playSfx('hit')
         buzz(d?.killed ? 'success' : 'medium')
         const head = d?.zone === 'head'
-        const gunLine = head ? `${gunNameRef.current} · Headshot` : gunNameRef.current
-        if (d?.killed) addPop(100, 'TAGGED OUT', HUD.red)
-        else addPop((d?.hits || 1) * 10 + (head ? 10 : 0), head ? 'HEADSHOT' : d?.zone === 'limb' ? 'LIMB HIT' : 'BODY HIT', head ? HUD.gold : '#fff')
+        const gunLine = head ? tr('weapon_headshot', { weapon: gunNameRef.current }) : gunNameRef.current
+        if (d?.killed) addPop(100, tr('tagged_out'), HUD.red)
+        else addPop((d?.hits || 1) * 10 + (head ? 10 : 0), tr(head ? 'pop_headshot' : d?.zone === 'limb' ? 'pop_limb' : 'pop_body'), head ? HUD.gold : '#fff')
         const victims = []
         if (d?.killed) victims.push({ name: d.name, weapon: gunLine })
-        for (const sh of Array.isArray(d?.splash) ? d.splash : []) if (sh?.killed) victims.push({ name: sh.name, weapon: `${gunNameRef.current} · Splash` })
+        for (const sh of Array.isArray(d?.splash) ? d.splash : []) if (sh?.killed) victims.push({ name: sh.name, weapon: tr('weapon_splash', { weapon: gunNameRef.current }) })
         victims.forEach((v) => battle.addKill({ victim: v.name, weapon: v.weapon, points: 100 }))
         // Hit marker + pop + banner say it all; no extra text mid-fight.
         if (victims.length) onTagOuts(victims.map((v) => v.name))
@@ -582,13 +593,13 @@ export function LaserTagGame({ room, onExit }) {
         const hits = Array.isArray(d?.hits) ? d.hits : []
         const kills = hits.filter((h) => h.killed)
         battle.addExplosion('Grenade')
-        if (!hits.length) { flash('Grenade missed', false); return }
+        if (!hits.length) { flash(tr('grenade_missed'), false); return }
         playSfx('hit')
         buzz('success')
-        kills.forEach((k) => battle.addKill({ victim: k.name, weapon: 'Grenade', points: 100 }))
+        kills.forEach((k) => battle.addKill({ victim: k.name, weapon: tr('w_grenade'), points: 100 }))
         if (kills.length) onTagOuts(kills.map((k) => k.name))
-        if (kills.length) flash(`Grenade tagged out ${kills.map((k) => k.name).join(', ')}!`, true)
-        else flash(`Grenade hit ${hits.map((h) => `${h.name} −${h.damage}`).join(', ')}`, true)
+        if (kills.length) flash(tr('grenade_kills', { names: kills.map((k) => k.name).join(', ') }), true)
+        else flash(tr('grenade_hits', { hits: hitList(hits) }), true)
       }),
       room.onMessage('rocket_ok', (d) => {
         // The explosion itself was drawn when the rocket landed on this phone; this is the score.
@@ -599,10 +610,10 @@ export function LaserTagGame({ room, onExit }) {
         if (kills.length) setKillTick(Date.now())
         playSfx('hit')
         buzz('success')
-        hits.forEach((h) => addPop(10 + (h.killed ? 100 : 0), h.killed ? 'TAGGED OUT' : 'SPLASH', h.killed ? HUD.red : '#fff'))
-        kills.forEach((k) => battle.addKill({ victim: k.name, weapon: `${gunNameRef.current} · Splash`, points: 100 }))
+        hits.forEach((h) => addPop(10 + (h.killed ? 100 : 0), tr(h.killed ? 'tagged_out' : 'pop_splash'), h.killed ? HUD.red : '#fff'))
+        kills.forEach((k) => battle.addKill({ victim: k.name, weapon: tr('weapon_splash', { weapon: gunNameRef.current }), points: 100 }))
         if (kills.length) onTagOuts(kills.map((k) => k.name))
-        else flash(`Rocket hit ${hits.map((h) => `${h.name} −${h.damage}`).join(', ')}`, true)
+        else flash(tr('rocket_hits', { hits: hitList(hits) }), true)
       }),
       room.onMessage('sticky_place_ok', (d) => {
         try {
@@ -621,21 +632,21 @@ export function LaserTagGame({ room, onExit }) {
         for (const b of Array.isArray(d?.bombs) ? d.bombs : []) if (b?.id) stickyKnown.current.delete(b.id)
         battle.addExplosion('Sticky bomb')
         battle.shake(14)
-        if (!hits.length) { flash(d?.count > 1 ? `${d.count} sticky bombs went off — no one hit` : 'Sticky bomb missed', false); return }
+        if (!hits.length) { flash(d?.count > 1 ? tr('sticky_none', { n: d.count }) : tr('sticky_missed'), false); return }
         playSfx('explosion')
         buzz('success')
         setBlastKey(Date.now())
-        kills.forEach((k) => battle.addKill({ victim: k.name, weapon: 'Sticky bomb', points: 100 }))
+        kills.forEach((k) => battle.addKill({ victim: k.name, weapon: tr('w_sticky'), points: 100 }))
         if (kills.length) onTagOuts(kills.map((k) => k.name))
-        if (kills.length) flash(`Sticky bomb tagged out ${kills.map((k) => k.name).join(', ')}!`, true)
-        else flash(`Sticky bomb hit ${hits.map((h) => `${h.name} −${h.damage}`).join(', ')}`, true)
+        if (kills.length) flash(tr('sticky_kills', { names: kills.map((k) => k.name).join(', ') }), true)
+        else flash(tr('sticky_hits', { hits: hitList(hits) }), true)
       }),
       room.onMessage('land_mine_ok', () => {
         buzz('medium')
-        flash('Land mine placed. It\'s on your map', true)
+        flash(tr('mine_placed'), true)
       }),
       room.onMessage('got_hit', (d, from) => {
-        const by = String(d?.by || 'Someone').slice(0, 24)
+        const by = String(d?.by || tr('someone')).slice(0, 24)
         const dmg = d?.damage ? ` −${d.damage}` : ''
         const isExplosive = d?.zone === 'grenade' || d?.zone === 'sticky_bomb' || d?.zone === 'land_mine' || d?.zone === 'rocket'
         if (isExplosive) {
@@ -653,15 +664,16 @@ export function LaserTagGame({ room, onExit }) {
           const angle = directionToAngle(myPosRef.current, headingRef.current, shooterPos)
           battle.addHit(angle)
         } catch {}
-        const zoneLabel = d?.zone === 'grenade' ? 'Grenade' : d?.zone === 'sticky_bomb' ? 'Sticky bomb' : d?.zone === 'land_mine' ? 'Land mine' : d?.zone === 'head' ? 'Headshot' : d?.zone === 'rocket' ? 'Rocket' : 'Hit'
-        const suffix = d?.zone === 'grenade' ? "'s grenade" : d?.zone === 'sticky_bomb' ? "'s sticky bomb" : d?.zone === 'land_mine' ? "'s land mine" : ''
+        const zoneKey = d?.zone === 'grenade' ? 'w_grenade' : d?.zone === 'sticky_bomb' ? 'w_sticky' : d?.zone === 'land_mine' ? 'w_mine' : d?.zone === 'head' ? 'w_headshot' : d?.zone === 'rocket' ? 'w_rocket' : 'w_hit'
+        const zoneLabel = tr(zoneKey)
+        const outKey = d?.zone === 'grenade' ? 'out_by_grenade' : d?.zone === 'sticky_bomb' ? 'out_by_sticky' : d?.zone === 'land_mine' ? 'out_by_mine' : 'out_by'
         if (d?.killed) {
-          flash(`Tagged out by ${by}${suffix}`, false)
+          flash(tr(outKey, { name: by }), false)
           const kid = typeof d?.byId === 'string' ? d.byId : null
           // Killer card: weapon, where they were, how much HP they had left.
           let weapon = null
           try { weapon = typeof d?.weapon === 'string' ? getWeapon(d.weapon)?.name || null : null } catch { weapon = null }
-          if (zoneLabel !== 'Hit') weapon = weapon && zoneLabel === 'Headshot' ? `${weapon} · Headshot` : zoneLabel === 'Headshot' ? 'Headshot' : zoneLabel
+          if (zoneKey !== 'w_hit') weapon = weapon && zoneKey === 'w_headshot' ? tr('weapon_headshot', { weapon }) : zoneLabel
           const kpos = kid ? positionsRef.current?.[kid] : null
           const kst = kid ? stateRef.current?.players?.[kid] : null
           setKiller({ id: kid, name: by, weapon, where: relativeWhere(myPosRef.current, headingRef.current, kpos), hpLeft: Number.isFinite(kst?.hp) ? kst.hp : null })
@@ -669,7 +681,7 @@ export function LaserTagGame({ room, onExit }) {
           setStreak(0)
           recentKills.current = []
         }
-        else flash(`${zoneLabel} by ${by}${dmg}`, false)
+        else flash(`${tr('hit_by', { what: zoneLabel, name: by })}${dmg}`, false)
       }),
       room.onMessage('bystander_ok', (d) => {
         try {
@@ -677,7 +689,7 @@ export function LaserTagGame({ room, onExit }) {
           if (!userId) return
           playSfx('hit')
           buzz('success')
-          flash(`Tagged iYiYi user @${String(d.username || 'iyiyi').slice(0, 24)} +${d.points || engine.BYSTANDER_POINTS}`, true)
+          flash(tr('bystander_tagged', { user: String(d.username || 'iyiyi').slice(0, 24), n: d.points || engine.BYSTANDER_POINTS }), true)
           const { fromName, code } = btCtx.current
           // Stored row first (missed-alert inbox), then the live alert carrying its id.
           recordBystanderTag({ targetId: userId, fromName, code })
@@ -712,14 +724,14 @@ export function LaserTagGame({ room, onExit }) {
         const pos = b.lat != null && b.lng != null ? { lat: b.lat, lng: b.lng } : null
         const dist = myPos && pos ? distanceMeters(myPos, pos) : null
         const angle = myPos && pos ? directionToAngle(myPos, headingRef.current, pos) : 0
-        battle.addMegaExplosion({ label: 'Land mine', angle: iWasHit ? 0 : angle, dist: iWasHit ? 0 : dist, by: mine ? 'YOUR MINE' : b.byName ? `${b.byName}'s mine` : null })
+        battle.addMegaExplosion({ label: 'Land mine', angle: iWasHit ? 0 : angle, dist: iWasHit ? 0 : dist, by: mine ? tr('your_mine') : b.byName ? tr('mine_of', { name: b.byName }) : null })
         if (!iWasHit) { playSfx('explosion'); buzz(mine || (dist != null && dist < 60) ? 'heavy' : 'medium') }
         if (mine) {
           const killed = hits.filter((h) => h.killed)
-          killed.forEach((h) => battle.addKill({ victim: h.name, weapon: 'Land mine', points: 100 }))
+          killed.forEach((h) => battle.addKill({ victim: h.name, weapon: tr('w_mine'), points: 100 }))
           const wounded = hits.filter((h) => !h.killed)
-          if (wounded.length) flash(`Your mine hit ${wounded.map((h) => `${h.name} −${h.damage}`).join(', ')}`, true)
-          else if (!killed.length) flash('Your land mine went off', true)
+          if (wounded.length) flash(tr('mine_hits', { hits: hitList(wounded) }), true)
+          else if (!killed.length) flash(tr('mine_went_off'), true)
         }
       } catch {}
     }
@@ -800,17 +812,17 @@ export function LaserTagGame({ room, onExit }) {
     if (bombState === 'planted') {
       playSfx('planted')
       buzz('warning')
-      showAlert({ title: `Bomb planted at site ${snd.bomb.site}`, sub: attacker ? `Defend the bomb for ${Math.round(engine.BOMB_MS / 1000)} s` : `Get to site ${snd.bomb.site} and hold DEFUSE!`, color: attacker ? ST.objective : ST.enemy, icon: 'flag' }, 4500)
+      showAlert({ title: tr('bomb_planted_at', { site: snd.bomb.site }), sub: attacker ? tr('defend_bomb_for', { n: Math.round(engine.BOMB_MS / 1000) }) : tr('get_to_defuse', { site: snd.bomb.site }), color: attacker ? ST.objective : ST.enemy, icon: 'flag' }, 4500)
     } else if (bombState === 'defused') {
       playSfx('defused')
       buzz('success')
-      showAlert({ title: 'Bomb defused', sub: attacker ? 'They stopped the bomb' : 'Nice work!', color: attacker ? ST.enemy : ST.friendly, icon: 'shield-checkmark' })
+      showAlert({ title: tr('bomb_defused'), sub: attacker ? tr('they_stopped') : tr('nice_work'), color: attacker ? ST.enemy : ST.friendly, icon: 'shield-checkmark' })
     } else if (bombState === 'exploded') {
       playSfx('explosion')
       buzz('heavy')
-      showAlert({ title: 'The bomb exploded', color: attacker ? ST.friendly : ST.enemy, icon: 'flame' })
+      showAlert({ title: tr('bomb_exploded'), color: attacker ? ST.friendly : ST.enemy, icon: 'flame' })
     } else if (bombState === 'dropped' && attacker) {
-      showAlert({ title: 'Bomb dropped', sub: 'Walk over to it and pick it up', color: ST.objective, icon: 'flag-outline' })
+      showAlert({ title: tr('bomb_dropped'), sub: tr('walk_pick_up'), color: ST.objective, icon: 'flag-outline' })
     }
   }, [bombEventKey]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -819,14 +831,14 @@ export function LaserTagGame({ room, onExit }) {
   useEffect(() => {
     if (!carrierIsMe) return
     buzz('warning')
-    showAlert({ title: 'You have the bomb', sub: `Get to ${snd.sites.map((x) => `site ${x.id}`).join(' or ')} and hold PLANT`, color: ST.objective, icon: 'flag' }, 4500)
+    showAlert({ title: tr('you_have_bomb'), sub: tr('get_to_plant', { sites: snd.sites.map((x) => tr('site_n', { id: x.id })).join(tr('list_or')) }), color: ST.objective, icon: 'flag' }, 4500)
   }, [carrierIsMe, state?.round, snd?.roundNo]) // eslint-disable-line react-hooks/exhaustive-deps
   const actAlertKey = snd?.act && snd.act.by !== meId ? `${snd.act.kind}:${snd.act.startedAt}` : null
   useEffect(() => {
     if (!actAlertKey || !snd?.act) return
     const mine = myTeam && state.players[snd.act.by]?.team === myTeam
-    if (snd.act.kind === 'plant' && !mine) { buzz('warning'); showAlert({ title: `They’re planting at ${snd.act.site}`, sub: 'Stop them', color: ST.enemy, icon: 'warning' }, 2500) }
-    else if (snd.act.kind === 'defuse' && !mine) { buzz('warning'); showAlert({ title: 'They’re defusing', sub: `Get back to site ${snd.bomb?.site || ''}`, color: ST.enemy, icon: 'warning' }, 2500) }
+    if (snd.act.kind === 'plant' && !mine) { buzz('warning'); showAlert({ title: tr('they_planting', { site: snd.act.site }), sub: tr('stop_them'), color: ST.enemy, icon: 'warning' }, 2500) }
+    else if (snd.act.kind === 'defuse' && !mine) { buzz('warning'); showAlert({ title: tr('they_defusing'), sub: tr('get_back_site', { site: snd.bomb?.site || '' }), color: ST.enemy, icon: 'warning' }, 2500) }
   }, [actAlertKey]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const bombSecs = bombState === 'planted' ? Math.max(0, Math.ceil(((snd?.bomb?.explodesAt || now) - now) / 1000)) : null
@@ -873,7 +885,7 @@ export function LaserTagGame({ room, onExit }) {
           for (const b of next.blasts) {
             if (old.has(b.id)) continue
             for (const h of b.hits || []) {
-              const victimMsg = { by: b.byName || 'Someone', byId: b.by, zone: 'land_mine', damage: h.damage, killed: h.killed }
+              const victimMsg = { by: b.byName || tr('someone'), byId: b.by, zone: 'land_mine', damage: h.damage, killed: h.killed }
               if (h.id === meId) room.emitter.emit('msg:got_hit', victimMsg, b.by)
               else room.queue('got_hit', victimMsg, { to: h.id })
             }
@@ -961,7 +973,7 @@ export function LaserTagGame({ room, onExit }) {
     return out
   }, [participantIds, positions, meId])
   const btCtx = useRef({})
-  btCtx.current = { fromName: myState?.name || snap?.me?.username || 'Someone', code: snap?.code || null }
+  btCtx.current = { fromName: myState?.name || snap?.me?.username || tr('someone'), code: snap?.code || null }
   const btLast = useRef({}) // userId -> last tag time (local mirror of the host's 60 s cap)
   useTaggablePrompt(!!state)
 
@@ -1101,7 +1113,7 @@ export function LaserTagGame({ room, onExit }) {
   // `snap` = camera mode with no person under the crosshair (lower chance).
   const fireCompass = (shots, snap = false, firedAt = Date.now()) => {
     const target = inSightsRef.current
-    if (!target) { flash(snap ? 'Miss' : 'No one in your sights', false); return }
+    if (!target) { flash(tr(snap ? 'miss' : 'no_one_sights'), false); return }
     const chance = target.chance * (snap ? 0.6 : 1)
     let hits = 0
     for (let i = 0; i < shots; i++) if (Math.random() < chance) hits += 1
@@ -1116,11 +1128,11 @@ export function LaserTagGame({ room, onExit }) {
   // One trigger pull. Unlimited ammo; slow weapons keep their cycle (rocket 1 per 3 s).
   const fireShot = () => {
     if (dead || !playing) return
-    if (tooFastRef.current) { flash(SPEED_LOCK_TEXT, false); return }
+    if (tooFastRef.current) { flash(speedLockText(), false); return }
     const gap = gun.id === 'rocket' ? Math.max(ROCKET_GAP_MS, minShotGapMs(gun)) : minShotGapMs(gun)
     const t0 = Date.now()
     if (gap > 0 && t0 - (lastPullRef.current[gun.id] || 0) < gap) {
-      if (gun.id === 'rocket') flash(`Reloading · ${Math.ceil((gap - (t0 - lastPullRef.current[gun.id])) / 1000)} s`, false)
+      if (gun.id === 'rocket') flash(tr('reloading', { n: Math.ceil((gap - (t0 - lastPullRef.current[gun.id])) / 1000) }), false)
       return
     }
     lastPullRef.current[gun.id] = t0
@@ -1158,7 +1170,7 @@ export function LaserTagGame({ room, onExit }) {
     buzz(gun.automatic ? 'light' : 'medium') // recoil rumble (respects the Vibration setting)
     const h = aimRef.current
     broadcastShot(h.pos)
-    if (!h.pos || !h.heading) { flash('No GPS/compass fix yet', false); return }
+    if (!h.pos || !h.heading) { flash(tr('no_fix'), false); return }
     const firedAt = t0 // the host rate-limits on this, not on when the camera frame resolved
     if (visionAim) { fireVision(shots, firedAt, tapAimRef.current).catch(() => fireCompass(shots, true, firedAt)); return }
     fireCompass(shots, false, firedAt)
@@ -1228,7 +1240,7 @@ export function LaserTagGame({ room, onExit }) {
         playSfx('explosion'); buzz('heavy'); setTimeout(() => buzz('heavy'), 140)
         if (covered) {
           addCoverMark({ kind: 'scorch', bearing: camAim.heading, elev: Number.isFinite(camAim.pitch) ? camAim.pitch : 0, range: surface?.range ?? impact.dist })
-          flash(`Rocket hit cover · ${Math.round(impact.dist)} m`, false)
+          flash(tr('rocket_cover', { n: Math.round(impact.dist) }), false)
         }
       }
       if (hipFire) {
@@ -1251,7 +1263,7 @@ export function LaserTagGame({ room, onExit }) {
     playShot(gun)
     buzz('heavy')
     broadcastShot(h.pos)
-    if (!h.pos || !h.heading) { flash('No GPS/compass fix yet — rocket wasted', false); return }
+    if (!h.pos || !h.heading) { flash(tr('rocket_wasted'), false); return }
     try {
       if (lock && !covered) {
         let hits = 1
@@ -1335,7 +1347,7 @@ export function LaserTagGame({ room, onExit }) {
       // A person, but nobody in the match matches that direction: if one enemy is in your
       // sights by compass, count it as them; otherwise it was a bystander.
       if (inSightsRef.current) { sendHit(inSightsRef.current.id, { hits: shots, shots, zone: hit.zone, method: 'vision', firedAt }); return }
-      flash('That’s not a player in this game', false)
+      flash(tr('not_player'), false)
       return
     }
     sendHit(picked.target.id, { hits: shots, shots, zone: hit.zone, method: 'vision', firedAt })
@@ -1345,18 +1357,18 @@ export function LaserTagGame({ room, onExit }) {
   const throwGrenade = async (distance, how) => {
     try {
     if (dead || !playing) return
-    if (tooFastRef.current) { flash(SPEED_LOCK_TEXT, false); return }
+    if (tooFastRef.current) { flash(speedLockText(), false); return }
     const h = aimRef.current
-    if (!h.pos || !h.heading) { flash('No GPS/compass fix yet', false); return }
-    if (!grenadeInv.owner && !(grenadeInv.balance > 0)) { flash('No grenades left — get more in the Arcade Shop', false); return }
+    if (!h.pos || !h.heading) { flash(tr('no_fix'), false); return }
+    if (!grenadeInv.owner && !(grenadeInv.balance > 0)) { flash(tr('no_grenades_left'), false); return }
     const capKey = `${snap?.code}:${snap?.info?.round}`
     const cap = matchCheck('grenade', capKey)
     if (!cap.ok) { flash(cap.text, false); return }
     const ok = await spendGrenade({ matchKey: capKey })
-    if (!ok) { flash('No grenades left — get more in the Arcade Shop', false); return }
+    if (!ok) { flash(tr('no_grenades_left'), false); return }
     const land = destinationPoint(h.pos, h.heading.deg, distance)
     buzz('medium')
-    flash(`Grenade ${how === 'swing' ? 'thrown' : 'out'} — ${distance} m`, true)
+    flash(tr(how === 'swing' ? 'grenade_thrown' : 'grenade_out', { n: distance }), true)
     const t = setTimeout(() => {
       try {
         playSfx('explosion')
@@ -1379,22 +1391,22 @@ export function LaserTagGame({ room, onExit }) {
     stickyBusy.current = true
     try {
       if (dead || !playing) return
-      if (tooFastRef.current) { flash(SPEED_LOCK_TEXT, false); return }
+      if (tooFastRef.current) { flash(speedLockText(), false); return }
       const h = aimRef.current
-      if (!h.pos) { flash('No GPS fix yet', false); return }
-      if (!stickyBombInv.owner && !(stickyBombInv.balance > 0)) { flash('No sticky bombs left', false); return }
+      if (!h.pos) { flash(tr('no_gps'), false); return }
+      if (!stickyBombInv.owner && !(stickyBombInv.balance > 0)) { flash(tr('no_sticky_left'), false); return }
       const capKey = `${snap?.code}:${snap?.info?.round}`
       const cap = matchCheck('stickyBomb', capKey)
       if (!cap.ok) { flash(cap.text, false); return }
       const ok = await spendStickyBomb({ matchKey: capKey })
-      if (!ok) { flash('No sticky bombs left', false); return }
+      if (!ok) { flash(tr('no_sticky_left'), false); return }
       const id = `${meId || 'me'}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`
       const item = { id, lat: round6(h.pos.lat), lng: round6(h.pos.lng), at: Date.now() }
       setPendingStickies((a) => [...a, item])
       room.sendAction({ type: 'sticky_place', id })
       buzz('medium')
       const n = myStickiesRef.current.length + 1
-      flash(n > 1 ? `${n} sticky bombs placed · DETONATE blows them all` : 'Sticky bomb placed · place more, or DETONATE', true)
+      flash(n > 1 ? tr('sticky_placed_n', { n }) : tr('sticky_placed'), true)
     } catch { /* IAP / room error */ } finally { stickyBusy.current = false }
   }
 
@@ -1402,7 +1414,7 @@ export function LaserTagGame({ room, onExit }) {
   const detonateStickyBombs = () => {
     try {
       if (dead || !playing) return
-      if (tooFastRef.current) { flash(SPEED_LOCK_TEXT, false); return }
+      if (tooFastRef.current) { flash(speedLockText(), false); return }
       const mine = myStickiesRef.current
       if (!mine.length) return
       const hostKnows = stickyAck.current || (stateRef.current?.stickies || []).some((b) => b.by === meId)
@@ -1421,17 +1433,17 @@ export function LaserTagGame({ room, onExit }) {
   const dropLandMine = async () => {
     try {
     if (dead || !playing) return
-    if (tooFastRef.current) { flash(SPEED_LOCK_TEXT, false); return }
+    if (tooFastRef.current) { flash(speedLockText(), false); return }
     const h = aimRef.current
-    if (!h.pos) { flash('No GPS fix yet', false); return }
-    if (!landMineInv.owner && !(landMineInv.balance > 0)) { flash('No land mines left', false); return }
+    if (!h.pos) { flash(tr('no_gps'), false); return }
+    if (!landMineInv.owner && !(landMineInv.balance > 0)) { flash(tr('no_mines_left'), false); return }
     const capKey = `${snap?.code}:${snap?.info?.round}`
     const cap = matchCheck('landMine', capKey)
     if (!cap.ok) { flash(cap.text, false); return }
     const ok = await spendLandMine({ matchKey: capKey })
-    if (!ok) { flash('No land mines left', false); return }
+    if (!ok) { flash(tr('no_mines_left'), false); return }
     buzz('medium')
-    flash('Land mine down. It goes off when an enemy walks near', true)
+    flash(tr('mine_down'), true)
     room.sendAction({ type: 'land_mine' })
     } catch { /* IAP error */ }
   }
@@ -1439,7 +1451,7 @@ export function LaserTagGame({ room, onExit }) {
   const tagBystander = (user) => {
     const t = Date.now()
     if (t - (btLast.current[user.id] || 0) < BYSTANDER_COOLDOWN_MS) {
-      flash(`Already tagged @${user.username} — once a minute`, false)
+      flash(tr('already_tagged', { user: user.username }), false)
       return
     }
     btLast.current[user.id] = t
@@ -1548,7 +1560,7 @@ export function LaserTagGame({ room, onExit }) {
         const pl = state?.players?.[pid]
         out.push({
           id: `rev-${pid}`,
-          name: pl?.name || 'Enemy',
+          name: pl?.name || tr('enemy'),
           d: distanceMeters(myPos, pos),
           bearing: bearingDeg(myPos, pos),
           color: ST.enemy,
@@ -1623,12 +1635,12 @@ export function LaserTagGame({ room, onExit }) {
     const out = []
     try {
       const mateOf = (by) => state && state.mode !== 'ffa' && by !== meId && state.players?.[by]?.team && state.players[by].team === myTeam
-      for (const b of myStickies) out.push({ id: `c4-${b.id}`, kind: 'c4', lat: b.lat, lng: b.lng, label: 'YOUR C4' })
-      for (const b of state?.stickies || []) if (mateOf(b?.by)) out.push({ id: `c4-${b.id}`, kind: 'c4', lat: b.lat, lng: b.lng, label: `${String(state.players[b.by].name || 'TEAM').toUpperCase()}’S C4`, color: ST.friendly })
+      for (const b of myStickies) out.push({ id: `c4-${b.id}`, kind: 'c4', lat: b.lat, lng: b.lng, label: tr('your_c4') })
+      for (const b of state?.stickies || []) if (mateOf(b?.by)) out.push({ id: `c4-${b.id}`, kind: 'c4', lat: b.lat, lng: b.lng, label: tr('team_c4', { name: String(state.players[b.by].name || tr('team_word')).toUpperCase() }), color: ST.friendly })
       for (const [i, m] of (state?.landMines || []).entries()) {
         if (m?.lat == null) continue
-        if (m.by === meId) out.push({ id: `mine-${m.placedAt || i}-${i}`, kind: 'mine', lat: m.lat, lng: m.lng, label: 'YOUR MINE' })
-        else if (mateOf(m.by)) out.push({ id: `mine-${m.placedAt || i}-${i}`, kind: 'mine', lat: m.lat, lng: m.lng, label: 'TEAM MINE', color: ST.friendly })
+        if (m.by === meId) out.push({ id: `mine-${m.placedAt || i}-${i}`, kind: 'mine', lat: m.lat, lng: m.lng, label: tr('your_mine') })
+        else if (mateOf(m.by)) out.push({ id: `mine-${m.placedAt || i}-${i}`, kind: 'mine', lat: m.lat, lng: m.lng, label: tr('team_mine'), color: ST.friendly })
       }
     } catch {}
     return out
@@ -1637,8 +1649,8 @@ export function LaserTagGame({ room, onExit }) {
   // ---- render ----
   if (!room || !snap) return null
   if (loc.status !== 'granted') return <LocationGate status={loc.status} onExit={onExit} what="Laser Tag" />
-  if (!state) return <Spectating text="Starting…" />
-  if (!myState) return <Spectating text={state.endless ? 'Dropping you into the arena…' : undefined} />
+  if (!state) return <Spectating text={t('starting')} />
+  if (!myState) return <Spectating text={state.endless ? t('arena_drop') : undefined} />
 
   if (state.phase === 'ended') {
     return (
@@ -1707,8 +1719,8 @@ export function LaserTagGame({ room, onExit }) {
     : topMode
       ? null
       : triggerMode
-        ? (gun.automatic ? 'AIM · TAP TO FIRE · HOLD FOR AUTO' : 'AIM · TAP ANYWHERE TO FIRE')
-        : visionAim ? 'AIM · PRESS FIRE OR TAP A TARGET' : 'AIM · CROSSHAIR ON A PLAYER · PRESS FIRE'
+        ? t(gun.automatic ? 'hint_trig_auto' : 'hint_trig')
+        : t(visionAim ? 'hint_vision' : 'hint_compass')
   // Hip fire: what the radar shows (the same enemies the camera view would tag).
   const hipRange = Math.min(gun.range, COMPASS_MAX_RANGE_M)
   const hip = topMode ? (() => {
@@ -1758,7 +1770,7 @@ export function LaserTagGame({ room, onExit }) {
                   const r = { x: 12, y: Math.max(H * 0.3, Math.min(H * 0.5, topEdge + 8)), w: 104, h: 140 }
                   return [W / 2 + (r.x - W / 2) / z, H / 2 + (r.y - H / 2) / z, r.w / z, r.h / z]
                 })()}
-                onCameraError={() => { setSelfieOn(false); flash('Selfie camera unavailable', false) }}
+                onCameraError={() => { setSelfieOn(false); flash(tr('selfie_unavailable'), false) }}
               />
             ) : (
               <CameraView ref={cameraRef} style={StyleSheet.absoluteFill} facing="back" animateShutter={false} />
@@ -1767,7 +1779,7 @@ export function LaserTagGame({ room, onExit }) {
         </View>
       ) : (
         <View style={[StyleSheet.absoluteFill, styles.noCam]} onLayout={(e) => setView(e.nativeEvent.layout)}>
-          {camPerm && !camPerm.granted && camPerm.status === 'denied' ? <CameraOff what="aiming in Laser Tag" compact /> : null}
+          {camPerm && !camPerm.granted && camPerm.status === 'denied' ? <CameraOff what={t('cam_what')} compact /> : null}
         </View>
       )}
 
@@ -1788,7 +1800,7 @@ export function LaserTagGame({ room, onExit }) {
           onPressOut={() => { trigger.onPressOut(); tapAimRef.current = null }}
           disabled={dead || !playing || tooFast}
           accessibilityRole="button"
-          accessibilityLabel={gun.automatic ? 'Fire. Hold for continuous fire' : 'Fire. Every tap fires'}
+          accessibilityLabel={t(gun.automatic ? 'fire_a11y_auto' : 'fire_a11y')}
         />
       )}
       {/* Classic camera aim (FIRE button): tapping a target bracket also fires at that person
@@ -1809,7 +1821,7 @@ export function LaserTagGame({ room, onExit }) {
             trigger.onPressOut()
             tapAimRef.current = null
           }}
-          accessibilityLabel="Tap a target to fire at it"
+          accessibilityLabel={t('tap_target_a11y')}
         />
       ) : null}
 
@@ -1912,7 +1924,7 @@ export function LaserTagGame({ room, onExit }) {
             {bombPlanted ? (
               <BombCountdown msLeft={(snd.bomb.explodesAt || now) - now} inline />
             ) : (
-              <MatchClock clock={formatClock(timerMs)} live={!!state.endless} kicker={topMode ? 'HIP FIRE' : null} compact={tight} />
+              <MatchClock clock={formatClock(timerMs)} live={!!state.endless} kicker={topMode ? t('hip_fire') : null} compact={tight} />
             )}
           </View>
         </View>
@@ -1950,14 +1962,14 @@ export function LaserTagGame({ room, onExit }) {
           {!bannerUp && !triggerMode ? (
             <Text style={[styles.sightText, (targetLocked || inSights) && { color: ST.enemy }]} numberOfLines={2}>
               {visionAim
-                ? (targetLocked ? 'TARGET LOCKED' : inSights ? `${inSights.name.toUpperCase()} · ${formatDistance(inSights.d).toUpperCase()}` : enemies.some((e) => e.alive) ? `CAMERA AIM · ${formatDistance(VISION_RANGE_M).toUpperCase()}` : 'WAITING FOR PLAYERS’ GPS…')
+                ? (targetLocked ? t('target_locked') : inSights ? `${inSights.name.toUpperCase()} · ${formatDistance(inSights.d).toUpperCase()}` : enemies.some((e) => e.alive) ? t('camera_aim', { d: formatDistance(VISION_RANGE_M).toUpperCase() }) : t('waiting_gps'))
                 : inSights
                   ? `${inSights.name.toUpperCase()} · ${formatDistance(inSights.d).toUpperCase()} · ${Math.round(inSights.chance * 100)}%`
-                  : enemies.some((e) => e.alive) ? 'NO TARGET' : 'WAITING FOR PLAYERS’ GPS…'}
+                  : enemies.some((e) => e.alive) ? t('no_target') : t('waiting_gps')}
             </Text>
           ) : null}
-          {!bannerUp && triggerMode && targetLocked ? <Text style={[styles.sightText, { color: ST.enemy }]}>TARGET LOCKED</Text> : null}
-          {!visionAim && !triggerMode && !bannerUp ? <Text style={styles.aimMode}>COMPASS AIM · {formatDistance(Math.min(gun.range, COMPASS_MAX_RANGE_M)).toUpperCase()}</Text> : null}
+          {!bannerUp && triggerMode && targetLocked ? <Text style={[styles.sightText, { color: ST.enemy }]}>{t('target_locked')}</Text> : null}
+          {!visionAim && !triggerMode && !bannerUp ? <Text style={styles.aimMode}>{t('compass_aim', { d: formatDistance(Math.min(gun.range, COMPASS_MAX_RANGE_M)).toUpperCase() })}</Text> : null}
           {!!marker && !bannerUp ? <Text style={[styles.marker, { color: marker.good ? ST.health : '#fff' }]} numberOfLines={2}>{stripSymbols(marker.text)}</Text> : null}
           {showTip && !marker && !bannerUp ? (
             <View style={styles.tip}>
@@ -1973,7 +1985,7 @@ export function LaserTagGame({ room, onExit }) {
         <View style={[styles.hip, { top: hip.top, height: hip.height, left: land ? midLeft : 12, right: land ? midRight : 12 }]} pointerEvents="none">
           <View style={{ alignItems: 'center', gap: 4 }}>
             <Svg width={36} height={20} viewBox="0 0 40 22" fill="none"><Path d="M2 20L20 3l18 17" stroke={inSights ? ST.enemy : '#fff'} strokeWidth={2.6} strokeLinejoin="round" /></Svg>
-            <Text style={styles.hipCue}>POINT THE TOP EDGE AT A PLAYER</Text>
+            <Text style={styles.hipCue}>{t('point_top')}</Text>
           </View>
           <View onLayout={(e) => { const l = e.nativeEvent.layout; setRadarAt((p) => (p && Math.abs(p.x - l.x) < 1 && Math.abs(p.y - l.y) < 1 ? p : { x: l.x, y: l.y })) }}>
             <HipFireRadar size={hip.size} heading={heading?.deg} rangeM={hipRange} coneDeg={hip.cone} enemies={hip.shown} mates={hip.mates} objectives={hip.objectives} explosives={hip.explosives} lockedId={inSights?.id} />
@@ -1989,7 +2001,7 @@ export function LaserTagGame({ room, onExit }) {
         {tooFast ? (
           <View style={[styles.pillWarn, styles.speedPill]} pointerEvents="none" accessibilityLiveRegion="polite">
             <Ionicons name="speedometer-outline" size={16} color="#fff" />
-            <Text style={styles.pillWarnText} numberOfLines={2}>{SPEED_LOCK_TEXT.toUpperCase()}{speedLock.kmh ? ` · ${speedLock.kmh} KM/H` : ''}</Text>
+            <Text style={styles.pillWarnText} numberOfLines={2}>{speedLockText().toUpperCase()}{speedLock.kmh ? ` · ${speedLock.kmh} KM/H` : ''}</Text>
           </View>
         ) : null}
         {objective && (
@@ -1997,7 +2009,7 @@ export function LaserTagGame({ room, onExit }) {
             <Text style={styles.objectiveText} pointerEvents="none" numberOfLines={2}>{stripSymbols(objective.text)}</Text>
             {objective.action && !dead && playing && (
               objective.action.kind === 'pickup' ? (
-                <HudCta title="Pick up bomb" tone="gold" icon="flag" onPress={() => { buzz('medium'); room.sendAction({ type: 'pickup' }) }} style={{ minWidth: 220 }} />
+                <HudCta title={t('pick_up_bomb')} tone="gold" icon="flag" onPress={() => { buzz('medium'); room.sendAction({ type: 'pickup' }) }} style={{ minWidth: 220 }} />
               ) : (
                 <HoldActionButton
                   key={`${state.round}:${snd.roundNo}:${objective.action.kind}-${objective.action.site || ''}`}
@@ -2021,18 +2033,18 @@ export function LaserTagGame({ room, onExit }) {
         {uav.enemyMs > 0 ? (
           <View style={styles.pillWarn} pointerEvents="none">
             <Ionicons name="radio-outline" size={14} color={ST.enemy} />
-            <Text style={styles.pillWarnText} numberOfLines={1}>ENEMY UAV OVERHEAD · {Math.ceil(uav.enemyMs / 1000)}S</Text>
+            <Text style={styles.pillWarnText} numberOfLines={1}>{t('enemy_uav', { n: Math.ceil(uav.enemyMs / 1000) })}</Text>
           </View>
         ) : null}
         {outsideArea ? (
           <View style={[styles.pillWarn, { backgroundColor: 'rgba(255,61,82,0.85)' }]} pointerEvents="none">
             <Ionicons name="warning" size={14} color="#fff" />
-            <Text style={styles.pillWarnText} numberOfLines={2}>OUTSIDE THE PLAY AREA · HEAD BACK</Text>
+            <Text style={styles.pillWarnText} numberOfLines={2}>{t('outside_area')}</Text>
           </View>
         ) : null}
         {(myPos?.acc > 20 || compassLow) && (
           <Text style={[styles.warn, { alignSelf: leftHanded ? 'flex-end' : 'flex-start' }]} pointerEvents="none" numberOfLines={2}>
-            {myPos?.acc > 20 ? `WEAK GPS (±${Math.round(myPos.acc)} M)` : 'COMPASS NEEDS CALIBRATING · MOVE YOUR PHONE IN A FIGURE 8'}
+            {myPos?.acc > 20 ? t('weak_gps', { n: Math.round(myPos.acc) }) : t('compass_cal')}
           </Text>
         )}
         {hint && !objective?.action ? <Text style={styles.hint} pointerEvents="none" numberOfLines={1}>{hint}</Text> : null}
@@ -2047,7 +2059,7 @@ export function LaserTagGame({ room, onExit }) {
         <View style={[styles.leftCol, { width: leftColW }]} pointerEvents="box-none">
           {streak > 0 && !dead ? (
             <View style={styles.streak} pointerEvents="none">
-              <Text style={stType.label}>STREAK</Text>
+              <Text style={stType.label}>{t('streak')}</Text>
               <View style={styles.streakRow}>
                 {Array.from({ length: Math.max(3, Math.min(5, streak)) }, (_, i) => (
                   <View key={i} style={[styles.streakPip, { backgroundColor: i < streak ? ST.objective : 'rgba(255,255,255,0.18)' }]} />
@@ -2063,7 +2075,7 @@ export function LaserTagGame({ room, onExit }) {
               disabled={!playing || dead || bino || tooFast}
               size={tileSize}
               onThrow={throwGrenade}
-              onEmpty={() => flash('No grenades — get 10 in the Arcade Shop', false)}
+              onEmpty={() => flash(t('no_grenades_shop'), false)}
             />
             <StickyBombButton
               count={stickyBombInv.owner ? Infinity : stickyBombInv.balance}
@@ -2071,14 +2083,14 @@ export function LaserTagGame({ room, onExit }) {
               disabled={!playing || dead || bino || tooFast}
               size={tileSize}
               onPlace={placeStickyBomb}
-              onEmpty={() => flash('No sticky bombs — get more in the Arcade Shop', false)}
+              onEmpty={() => flash(t('no_sticky_shop'), false)}
             />
             <LandMineButton
               count={landMineInv.owner ? Infinity : landMineInv.balance}
               disabled={!playing || dead || bino || tooFast}
               size={tileSize}
               onDrop={dropLandMine}
-              onEmpty={() => flash('No land mines — get more in the Arcade Shop', false)}
+              onEmpty={() => flash(t('no_mines_shop'), false)}
             />
             <UavButton tile count={uav.count} activeMsLeft={uav.myMs} cooldownMsLeft={uav.cooldownMs} disabled={!playing && !uav.empty} onPress={uav.callUav} size={tileSize} />
           </View>
@@ -2095,17 +2107,17 @@ export function LaserTagGame({ room, onExit }) {
         <View style={[styles.rightCol, { alignItems: leftHanded ? 'flex-start' : 'flex-end', maxWidth: Math.max(rightColW, hud.width - hud.side * 2 - leftColW - 8) }]} pointerEvents="box-none">
           {camPerm?.granted && !topMode ? (
             <View style={[styles.opticsRow, { justifyContent: leftHanded ? 'flex-start' : 'flex-end' }]} pointerEvents="box-none">
-              <HudButton onPress={toggleBino} on={bino} icon="telescope-outline" accessibilityLabel={bino ? 'Lower binoculars' : 'Binoculars: scout enemies. Cannot shoot.'} />
+              <HudButton onPress={toggleBino} on={bino} icon="telescope-outline" accessibilityLabel={t(bino ? 'bino_lower' : 'bino_a11y')} />
               {recOk ? (
-                <HudButton onPress={toggleRecording} on={!!recAt} onColor={ST.enemy} accessibilityLabel={recAt ? 'Stop recording and save to Photos' : 'Record gameplay with your voice'}
+                <HudButton onPress={toggleRecording} on={!!recAt} onColor={ST.enemy} accessibilityLabel={t(recAt ? 'rec_stop' : 'rec_start')}
                   text={recAt ? (() => { const sec = Math.max(0, Math.floor((recNow - recAt) / 1000)); return `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}` })() : null}>
                   <View style={[styles.recDot, recAt && { borderRadius: 1 }]} />
                 </HudButton>
               ) : null}
               {dualOk ? (
-                <HudButton onPress={() => { buzz('select'); setSelfieOn((v) => !v) }} on={selfieOn} onColor={ST.friendly} icon="camera-reverse-outline" accessibilityLabel={selfieOn ? 'Hide selfie camera' : 'Show selfie camera'} />
+                <HudButton onPress={() => { buzz('select'); setSelfieOn((v) => !v) }} on={selfieOn} onColor={ST.friendly} icon="camera-reverse-outline" accessibilityLabel={t(selfieOn ? 'selfie_hide' : 'selfie_show')} />
               ) : null}
-              <HudButton onPress={scope.cycle} on={scope.zoom > 1} onColor={ST.friendly} text={formatZoom(scope.zoom)} accessibilityLabel={`Scope zoom ${formatZoom(scope.zoom)}. Tap to change, or pinch the screen.`} />
+              <HudButton onPress={scope.cycle} on={scope.zoom > 1} onColor={ST.friendly} text={formatZoom(scope.zoom)} accessibilityLabel={t('scope_a11y', { z: formatZoom(scope.zoom) })} />
             </View>
           ) : null}
           {aim.mode === 'camera' && (
@@ -2135,7 +2147,7 @@ export function LaserTagGame({ room, onExit }) {
       {state.phase === 'roundEnd' && snd && <RoundBreak state={state} now={now} meTeam={myTeam} />}
 
       <WeaponWheel visible={wheelOpen} loadout={loadout} currentId={weaponId} onPick={pickWeapon} onClose={() => setWheelOpen(false)} insets={insets} />
-      <ScoreboardOverlay visible={scoresOpen} state={state} meId={meId} insets={insets} clock={state.endless ? 'LIVE' : formatClock(timerMs)} onClose={() => setScoresOpen(false)} />
+      <ScoreboardOverlay visible={scoresOpen} state={state} meId={meId} insets={insets} clock={state.endless ? t('live') : formatClock(timerMs)} onClose={() => setScoresOpen(false)} />
       <MapOverlay
         visible={mapOpen}
         onClose={() => setMapOpen(false)}
@@ -2185,31 +2197,31 @@ function sndObjective(state, meId, myPos, now) {
   const myAct = act?.by === meId
   const where = (target) => (myPos && target?.lat != null ? `${formatDistance(distanceMeters(myPos, target))} ${compassLabel(bearingDeg(myPos, target))}` : '')
   const nearest = myPos ? [...snd.sites].sort((a, b) => distanceMeters(myPos, a) - distanceMeters(myPos, b))[0] : snd.sites[0]
-  if (!me.alive) return { text: 'Spectating until the next round' }
+  if (!me.alive) return { text: tr('obj_spectating') }
   if (bomb.state === 'planted') {
-    if (attacker) return { text: act?.kind === 'defuse' ? `They’re defusing at ${bomb.site}! Stop them` : `Bomb is active at ${bomb.site} — defend the bomb!` }
+    if (attacker) return { text: act?.kind === 'defuse' ? tr('obj_they_defusing_at', { site: bomb.site }) : tr('obj_bomb_active', { site: bomb.site }) }
     const inside = engine.atBomb(snd, myPos)
     return {
-      text: inside ? (act?.kind === 'defuse' && !myAct ? 'A teammate is defusing — cover them' : 'You’re at the bomb — hold DEFUSE') : `Defuse the bomb at ${bomb.site}: ${where(bomb)}`,
+      text: inside ? tr(act?.kind === 'defuse' && !myAct ? 'obj_mate_defusing' : 'obj_at_bomb') : tr('obj_defuse_at', { site: bomb.site, where: where(bomb) }),
       action: inside && (!act || myAct) ? { kind: 'defuse' } : null,
     }
   }
   if (attacker) {
     if (bomb.state === 'carried' && bomb.carrier === meId) {
       const site = myPos ? snd.sites.find((x) => engine.insideRadius(myPos, x, x.r || engine.SITE_RADIUS_M)) : null
-      if (site) return { text: `Inside site ${site.id} — hold PLANT`, action: !act || myAct ? { kind: 'plant', site: site.id } : null }
-      return { text: myPos ? `You have the bomb · site ${nearest?.id}: ${where(nearest)}` : 'You have the bomb · waiting for GPS…' }
+      if (site) return { text: tr('obj_inside_site', { site: site.id }), action: !act || myAct ? { kind: 'plant', site: site.id } : null }
+      return { text: myPos ? tr('obj_have_bomb_site', { site: nearest?.id, where: where(nearest) }) : tr('obj_have_bomb_wait') }
     }
-    if (act?.kind === 'plant') return { text: `${state.players[act.by]?.name || 'A teammate'} is planting at ${act.site} — cover them` }
+    if (act?.kind === 'plant') return { text: tr('obj_mate_planting', { name: state.players[act.by]?.name || tr('a_teammate'), site: act.site }) }
     if (bomb.state === 'dropped') {
       const close = myPos && bomb.lat != null && distanceMeters(myPos, bomb) <= engine.PICKUP_RANGE_M + engine.gpsSlack(myPos.acc)
-      return { text: close ? 'The bomb is here' : `Bomb dropped: ${where(bomb)}`, action: close ? { kind: 'pickup' } : null }
+      return { text: close ? tr('obj_bomb_here') : tr('obj_bomb_dropped', { where: where(bomb) }), action: close ? { kind: 'pickup' } : null }
     }
     const carrier = state.players[bomb.carrier]
-    return { text: carrier ? `${carrier.name} has the bomb — cover them` : 'Eliminate the defenders' }
+    return { text: carrier ? tr('obj_carrier', { name: carrier.name }) : tr('obj_eliminate') }
   }
-  if (act?.kind === 'plant') return { text: `They’re planting at ${act.site}! Stop them` }
-  return { text: `Defend ${snd.sites.map((x) => x.id).join(' & ')} · nearest ${where(nearest)}` }
+  if (act?.kind === 'plant') return { text: tr('obj_they_planting', { site: act.site }) }
+  return { text: tr('obj_defend', { sites: snd.sites.map((x) => x.id).join(tr('list_and')), where: where(nearest) }) }
 }
 
 const styles = StyleSheet.create({

@@ -18,6 +18,9 @@ import { HUD } from '../games/laser/HudPro'
 import { Btn, ConnectionBanner, Pill, PlayerRow, PlayerTapContext } from '../games/MultiplayerUI'
 import { FONT, ST, stType, useStudioFonts } from '../games/studio'
 import ProfilePreviewSheet from '../components/ProfilePreviewSheet'
+import { translate, useT } from '../i18n'
+import R from '../i18n/strings/gameRoom'
+import { mpGameName, teamName } from '../lib/games'
 import {
   MP_GAMES, TEAMS, getActiveRoom, getMyProfile, isArenaCode, isMultiplayerGame, openRoom, resolveGameId, useRoomPositions, useRoomSnapshot,
 } from '../lib/multiplayer'
@@ -25,8 +28,9 @@ import {
 export default function GamePlayScreen({ navigation, route }) {
   const params = route.params || {}
   const { code, mode = 'social', aiDifficulty = null } = params
+  const t = useT(R)
   const gameId = resolveGameId(params.gameId)
-  const gameName = params.gameName || MP_GAMES[gameId]?.name || 'Game'
+  const gameName = mpGameName(gameId, params.gameName || MP_GAMES[gameId]?.name || t('game'))
   const multiplayer = isMultiplayerGame(gameId)
   const immersive = gameId === 'lasertag' || gameId === 'royale' // camera fills the whole screen
   // Every game is dark (studio look) whatever the system theme, so the shell is too.
@@ -84,7 +88,7 @@ export default function GamePlayScreen({ navigation, route }) {
         r.handedOff = true
         setRoom(r)
       })
-      .catch((e) => { if (!cancelled) setRoomError(e?.message || 'Couldn’t connect to the game.') })
+      .catch((e) => { if (!cancelled) setRoomError(e?.message || translate(R, 'connect_failed')) })
     return () => { cancelled = true }
   }, [multiplayer, code, gameId, room])
 
@@ -161,7 +165,7 @@ export default function GamePlayScreen({ navigation, route }) {
       case 'heads-up':
         return <HeadsUp7UpGame room={room} onExit={leave} />
       default:
-        return <Text style={[stType.body, { padding: 24 }]}>This game isn’t available.</Text>
+        return <Text style={[stType.body, { padding: 24 }]}>{t('unavailable')}</Text>
     }
   }
 
@@ -169,12 +173,12 @@ export default function GamePlayScreen({ navigation, route }) {
   const body = fatal ? (
     <View style={styles.center}>
       <Ionicons name="cloud-offline" size={28} color={ST.enemy} style={{ marginBottom: 10 }} />
-      <Text style={[stType.kicker, { color: ST.enemy, marginBottom: 4 }]}>Connection</Text>
+      <Text style={[stType.kicker, { color: ST.enemy, marginBottom: 4 }]}>{t('connection')}</Text>
       <Text style={[stType.title, { textAlign: 'center' }]}>{fatal}</Text>
-      <Btn title="Back to games" onPress={leave} style={{ marginTop: 16 }} />
+      <Btn title={t('back_to_games')} onPress={leave} style={{ marginTop: 16 }} />
     </View>
   ) : multiplayer && !room ? (
-    <View style={styles.center}><Text style={stType.label}>Connecting…</Text></View>
+    <View style={styles.center}><Text style={stType.label}>{t('connecting')}</Text></View>
   ) : renderGame()
 
   if (!multiplayer) {
@@ -183,11 +187,11 @@ export default function GamePlayScreen({ navigation, route }) {
         <StatusBar barStyle="light-content" />
         <SafeAreaView style={{ flex: 1 }} edges={['top', 'bottom']}>
           <View style={styles.topBar}>
-            <Pressable onPress={() => navigation.goBack()} style={({ pressed }) => [styles.iconBtn, pressed && styles.pressed]} accessibilityRole="button" accessibilityLabel="Close" hitSlop={8}>
+            <Pressable onPress={() => navigation.goBack()} style={({ pressed }) => [styles.iconBtn, pressed && styles.pressed]} accessibilityRole="button" accessibilityLabel={t('close')} hitSlop={8}>
               <Ionicons name="close" size={20} color={ST.text} />
             </Pressable>
             <View style={{ flex: 1, minWidth: 0, marginLeft: 6 }}>
-              <Text style={styles.kicker} numberOfLines={1}>iYiYi Arcade</Text>
+              <Text style={styles.kicker} numberOfLines={1}>{t('arcade_kicker')}</Text>
               <Text style={styles.title} numberOfLines={1}>{gameName}</Text>
             </View>
           </View>
@@ -199,16 +203,16 @@ export default function GamePlayScreen({ navigation, route }) {
 
   const buttons = (
     <View style={styles.btnRow}>
-      <Pressable onPress={() => setPanel((p) => (p === 'players' ? null : 'players'))} style={({ pressed }) => [styles.iconBtn, panel === 'players' && styles.iconBtnOn, pressed && styles.pressed]} accessibilityRole="button" accessibilityLabel="Players" accessibilityState={{ selected: panel === 'players' }}>
+      <Pressable onPress={() => setPanel((p) => (p === 'players' ? null : 'players'))} style={({ pressed }) => [styles.iconBtn, panel === 'players' && styles.iconBtnOn, pressed && styles.pressed]} accessibilityRole="button" accessibilityLabel={t('players')} accessibilityState={{ selected: panel === 'players' }}>
         <Ionicons name="people" size={18} color={panel === 'players' ? ST.friendly : ST.text} />
       </Pressable>
       {gameId !== 'chess' ? (
-        <Pressable onPress={() => setPanel((p) => (p === 'chat' ? null : 'chat'))} style={({ pressed }) => [styles.iconBtn, panel === 'chat' && styles.iconBtnOn, pressed && styles.pressed]} accessibilityRole="button" accessibilityLabel="Chat" accessibilityState={{ selected: panel === 'chat' }}>
+        <Pressable onPress={() => setPanel((p) => (p === 'chat' ? null : 'chat'))} style={({ pressed }) => [styles.iconBtn, panel === 'chat' && styles.iconBtnOn, pressed && styles.pressed]} accessibilityRole="button" accessibilityLabel={t('chat')} accessibilityState={{ selected: panel === 'chat' }}>
           <Ionicons name="chatbubble-ellipses" size={18} color={panel === 'chat' ? ST.friendly : ST.text} />
           {unread > 0 && <View style={styles.badge}><Text style={styles.badgeText}>{unread > 9 ? '9+' : unread}</Text></View>}
         </Pressable>
       ) : null}
-      <Pressable onPress={() => { setPanel(null); setMenuOpen(true) }} style={({ pressed }) => [styles.iconBtn, pressed && styles.pressed]} accessibilityRole="button" accessibilityLabel="Menu">
+      <Pressable onPress={() => { setPanel(null); setMenuOpen(true) }} style={({ pressed }) => [styles.iconBtn, pressed && styles.pressed]} accessibilityRole="button" accessibilityLabel={t('menu')}>
         <Ionicons name="menu" size={20} color={ST.text} />
       </Pressable>
     </View>
@@ -219,18 +223,18 @@ export default function GamePlayScreen({ navigation, route }) {
       {panel === 'players' && snap && (
         <View style={[styles.overlay, { top: insets.top + 56 }]}>
           <View style={[styles.panel, { borderTopColor: ST.friendly, borderTopWidth: 2 }]}>
-            <Text style={[stType.label, { marginBottom: 4 }]}>Players · code {snap.code}</Text>
+            <Text style={[stType.label, { marginBottom: 4 }]}>{t('players_code', { code: snap.code })}</Text>
             {snap.roster.map((p) => (
               <PlayerRow
                 key={p.id}
                 player={p}
-                subtitle={p.id === snap.hostId ? 'Host' : null}
+                subtitle={p.id === snap.hostId ? t('host') : null}
                 right={p.id === snap.me.id
-                  ? <Pill text="YOU" color={ST.friendly} />
-                  : <Btn size="sm" title={muted.has(p.id) ? 'Unmute' : 'Mute'} onPress={() => toggleMute(p.id)} />}
+                  ? <Pill text={t('you_pill')} color={ST.friendly} />
+                  : <Btn size="sm" title={t(muted.has(p.id) ? 'unmute' : 'mute')} onPress={() => toggleMute(p.id)} />}
               />
             ))}
-            <Text style={[stType.small, { marginTop: 8 }]}>Muting hides that player’s chat messages on your phone.</Text>
+            <Text style={[stType.small, { marginTop: 8 }]}>{t('mute_note')}</Text>
           </View>
         </View>
       )}
@@ -242,7 +246,7 @@ export default function GamePlayScreen({ navigation, route }) {
               keyExtractor={(m, i) => String(m?.id ?? i)}
               style={{ maxHeight: 260 }}
               inverted
-              ListEmptyComponent={<Text style={stType.small}>No messages yet. Say hi!</Text>}
+              ListEmptyComponent={<Text style={stType.small}>{t('no_messages')}</Text>}
               renderItem={({ item }) => (
                 <View style={styles.msg}>
                   <Pressable
@@ -252,7 +256,7 @@ export default function GamePlayScreen({ navigation, route }) {
                     style={{ alignSelf: 'flex-start' }}
                   >
                     <Text style={[styles.msgName, { color: item.from === snap?.me?.id ? ST.friendly : ST.muted }]}>
-                      {item.from === snap?.me?.id ? 'You' : nameOf[item.from] || 'Player'}
+                      {item.from === snap?.me?.id ? t('you') : nameOf[item.from] || t('player')}
                     </Text>
                   </Pressable>
                   <Text style={stType.body}>{item.text}</Text>
@@ -263,7 +267,7 @@ export default function GamePlayScreen({ navigation, route }) {
               <TextInput
                 value={chatInput}
                 onChangeText={setChatInput}
-                placeholder="Message"
+                placeholder={t('message_ph')}
                 placeholderTextColor={ST.faint}
                 selectionColor={ST.friendly}
                 keyboardAppearance="dark"
@@ -272,7 +276,7 @@ export default function GamePlayScreen({ navigation, route }) {
                 returnKeyType="send"
                 onSubmitEditing={send}
               />
-              <Btn title="Send" size="sm" variant="primary" onPress={send} disabled={!chatInput.trim() || snap?.status !== 'connected'} />
+              <Btn title={t('send')} size="sm" variant="primary" onPress={send} disabled={!chatInput.trim() || snap?.status !== 'connected'} />
             </View>
           </View>
         </KeyboardAvoidingView>
@@ -314,7 +318,7 @@ export default function GamePlayScreen({ navigation, route }) {
       <SafeAreaView style={{ flex: 1 }} edges={['top', 'bottom']}>
         <View style={styles.topBar}>
           <View style={{ flex: 1, minWidth: 0 }}>
-            {snap ? <Text style={styles.kicker} numberOfLines={1}>Code {snap.code} · {snap.roster.length} player{snap.roster.length === 1 ? '' : 's'}</Text> : null}
+            {snap ? <Text style={styles.kicker} numberOfLines={1}>{t(snap.roster.length === 1 ? 'code_players_one' : 'code_players_n', { code: snap.code, n: snap.roster.length })}</Text> : null}
             <Text style={styles.title} numberOfLines={1}>{gameName}</Text>
           </View>
           {buttons}
@@ -337,9 +341,9 @@ function matchContext(gameId, snap, id, myId) {
     if (gameId !== 'lasertag' || !st?.players?.[id]) return {}
     const them = st.players[id]
     const mine = myId ? st.players[myId] : null
-    const out = { stats: [{ label: 'This match', value: `${them.kills || 0} / ${them.deaths || 0}` }, { label: 'Score', value: them.score ?? 0 }] }
+    const out = { stats: [{ label: translate(R, 'this_match'), value: `${them.kills || 0} / ${them.deaths || 0}` }, { label: translate(R, 'score'), value: them.score ?? 0 }] }
     if (st.mode && st.mode !== 'ffa' && them.team) {
-      out.teamLabel = `${TEAMS[them.team]?.name || them.team} team`
+      out.teamLabel = translate(R, 'team_label', { team: TEAMS[them.team] ? teamName(them.team) : them.team })
       if (mine?.team) out.relation = mine.team === them.team ? 'teammate' : 'enemy'
     } else if (mine) {
       out.relation = 'opponent'

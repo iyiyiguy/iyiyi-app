@@ -5,14 +5,11 @@ import GlassPanel from './GlassPanel'
 import { colors, radii, type } from '../theme'
 import { MP_GAMES, getCurrentRoom, openRoom } from '../lib/multiplayer'
 import { sendGameInvite } from '../lib/invites'
+import { useT } from '../i18n'
+import strings from '../i18n/strings/arcadeSocial'
+import { mpGameName } from '../lib/games'
 
 const CHALLENGE_GAMES = ['chess', 'lasertag', 'spider-spider', 'beside-them']
-const SHORT = {
-  chess: 'Online chess — moves sync live',
-  lasertag: 'Free-for-all, Team Deathmatch or Search & Destroy',
-  'spider-spider': 'Real-world tag — run from the spider',
-  'beside-them': 'Find the imposter walking among you (4+ players)',
-}
 
 // Resolves once the room's channel is connected (or after a few seconds regardless —
 // the invite still carries the code, and the lobby shows connection status).
@@ -34,6 +31,7 @@ function whenConnected(room, timeoutMs = 6000) {
 // "Challenge" on someone's profile: pick a multiplayer game, host a room for it, send
 // them an invite with the join code, and go to the lobby to wait for them.
 export default function ChallengeSheet({ visible, onClose, navigation, target }) {
+  const t = useT(strings)
   const [busy, setBusy] = useState(null)
 
   const host = async (gameId) => {
@@ -41,20 +39,20 @@ export default function ChallengeSheet({ visible, onClose, navigation, target })
     try {
       const room = await openRoom({ gameId, mode: 'host' })
       await whenConnected(room)
-      if (room.status === 'error') throw new Error(room.error || 'Couldn’t start the game.')
+      if (room.status === 'error') throw new Error(room.error || t('err_start'))
       let inviteError = null
       try {
         await sendGameInvite(target.id, { gameId, code: room.code })
       } catch (e) {
-        inviteError = e?.message || 'Couldn’t send the invite.'
+        inviteError = e?.message || t('err_invite')
       }
       onClose?.()
       navigation.navigate('GameLobby', { gameId, code: room.code })
       if (inviteError) {
-        Alert.alert('Invite not sent', `${inviteError} Your game is open — share code ${room.code} with ${target.username || 'them'}.`)
+        Alert.alert(t('invite_not_sent'), t('invite_not_sent_msg', { err: inviteError, code: room.code, name: target.username || t('them') }))
       }
     } catch (e) {
-      Alert.alert('Couldn’t start the game', e?.message || 'Please try again.')
+      Alert.alert(t('cant_start_title'), e?.message || t('try_again'))
     } finally {
       setBusy(null)
     }
@@ -64,13 +62,13 @@ export default function ChallengeSheet({ visible, onClose, navigation, target })
     if (busy) return
     const current = getCurrentRoom()
     if (current?.info?.phase === 'playing') {
-      Alert.alert('You’re in a match', 'Finish or leave your current game before starting a new one.')
+      Alert.alert(t('in_match_title'), t('in_match_msg'))
       return
     }
     if (current) {
-      Alert.alert('Leave your current lobby?', `You’re in a ${MP_GAMES[current.gameId]?.name ?? 'game'} lobby (${current.code}). Starting a challenge will leave it.`, [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Leave & challenge', onPress: () => host(gameId) },
+      Alert.alert(t('leave_lobby_title'), t('leave_lobby_msg', { game: MP_GAMES[current.gameId] ? mpGameName(current.gameId, MP_GAMES[current.gameId].name) : t('game'), code: current.code }), [
+        { text: t('cancel'), style: 'cancel' },
+        { text: t('leave_challenge'), onPress: () => host(gameId) },
       ])
       return
     }
@@ -79,17 +77,17 @@ export default function ChallengeSheet({ visible, onClose, navigation, target })
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <Pressable style={styles.backdrop} onPress={busy ? undefined : onClose} accessibilityLabel="Close" />
+      <Pressable style={styles.backdrop} onPress={busy ? undefined : onClose} accessibilityLabel={t('close')} />
       <View style={styles.wrap} pointerEvents="box-none">
         <GlassPanel radius={radii.lg} strong animateIn={false}>
           <View style={styles.inner}>
             <View style={styles.head}>
-              <Text style={[type.title, { flex: 1 }]} numberOfLines={1}>Challenge {target?.username ?? ''}</Text>
-              <Pressable onPress={onClose} disabled={!!busy} hitSlop={10} accessibilityRole="button" accessibilityLabel="Close">
+              <Text style={[type.title, { flex: 1 }]} numberOfLines={1}>{t('challenge_title', { name: target?.username ?? '' })}</Text>
+              <Pressable onPress={onClose} disabled={!!busy} hitSlop={10} accessibilityRole="button" accessibilityLabel={t('close')}>
                 <Ionicons name="close" size={24} color={colors.textMuted} />
               </Pressable>
             </View>
-            <Text style={[type.caption, { marginBottom: 8 }]}>You host the game; they get an invite to join your lobby.</Text>
+            <Text style={[type.caption, { marginBottom: 8 }]}>{t('challenge_sub')}</Text>
             {CHALLENGE_GAMES.map((id) => {
               const g = MP_GAMES[id]
               return (
@@ -102,8 +100,8 @@ export default function ChallengeSheet({ visible, onClose, navigation, target })
                 >
                   <Text style={styles.icon}>{g.icon}</Text>
                   <View style={{ flex: 1 }}>
-                    <Text style={[type.body, { fontWeight: '700' }]}>{g.name}</Text>
-                    <Text style={type.caption} numberOfLines={2}>{SHORT[id]}</Text>
+                    <Text style={[type.body, { fontWeight: '700' }]}>{mpGameName(id, g.name)}</Text>
+                    <Text style={type.caption} numberOfLines={2}>{t(`short_${id}`)}</Text>
                   </View>
                   {busy === id ? <ActivityIndicator color={colors.textMuted} /> : <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />}
                 </Pressable>

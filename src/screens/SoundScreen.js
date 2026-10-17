@@ -14,8 +14,11 @@ import ContentViewer from '../components/ContentViewer'
 import MiniPlayer from '../components/MiniPlayer'
 import { MC } from '../components/SoundRow'
 import { PlaylistSheet, ReportSheet, shareSound } from '../components/SoundSheets'
+import { useT } from '../i18n'
+import strings from '../i18n/strings/music'
 
 export default function SoundScreen({ navigation, route }) {
+  const t = useT(strings)
   const insets = useSafeAreaInsets()
   const id = route?.params?.soundId || route?.params?.sound?.id
   const [sound, setSound] = useState(route?.params?.sound || null)
@@ -47,9 +50,9 @@ export default function SoundScreen({ navigation, route }) {
   const back = () => (navigation.canGoBack() ? navigation.goBack() : navigation.navigate('Tabs'))
   const needSignIn = () => {
     if (me) return false
-    Alert.alert('Sign in first', 'Make an account to save sounds and use them on videos.', [
-      { text: 'Not now', style: 'cancel' },
-      { text: 'Sign in', onPress: () => navigation.navigate('SignIn') },
+    Alert.alert(t('signInFirst'), t('signInFirstMsg'), [
+      { text: t('notNow'), style: 'cancel' },
+      { text: t('signIn'), onPress: () => navigation.navigate('SignIn') },
     ])
     return true
   }
@@ -72,9 +75,9 @@ export default function SoundScreen({ navigation, route }) {
     return (
       <View style={[st.screen, st.center, { paddingTop: insets.top }]}>
         <Ionicons name="musical-notes-outline" size={36} color={MC.muted} />
-        <Text style={st.h2}>This sound isn’t available</Text>
-        <Text style={st.muted}>It may be private or was removed.</Text>
-        <Pressable onPress={back} style={[st.btn, { marginTop: 16 }]}><Text style={st.btnText}>Go back</Text></Pressable>
+        <Text style={st.h2}>{t('unavailable')}</Text>
+        <Text style={st.muted}>{t('unavailableMsg')}</Text>
+        <Pressable onPress={back} style={[st.btn, { marginTop: 16 }]}><Text style={st.btnText}>{t('goBack')}</Text></Pressable>
       </View>
     )
   }
@@ -85,13 +88,13 @@ export default function SoundScreen({ navigation, route }) {
   return (
     <View style={[st.screen, { paddingTop: Platform.OS === 'web' ? 12 : insets.top + 4 }]}>
       <View style={st.top}>
-        <Pressable onPress={back} hitSlop={10} accessibilityLabel="Back"><Ionicons name="chevron-back" size={26} color={MC.text} /></Pressable>
-        <Text style={st.topTitle}>Sound</Text>
-        <Pressable onPress={() => shareSound(sound)} hitSlop={10} accessibilityLabel="Share"><Ionicons name="share-outline" size={22} color={MC.text} /></Pressable>
+        <Pressable onPress={back} hitSlop={10} accessibilityLabel={t('back')}><Ionicons name="chevron-back" size={26} color={MC.text} /></Pressable>
+        <Text style={st.topTitle}>{t('sound')}</Text>
+        <Pressable onPress={() => shareSound(sound)} hitSlop={10} accessibilityLabel={t('share')}><Ionicons name="share-outline" size={22} color={MC.text} /></Pressable>
       </View>
       <ScrollView contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: insets.bottom + 120, maxWidth: 820, width: '100%', alignSelf: 'center' }}>
         <View style={st.hero}>
-          <Pressable onPress={play} disabled={!playable} style={[st.cover, !playable && { opacity: 0.5 }]} accessibilityLabel={isPlaying ? 'Pause' : 'Play'}>
+          <Pressable onPress={play} disabled={!playable} style={[st.cover, !playable && { opacity: 0.5 }]} accessibilityLabel={isPlaying ? t('pause') : t('play')}>
             <Ionicons name={sound.kind === 'song' ? 'musical-note' : 'grid'} size={34} color={MC.gold} />
             <View style={st.coverPlay}><Ionicons name={isPlaying ? 'pause' : 'play'} size={20} color={MC.bg} /></View>
           </Pressable>
@@ -99,10 +102,10 @@ export default function SoundScreen({ navigation, route }) {
             <Text style={st.h1} numberOfLines={2}>{sound.title}</Text>
             <Pressable onPress={() => openProfile(navigation, sound.user_id, sound.profiles?.avatar_url)} style={st.owner}>
               <Image source={avatarSource(sound.profiles?.avatar_url)} style={st.avatar} />
-              <Text style={st.ownerName}>@{sound.profiles?.username || 'member'}</Text>
+              <Text style={st.ownerName}>@{sound.profiles?.username || t('member')}</Text>
             </Pressable>
             <Text style={st.muted}>
-              {formatCount(sound.play_count || 0)} plays · {formatCount(sound.use_count || 0)} videos{sound.bpm ? ` · ${sound.bpm} BPM` : ''} · {sound.kind === 'song' ? 'Song' : sound.kind === 'beat' ? 'Beat' : 'Sound'}
+              {t('statsLine', { plays: formatCount(sound.play_count || 0), videos: formatCount(sound.use_count || 0) })}{sound.bpm ? ` · ${sound.bpm} BPM` : ''} · {sound.kind === 'song' ? t('kindSong') : sound.kind === 'beat' ? t('kindBeat') : t('kindSound')}
             </Text>
           </View>
         </View>
@@ -113,36 +116,36 @@ export default function SoundScreen({ navigation, route }) {
             ))}
           </View>
         ) : null}
-        {sound.is_muted ? <Text style={st.warn}>This sound is muted while a copyright report is reviewed.</Text> : null}
-        {sound.status === 'private' && mine ? <Text style={st.note}>Only you can see this sound. Make it public from Studio → My sounds.</Text> : null}
+        {sound.is_muted ? <Text style={st.warn}>{t('mutedWarn')}</Text> : null}
+        {sound.status === 'private' && mine ? <Text style={st.note}>{t('privateNote')}</Text> : null}
 
         <View style={st.actions}>
           <Pressable onPress={useIt} disabled={!playable} style={[st.btn, st.btnMain, !playable && { opacity: 0.5 }]} accessibilityRole="button">
             <Ionicons name="videocam" size={18} color="#fff" />
-            <Text style={[st.btnText, { color: '#fff' }]}>Use this sound</Text>
+            <Text style={[st.btnText, { color: '#fff' }]}>{t('useThisSound')}</Text>
           </Pressable>
-          <Pressable onPress={toggleSave} style={st.iconBtn} accessibilityLabel={saved ? 'Unsave' : 'Save'}>
+          <Pressable onPress={toggleSave} style={st.iconBtn} accessibilityLabel={saved ? t('unsave') : t('save')}>
             <Ionicons name={saved ? 'bookmark' : 'bookmark-outline'} size={20} color={saved ? MC.gold : MC.text} />
           </Pressable>
-          <Pressable onPress={() => { if (!needSignIn()) setPlOpen(true) }} style={st.iconBtn} accessibilityLabel="Add to playlist">
+          <Pressable onPress={() => { if (!needSignIn()) setPlOpen(true) }} style={st.iconBtn} accessibilityLabel={t('addToPlaylist')}>
             <Ionicons name="add-circle-outline" size={21} color={MC.text} />
           </Pressable>
-          <Pressable onPress={() => shareSound(sound)} style={st.iconBtn} accessibilityLabel="Send to someone">
+          <Pressable onPress={() => shareSound(sound)} style={st.iconBtn} accessibilityLabel={t('sendToSomeone')}>
             <Ionicons name="paper-plane-outline" size={20} color={MC.text} />
           </Pressable>
         </View>
 
-        <Text style={st.section}>Videos with this sound</Text>
+        <Text style={st.section}>{t('videosWithSound')}</Text>
         {videos == null ? <ActivityIndicator color={MC.accent} /> : videos.length ? (
           <MasonryGrid items={videos} showOwner onOpen={(index) => setViewer({ open: true, index })} />
         ) : (
-          <Text style={st.muted}>No videos yet. Be the first to use it.</Text>
+          <Text style={st.muted}>{t('noVideos')}</Text>
         )}
 
         {!mine && me ? (
           <Pressable onPress={() => setReportOpen(true)} style={st.report}>
             <Ionicons name="flag-outline" size={14} color={MC.muted} />
-            <Text style={st.reportText}>Report copyright</Text>
+            <Text style={st.reportText}>{t('reportCopyright')}</Text>
           </Pressable>
         ) : null}
       </ScrollView>

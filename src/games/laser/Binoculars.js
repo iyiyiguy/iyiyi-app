@@ -2,6 +2,8 @@ import { memo } from 'react'
 import { StyleSheet, Text, View } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { angleDiff, formatDistance } from '../../lib/multiplayer'
+import { translate } from '../../i18n'
+import H from '../../i18n/strings/laserHud'
 import { CAMERA_HFOV_DEG } from './vision'
 import { FONT, ST, stShadow } from '../studio'
 
@@ -75,7 +77,7 @@ export function BinocularFrame({ zoom, view }) {
       <View style={[s.mask, { width: d + ring * 2, height: d + ring * 2, borderRadius: (d + ring * 2) / 2, borderWidth: ring, left: (view.width - d) / 2 - ring, top: (view.height - d) / 2 - ring }]} />
       <View style={[s.badge, { top: (view.height - d) / 2 + 14 }]}>
         <Ionicons name="telescope-outline" size={14} color={ST.objective} />
-        <Text style={s.badgeText}>BINOCULARS · {Number.isInteger(zoom) ? zoom : zoom.toFixed(1)}× · LOWER TO SHOOT</Text>
+        <Text style={s.badgeText}>{translate(H, 'bino_badge', { n: Number.isInteger(zoom) ? zoom : zoom.toFixed(1) })}</Text>
       </View>
     </View>
   )

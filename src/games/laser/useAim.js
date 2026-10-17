@@ -29,21 +29,26 @@ import { useEffect, useRef, useState } from 'react'
 import { Platform } from 'react-native'
 import * as Location from 'expo-location'
 import { Accelerometer, Magnetometer } from 'expo-sensors'
+import { translate } from '../../i18n'
+import H from '../../i18n/strings/laserHud'
+
+const tr = (k, v) => translate(H, k, v)
 
 const SMOOTH = 0.25 // weight of each new sample
 const STRONG = 0.75 // |axis| above this → gravity is mostly along that axis
 const STABLE_SAMPLES = 2
 
+// Getters: read in the viewer's language each time.
 export const AIM_MODE_LABELS = {
-  trigger: 'AIM · tap screen to fire, hold for auto',
-  top: 'HIP FIRE · point the top edge, tap anywhere',
-  camera: 'AIM · FIRE button or tap a target',
+  get trigger() { return tr('aim_label_trigger') },
+  get top() { return tr('aim_label_top') },
+  get camera() { return tr('aim_label_camera') },
 }
 // One-line coaching shown at the start of a match.
 export const AIM_MODE_TIPS = {
-  trigger: 'Hold upright to AIM with the camera · tap a player (or anywhere) to fire, hold for auto · hold the phone flat for HIP FIRE',
-  top: 'HIP FIRE: point the TOP EDGE of the phone at a player and tap · hold the phone upright to aim with the camera',
-  camera: 'Get the crosshair near a player and press FIRE, or tap the box around them · hold the phone flat for HIP FIRE',
+  get trigger() { return tr('aim_tip_trigger') },
+  get top() { return tr('aim_tip_top') },
+  get camera() { return tr('aim_tip_camera') },
 }
 
 function holdFrom({ x, y, z }) {

@@ -21,9 +21,12 @@ import { QrCodesSheet } from './QrCodes'
 import { Toy } from './toys'
 import { fetchWalkablePoints } from './walkable'
 import { PlacePanel } from './PlaceStations'
-import { AUTO_MIN_GAP_M, KILL_HOLD_OPTIONS, MAX_AUTO_STATIONS, floorLabel, generateAutoStations, hasPos, holdMsOf, makeQrStations, stationKind } from './engine'
+import { AUTO_MIN_GAP_M, KILL_HOLD_OPTIONS, MAX_AUTO_STATIONS, floorIndex, generateAutoStations, hasPos, holdMsOf, makeQrStations, stationKind } from './engine'
 import { distanceMeters, formatDistance } from '../../lib/multiplayer'
 import { ST, StButton, StPanel, stType, withAlpha } from '../studio'
+import { useT } from '../../i18n'
+import B from '../../i18n/strings/besideThem'
+import { bt, floorName, stationName } from './text'
 
 export const MIN_STATIONS = 1
 export const MAX_STATIONS = MAX_AUTO_STATIONS
@@ -31,13 +34,13 @@ const AREA_SIZES = [50, 100, 200, 400]
 const COUNTS = [4, 6, 8, 10]
 const DEFAULT_COUNT = 6
 const INDOOR_ACC_M = 15 // host's GPS worse than this: probably indoors
-const HOLD_LABELS = { 0: 'Instant', 1000: '1 s', 1500: '1.5 s', 2000: '2 s' }
+const HOLD_LABELS = { get 0() { return bt('instant') }, 1000: '1 s', 1500: '1.5 s', 2000: '2 s' }
 
 const MODES = [
-  { id: 'auto', title: 'Auto GPS', tag: 'Outdoors · no setup', icon: 'navigate-outline', text: 'Stations with silly names appear around your circle. Walk there and the task opens. Needs open sky — GPS is poor indoors.' },
-  { id: 'place', title: 'Walk & place', tag: 'Indoors · multiple floors', icon: 'footsteps-outline', text: 'Walk around the house or venue and tap “Place station here” at each spot. Uses GPS plus the barometer, so a station upstairs only opens upstairs.' },
-  { id: 'qr', title: 'QR markers', tag: 'Most precise · any floor', icon: 'qr-code-outline', text: 'Print or show a code for each station and tape them up. Scanning the code starts the task — works indoors and on every floor.' },
-  { id: 'photo', title: 'Photo stations', tag: 'Scan an object', icon: 'camera-outline', text: 'Photograph real objects (a bench, a door, a sign). Players find the object and match the photo. Uses GPS.' },
+  { id: 'auto', get title() { return bt('mode_auto') }, get tag() { return bt('mode_auto_tag') }, icon: 'navigate-outline', get text() { return bt('mode_auto_text') } },
+  { id: 'place', get title() { return bt('mode_place') }, get tag() { return bt('mode_place_tag') }, icon: 'footsteps-outline', get text() { return bt('mode_place_text') } },
+  { id: 'qr', get title() { return bt('mode_qr') }, get tag() { return bt('mode_qr_tag') }, icon: 'qr-code-outline', get text() { return bt('mode_qr_text') } },
+  { id: 'photo', get title() { return bt('mode_photo') }, get tag() { return bt('mode_photo_tag') }, icon: 'camera-outline', get text() { return bt('mode_photo_text') } },
 ]
 const MODE_IDS = MODES.map((m) => m.id)
 
@@ -53,12 +56,12 @@ export function besideCanStart(info) {
   const s = info.settings || {}
   const mode = stationModeOf(s)
   const n = (s.stations || []).length
-  if (mode !== 'qr' && mode !== 'place' && !s.area) return { ok: false, reason: 'Set the play area on the map.' }
+  if (mode !== 'qr' && mode !== 'place' && !s.area) return { ok: false, reason: bt('cs_set_area') }
   if (n < MIN_STATIONS) {
-    if (mode === 'auto') return { ok: false, reason: 'Placing task stations…' }
-    if (mode === 'qr') return { ok: false, reason: 'Make the station codes first.' }
-    if (mode === 'place') return { ok: false, reason: 'Walk around and place at least one station.' }
-    return { ok: false, reason: 'Scan at least one task station (5–10 is best).' }
+    if (mode === 'auto') return { ok: false, reason: bt('cs_placing') }
+    if (mode === 'qr') return { ok: false, reason: bt('cs_make_codes') }
+    if (mode === 'place') return { ok: false, reason: bt('cs_place_one') }
+    return { ok: false, reason: bt('cs_scan_one') }
   }
   return { ok: true }
 }
@@ -67,6 +70,7 @@ const validStation = (st) =>
   st && typeof st.id === 'string' && Number.isFinite(st.lat) && Number.isFinite(st.lng) && typeof st.name === 'string'
 
 export function BesideSetup({ room, snap }) {
+  const t = useT(B)
   const info = snap.info
   const s = info.settings || {}
   const isHost = snap.isHost
@@ -182,10 +186,10 @@ export function BesideSetup({ room, snap }) {
   }
 
   const remove = (st) => {
-    Alert.alert('Remove station?', st.name, [
-      { text: 'Cancel', style: 'cancel' },
+    Alert.alert(t('remove_station_q'), stationName(st), [
+      { text: t('cancel'), style: 'cancel' },
       {
-        text: 'Remove',
+        text: t('remove'),
         style: 'destructive',
         onPress: () => {
           if (isHost) room.setInfo({ settings: { ...s, stations: stations.filter((x) => x.id !== st.id) } })
@@ -209,9 +213,9 @@ export function BesideSetup({ room, snap }) {
   return (
     <>
       <StPanel accent={ST.objective} style={styles.panel}>
-        <Text style={[stType.label, { marginBottom: 6 }]}>Where are you playing?</Text>
+        <Text style={[stType.label, { marginBottom: 6 }]}>{t('where_playing')}</Text>
         <View style={[styles.chips, { marginTop: 0, marginBottom: 10 }]}>
-          {[['outdoors', 'Outdoors', 'sunny-outline'], ['indoors', 'Indoors', 'home-outline']].map(([v, label, icon]) => {
+          {[['outdoors', t('outdoors'), 'sunny-outline'], ['indoors', t('indoors'), 'home-outline']].map(([v, label, icon]) => {
             const on = v === 'indoors' ? indoors : !indoors
             return (
               <Pressable
@@ -221,16 +225,16 @@ export function BesideSetup({ room, snap }) {
                 style={[styles.chip, styles.chipRow, on && styles.chipOn]}
                 accessibilityRole="radio"
                 accessibilityState={{ selected: on, disabled: !isHost }}
-                accessibilityLabel={`Playing ${label.toLowerCase()}`}
+                accessibilityLabel={t(v === 'indoors' ? 'playing_indoors' : 'playing_outdoors')}
               >
                 <Ionicons name={icon} size={14} color={on ? ST.ink : ST.text} />
                 <Text style={[styles.chipText, { color: on ? ST.ink : ST.text, marginLeft: 5 }]}>{label}</Text>
               </Pressable>
             )
           })}
-          {!venue && weakGps ? <Text style={[stType.small, { fontSize: 11, alignSelf: 'center' }]}>GPS ±{Math.round(hostFix.acc)} m — looks indoors</Text> : null}
+          {!venue && weakGps ? <Text style={[stType.small, { fontSize: 11, alignSelf: 'center' }]}>{t('gps_looks_indoors', { n: Math.round(hostFix.acc) })}</Text> : null}
         </View>
-        <Text style={[stType.label, { marginBottom: 8 }]}>Task stations</Text>
+        <Text style={[stType.label, { marginBottom: 8 }]}>{t('task_stations')}</Text>
         {MODES.map((m) => {
           const on = mode === m.id
           return (
@@ -250,7 +254,7 @@ export function BesideSetup({ room, snap }) {
                   <Text style={[stType.name, { fontSize: 15 }]}>{m.title}</Text>
                 </View>
                 <Text style={[stType.label, { fontSize: 10, color: on ? ST.friendly : ST.faint, marginTop: 1 }]}>
-                  {m.tag}{recommended.includes(m.id) ? ' · recommended' : ''}
+                  {m.tag}{recommended.includes(m.id) ? ` · ${t('recommended')}` : ''}
                 </Text>
                 {on ? <Text style={[stType.small, { fontSize: 12, marginTop: 3 }]}>{m.text}</Text> : null}
               </View>
@@ -262,11 +266,11 @@ export function BesideSetup({ room, snap }) {
             <Ionicons name="business-outline" size={16} color={ST.objective} />
             <View style={{ flex: 1, marginLeft: 8 }}>
               <Text style={[stType.small, { color: ST.text }]}>
-                {weakGps ? `GPS is ±${Math.round(hostFix.acc)} m here. ` : ''}Indoors, GPS can’t tell rooms or floors apart. QR markers are the most reliable and work on every floor; Walk & place uses the barometer for floors.
+                {weakGps ? `${t('gps_is_here', { n: Math.round(hostFix.acc) })} ` : ''}{t('indoor_hint')}
               </Text>
               <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
-                <StButton title="Use QR" tone="objective" height={32} onPress={() => setMode('qr')} style={{ paddingHorizontal: 10 }} />
-                <StButton title="Walk & place" tone="outline" color={ST.objective} height={32} onPress={() => setMode('place')} style={{ paddingHorizontal: 10 }} />
+                <StButton title={t('use_qr')} tone="objective" height={32} onPress={() => setMode('qr')} style={{ paddingHorizontal: 10 }} />
+                <StButton title={t('mode_place')} tone="outline" color={ST.objective} height={32} onPress={() => setMode('place')} style={{ paddingHorizontal: 10 }} />
               </View>
             </View>
           </View>
@@ -274,7 +278,7 @@ export function BesideSetup({ room, snap }) {
       </StPanel>
 
       <StPanel accent={ST.enemy} style={styles.panel}>
-        <Text style={[stType.label, { marginBottom: 6 }]}>Elimination</Text>
+        <Text style={[stType.label, { marginBottom: 6 }]}>{t('elimination')}</Text>
         <View style={[styles.chips, { marginTop: 0 }]}>
           {KILL_HOLD_OPTIONS.map((ms) => (
             <Pressable
@@ -284,26 +288,26 @@ export function BesideSetup({ room, snap }) {
               style={[styles.chip, holdMs === ms && styles.chipOn, !isHost && holdMs !== ms && { opacity: 0.45 }]}
               accessibilityRole="radio"
               accessibilityState={{ selected: holdMs === ms, disabled: !isHost }}
-              accessibilityLabel={ms ? `Hold ${HOLD_LABELS[ms]} to eliminate` : 'Instant elimination'}
+              accessibilityLabel={ms ? t('hold_x_eliminate', { s: HOLD_LABELS[ms] }) : t('instant_elimination')}
             >
               <Text style={[styles.chipText, { color: holdMs === ms ? ST.ink : ST.text }]}>{HOLD_LABELS[ms]}{ms === 1500 ? ' ★' : ''}</Text>
             </Pressable>
           ))}
         </View>
         <Text style={[stType.small, { marginTop: 8 }]}>
-          {holdMs ? `The imposter holds on someone for ${HOLD_LABELS[holdMs]} within arm’s reach — enough for a sharp crewmate to notice.` : 'One tap — still only within arm’s reach, with a good signal and on the same floor.'}
+          {holdMs ? t('hold_explain', { s: HOLD_LABELS[holdMs] }) : t('instant_explain')}
         </Text>
       </StPanel>
 
       {!areaOptional || isHost ? (
         <StPanel accent={ST.friendly} style={styles.panel}>
-          <Text style={[stType.label, { marginBottom: 6 }]}>Play area{areaOptional ? ' (optional)' : ''}</Text>
+          <Text style={[stType.label, { marginBottom: 6 }]}>{areaOptional ? t('play_area_optional') : t('play_area')}</Text>
           <GameMap
             center={area}
             onPick={isHost ? setArea : undefined}
-            hint={isHost ? (area ? 'Tap to move the center' : 'Tap the map to set the center') : null}
+            hint={isHost ? (area ? t('tap_move_center') : t('tap_set_center')) : null}
             circles={area ? [{ id: 'area', lat: area.lat, lng: area.lng, radius: area.r, color: ST.friendly }] : []}
-            markers={mapStations.map((st, i) => ({ id: st.id, lat: st.lat, lng: st.lng, label: `${st.no || i + 1}. ${st.name}`, color: ST.objective }))}
+            markers={mapStations.map((st, i) => ({ id: st.id, lat: st.lat, lng: st.lng, label: `${st.no || i + 1}. ${stationName(st)}`, color: ST.objective }))}
           />
           {isHost && area && (
             <View style={styles.chips}>
@@ -315,30 +319,30 @@ export function BesideSetup({ room, snap }) {
             </View>
           )}
           <Text style={[stType.small, { marginTop: 8 }]}>
-            {area ? 'Everyone plays inside this circle. Keep it somewhere safe and walkable.' : isHost ? 'Choose where the game is played.' : 'The host is choosing the play area.'}
+            {area ? t('area_inside') : isHost ? t('area_choose') : t('area_host_choosing')}
           </Text>
-          {tooSmall ? <Text style={[stType.small, { marginTop: 4, color: ST.objective }]}>Small area: GPS stations will sit close together. QR markers work better here.</Text> : null}
+          {tooSmall ? <Text style={[stType.small, { marginTop: 4, color: ST.objective }]}>{t('small_area')}</Text> : null}
         </StPanel>
       ) : null}
 
       <StPanel accent={ST.objective} style={styles.panel}>
         <View style={styles.headRow}>
-          <Text style={stType.label}>{mode === 'qr' ? 'Station codes' : 'Stations'} · {stations.length}{mode === 'photo' || mode === 'place' ? `/${MAX_STATIONS}` : ''}</Text>
+          <Text style={stType.label}>{mode === 'qr' ? t('station_codes') : t('stations')} · {stations.length}{mode === 'photo' || mode === 'place' ? `/${MAX_STATIONS}` : ''}</Text>
           <Text style={[stType.label, { color: stations.length >= MIN_STATIONS ? ST.health : ST.objective }]}>
-            {placing ? 'Snapping to paths…' : stations.length >= MIN_STATIONS ? 'Ready' : mode === 'photo' ? 'Scan one or more' : mode === 'place' ? 'Place one or more' : '—'}
+            {placing ? t('snapping') : stations.length >= MIN_STATIONS ? t('ready_word') : mode === 'photo' ? t('scan_one_more') : mode === 'place' ? t('place_one_more') : '—'}
           </Text>
         </View>
 
         {isHost && (mode === 'auto' || mode === 'qr') ? (
           <View style={[styles.chips, { marginTop: 0, marginBottom: 8 }]}>
             {COUNTS.map((n) => (
-              <Pressable key={n} onPress={() => setCount(n)} style={[styles.chip, count === n && styles.chipOn]} accessibilityRole="button" accessibilityLabel={`${n} stations`} accessibilityState={{ selected: count === n }}>
+              <Pressable key={n} onPress={() => setCount(n)} style={[styles.chip, count === n && styles.chipOn]} accessibilityRole="button" accessibilityLabel={t('n_stations', { n })} accessibilityState={{ selected: count === n }}>
                 <Text style={[styles.chipText, { color: count === n ? ST.ink : ST.text }]}>{n}</Text>
               </Pressable>
             ))}
             {mode === 'auto' && area ? (
-              <Pressable onPress={() => placeAuto(area, count)} style={styles.chip} accessibilityRole="button" accessibilityLabel="Shuffle station spots">
-                <Text style={[styles.chipText, { color: ST.friendly }]}>Shuffle</Text>
+              <Pressable onPress={() => placeAuto(area, count)} style={styles.chip} accessibilityRole="button" accessibilityLabel={t('shuffle_a11y')}>
+                <Text style={[styles.chipText, { color: ST.friendly }]}>{t('shuffle')}</Text>
               </Pressable>
             ) : null}
           </View>
@@ -347,12 +351,12 @@ export function BesideSetup({ room, snap }) {
         {stations.length === 0 && (
           <Text style={stType.small}>
             {mode === 'auto'
-              ? (area ? 'Placing stations…' : isHost ? 'Set the play area and stations appear on the map.' : 'The host is setting up stations.')
+              ? (area ? t('placing_stations') : isHost ? t('set_area_first_hint') : t('host_setting_up'))
               : mode === 'qr'
-                ? (isHost ? 'Pick how many codes to make.' : 'The host is making station codes.')
+                ? (isHost ? t('pick_codes') : t('host_making_codes'))
                 : mode === 'place'
-                  ? (isHost ? 'Walk to each spot and tap “Place station here”. 5–10 spread over the rooms (and floors) works best.' : 'The host is walking around placing stations.')
-                : canScan ? 'Walk to real objects inside the play area and scan them. 5–10 stations spread around works best.' : 'The host is scanning task stations.'}
+                  ? (isHost ? t('place_hint') : t('host_placing'))
+                : canScan ? t('scan_hint') : t('host_scanning')}
           </Text>
         )}
         {stations.map((st, i) => {
@@ -363,16 +367,16 @@ export function BesideSetup({ room, snap }) {
                 ? <StationImage room={room} station={st} assets={snap.assets} style={styles.thumb} />
                 : <View style={[styles.thumb, styles.toyBox]}>{st.toy ? <Toy kind={st.toy} size={38} /> : <Ionicons name={st.icon || 'flag-outline'} size={20} color={ST.objective} />}</View>}
               <View style={{ flex: 1, marginLeft: 10 }}>
-                <Text style={[stType.name, { fontSize: 15 }]} numberOfLines={1}>{st.no || i + 1}. {st.name}</Text>
+                <Text style={[stType.name, { fontSize: 15 }]} numberOfLines={1}>{st.no || i + 1}. {stationName(st)}</Text>
                 <Text style={[stType.small, { fontSize: 11 }]}>
-                  {k === 'qr' ? `Code ${st.code}`
-                    : k === 'place' ? [floorLabel(st.alt) || 'Floor ?', Number.isFinite(st.acc) ? `GPS ±${st.acc} m` : null, st.photo || st.url ? 'photo hint' : null].filter(Boolean).join(' · ')
-                      : area && hasPos(st) ? `${formatDistance(distanceMeters(area, st))} from center` : ''}
-                  {k === 'photo' && !st.url ? ' · shared from phone' : ''}
+                  {k === 'qr' ? t('code_x', { code: st.code })
+                    : k === 'place' ? [floorName(floorIndex(st.alt)) || t('floor_unknown'), Number.isFinite(st.acc) ? `GPS ±${st.acc} m` : null, st.photo || st.url ? t('photo_hint') : null].filter(Boolean).join(' · ')
+                      : area && hasPos(st) ? t('from_center', { d: formatDistance(distanceMeters(area, st)) }) : ''}
+                  {k === 'photo' && !st.url ? ` · ${t('shared_from_phone')}` : ''}
                 </Text>
               </View>
               {((k === 'photo' && (isHost || st.by === snap.me.id)) || (k === 'place' && isHost)) && (
-                <Pressable onPress={() => remove(st)} hitSlop={8} accessibilityRole="button" accessibilityLabel={`Remove ${st.name}`}>
+                <Pressable onPress={() => remove(st)} hitSlop={8} accessibilityRole="button" accessibilityLabel={t('remove_x', { name: stationName(st) })}>
                   <Ionicons name="trash-outline" size={18} color={ST.enemy} />
                 </Pressable>
               )}
@@ -381,7 +385,7 @@ export function BesideSetup({ room, snap }) {
         })}
         {mode === 'qr' && isHost && stations.length ? (
           <StButton
-            title="Show / print codes"
+            title={t('show_print_codes')}
             tone="objective"
             height={46}
             left={<Ionicons name="qr-code-outline" size={18} color={ST.ink} />}
@@ -392,11 +396,11 @@ export function BesideSetup({ room, snap }) {
         {mode === 'place' && isHost ? <PlacePanel room={room} stations={stations} meId={snap.me.id} /> : null}
         {canScan && stations.length < MAX_STATIONS && (
           <StButton
-            title="Scan a station"
+            title={t('scan_a_station')}
             tone="objective"
             height={46}
             left={<Ionicons name="camera-outline" size={18} color={ST.ink} />}
-            onPress={() => (area ? setScanning(true) : Alert.alert('Set the play area first', 'Stations need to be inside the play area.'))}
+            onPress={() => (area ? setScanning(true) : Alert.alert(t('set_area_first'), t('stations_inside_area')))}
             style={{ marginTop: 10 }}
           />
         )}

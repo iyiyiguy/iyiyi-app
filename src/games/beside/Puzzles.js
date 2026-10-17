@@ -9,23 +9,26 @@ import { shuffled } from '../../lib/multiplayer'
 import { Ionicons } from '@expo/vector-icons'
 import { ST, stType, withAlpha } from '../studio'
 import { MONO, termType } from './terminal'
+import { useT } from '../../i18n'
+import B from '../../i18n/strings/besideThem'
+import { bt } from './text'
 
 export const PUZZLES = {
-  wires: 'Connect the wires',
-  memory: 'Repeat the sequence',
-  lock: 'Crack the lock',
-  tiles: 'Align the tiles',
-  pattern: 'Trace the pattern',
+  get wires() { return bt('pz_wires') },
+  get memory() { return bt('pz_memory') },
+  get lock() { return bt('pz_lock') },
+  get tiles() { return bt('pz_tiles') },
+  get pattern() { return bt('pz_pattern') },
 }
 export const PUZZLE_KINDS = Object.keys(PUZZLES)
 
 /** Terminal module name per puzzle (display only). */
 export const PUZZLE_MODULES = {
-  wires: 'Circuit panel',
-  memory: 'Data blocks',
-  lock: 'Keypad override',
-  tiles: 'Matrix align',
-  pattern: 'Matrix trace',
+  get wires() { return bt('mod_wires') },
+  get memory() { return bt('mod_memory') },
+  get lock() { return bt('mod_lock') },
+  get tiles() { return bt('mod_tiles') },
+  get pattern() { return bt('mod_pattern') },
 }
 
 const noop = () => {}
@@ -61,6 +64,7 @@ function Hint({ children }) {
 }
 
 function Wires({ onDone, onProgress, onError }) {
+  const t = useT(B)
   const [right] = useState(() => shuffled([0, 1, 2, 3]))
   const [picked, setPicked] = useState(null)
   const [linked, setLinked] = useState([])
@@ -81,13 +85,13 @@ function Wires({ onDone, onProgress, onError }) {
   }
   return (
     <View>
-      <Hint>Tap a wire on the left, then the matching color on the right.</Hint>
+      <Hint>{t('hint_wires')}</Hint>
       <View style={styles.wires}>
         <View style={styles.wireCol}>
           {[0, 1, 2, 3].map((c) => {
             const on = linked.includes(c)
             return (
-              <Pressable key={c} onPress={() => !on && setPicked(c)} style={[styles.wireRow, picked === c && styles.wirePicked]} accessibilityRole="button" accessibilityLabel={`Left wire ${c + 1}`}>
+              <Pressable key={c} onPress={() => !on && setPicked(c)} style={[styles.wireRow, picked === c && styles.wirePicked]} accessibilityRole="button" accessibilityLabel={t('left_wire', { n: c + 1 })}>
                 <Text style={styles.pin}>A{c + 1}</Text>
                 <View style={[styles.wire, { backgroundColor: WIRE_COLORS[c], opacity: on ? 0.35 : 1 }]} />
                 <View style={[styles.node, { borderColor: WIRE_COLORS[c] }, on && { backgroundColor: LIVE, borderColor: LIVE }]} />
@@ -109,7 +113,7 @@ function Wires({ onDone, onProgress, onError }) {
           {right.map((c, i) => {
             const on = linked.includes(c)
             return (
-              <Pressable key={c} onPress={() => !on && tapRight(c)} style={styles.wireRow} accessibilityRole="button" accessibilityLabel={`Right socket ${c + 1}`}>
+              <Pressable key={c} onPress={() => !on && tapRight(c)} style={styles.wireRow} accessibilityRole="button" accessibilityLabel={t('right_socket', { n: c + 1 })}>
                 <View style={[styles.node, { borderColor: WIRE_COLORS[c] }, on && { backgroundColor: LIVE, borderColor: LIVE }]} />
                 <View style={[styles.wire, { backgroundColor: WIRE_COLORS[c], opacity: on ? 0.35 : 1 }]} />
                 <Text style={styles.pin}>B{i + 1}</Text>
@@ -118,7 +122,7 @@ function Wires({ onDone, onProgress, onError }) {
           })}
         </View>
       </View>
-      <Text style={[termType.mono, { textAlign: 'center', marginTop: 12 }]}>CIRCUITS {linked.length}/4 LINKED</Text>
+      <Text style={[termType.mono, { textAlign: 'center', marginTop: 12 }]}>{t('circuits_linked', { n: linked.length, total: 4 })}</Text>
     </View>
   )
 }
@@ -126,6 +130,7 @@ function Wires({ onDone, onProgress, onError }) {
 const ADDR = ['0x0A', '0x1F', '0x2C', '0x3B', '0x4E', '0x5D', '0x6A', '0x7F', '0x8C']
 
 function Memory({ onDone, onProgress, onError }) {
+  const t = useT(B)
   const [seq, setSeq] = useState(() => Array.from({ length: 4 }, () => Math.floor(Math.random() * 9)))
   const [lit, setLit] = useState(null)
   const [showing, setShowing] = useState(true)
@@ -161,7 +166,7 @@ function Memory({ onDone, onProgress, onError }) {
   }
   return (
     <View>
-      <Hint>{showing ? 'Watch the lights…' : `Repeat it: ${pos}/${seq.length}`}</Hint>
+      <Hint>{showing ? t('watch_lights') : t('repeat_it', { n: pos, total: seq.length })}</Hint>
       <View style={styles.grid}>
         {Array.from({ length: 9 }, (_, i) => (
           <Pressable key={i} onPress={() => tap(i)} style={[styles.cell, styles.block, lit === i && styles.blockLit]} accessibilityRole="button" accessibilityLabel={`Light ${i + 1}`}>
@@ -177,6 +182,7 @@ function Memory({ onDone, onProgress, onError }) {
 }
 
 function Lock({ onDone, onProgress }) {
+  const t = useT(B)
   const [code] = useState(() => Array.from({ length: 3 }, () => Math.floor(Math.random() * 10)))
   const [dials, setDials] = useState(() => code.map((c) => (c + 3 + Math.floor(Math.random() * 5)) % 10))
   useEffect(() => { onProgress(dials.filter((v, j) => v === code[j]).length / 3) }, [dials]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -188,7 +194,7 @@ function Lock({ onDone, onProgress }) {
   }
   return (
     <View>
-      <Hint>The code on the sticky note is {code.join(' ')}. Turn the dials to match.</Hint>
+      <Hint>{t('hint_lock', { code: code.join(' ') })}</Hint>
       <View style={styles.dials}>
         {dials.map((v, i) => {
           const ok = v === code[i]
@@ -212,6 +218,7 @@ function Lock({ onDone, onProgress }) {
 const COORD = (i) => `${'ABC'[Math.floor(i / 3)]}${(i % 3) + 1}`
 
 function Tiles({ onDone, onProgress }) {
+  const t = useT(B)
   const [rot, setRot] = useState(() => {
     const r = Array.from({ length: 9 }, () => Math.floor(Math.random() * 4))
     if (r.every((x) => x === 0)) r[4] = 2
@@ -226,7 +233,7 @@ function Tiles({ onDone, onProgress }) {
   }
   return (
     <View>
-      <Hint>Tap tiles to rotate them until every arrow points up.</Hint>
+      <Hint>{t('hint_tiles')}</Hint>
       <View style={styles.grid}>
         {rot.map((r, i) => (
           <Pressable key={i} onPress={() => tap(i)} style={[styles.cell, r === 0 && styles.cellOk]} accessibilityRole="button" accessibilityLabel={`Tile ${i + 1}`}>
@@ -240,6 +247,7 @@ function Tiles({ onDone, onProgress }) {
 }
 
 function Pattern({ onDone, onProgress, onError }) {
+  const t = useT(B)
   const [pattern, setPattern] = useState(() => shuffled([0, 1, 2, 3, 4, 5, 6, 7, 8]).slice(0, 5))
   const [pos, setPos] = useState(0)
   useEffect(() => { onProgress(pos / pattern.length) }, [pos, pattern.length]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -257,7 +265,7 @@ function Pattern({ onDone, onProgress, onError }) {
   }
   return (
     <View>
-      <Hint>Trace the pattern: tap the dots in number order.</Hint>
+      <Hint>{t('hint_pattern')}</Hint>
       <View style={styles.grid}>
         {Array.from({ length: 9 }, (_, i) => {
           const order = pattern.indexOf(i)

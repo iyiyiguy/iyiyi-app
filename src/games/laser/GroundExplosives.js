@@ -9,6 +9,10 @@ import { Ionicons } from '@expo/vector-icons'
 import { FONT, ST } from '../studio'
 import { bearingDeg, distanceMeters, formatDistance } from '../../lib/multiplayer'
 import { PHONE_HEIGHT_M, nearRadius, projectGround } from './arGround'
+import { translate } from '../../i18n'
+import H from '../../i18n/strings/laserHud'
+
+const tr = (k, v) => translate(H, k, v)
 
 const C4_IMG = require('../../../assets/games/c4.png')
 const MINE_IMG = require('../../../assets/guns/landmine.png')
@@ -42,7 +46,7 @@ export function groundMarkers({ items, myPos, headingDeg, pitchDeg = 0, zoom = 1
   return out.sort((a, b) => b.d - a.d) // far ones behind near ones
 }
 
-const labelFor = (m) => m.label || (m.kind === 'c4' ? 'YOUR C4' : 'YOUR MINE')
+const labelFor = (m) => m.label || tr(m.kind === 'c4' ? 'your_c4' : 'your_mine')
 
 export const GroundExplosives = memo(function GroundExplosives({ markers, view }) {
   if (!markers?.length) return null
@@ -55,7 +59,7 @@ export const GroundExplosives = memo(function GroundExplosives({ markers, view }
       {markers.map((m) => {
         const color = m.color || ST.objective
         const label = labelFor(m)
-        const dist = m.near ? 'NEAR YOU' : formatDistance(m.d).toUpperCase()
+        const dist = m.near ? tr('near_you') : formatDistance(m.d).toUpperCase()
         if (!m.inView) {
           if (m.near) return null
           if (m.side === 'down' || m.side === 'up') {
@@ -94,7 +98,7 @@ export const GroundExplosives = memo(function GroundExplosives({ markers, view }
         <View style={[s.feet, { bottom: Math.max(160, H * 0.26) }]}>
           <View style={[s.feetRing, { borderColor: feet[0].color || ST.objective }]} />
           <Text style={s.edgeText} numberOfLines={1}>
-            {feet.length === 1 ? `${labelFor(feet[0])} · AT YOUR FEET` : `${feet.length} EXPLOSIVES · AT YOUR FEET`}
+            {feet.length === 1 ? tr('at_feet', { label: labelFor(feet[0]) }) : tr('n_explosives_feet', { n: feet.length })}
           </Text>
         </View>
       ) : null}

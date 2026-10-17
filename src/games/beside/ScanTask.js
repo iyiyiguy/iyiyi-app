@@ -21,12 +21,16 @@ import {
 import { stationKind } from './engine'
 import { QrCamera, QrFrame } from './QrScan'
 import { Toy } from './toys'
+import { useT } from '../../i18n'
+import B from '../../i18n/strings/besideThem'
+import { stationName } from './text'
 
 const GRANTED_MS = 1100
 const DENIED_MS = 750
 
 // onDone({ code }) — code: the scanned QR code for 'qr' stations (the host checks it).
 export function ScanTask({ visible, room, station, stationNo, assets, puzzle, scannedCode, onClose, onDone }) {
+  const t = useT(B)
   const kind = stationKind(station)
   const [perm] = useCameraGate(visible && kind === 'photo')
   const [step, setStep] = useState('scan')
@@ -56,8 +60,9 @@ export function ScanTask({ visible, room, station, stationNo, assets, puzzle, sc
   const haveCode = code || scannedCode
   // Auto / walk & place stations and already-scanned QR codes go straight to the puzzle.
   const eff = step === 'scan' && (shownKind === 'auto' || shownKind === 'place' || (shownKind === 'qr' && haveCode)) ? 'puzzle' : step
-  const no = `STATION ${pad2(shown.stationNo || 0)}`
-  const segs = [st.name, 'Access level crew', 'Link secure']
+  const no = t('station_no', { n: pad2(shown.stationNo || 0) })
+  const stName = stationName(st)
+  const segs = [stName, t('seg_access'), t('seg_link')]
 
   const flashDenied = () => {
     clearTimeout(denyTimer.current)
@@ -76,26 +81,26 @@ export function ScanTask({ visible, room, station, stationNo, assets, puzzle, sc
 
   const onQr = ({ id, code: c }) => {
     if (id === st.id && c === st.code) { buzz('medium'); setQrError(null); setCode(c); setProg(0); setStep('puzzle') }
-    else { buzz('warning'); setQrError('That’s a different station’s code. Find this one.') }
+    else { buzz('warning'); setQrError(t('qr_other_station')) }
   }
 
   let body
   if (eff === 'scan' && shownKind === 'qr') {
     body = (
       <View style={styles.fill}>
-        <QrCamera active={visible} onScan={onQr} onOther={() => setQrError('That isn’t a Beside Them code.')} />
+        <QrCamera active={visible} onScan={onQr} onOther={() => setQrError(t('qr_not_bt'))} />
         <TermBackdrop overCamera reduce={reduce} />
-        <QrFrame label={`Code ${pad2(shown.stationNo || 0)} · ${st.name}`} />
+        <QrFrame label={t('code_n_name', { n: pad2(shown.stationNo || 0), name: stName })} />
         <SafeAreaView style={styles.overlay} edges={['top', 'bottom']} pointerEvents="box-none">
           <View>
             <TermHeader left={no} segments={segs} reduce={reduce} style={{ marginBottom: 10 }} />
-            <Text style={[stType.kicker, stShadow]}>Scan the code</Text>
-            <Text style={[stType.title, stShadow]} numberOfLines={2}>{st.name}</Text>
-            <Text style={[termType.mono, { color: ST.text }, stShadow]}>&gt; Find code {pad2(shown.stationNo || 0)} and fill the square with it.</Text>
+            <Text style={[stType.kicker, stShadow]}>{t('scan_the_code')}</Text>
+            <Text style={[stType.title, stShadow]} numberOfLines={2}>{stName}</Text>
+            <Text style={[termType.mono, { color: ST.text }, stShadow]}>&gt; {t('find_code_fill', { n: pad2(shown.stationNo || 0) })}</Text>
           </View>
           <View>
             {qrError ? <Text style={[stType.small, { color: ST.objective, marginBottom: 8, textAlign: 'center' }, stShadow]}>{qrError}</Text> : null}
-            <StButton title="Cancel" tone="ghost" onPress={close} style={{ backgroundColor: ST.panelStrong }} />
+            <StButton title={t('cancel')} tone="ghost" onPress={close} style={{ backgroundColor: ST.panelStrong }} />
           </View>
         </SafeAreaView>
       </View>
@@ -107,7 +112,7 @@ export function ScanTask({ visible, room, station, stationNo, assets, puzzle, sc
           <CameraView style={StyleSheet.absoluteFill} facing="back" />
         ) : (
           <View style={[StyleSheet.absoluteFill, styles.center, { backgroundColor: TERM.ground }]}>
-            {perm && !perm.granted && perm.status === 'denied' ? <CameraOff what="scanning stations" compact /> : null}
+            {perm && !perm.granted && perm.status === 'denied' ? <CameraOff what={t('cam_what_stations')} compact /> : null}
           </View>
         )}
         <TermBackdrop overCamera reduce={reduce} />
@@ -121,13 +126,13 @@ export function ScanTask({ visible, room, station, stationNo, assets, puzzle, sc
             <TermHeader left={no} segments={segs} reduce={reduce} style={{ marginBottom: 10 }} />
             <View style={styles.topRow}>
               <View style={{ flex: 1 }}>
-                <Text style={[stType.kicker, stShadow]}>Scan station</Text>
-                <Text style={[stType.title, stShadow]} numberOfLines={2}>{st.name}</Text>
-                <Text style={[termType.mono, { color: ST.text }, stShadow]}>&gt; Line the camera up with the object in the photo.</Text>
+                <Text style={[stType.kicker, stShadow]}>{t('scan_station')}</Text>
+                <Text style={[stType.title, stShadow]} numberOfLines={2}>{stName}</Text>
+                <Text style={[termType.mono, { color: ST.text }, stShadow]}>&gt; {t('line_up_camera')}</Text>
               </View>
-              <Pressable onPress={() => setOverlay((v) => !v)} style={styles.refCard} accessibilityRole="button" accessibilityLabel="Toggle reference overlay">
+              <Pressable onPress={() => setOverlay((v) => !v)} style={styles.refCard} accessibilityRole="button" accessibilityLabel={t('toggle_overlay')}>
                 <StationImage room={room} station={st} assets={assets} style={styles.refImg} />
-                <Text style={styles.refText}>{overlay ? 'Hide overlay' : 'Show overlay'}</Text>
+                <Text style={styles.refText}>{overlay ? t('hide_overlay') : t('show_overlay')}</Text>
                 <Brackets color={withAlpha(ST.friendly, 0.7)} size={8} inset={-1} />
               </Pressable>
             </View>
@@ -135,8 +140,8 @@ export function ScanTask({ visible, room, station, stationNo, assets, puzzle, sc
           <View>
             <ScanReadouts reduce={reduce} live={!!perm?.granted} />
             <View style={{ flexDirection: 'row', gap: 10 }}>
-              <StButton title="Cancel" tone="ghost" onPress={close} style={{ flex: 1, backgroundColor: ST.panelStrong }} />
-              <StButton title="It matches" disabled={!perm?.granted} onPress={() => { buzz('medium'); setProg(0); setStep('puzzle') }} style={{ flex: 2 }} />
+              <StButton title={t('cancel')} tone="ghost" onPress={close} style={{ flex: 1, backgroundColor: ST.panelStrong }} />
+              <StButton title={t('it_matches')} disabled={!perm?.granted} onPress={() => { buzz('medium'); setProg(0); setStep('puzzle') }} style={{ flex: 2 }} />
             </View>
           </View>
         </SafeAreaView>
@@ -153,7 +158,7 @@ export function ScanTask({ visible, room, station, stationNo, assets, puzzle, sc
           <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 10, gap: 10 }}>
             {st.toy ? <Toy kind={st.toy} size={44} /> : null}
             <View style={{ flex: 1, minWidth: 0 }}>
-              <Text style={[stType.kicker, { color: ST.objective }]} numberOfLines={1}>Crack the code · {st.name}</Text>
+              <Text style={[stType.kicker, { color: ST.objective }]} numberOfLines={1}>{t('crack_code', { name: stName })}</Text>
               <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                 <Text style={[stType.title, { fontSize: 26, flexShrink: 1 }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{PUZZLES[pKind]}</Text>
                 <Cursor reduce={reduce} color={ST.friendly} w={10} h={20} />
@@ -161,26 +166,26 @@ export function ScanTask({ visible, room, station, stationNo, assets, puzzle, sc
             </View>
           </View>
           <View style={styles.statRow}>
-            <Readout label="Decrypt" value={`${String(Math.round(prog * 100)).padStart(3, '0')}%`} color={granted ? TERM.granted : ST.friendly} />
-            <Readout label="Cipher" value={`AES-${pKind ? pKind.length * 32 : 256}`} />
-            <Readout label="Status" value={granted ? 'OPEN' : denied ? 'RETRY' : 'LOCKED'} color={granted ? TERM.granted : denied ? TERM.denied : ST.objective} />
+            <Readout label={t('ro_decrypt')} value={`${String(Math.round(prog * 100)).padStart(3, '0')}%`} color={granted ? TERM.granted : ST.friendly} />
+            <Readout label={t('ro_cipher')} value={`AES-${pKind ? pKind.length * 32 : 256}`} />
+            <Readout label={t('ro_status')} value={granted ? t('st_open') : denied ? t('st_retry') : t('st_locked')} color={granted ? TERM.granted : denied ? TERM.denied : ST.objective} />
           </View>
           <SegBar value={prog} color={granted ? TERM.granted : ST.friendly} style={{ marginBottom: 12 }} />
           {granted ? (
-            <Pressable style={styles.stampArea} onPress={() => { clearTimeout(grantTimer.current); setStep('scan') }} accessibilityRole="button" accessibilityLabel="Access granted. Tap to close">
-              <AccessStamp granted reduce={reduce} sub={`TASK LOGGED · ${no}`} />
+            <Pressable style={styles.stampArea} onPress={() => { clearTimeout(grantTimer.current); setStep('scan') }} accessibilityRole="button" accessibilityLabel={t('granted_a11y')}>
+              <AccessStamp granted reduce={reduce} sub={t('task_logged', { no })} />
             </Pressable>
           ) : (
             <View>
-              <TermModule title={`Module // ${PUZZLE_MODULES[pKind] || 'Matrix trace'}`} code={`${no.slice(-2)}-${(pKind || 'pattern').slice(0, 3).toUpperCase()}`} color={ST.friendly} flash={!!denied}>
+              <TermModule title={t('module_name', { name: PUZZLE_MODULES[pKind] || PUZZLE_MODULES.pattern })} code={`${pad2(shown.stationNo || 0)}-${(pKind || 'pattern').slice(0, 3).toUpperCase()}`} color={ST.friendly} flash={!!denied}>
                 <Puzzle key={`${st.id}-${pKind}`} kind={pKind} onDone={finished} onProgress={setProg} onError={flashDenied} />
               </TermModule>
               {denied ? (
                 <View style={styles.deniedWrap} pointerEvents="none">
-                  <AccessStamp key={denied} granted={false} reduce={reduce} sub="SO CLOSE · GO AGAIN" />
+                  <AccessStamp key={denied} granted={false} reduce={reduce} sub={t('so_close')} />
                 </View>
               ) : null}
-              <StButton title="Cancel task" tone="ghost" onPress={close} style={{ marginTop: 12 }} />
+              <StButton title={t('cancel_task')} tone="ghost" onPress={close} style={{ marginTop: 12 }} />
             </View>
           )}
         </SafeAreaView>
@@ -197,6 +202,7 @@ export function ScanTask({ visible, room, station, stationNo, assets, puzzle, sc
 
 /** Targeting reticle: corner brackets, crosshair ticks, rotating ring and a sweep line. */
 function Reticle({ reduce, live, children }) {
+  const t = useT(B)
   const spin = useRef(new Animated.Value(0)).current
   const sweep = useRef(new Animated.Value(0)).current
   const [size, setSize] = useState(300)
@@ -229,20 +235,21 @@ function Reticle({ reduce, live, children }) {
         </Animated.View>
       ) : null}
       <Brackets color={c} size={30} thick={3} />
-      <Text style={[styles.retLabel, { color: c }]}>{live ? 'SCANNING' : 'OPTICS OFFLINE'}</Text>
+      <Text style={[styles.retLabel, { color: c }]}>{live ? t('scanning_caps') : t('optics_offline')}</Text>
     </View>
   )
 }
 
 /** Cosmetic signal readouts. There is no automatic image match: the player confirms. */
 function ScanReadouts({ reduce, live }) {
+  const t = useT(B)
   const signal = useTicker(live && !reduce, 700, () => 84 + Math.floor(Math.random() * 14), 91)
   const dots = useTicker(live && !reduce, 450, (d) => (d + 1) % 4, 3)
   return (
     <View style={[styles.statRow, { marginBottom: 10 }]}>
-      <Readout label="Signal" value={live ? `${String(signal).padStart(3, '0')}%` : '---'} color={live ? ST.health : ST.faint} />
-      <Readout label="Optics" value={live ? `SCANNING${'.'.repeat(dots)}` : 'OFFLINE'} color={live ? ST.friendly : ST.enemy} />
-      <Readout label="Match" value="CONFIRM" color={ST.objective} />
+      <Readout label={t('ro_signal')} value={live ? `${String(signal).padStart(3, '0')}%` : '---'} color={live ? ST.health : ST.faint} />
+      <Readout label={t('ro_optics')} value={live ? `${t('scanning_caps')}${'.'.repeat(dots)}` : t('offline_caps')} color={live ? ST.friendly : ST.enemy} />
+      <Readout label={t('ro_match')} value={t('confirm_caps')} color={ST.objective} />
     </View>
   )
 }

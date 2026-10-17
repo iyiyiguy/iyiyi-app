@@ -1,5 +1,5 @@
 // Camera strings for automatic posting (captures post after 5 s and tag people nearby who have
-// tagging on) and the lens / look notes. Missing languages fall back to English.
+// tagging on) and the lens / look notes. 
 export default {
   en: {
     peopleSubtitle: 'Everyone within 150 ft who has tagging on is tagged in what you post. People can turn this off in Settings.',
@@ -48,5 +48,23 @@ export default {
     nearbyChip: '근처 {n}명이 태그돼요 ›',
     videoLookNote: '룩과 프레임은 사진에만 저장돼요',
     videoLensNote: '동영상에서는 렌즈가 실시간으로만 보여요',
+  },
+  ar: {
+    peopleSubtitle: 'كل من هم ضمن 150 قدمًا وفعّلوا الإشارة تتم الإشارة إليهم فيما تنشره. يمكنهم إيقاف ذلك من الإعدادات.',
+    nearbyChip: 'ستتم الإشارة إلى {n} بالقرب ›',
+    videoLookNote: 'المظهر والإطار يُحفظان على الصور فقط',
+    videoLensNote: 'تظهر العدسة مباشرةً فقط في الفيديو',
+  },
+  hi: {
+    peopleSubtitle: '150 ft के अंदर जिनकी टैगिंग चालू है, वे सभी आपकी पोस्ट में टैग होते हैं। लोग इसे सेटिंग्स में बंद कर सकते हैं।',
+    nearbyChip: 'आस-पास के {n} टैग होंगे ›',
+    videoLookNote: 'लुक और फ़्रेम सिर्फ़ फ़ोटो पर सेव होते हैं',
+    videoLensNote: 'वीडियो में लेंस सिर्फ़ लाइव दिखता है',
+  },
+  tl: {
+    peopleSubtitle: 'Lahat ng nasa loob ng 150 ft na naka-on ang tagging ay ita-tag sa ipo-post mo. Puwede itong i-off sa Settings.',
+    nearbyChip: '{n} sa malapit ang ita-tag ›',
+    videoLookNote: 'Sa litrato lang naka-save ang look at frame',
+    videoLensNote: 'Sa video, live lang makikita ang lens',
   },
 }

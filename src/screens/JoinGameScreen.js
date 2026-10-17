@@ -7,30 +7,34 @@ import {
   AC, ArcadeBackground, ArcadeHeader, ArcadePanel, gameIcon, GhostButton, PlayButton, StatusBarScrim, arcadeText, useArcadeInsets, useArcadeStatusBar,
 } from '../games/arcadeUI'
 import { FONT, ST, withAlpha } from '../games/studio'
+import { translate, useT } from '../i18n'
+import R from '../i18n/strings/gameRoom'
+import { laserMode, mpGameName } from '../lib/games'
 
 // Open rooms advertised nearby (optionally for one game). Shared with GameLobby.
 export function NearbyRoomsList({ gameId = null, onJoin }) {
+  const t = useT(R)
   const { rooms, status, locationStatus, refresh } = useNearbyRooms(gameId)
   const openHost = useOpenProfile()
   return (
     <View>
       <View style={styles.listHeader}>
-        <Text style={arcadeText.label}>Open games near you</Text>
+        <Text style={arcadeText.label}>{t('open_near')}</Text>
         <Pressable onPress={refresh} hitSlop={10} accessibilityRole="button" style={styles.refresh}>
           <Ionicons name="refresh" size={13} color={AC.accent} />
-          <Text style={styles.refreshText}>Refresh</Text>
+          <Text style={styles.refreshText}>{t('refresh')}</Text>
         </Pressable>
       </View>
       {locationStatus === 'denied' ? (
-        <Text style={arcadeText.caption}>Turn on location for iYiYi in Settings to see games near you. You can still join with a code.</Text>
+        <Text style={arcadeText.caption}>{t('near_loc_off')}</Text>
       ) : status === 'connecting' || locationStatus === 'pending' ? (
         <ActivityIndicator color={AC.muted} style={{ marginVertical: 12 }} />
       ) : status === 'error' ? (
-        <Text style={arcadeText.caption}>Couldn't load nearby games. Check your connection and tap Refresh.</Text>
+        <Text style={arcadeText.caption}>{t('near_error')}</Text>
       ) : rooms.length === 0 ? (
         <View style={styles.emptyBox}>
           <Ionicons name="radio-outline" size={22} color={AC.faint} />
-          <Text style={[arcadeText.caption, { textAlign: 'center' }]}>No open games nearby right now. Host one and invite people around you.</Text>
+          <Text style={[arcadeText.caption, { textAlign: 'center' }]}>{t('near_empty')}</Text>
         </View>
       ) : (
         rooms.map((r) => {
@@ -43,16 +47,16 @@ export function NearbyRoomsList({ gameId = null, onJoin }) {
                 disabled={!r.hostId}
                 onPress={() => openHost(r.hostId)}
                 accessibilityRole="button"
-                accessibilityHint="Opens the host’s profile"
+                accessibilityHint={t('opens_host')}
               >
                 <Text style={styles.roomTitle} numberOfLines={1}>
-                  {r.mode && LASER_MODES[r.mode] ? LASER_MODES[r.mode].name : g?.name} · <Text style={{ color: AC.accent }}>{r.hostName}</Text>
+                  {r.mode && LASER_MODES[r.mode] ? laserMode(r.mode) : mpGameName(r.gameId, g?.name)} · <Text style={{ color: AC.accent }}>{r.hostName}</Text>
                 </Text>
                 <Text style={arcadeText.caption}>
-                  {r.players}/{r.maxPlayers} players · about {formatDistance(r.distance)} away
+                  {t('room_meta', { n: r.players, max: r.maxPlayers, d: formatDistance(r.distance) })}
                 </Text>
               </Pressable>
-              <PlayButton title="Join" icon="enter" small onPress={() => onJoin(r.gameId, r.code)} />
+              <PlayButton title={t('join')} icon="enter" small onPress={() => onJoin(r.gameId, r.code)} />
             </View>
           )
         })
@@ -62,6 +66,7 @@ export function NearbyRoomsList({ gameId = null, onJoin }) {
 }
 
 export function CodeEntry({ onJoin, initialCode = '' }) {
+  const t = useT(R)
   const [code, setCode] = useState(() => normalizeCode(initialCode))
   useEffect(() => {
     if (initialCode) setCode(normalizeCode(initialCode))
@@ -69,11 +74,11 @@ export function CodeEntry({ onJoin, initialCode = '' }) {
   const valid = isValidCode(code)
   return (
     <View>
-      <Text style={[arcadeText.label, { marginBottom: 8 }]}>Join with a code</Text>
+      <Text style={[arcadeText.label, { marginBottom: 8 }]}>{t('join_code')}</Text>
       <View style={styles.codeRow}>
         <TextInput
           value={code}
-          onChangeText={(t) => setCode(normalizeCode(t))}
+          onChangeText={(v) => setCode(normalizeCode(v))}
           placeholder="ABCDE"
           placeholderTextColor={AC.faint}
           selectionColor={ST.friendly}
@@ -83,10 +88,10 @@ export function CodeEntry({ onJoin, initialCode = '' }) {
           style={[styles.codeInput, valid && styles.codeInputValid]}
           returnKeyType="go"
           onSubmitEditing={() => valid && onJoin(code)}
-          accessibilityLabel="Game code"
+          accessibilityLabel={t('game_code')}
           keyboardAppearance="dark"
         />
-        <PlayButton title="Join" icon="enter" disabled={!valid} onPress={() => onJoin(code)} />
+        <PlayButton title={t('join')} icon="enter" disabled={!valid} onPress={() => onJoin(code)} />
       </View>
     </View>
   )
@@ -97,6 +102,7 @@ export function CodeEntry({ onJoin, initialCode = '' }) {
 // game; GameLobby forwards Battle Royale codes to its own screen). An invalid one is left in
 // the code box with a note.
 export default function JoinGameScreen({ navigation, route }) {
+  const t = useT(R)
   const insets = useArcadeInsets()
   useArcadeStatusBar()
   const joinRoom = (gid, code) => navigation.navigate('GameLobby', { gameId: gid, code })
@@ -110,14 +116,14 @@ export default function JoinGameScreen({ navigation, route }) {
     try {
       const gid = gameIdFromCode(linkCode)
       if (!gid || !isValidCode(linkCode)) {
-        setLinkError(`“${linkCode}” isn’t a valid game code. Check the invite and try again.`)
+        setLinkError(translate(R, 'bad_code', { code: linkCode }))
         return
       }
       setLinkError(null)
       // Replace so Back from the lobby doesn't land on this screen again.
       navigation.replace('GameLobby', { gameId: gid, code: linkCode })
     } catch {
-      setLinkError('Couldn’t open that invite. Enter the code below to join.')
+      setLinkError(translate(R, 'invite_failed'))
     }
   }, [linkCode, navigation])
 
@@ -125,8 +131,8 @@ export default function JoinGameScreen({ navigation, route }) {
     <View style={styles.screen}>
       <ArcadeBackground />
       <ScrollView contentContainerStyle={{ paddingTop: insets.top + 10, paddingBottom: insets.bottom + 60, paddingHorizontal: 20 }} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
-        <ArcadeHeader kicker="Arcade" title="Join a game" onBack={() => navigation.goBack()} />
-        <Text style={[arcadeText.caption, { marginTop: 6, marginBottom: 18 }]}>Play with people around you.</Text>
+        <ArcadeHeader kicker={t('arcade')} title={t('join_a_game')} onBack={() => navigation.goBack()} />
+        <Text style={[arcadeText.caption, { marginTop: 6, marginBottom: 18 }]}>{t('play_around')}</Text>
 
         {linkError ? <Text style={styles.linkError}>{linkError}</Text> : null}
         <ArcadePanel style={styles.panel} accent={ST.friendly}>
@@ -136,7 +142,7 @@ export default function JoinGameScreen({ navigation, route }) {
         <NearbyRoomsList onJoin={joinRoom} />
 
         <View style={{ height: 24 }} />
-        <GhostButton title="Host a game instead" icon="add-circle" onPress={() => navigation.popTo('Tabs', { screen: 'Games' })} />
+        <GhostButton title={t('host_instead')} icon="add-circle" onPress={() => navigation.popTo('Tabs', { screen: 'Games' })} />
       </ScrollView>
       <StatusBarScrim height={insets.top} />
     </View>

@@ -4,9 +4,12 @@ import { Ionicons } from '@expo/vector-icons'
 import Glass from '../Glass'
 import { MODE_ACTIVE_COLOR } from './ModeSwitcher'
 import { FIRST_USE_TIPS, HELP_TOPICS } from '../../lib/cameraPrefs'
+import { useT } from '../../i18n'
+import camStrings from '../../i18n/strings/camera'
 
 // Small round "?" that opens the help sheet. Lives beside the options bar.
 export function HelpButton({ onPress, disabled }) {
+  const t = useT(camStrings)
   return (
     <Pressable
       onPress={() => { try { onPress?.() } catch {} }}
@@ -14,7 +17,7 @@ export function HelpButton({ onPress, disabled }) {
       hitSlop={10}
       style={({ pressed }) => [styles.helpBtn, (pressed || disabled) && { opacity: disabled ? 0.35 : 0.6 }]}
       accessibilityRole="button"
-      accessibilityLabel="How the camera options work"
+      accessibilityLabel={t('helpA11y')}
     >
       <Ionicons name="help" size={14} color="rgba(255,255,255,0.9)" />
     </Pressable>
@@ -24,6 +27,7 @@ export function HelpButton({ onPress, disabled }) {
 // Compact glass list explaining every camera control in a line each. Tap a row to reopen
 // its full tip; tap outside (or the X) to close.
 export default function CameraHelpSheet({ visible, onClose, onOpenTip }) {
+  const t = useT(camStrings)
   const anim = useRef(new Animated.Value(0)).current
   useEffect(() => {
     if (!visible) return
@@ -34,42 +38,44 @@ export default function CameraHelpSheet({ visible, onClose, onOpenTip }) {
 
   const close = () => { try { onClose?.() } catch {} }
   const translateY = anim.interpolate({ inputRange: [0, 1], outputRange: [14, 0] })
-  const topics = HELP_TOPICS.filter((t) => t && FIRST_USE_TIPS[t.id])
+  const topics = HELP_TOPICS.filter((x) => x && FIRST_USE_TIPS[x.id])
   return (
     <View style={styles.overlay}>
-      <Pressable style={StyleSheet.absoluteFill} onPress={close} accessibilityLabel="Close help" />
+      <Pressable style={StyleSheet.absoluteFill} onPress={close} accessibilityLabel={t('closeHelp')} />
       <Animated.View style={[styles.sheetWrap, { opacity: anim, transform: [{ translateY }] }]}>
         <Glass scheme="dark" strong radius={22} style={styles.sheet} contentStyle={{ flexShrink: 1 }}>
           <View style={styles.header}>
-            <Text style={styles.heading}>Camera help</Text>
-            <Pressable onPress={close} hitSlop={10} style={styles.close} accessibilityRole="button" accessibilityLabel="Close help">
+            <Text style={styles.heading}>{t('helpTitle')}</Text>
+            <Pressable onPress={close} hitSlop={10} style={styles.close} accessibilityRole="button" accessibilityLabel={t('closeHelp')}>
               <Ionicons name="close" size={15} color="rgba(255,255,255,0.85)" />
             </Pressable>
           </View>
           <ScrollView style={styles.scroll} contentContainerStyle={{ paddingBottom: 4 }} showsVerticalScrollIndicator={false}>
-            {topics.map((t) => {
-              const tip = FIRST_USE_TIPS[t.id]
+            {topics.map((topic) => {
+              const tip = FIRST_USE_TIPS[topic.id]
+              const title = t(`tip_${topic.id}_title`)
+              const short = t(`tip_${topic.id}_short`)
               return (
                 <Pressable
-                  key={t.id}
-                  onPress={() => { try { onOpenTip?.(t.id) } catch {} }}
+                  key={topic.id}
+                  onPress={() => { try { onOpenTip?.(topic.id) } catch {} }}
                   style={({ pressed }) => [styles.row, pressed && { backgroundColor: 'rgba(255,255,255,0.08)' }]}
                   accessibilityRole="button"
-                  accessibilityLabel={`${tip.title}. ${t.short} Tap for more.`}
+                  accessibilityLabel={t('helpRowA11y', { title, short })}
                 >
                   <View style={styles.iconWrap}>
                     <Ionicons name={tip.icon || 'information-circle-outline'} size={15} color={MODE_ACTIVE_COLOR} />
                   </View>
                   <View style={{ flex: 1 }}>
-                    <Text style={styles.title} numberOfLines={1}>{tip.title}</Text>
-                    <Text style={styles.short} numberOfLines={2}>{t.short}</Text>
+                    <Text style={styles.title} numberOfLines={1}>{title}</Text>
+                    <Text style={styles.short} numberOfLines={2}>{short}</Text>
                   </View>
                   <Ionicons name="chevron-forward" size={14} color="rgba(255,255,255,0.4)" />
                 </Pressable>
               )
             })}
           </ScrollView>
-          <Text style={styles.foot}>Tap a row for more · tap outside to close</Text>
+          <Text style={styles.foot}>{t('helpFoot')}</Text>
         </Glass>
       </Animated.View>
     </View>

@@ -11,10 +11,14 @@ import { buzz } from '../../lib/gamePrefs'
 import { fireRateLabel, gunRatings } from '../../lib/guns'
 import { gunArt } from '../../lib/gunArt'
 import { FONT, ST, stType } from '../studio'
+import { translate } from '../../i18n'
+import H from '../../i18n/strings/laserHud'
+
+const tr = (k, v) => translate(H, k, v)
 
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v))
-const modeLabel = (w) => (w?.fireMode === 'automatic' ? 'AUTO' : (w?.shotsPerClick || 1) > 1 ? `BURST ${w.shotsPerClick}` : 'SEMI')
-const STATS = [['DAMAGE', 'power'], ['FIRE RATE', 'fireRate'], ['ACCURACY', 'accuracy'], ['RANGE', 'range']]
+const modeLabel = (w) => (w?.fireMode === 'automatic' ? tr('fire_auto') : (w?.shotsPerClick || 1) > 1 ? tr('fire_burst_n', { n: w.shotsPerClick }) : tr('fire_semi'))
+const STATS = [['stat_damage', 'power'], ['stat_rate', 'fireRate'], ['stat_accuracy', 'accuracy'], ['stat_range', 'range']]
 
 export function WeaponSpinWheel({ visible, loadout, currentId, onPick, onClose, insets }) {
   if (!visible || !Array.isArray(loadout) || loadout.length === 0) return null
@@ -123,11 +127,11 @@ function Wheel({ loadout, currentId, onPick, onClose, insets }) {
 
   return (
     <View style={[StyleSheet.absoluteFill, st.root]}>
-      <Pressable style={st.backdrop} onPress={() => finish('close')} accessibilityRole="button" accessibilityLabel="Close weapon wheel" />
+      <Pressable style={st.backdrop} onPress={() => finish('close')} accessibilityRole="button" accessibilityLabel={tr('close_wheel')} />
       <Animated.View style={[st.body, { paddingTop: top, paddingBottom: bottom, opacity: show, gap: compact ? 10 : 16 }]} pointerEvents="box-none">
         <View style={st.head}>
-          <Text style={[stType.kicker, { letterSpacing: 2.6 }]}>LOADOUT</Text>
-          <Text style={st.title}>SELECT WEAPON</Text>
+          <Text style={[stType.kicker, { letterSpacing: 2.6 }]}>{tr('loadout')}</Text>
+          <Text style={st.title}>{tr('select_weapon')}</Text>
         </View>
 
         <Animated.View
@@ -135,7 +139,7 @@ function Wheel({ loadout, currentId, onPick, onClose, insets }) {
           {...pan.panHandlers}
           accessible
           accessibilityRole="adjustable"
-          accessibilityLabel={`Weapon wheel. ${w?.name} selected${equipped ? ', equipped' : ''}. Swipe up or down to change, double-tap the Equip button to equip.`}
+          accessibilityLabel={tr(equipped ? 'wheel_a11y_eq' : 'wheel_a11y', { name: w?.name })}
           accessibilityActions={[{ name: 'increment' }, { name: 'decrement' }, { name: 'activate' }]}
           onAccessibilityAction={(e) => {
             const a = e.nativeEvent.actionName
@@ -158,7 +162,7 @@ function Wheel({ loadout, currentId, onPick, onClose, insets }) {
           <View pointerEvents="none" style={[st.centre, { left: half - 75, top: half - 52, width: 150, height: 104 }]}>
             <Text style={st.centreName} numberOfLines={2}>{String(w?.name || '').toUpperCase()}</Text>
             <Text style={st.centreMode}>{modeLabel(w)}</Text>
-            <Text style={st.centreHint}>{equipped ? 'EQUIPPED' : 'TAP TO EQUIP'}</Text>
+            <Text style={st.centreHint}>{tr(equipped ? 'equipped' : 'tap_equip')}</Text>
           </View>
         </Animated.View>
 
@@ -167,7 +171,7 @@ function Wheel({ loadout, currentId, onPick, onClose, insets }) {
             const cells = Math.round(clamp(Number(ratings[key]) || 0, 0, 1) * 10)
             return (
               <View key={key} style={st.statRow}>
-                <Text style={st.statLabel}>{label}</Text>
+                <Text style={st.statLabel}>{tr(label)}</Text>
                 <View style={st.cells}>
                   {Array.from({ length: 10 }, (_, j) => <View key={j} style={[st.cell, { backgroundColor: j < cells ? ST.friendly : 'rgba(255,255,255,0.14)' }]} />)}
                 </View>
@@ -178,11 +182,11 @@ function Wheel({ loadout, currentId, onPick, onClose, insets }) {
         </View>
 
         <View style={st.buttons}>
-          <Pressable onPress={() => finish('pick')} style={({ pressed }) => [st.equip, pressed && { opacity: 0.85 }]} accessibilityRole="button" accessibilityLabel={`Equip ${w?.name}`}>
-            <Text style={st.equipText}>{equipped ? 'KEEP' : 'EQUIP'}</Text>
+          <Pressable onPress={() => finish('pick')} style={({ pressed }) => [st.equip, pressed && { opacity: 0.85 }]} accessibilityRole="button" accessibilityLabel={tr('equip_a11y', { name: w?.name })}>
+            <Text style={st.equipText}>{tr(equipped ? 'keep' : 'equip')}</Text>
           </Pressable>
-          <Pressable onPress={() => finish('close')} style={({ pressed }) => [st.closeBtn, pressed && { opacity: 0.75 }]} accessibilityRole="button" accessibilityLabel="Close weapon wheel">
-            <Text style={st.closeText}>CLOSE</Text>
+          <Pressable onPress={() => finish('close')} style={({ pressed }) => [st.closeBtn, pressed && { opacity: 0.75 }]} accessibilityRole="button" accessibilityLabel={tr('close_wheel')}>
+            <Text style={st.closeText}>{tr('close_btn')}</Text>
           </Pressable>
         </View>
       </Animated.View>

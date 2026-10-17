@@ -7,36 +7,42 @@ import { MODE_ACTIVE_COLOR } from './ModeSwitcher'
 import {
   BURST_CHOICES, CUTOFF_CHOICES, DEFAULT_BURST_SHOTS, CUTOFF_RANGE, DEFAULT_CUTOFF_CUSTOM, DEFAULT_TIMER_CUSTOM, TIMER_CHOICES, TIMER_RANGE, clampSeconds,
 } from '../../lib/cameraPrefs'
-import { LOOKS, lookInfo, normalizeLook } from './filters/lenses'
+import { LOOKS, normalizeLook } from './filters/lenses'
+import { translate } from '../../i18n'
+import camStrings from '../../i18n/strings/camera'
+
+// Strings are looked up when the bar renders, so they follow the app language.
+const L = (key, vars) => translate(camStrings, key, vars)
+const lookName = (id) => L(`look_${normalizeLook(id)}`)
 
 const tap = () => Haptics.selectionAsync().catch(() => {})
 
 // 0 -> Off, 45 -> 45s, 120 -> 2m, 90 -> 1m30s
 const fmtSeconds = (s) => {
   const n = Number(s) || 0
-  if (!n) return 'Off'
+  if (!n) return L('off')
   if (n < 60) return `${n}s`
   const m = Math.floor(n / 60)
   const r = n % 60
   return r ? `${m}m${r}s` : `${m}m`
 }
-const fmtShots = (n) => (n ? `×${n}` : 'Off')
+const fmtShots = (n) => (n ? `×${n}` : L('off'))
 // Cut-off: 0 means no cut-off at all - record until you stop.
 const fmtCutoff = (s) => (Number(s) ? fmtSeconds(s) : '∞')
-const fmtCutoffLong = (s) => (Number(s) ? fmtSeconds(s) : 'Unlimited')
+const fmtCutoffLong = (s) => (Number(s) ? fmtSeconds(s) : L('unlimited'))
 
 // `custom` options also take any length in `range` (a stepper behind the Custom chip),
 // remembered in options[customKey].
 const OPTION_DEFS = {
-  timer: { icon: 'timer-outline', label: 'Countdown', choices: TIMER_CHOICES, fmt: fmtSeconds, range: TIMER_RANGE, customKey: 'timerCustom', customDefault: DEFAULT_TIMER_CUSTOM },
-  burst: { icon: 'albums-outline', label: 'Burst', choices: BURST_CHOICES, fmt: fmtShots },
+  timer: { icon: 'timer-outline', get label() { return L('opt_timer') }, choices: TIMER_CHOICES, fmt: fmtSeconds, range: TIMER_RANGE, customKey: 'timerCustom', customDefault: DEFAULT_TIMER_CUSTOM },
+  burst: { icon: 'albums-outline', get label() { return L('opt_burst') }, choices: BURST_CHOICES, fmt: fmtShots },
   cutoff: {
-    icon: 'stopwatch-outline', label: 'Video cut-off', choices: CUTOFF_CHOICES, fmt: fmtCutoff, longFmt: fmtCutoffLong,
+    icon: 'stopwatch-outline', get label() { return L('opt_cutoff') }, choices: CUTOFF_CHOICES, fmt: fmtCutoff, longFmt: fmtCutoffLong,
     range: CUTOFF_RANGE, customKey: 'cutoffCustom', customDefault: DEFAULT_CUTOFF_CUSTOM,
   },
 }
 // Scene look (colour grade) + the iYiYi frame. AR lenses live in the carousel by the shutter.
-const LOOK_DEF = { icon: 'color-palette-outline', label: 'Look' }
+const LOOK_DEF = { icon: 'color-palette-outline', get label() { return L('opt_look') } }
 const longOf = (def, v) => (def.longFmt ? def.longFmt(v) : def.fmt(v))
 
 // Bigger jumps for the longer cut-off once you get past a minute.
@@ -97,7 +103,7 @@ function Stepper({ value, range, fmt, label, onChange }) {
         hitSlop={6}
         style={({ pressed }) => [styles.stepBtn, (pressed || atMin) && { opacity: atMin ? 0.35 : 0.6 }]}
         accessibilityRole="button"
-        accessibilityLabel={`Shorter ${label}`}
+        accessibilityLabel={L('shorter', { label })}
       >
         <Ionicons name="remove" size={18} color="#fff" />
       </Pressable>
@@ -111,7 +117,7 @@ function Stepper({ value, range, fmt, label, onChange }) {
         hitSlop={6}
         style={({ pressed }) => [styles.stepBtn, (pressed || atMax) && { opacity: atMax ? 0.35 : 0.6 }]}
         accessibilityRole="button"
-        accessibilityLabel={`Longer ${label}`}
+        accessibilityLabel={L('longer', { label })}
       >
         <Ionicons name="add" size={18} color="#fff" />
       </Pressable>
@@ -205,9 +211,9 @@ export default function CameraOptionsBar({
     const value = current && !def.choices.includes(current) ? current : customValue
     content = (
       <>
-        <Caption text={`${def.label} · custom`} />
+        <Caption text={L('customCaption', { label: def.label })} />
         <View style={styles.row}>
-          <Chip icon="chevron-back" onPress={() => setCustom(null)} accessibilityLabel={`Back to ${def.label} presets`} />
+          <Chip icon="chevron-back" onPress={() => setCustom(null)} accessibilityLabel={L('backToPresets', { label: def.label })} />
           <View style={styles.divider} />
           <Ionicons name={def.icon} size={16} color={MODE_ACTIVE_COLOR} style={{ marginHorizontal: 4 }} />
           <Stepper
@@ -218,7 +224,7 @@ export default function CameraOptionsBar({
             onChange={(v) => change({ [open]: v, [def.customKey]: v })}
           />
           <View style={styles.divider} />
-          <Chip text="Done" onPress={() => { setCustom(null); setOpen(null) }} accessibilityLabel={`Done, ${def.label} ${fmtSeconds(value)}`} />
+          <Chip text={L('done')} onPress={() => { setCustom(null); setOpen(null) }} accessibilityLabel={L('doneA11y', { label: def.label, value: fmtSeconds(value) })} />
         </View>
       </>
     )
@@ -226,9 +232,9 @@ export default function CameraOptionsBar({
     const value = normalizeLook(look)
     content = (
       <>
-        <Caption text={`${LOOK_DEF.label} · ${lookInfo(value).label}${frame ? ' + frame' : ''}`} />
+        <Caption text={`${LOOK_DEF.label} · ${lookName(value)}${frame ? L('plusFrame') : ''}`} />
         <View style={styles.row}>
-          <Chip icon={LOOK_DEF.icon} active={value !== 'none' || !!frame} onPress={() => setOpen(null)} accessibilityLabel="Close look options" />
+          <Chip icon={LOOK_DEF.icon} active={value !== 'none' || !!frame} onPress={() => setOpen(null)} accessibilityLabel={L('closeLook')} />
           <View style={styles.divider} />
           {LOOKS.map((l) => (
             <Pressable
@@ -238,18 +244,18 @@ export default function CameraOptionsBar({
               style={[styles.choice, value === l.id && styles.choiceActive]}
               accessibilityRole="button"
               accessibilityState={{ selected: value === l.id }}
-              accessibilityLabel={`${l.label} look`}
+              accessibilityLabel={L('lookA11y', { name: lookName(l.id) })}
             >
-              <Text style={[styles.choiceText, value === l.id && styles.choiceTextActive]} numberOfLines={1}>{l.label}</Text>
+              <Text style={[styles.choiceText, value === l.id && styles.choiceTextActive]} numberOfLines={1}>{lookName(l.id)}</Text>
             </Pressable>
           ))}
           <View style={styles.divider} />
           <Chip
             icon="scan-outline"
-            text="Frame"
+            text={L('frame')}
             active={!!frame}
             onPress={() => { try { onFrame?.(!frame) } catch {} }}
-            accessibilityLabel={`iYiYi frame ${frame ? 'on' : 'off'}`}
+            accessibilityLabel={L(frame ? 'frameOnA11y' : 'frameOffA11y')}
           />
         </View>
       </>
@@ -263,7 +269,7 @@ export default function CameraOptionsBar({
       <>
         <Caption text={`${def.label} · ${longOf(def, value)}`} />
         <View style={styles.row}>
-          <Chip icon={def.icon} active={!!value} onPress={() => setOpen(null)} accessibilityLabel={`Close ${def.label} options`} />
+          <Chip icon={def.icon} active={!!value} onPress={() => setOpen(null)} accessibilityLabel={L('closeOpts', { label: def.label })} />
           <View style={styles.divider} />
           {def.choices.map((c) => (
             <Pressable
@@ -295,10 +301,10 @@ export default function CameraOptionsBar({
               style={[styles.choice, styles.customChoice, isCustom && styles.choiceActive]}
               accessibilityRole="button"
               accessibilityState={{ selected: isCustom }}
-              accessibilityLabel={`${def.label} custom length${isCustom ? `, ${fmtSeconds(value)}` : ''}`}
+              accessibilityLabel={`${L('customLen', { label: def.label })}${isCustom ? `, ${fmtSeconds(value)}` : ''}`}
             >
               <Ionicons name="options-outline" size={13} color={isCustom ? MODE_ACTIVE_COLOR : 'rgba(255,255,255,0.9)'} />
-              <Text style={[styles.choiceText, isCustom && styles.choiceTextActive]}>{isCustom ? fmtSeconds(value) : 'Custom'}</Text>
+              <Text style={[styles.choiceText, isCustom && styles.choiceTextActive]}>{isCustom ? fmtSeconds(value) : L('custom')}</Text>
             </Pressable>
           ) : null}
           {open === 'timer' && (
@@ -306,10 +312,10 @@ export default function CameraOptionsBar({
               <View style={styles.divider} />
               <Chip
                 icon="albums-outline"
-                text="Burst"
+                text={L('opt_burst')}
                 active={!!o.burstAfterCountdown}
                 onPress={() => change({ burstAfterCountdown: !o.burstAfterCountdown })}
-                accessibilityLabel={`Burst after countdown ${o.burstAfterCountdown ? 'on' : 'off'}`}
+                accessibilityLabel={L(o.burstAfterCountdown ? 'burstAfterOn' : 'burstAfterOff')}
               />
             </>
           )}
@@ -323,19 +329,19 @@ export default function CameraOptionsBar({
     const items = [
       {
         k: 'timer', icon: OPTION_DEFS.timer.icon, value: timerValue, active: !!timer,
-        a11y: `Countdown: ${fmtSeconds(timer)}${timer && afterShots ? `, then a burst of ${afterShots}` : ''}. Tap to change.`,
+        a11y: timer && afterShots ? L('timerBurstA11y', { v: fmtSeconds(timer), n: afterShots }) : L('timerA11y', { v: fmtSeconds(timer) }),
       },
     ]
     if (mode === 'video') {
       const cutoff = o.cutoff ?? 0
-      items.push({ k: 'cutoff', icon: OPTION_DEFS.cutoff.icon, value: fmtCutoff(cutoff), active: !!cutoff, a11y: `Video cut-off: ${fmtCutoffLong(cutoff)}. Tap to change.` })
+      items.push({ k: 'cutoff', icon: OPTION_DEFS.cutoff.icon, value: fmtCutoff(cutoff), active: !!cutoff, a11y: L('cutoffA11y', { v: fmtCutoffLong(cutoff) }) })
     } else {
       const burst = o.burst ?? 0
-      items.push({ k: 'burst', icon: OPTION_DEFS.burst.icon, value: fmtShots(burst), active: !!burst, a11y: `Burst: ${fmtShots(burst)}. Tap to change.` })
+      items.push({ k: 'burst', icon: OPTION_DEFS.burst.icon, value: fmtShots(burst), active: !!burst, a11y: L('burstA11y', { v: fmtShots(burst) }) })
     }
     const lk = normalizeLook(look)
-    const lkLabel = lk === 'none' ? (frame ? 'Frame' : 'None') : `${lookInfo(lk).label}${frame ? '+' : ''}`
-    items.push({ k: 'look', icon: LOOK_DEF.icon, value: lkLabel, active: lk !== 'none' || !!frame, a11y: `Look: ${lookInfo(lk).label}${frame ? ', with frame' : ''}. Tap to change.` })
+    const lkLabel = lk === 'none' ? (frame ? L('frame') : L('none')) : `${lookName(lk)}${frame ? '+' : ''}`
+    items.push({ k: 'look', icon: LOOK_DEF.icon, value: lkLabel, active: lk !== 'none' || !!frame, a11y: L(frame ? 'lookBarFrameA11y' : 'lookBarA11y', { v: lookName(lk) }) })
     content = (
       <View style={styles.row}>
         {items.map((it, i) => (

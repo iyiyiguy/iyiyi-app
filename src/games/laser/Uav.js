@@ -9,7 +9,13 @@ import Glass from '../../components/Glass'
 import { AC } from '../arcadeUI'
 import { UavPackCard, UavStorePanel, useUavBuyFlow } from '../UavStore'
 import { buzz } from '../../lib/gamePrefs'
-import { UAV_DURATION_MS, UAV_RULES_TEXT } from '../../lib/uav'
+import { UAV_DURATION_MS } from '../../lib/uav'
+import { uavRulesText } from './uavText'
+import { translate } from '../../i18n'
+import H from '../../i18n/strings/laserHud'
+import LT from '../../i18n/strings/laserTag'
+
+const tr = (k, v) => translate(H, k, v)
 import { font } from '../../theme'
 import { EquipTileFace } from './Consumables'
 import { FONT, ST } from '../studio'
@@ -30,10 +36,10 @@ export const UavButton = React.memo(function UavButton({ count, activeMsLeft = 0
   const secs = Math.max(0, Math.ceil(activeMsLeft / 1000))
   const cdSecs = Math.max(0, Math.ceil(cooldownMsLeft / 1000))
   const a11y = active
-    ? `UAV online, ${secs} seconds left`
+    ? tr('uav_online_a11y', { n: secs })
     : cooling
-      ? `UAV recharging, ready in ${cdSecs} seconds`
-      : empty ? 'UAV. None left — get more' : `Call in UAV. ${count === '∞' ? 'Unlimited' : count} available`
+      ? tr('uav_recharging_a11y', { n: cdSecs })
+      : empty ? tr('uav_none_a11y') : tr('uav_call_a11y', { n: count === '∞' ? tr('unlimited') : count })
   if (tile) {
     // Studio kit square (Laser Tag HUD): objective-coloured, count in the corner.
     return (
@@ -91,7 +97,7 @@ export function EnemyUavPill({ msLeft, top }) {
   return (
     <View style={[st.enemyPill, { top }]} pointerEvents="none">
       <MaterialCommunityIcons name="satellite-variant" size={14} color={ST.enemy} />
-      <Text style={st.enemyPillText}>ENEMY UAV OVERHEAD · {Math.ceil(msLeft / 1000)}S</Text>
+      <Text style={st.enemyPillText}>{translate(LT, 'enemy_uav', { n: Math.ceil(msLeft / 1000) })}</Text>
     </View>
   )
 }
@@ -163,15 +169,15 @@ function UavSheetBody({ onClose, balance, owner, freeLeft, insets }) {
   const maxH = Math.max(200, Math.min(560, winH - (insets?.top || 0) - (insets?.bottom || 0) - 120))
   return (
     <View style={[StyleSheet.absoluteFill, st.sheetRoot]}>
-      <Pressable style={st.backdrop} onPress={onClose} accessibilityRole="button" accessibilityLabel="Close" />
+      <Pressable style={st.backdrop} onPress={onClose} accessibilityRole="button" accessibilityLabel={tr('close')} />
       <View style={[st.sheetWrap, { paddingBottom: (insets?.bottom || 0) + 10 }]} pointerEvents="box-none">
         <View style={[st.sheet, hudSheet, { borderTopWidth: 2, borderTopColor: HUD.accent }]}>
           <View style={st.sheetHead}>
             <View style={{ flex: 1 }}>
-              <Text style={hudType.kicker}>KILLSTREAK</Text>
-              <Text style={st.sheetTitle}>UAV STORE</Text>
+              <Text style={hudType.kicker}>{tr('killstreak')}</Text>
+              <Text style={st.sheetTitle}>{tr('uav_store')}</Text>
             </View>
-            <Pressable onPress={onClose} hitSlop={10} style={st.close} accessibilityRole="button" accessibilityLabel="Close">
+            <Pressable onPress={onClose} hitSlop={10} style={st.close} accessibilityRole="button" accessibilityLabel={tr('close')}>
               <Ionicons name="close" size={20} color="#fff" />
             </Pressable>
           </View>
@@ -197,11 +203,11 @@ export function UavShopCard({ balance, owner, onOpenStore }) {
           )}
         </View>
         <View style={{ flex: 1, gap: 6 }}>
-          <Text style={st.cardTitle}>UAVs</Text>
-          <Text style={st.cardMeta}>Reveal every enemy on your map for {Math.round(UAV_DURATION_MS / 1000)}s in Laser Tag and Battle Royale. {UAV_RULES_TEXT}</Text>
-          <Text style={st.cardBal}>{owner ? 'Unlimited (owner)' : `Balance: ${balance}`}</Text>
-          <Pressable onPress={onOpenStore} style={({ pressed }) => [st.storeLink, pressed && { opacity: 0.75 }]} accessibilityRole="button" accessibilityLabel="Open the Arcade Store">
-            <Text style={st.storeLinkText}>All packs</Text>
+          <Text style={st.cardTitle}>{tr('uavs')}</Text>
+          <Text style={st.cardMeta}>{tr('uav_reveal', { n: Math.round(UAV_DURATION_MS / 1000) })} {uavRulesText()}</Text>
+          <Text style={st.cardBal}>{owner ? tr('unlimited_owner') : tr('balance', { n: balance })}</Text>
+          <Pressable onPress={onOpenStore} style={({ pressed }) => [st.storeLink, pressed && { opacity: 0.75 }]} accessibilityRole="button" accessibilityLabel={tr('open_store_a11y')}>
+            <Text style={st.storeLinkText}>{tr('all_packs')}</Text>
             <Ionicons name="chevron-forward" size={14} color="#fff" />
           </Pressable>
         </View>

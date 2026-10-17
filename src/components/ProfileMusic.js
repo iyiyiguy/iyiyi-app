@@ -6,8 +6,11 @@ import { Ionicons } from '@expo/vector-icons'
 import { publicSoundsOf, publicPlaylistsOf } from '../lib/sounds'
 import { playQueue, toggle, useMusic } from '../lib/musicPlayer'
 import SoundRow, { MC } from './SoundRow'
+import { useT } from '../i18n'
+import strings from '../i18n/strings/music'
 
 export default function ProfileMusic({ userId, username, navigation, style }) {
+  const t = useT(strings)
   const [sounds, setSounds] = useState([])
   const [lists, setLists] = useState([])
   const music = useMusic()
@@ -23,9 +26,9 @@ export default function ProfileMusic({ userId, username, navigation, style }) {
     <View style={[st.card, style]}>
       <View style={st.head}>
         <Ionicons name="musical-notes" size={16} color={MC.gold} />
-        <Text style={st.title} accessibilityRole="header">Music</Text>
-        <Text style={st.count}>{sounds.length ? `${sounds.length} sound${sounds.length === 1 ? '' : 's'}` : ''}{sounds.length && lists.length ? ' · ' : ''}{lists.length ? `${lists.length} playlist${lists.length === 1 ? '' : 's'}` : ''}</Text>
-        <Pressable onPress={() => seeAll(sounds.length ? 'sounds' : 'playlists')} hitSlop={8} style={{ marginLeft: 'auto' }}><Text style={st.link}>See all</Text></Pressable>
+        <Text style={st.title} accessibilityRole="header">{t('music')}</Text>
+        <Text style={st.count}>{sounds.length ? t(sounds.length === 1 ? 'soundsOne' : 'soundsMany', { n: sounds.length }) : ''}{sounds.length && lists.length ? ' · ' : ''}{lists.length ? t(lists.length === 1 ? 'playlistsOne' : 'playlistsMany', { n: lists.length }) : ''}</Text>
+        <Pressable onPress={() => seeAll(sounds.length ? 'sounds' : 'playlists')} hitSlop={8} style={{ marginLeft: 'auto' }}><Text style={st.link}>{t('seeAll')}</Text></Pressable>
       </View>
       {top.map((s, i) => (
         <SoundRow

@@ -100,7 +100,7 @@ export default function SubscriptionScreen({ navigation, route, onClose }) {
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}`, ...options.headers },
       })
     } catch (e) {
-      if (e?.name === 'AbortError') throw new Error('The server is taking too long. If you were charged, tap Restore Purchases.')
+      if (e?.name === 'AbortError') throw new Error(translate(strings, 'server_slow'))
       throw e
     } finally {
       clearTimeout(timer)
@@ -379,7 +379,7 @@ export default function SubscriptionScreen({ navigation, route, onClose }) {
               {!active ? (
                 <View style={styles.reassure}>
                   <Ionicons name="shield-checkmark" size={13} color={colors.textMuted} />
-                  <Text style={styles.reassureText}>{t('cancel_anytime', { where: Platform.OS === 'ios' ? 'Settings' : 'Google Play', store: storeName })}</Text>
+                  <Text style={styles.reassureText}>{t('cancel_anytime', { where: Platform.OS === 'ios' ? t('settings_app') : 'Google Play', store: storeName })}</Text>
                 </View>
               ) : null}
             </>

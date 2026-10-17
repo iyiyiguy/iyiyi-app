@@ -17,6 +17,10 @@ import { GameTutorial } from '../components/GameTutorial'
 import { FONT, ST, StButton, stType, useStudioFonts, withAlpha } from './studio'
 import { findBestMove, DIFFICULTY_LABELS } from '../lib/chessAI'
 import { recordChessGame } from '../lib/arcadeStats'
+import { translate, useT } from '../i18n'
+import C from '../i18n/strings/chess'
+
+const tc = (k, v) => translate(C, k, v)
 
 export const FILES = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h']
 // Filled glyphs for both sides, tinted per colour. ︎ keeps the pawn from
@@ -25,7 +29,7 @@ export const GLYPHS = { k: '♚', q: '♛', r: '♜', b: '♝', n: '♞', p: '�
 const PIECE_VALUE = { p: 1, n: 3, b: 3, r: 5, q: 9, k: 0 }
 const START_COUNT = { p: 8, n: 2, b: 2, r: 2, q: 1 }
 export const PROMOTION_CHOICES = ['q', 'r', 'b', 'n']
-const PIECE_NAME = { q: 'queen', r: 'rook', b: 'bishop', n: 'knight', k: 'king', p: 'pawn' }
+const PIECE_KEY = { q: 'pc_queen', r: 'pc_rook', b: 'pc_bishop', n: 'pc_knight', k: 'pc_king', p: 'pc_pawn' }
 const TUTORIAL_KEY = 'chess_tutorial_seen_v2'
 
 // Studio board: cool slate squares so the role colours (friendly last move, enemy check)
@@ -35,11 +39,11 @@ export const BOARD_DARK = '#4a5563'
 const MARK = 'rgba(7,9,12,0.42)' // legal-move dots and capture rings
 
 const TUTORIAL_STEPS = [
-  { icon: '♟︎', title: 'Tap to move', description: 'Tap one of your pieces to see its legal moves (dots), then tap a highlighted square to move there.' },
-  { icon: '♚', title: 'Checkmate wins', description: "Put the enemy king in check with no way out. The king's square turns red when it is in check." },
-  { icon: '♜', title: 'Special moves', description: 'Castling, en passant and pawn promotion all work. When a pawn reaches the last rank you choose its new piece.' },
-  { icon: '♞', title: 'Play the computer', description: 'Pick Easy, Medium or Hard. Wins raise your rating vs AI (separate from your online rating) and earn arcade points.' },
-  { icon: '♝', title: 'Pass & play', description: 'Play a friend on this device. White moves first, then hand over the phone.' },
+  { icon: '♟︎', get title() { return tc('tut1_t') }, get description() { return tc('tut1_d') } },
+  { icon: '♚', get title() { return tc('tut2_t') }, get description() { return tc('tut2_d') } },
+  { icon: '♜', get title() { return tc('tut3_t') }, get description() { return tc('tut3_d') } },
+  { icon: '♞', get title() { return tc('tut4_t') }, get description() { return tc('tut4_d') } },
+  { icon: '♝', get title() { return tc('tut5_t') }, get description() { return tc('tut5_d') } },
 ]
 
 export function describeResult(game, resignedColor) {
@@ -76,15 +80,17 @@ export function capturedText(captured, c) {
   return `${list.map((t) => GLYPHS[t]).join('')}${adv > 0 ? `  +${adv}` : ''}`
 }
 
-/** Human label for a result reason ("checkmate" -> "Checkmate"). */
-export function reasonLabel(reason) {
-  const map = {
-    checkmate: 'Checkmate', resignation: 'Resignation', stalemate: 'Stalemate', 'insufficient material': 'Insufficient material',
-    'threefold repetition': 'Threefold repetition', '50-move rule': '50-move rule', agreement: 'Agreement', abandonment: 'Abandonment',
-    timeout: 'Time out', 'timeout vs insufficient material': 'Time out vs insufficient material', aborted: 'Game aborted', draw: 'Draw',
-  }
-  return map[reason] || String(reason || '')
+/** Human label for a result reason ("checkmate" -> "Checkmate"), in the viewer's language. */
+const REASON_KEYS = {
+  checkmate: 'r_checkmate', resignation: 'r_resignation', stalemate: 'r_stalemate', 'insufficient material': 'r_insufficient',
+  'threefold repetition': 'r_threefold', '50-move rule': 'r_fifty', agreement: 'r_agreement', abandonment: 'r_abandonment',
+  timeout: 'r_timeout', 'timeout vs insufficient material': 'r_timeout_insufficient', aborted: 'r_aborted', draw: 'r_draw',
 }
+export function reasonLabel(reason) {
+  return REASON_KEYS[reason] ? tc(REASON_KEYS[reason]) : String(reason || '')
+}
+/** 'White' / 'Black' in the viewer's language. */
+export const colorLabel = (c) => tc(c === 'w' ? 'white' : 'black')
 
 /** m:ss, and 0:09.4 style tenths under 10 seconds (like Lichess). */
 export function formatClock(ms) {
@@ -102,6 +108,7 @@ export function formatClock(ms) {
 
 /** The 8x8 board. targets: Map<square, verbose move>. Memoized: pass a stable onSquare. */
 export const ChessBoard = memo(function ChessBoard({ board, size, flipped, selected, targets, lastMove, checkedKing, onSquare }) {
+  const t = useT(C)
   const sq = size / 8
   const rows = flipped ? [7, 6, 5, 4, 3, 2, 1, 0] : [0, 1, 2, 3, 4, 5, 6, 7]
   const cols = flipped ? [7, 6, 5, 4, 3, 2, 1, 0] : [0, 1, 2, 3, 4, 5, 6, 7]
@@ -123,7 +130,7 @@ export const ChessBoard = memo(function ChessBoard({ board, size, flipped, selec
                   key={square}
                   onPress={() => onSquare?.(square)}
                   style={[styles.square, { width: sq, height: sq, backgroundColor: light ? BOARD_LIGHT : BOARD_DARK }]}
-                  accessibilityLabel={`${square}${piece ? ` ${piece.color === 'w' ? 'white' : 'black'} ${PIECE_NAME[piece.type]}` : ''}${target ? ', legal move' : ''}`}
+                  accessibilityLabel={`${square}${piece ? ` ${t(piece.color === 'w' ? 'piece_white' : 'piece_black', { piece: t(PIECE_KEY[piece.type]) })}` : ''}${target ? `, ${t('legal_move')}` : ''}`}
                 >
                   {isFrom || isTo ? <View style={[StyleSheet.absoluteFill, { backgroundColor: withAlpha(ST.friendly, isTo ? 0.45 : 0.28) }]} /> : null}
                   {selected === square ? <View style={[StyleSheet.absoluteFill, styles.selectedSq]} /> : null}
@@ -175,6 +182,7 @@ export function ChessSeat({ name, sub, subColor, avatar, accent = ST.friendly, r
 
 /** Chess clock. mine + active fills friendly; low time while running turns enemy. */
 export function ChessClock({ ms, active, mine, style }) {
+  const t = useT(C)
   const low = ms != null && ms < 20000
   let bg = 'rgba(255,255,255,0.06)'
   let fg = 'rgba(242,244,247,0.7)'
@@ -183,7 +191,7 @@ export function ChessClock({ ms, active, mine, style }) {
     <View
       style={[styles.clock, { backgroundColor: bg }, active && !mine && !low && { borderBottomWidth: 2, borderBottomColor: ST.enemy }, style]}
       accessibilityRole="timer"
-      accessibilityLabel={`${mine ? 'Your' : 'Opponent'} clock ${formatClock(ms)}`}
+      accessibilityLabel={t(mine ? 'your_clock' : 'opp_clock', { time: formatClock(ms) })}
     >
       <Text allowFontScaling={false} style={[stType.clock, { fontSize: 22, color: fg }]}>{formatClock(ms)}</Text>
     </View>
@@ -215,18 +223,19 @@ export function ActionTile({ label, icon, onPress, disabled, tone, badge, access
 }
 
 /** Compact move list: "14. Nxe5 dxe5  15. Qh5+". Scrolls to the latest move. */
-export function MoveList({ moves, emptyText = 'White moves first', style }) {
+export function MoveList({ moves, emptyText, style }) {
+  const t = useT(C)
   const ref = useRef(null)
   useEffect(() => {
-    const t = setTimeout(() => ref.current?.scrollToEnd?.({ animated: true }), 50)
-    return () => clearTimeout(t)
+    const tm = setTimeout(() => ref.current?.scrollToEnd?.({ animated: true }), 50)
+    return () => clearTimeout(tm)
   }, [moves?.length])
   const pairs = []
   ;(moves || []).forEach((san, i) => { if (i % 2 === 0) pairs.push([san]); else pairs[pairs.length - 1].push(san) })
   return (
     <ScrollView ref={ref} horizontal style={[styles.moveList, style]} contentContainerStyle={styles.moveListContent} showsHorizontalScrollIndicator={false}>
       {pairs.length === 0 ? (
-        <Text style={styles.moveMuted}>{emptyText}</Text>
+        <Text style={styles.moveMuted}>{emptyText ?? t('white_first')}</Text>
       ) : pairs.map((pair, i) => {
         const latest = i === pairs.length - 1
         return (
@@ -241,12 +250,13 @@ export function MoveList({ moves, emptyText = 'White moves first', style }) {
 
 /** Promotion picker: four board-coloured squares. */
 export function PromotionPicker({ visible, color, onPick, onCancel }) {
+  const t = useT(C)
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onCancel}>
       <View style={styles.overlay}>
         <View style={styles.sheet}>
-          <Text style={[stType.kicker, { textAlign: 'center' }]}>Promote pawn</Text>
-          <Text style={[stType.title, { textAlign: 'center', marginTop: 4, marginBottom: 16 }]}>Choose a piece</Text>
+          <Text style={[stType.kicker, { textAlign: 'center' }]}>{t('promote_pawn')}</Text>
+          <Text style={[stType.title, { textAlign: 'center', marginTop: 4, marginBottom: 16 }]}>{t('choose_piece')}</Text>
           <View style={styles.promoRow}>
             {PROMOTION_CHOICES.map((p, i) => (
               <Pressable
@@ -254,14 +264,14 @@ export function PromotionPicker({ visible, color, onPick, onCancel }) {
                 onPress={() => onPick(p)}
                 style={({ pressed }) => [styles.promoBtn, { backgroundColor: i % 2 ? BOARD_DARK : BOARD_LIGHT }, pressed && { borderColor: ST.friendly }]}
                 accessibilityRole="button"
-                accessibilityLabel={`Promote to ${PIECE_NAME[p]}`}
+                accessibilityLabel={t('promote_to', { piece: t(PIECE_KEY[p]) })}
               >
                 <Text allowFontScaling={false} style={[styles.promoPiece, color === 'b' ? styles.blackPiece : styles.whitePiece]}>{GLYPHS[p]}</Text>
-                <Text allowFontScaling={false} style={styles.promoLabel}>{PIECE_NAME[p]}</Text>
+                <Text allowFontScaling={false} style={styles.promoLabel}>{t(PIECE_KEY[p])}</Text>
               </Pressable>
             ))}
           </View>
-          <StButton title="Cancel" tone="ghost" height={44} onPress={onCancel} style={{ marginTop: 16 }} />
+          <StButton title={t('cancel')} tone="ghost" height={44} onPress={onCancel} style={{ marginTop: 16 }} />
         </View>
       </View>
     </Modal>
@@ -317,6 +327,7 @@ export function ChessResultSheet({ visible, tone, kicker, title, sub, stats, chi
  */
 export function ChessGame({ mode: modeProp, difficulty: difficultyProp, playerColor = 'w', onExit, onChangeSetup, aiDifficulty }) {
   useStudioFonts()
+  const t = useT(C)
   const mode = modeProp === 'ai' || modeProp === 'local' ? modeProp : (aiDifficulty ? 'ai' : 'local')
   const difficulty = difficultyProp || aiDifficulty || 'medium'
   const { width } = useWindowDimensions()
@@ -470,9 +481,9 @@ export function ChessGame({ mode: modeProp, difficulty: difficultyProp, playerCo
 
   const confirmNewGame = () => {
     if (result || game.history().length === 0) return resetGame()
-    Alert.alert('Start a new game?', 'The current game will be abandoned.', [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'New game', style: 'destructive', onPress: resetGame },
+    Alert.alert(t('new_game_q'), t('new_game_msg'), [
+      { text: t('cancel'), style: 'cancel' },
+      { text: t('new_game'), style: 'destructive', onPress: resetGame },
     ])
     return undefined
   }
@@ -497,11 +508,10 @@ export function ChessGame({ mode: modeProp, difficulty: difficultyProp, playerCo
   const resign = () => {
     if (result) return
     const who = mode === 'ai' ? playerColor : turn
-    const label = mode === 'ai' ? 'You' : who === 'w' ? 'White' : 'Black'
-    Alert.alert('Resign?', `${label} will lose this game.`, [
-      { text: 'Cancel', style: 'cancel' },
+    Alert.alert(t('resign_q'), mode === 'ai' ? t('you_will_lose') : t('x_will_lose', { name: colorLabel(who) }), [
+      { text: t('cancel'), style: 'cancel' },
       {
-        text: 'Resign',
+        text: t('resign'),
         style: 'destructive',
         onPress: () => {
           searchTokenRef.current += 1
@@ -524,29 +534,29 @@ export function ChessGame({ mode: modeProp, difficulty: difficultyProp, playerCo
 
   const resultTitle = (() => {
     if (!result) return ''
-    if (!result.winner) return 'Draw'
-    if (mode === 'ai') return result.winner === playerColor ? 'Victory' : 'Defeat'
-    return `${result.winner === 'w' ? 'White' : 'Black'} wins`
+    if (!result.winner) return t('draw')
+    if (mode === 'ai') return result.winner === playerColor ? t('victory') : t('defeat')
+    return t('x_wins', { name: colorLabel(result.winner) })
   })()
   const resultTone = !result?.winner ? 'draw' : mode === 'ai' && result.winner !== playerColor ? 'loss' : 'win'
 
   const topColor = flipped ? 'w' : 'b'
   const bottomColor = flipped ? 'b' : 'w'
-  const colorName = (c) => (c === 'w' ? 'White' : 'Black')
+  const colorName = colorLabel
   const seatName = (c) => {
-    if (mode === 'ai') return c === playerColor ? `You · ${colorName(c)}` : `Computer · ${DIFFICULTY_LABELS[difficulty] || difficulty}`
+    if (mode === 'ai') return c === playerColor ? `${t('you')} · ${colorName(c)}` : `${t('computer')} · ${DIFFICULTY_LABELS[difficulty] || difficulty}`
     return colorName(c)
   }
   const seatAccent = (c) => (mode === 'ai' ? (c === playerColor ? ST.friendly : ST.enemy) : c === 'w' ? '#ffffff' : ST.faint)
   const seatSub = (c) => {
     if (result) {
-      if (!result.winner) return { text: `Draw · ${reasonLabel(result.reason)}`, color: ST.objective }
-      return result.winner === c ? { text: `Wins · ${reasonLabel(result.reason)}`, color: ST.objective } : { text: reasonLabel(result.reason), color: ST.muted }
+      if (!result.winner) return { text: `${t('draw')} · ${reasonLabel(result.reason)}`, color: ST.objective }
+      return result.winner === c ? { text: `${t('wins')} · ${reasonLabel(result.reason)}`, color: ST.objective } : { text: reasonLabel(result.reason), color: ST.muted }
     }
-    if (turn !== c) return { text: 'Waiting', color: ST.muted }
-    if (mode === 'ai' && c !== playerColor) return { text: 'Thinking…', color: ST.enemy }
-    const you = mode === 'ai' ? 'Your move' : `${colorName(c)} to move`
-    return { text: inCheck ? `Check · ${you}` : you, color: inCheck ? ST.enemy : ST.friendly }
+    if (turn !== c) return { text: t('waiting'), color: ST.muted }
+    if (mode === 'ai' && c !== playerColor) return { text: t('thinking'), color: ST.enemy }
+    const you = mode === 'ai' ? t('your_move') : t('x_to_move', { name: colorName(c) })
+    return { text: inCheck ? `${t('check')} · ${you}` : you, color: inCheck ? ST.enemy : ST.friendly }
   }
   const seat = (c) => {
     const sub = seatSub(c)
@@ -568,14 +578,14 @@ export function ChessGame({ mode: modeProp, difficulty: difficultyProp, playerCo
     )
   }
 
-  const kicker = mode === 'ai' ? `Vs computer · ${DIFFICULTY_LABELS[difficulty] || difficulty}` : 'Pass & play'
+  const kicker = mode === 'ai' ? `${t('vs_computer')} · ${DIFFICULTY_LABELS[difficulty] || difficulty}` : t('pass_play')
 
   return (
     <View style={styles.container}>
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
         <View style={styles.topRow}>
-          <Text style={[stType.kicker, { flex: 1 }]} numberOfLines={1}>{kicker}{history.length ? ` · Move ${Math.ceil(history.length / 2)}` : ''}</Text>
-          <Pressable onPress={() => setShowTutorial(true)} hitSlop={10} style={styles.helpBtn} accessibilityRole="button" accessibilityLabel="How to play">
+          <Text style={[stType.kicker, { flex: 1 }]} numberOfLines={1}>{kicker}{history.length ? ` · ${t('move_n', { n: Math.ceil(history.length / 2) })}` : ''}</Text>
+          <Pressable onPress={() => setShowTutorial(true)} hitSlop={10} style={styles.helpBtn} accessibilityRole="button" accessibilityLabel={t('how_to_play')}>
             <Text style={styles.helpText}>?</Text>
           </Pressable>
         </View>
@@ -595,23 +605,23 @@ export function ChessGame({ mode: modeProp, difficulty: difficultyProp, playerCo
           />
         </View>
 
-        <MoveList moves={history} emptyText="Moves will appear here" />
+        <MoveList moves={history} emptyText={t('moves_appear')} />
 
         {seat(bottomColor)}
 
         <View style={styles.actions}>
-          <ActionTile label="Undo" icon="arrow-undo" onPress={undo} disabled={!canUndo} />
-          <ActionTile label={result ? 'New game' : 'Restart'} icon="refresh" onPress={confirmNewGame} tone={result ? 'friendly' : undefined} />
-          <ActionTile label="Resign" icon="flag" onPress={resign} disabled={!!result || history.length === 0} tone="danger" />
+          <ActionTile label={t('undo')} icon="arrow-undo" onPress={undo} disabled={!canUndo} />
+          <ActionTile label={result ? t('new_game') : t('restart')} icon="refresh" onPress={confirmNewGame} tone={result ? 'friendly' : undefined} />
+          <ActionTile label={t('resign')} icon="flag" onPress={resign} disabled={!!result || history.length === 0} tone="danger" />
         </View>
         {(onChangeSetup || (result && !showResult)) && (
           <View style={[styles.actions, { marginTop: 6 }]}>
-            {onChangeSetup ? <ActionTile label="Change mode" icon="options" onPress={onChangeSetup} /> : null}
-            {result && !showResult ? <ActionTile label="Result" icon="podium" onPress={() => setShowResult(true)} tone="objective" /> : null}
+            {onChangeSetup ? <ActionTile label={t('change_mode')} icon="options" onPress={onChangeSetup} /> : null}
+            {result && !showResult ? <ActionTile label={t('result')} icon="podium" onPress={() => setShowResult(true)} tone="objective" /> : null}
           </View>
         )}
         {mode === 'ai' && undoCount > 0 && !result && (
-          <Text style={[stType.label, { marginTop: 10, color: ST.faint }]}>Takebacks used · {undoCount}</Text>
+          <Text style={[stType.label, { marginTop: 10, color: ST.faint }]}>{t('takebacks', { n: undoCount })}</Text>
         )}
       </ScrollView>
 
@@ -625,29 +635,29 @@ export function ChessGame({ mode: modeProp, difficulty: difficultyProp, playerCo
       <ChessResultSheet
         visible={showResult && !!result}
         tone={resultTone}
-        kicker={`${mode === 'ai' ? 'Vs computer' : 'Pass & play'} · ${reasonLabel(result?.reason)}`}
+        kicker={`${mode === 'ai' ? t('vs_computer') : t('pass_play')} · ${reasonLabel(result?.reason)}`}
         title={resultTitle}
-        sub={`${result?.winner ? `${colorName(result.winner)} wins by ${reasonLabel(result.reason).toLowerCase()}` : `Draw by ${reasonLabel(result?.reason).toLowerCase()}`} · ${Math.ceil(history.length / 2)} moves`}
+        sub={`${result?.winner ? t('x_wins', { name: colorName(result.winner) }) : t('draw')} · ${reasonLabel(result?.reason)} · ${t('n_moves', { n: Math.ceil(history.length / 2) })}`}
         stats={[
-          { label: 'Moves', value: String(Math.ceil(history.length / 2)) },
+          { label: t('moves'), value: String(Math.ceil(history.length / 2)) },
           ...(award && typeof award.ratingAfter === 'number'
-            ? [{ label: 'Rating vs AI', value: String(award.ratingAfter) }, { label: 'Change', value: `${award.ratingDelta >= 0 ? '+' : ''}${award.ratingDelta}`, color: award.ratingDelta >= 0 ? ST.health : ST.enemy }]
+            ? [{ label: t('rating_vs_ai'), value: String(award.ratingAfter) }, { label: t('change'), value: `${award.ratingDelta >= 0 ? '+' : ''}${award.ratingDelta}`, color: award.ratingDelta >= 0 ? ST.health : ST.enemy }]
             : []),
-          ...(award ? [{ label: 'Points', value: `+${award.pointsEarned}`, color: ST.objective }] : []),
+          ...(award ? [{ label: t('points'), value: `+${award.pointsEarned}`, color: ST.objective }] : []),
         ]}
         onRequestClose={() => setShowResult(false)}
         actions={(
           <>
-            <StButton title="Play again" onPress={resetGame} />
+            <StButton title={t('play_again')} onPress={resetGame} />
             <View style={{ flexDirection: 'row', gap: 8 }}>
-              <StButton title="View board" tone="ghost" height={44} onPress={() => setShowResult(false)} style={{ flex: 1 }} />
-              {onExit ? <StButton title="Exit" tone="ghost" height={44} onPress={onExit} style={{ flex: 1 }} /> : null}
+              <StButton title={t('view_board')} tone="ghost" height={44} onPress={() => setShowResult(false)} style={{ flex: 1 }} />
+              {onExit ? <StButton title={t('exit')} tone="ghost" height={44} onPress={onExit} style={{ flex: 1 }} /> : null}
             </View>
           </>
         )}
       />
 
-      {showTutorial && <GameTutorial steps={TUTORIAL_STEPS} onComplete={closeTutorial} gameTitle="Chess" />}
+      {showTutorial && <GameTutorial steps={TUTORIAL_STEPS} onComplete={closeTutorial} gameTitle={t('chess')} />}
     </View>
   )
 }

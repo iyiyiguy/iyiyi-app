@@ -8,6 +8,8 @@
 // The search is async: it yields to the event loop (setTimeout 0) between root moves
 // and has a hard time budget, so the UI keeps rendering while the AI "thinks".
 import { Chess } from 'chess.js'
+import { translate } from '../i18n'
+import C from '../i18n/strings/chess'
 
 export const DIFFICULTIES = ['easy', 'medium', 'hard']
 
@@ -18,7 +20,11 @@ const LEVELS = {
   hard: { maxDepth: 3, qDepth: 6, budgetMs: 2600, noise: 0 },
 }
 
-export const DIFFICULTY_LABELS = { easy: 'Easy', medium: 'Medium', hard: 'Hard' }
+export const DIFFICULTY_LABELS = {
+  get easy() { return translate(C, 'diff_easy') },
+  get medium() { return translate(C, 'diff_medium') },
+  get hard() { return translate(C, 'diff_hard') },
+}
 
 const VAL = { p: 100, n: 320, b: 330, r: 500, q: 900, k: 0 }
 const MATE = 100000

@@ -13,6 +13,9 @@ import { MP_GAMES, resolveGameId } from '../lib/multiplayer'
 import { shareInvite } from '../lib/textInvite'
 import { buzz } from '../lib/gamePrefs'
 import { ST, StButton, StPanel, stType, withAlpha } from './studio'
+import { useT } from '../i18n'
+import R from '../i18n/strings/gameRoom'
+import { mpGameName } from '../lib/games'
 
 /** Players still needed to start (0 when there are enough). */
 export function playersNeeded(gameId, count) {
@@ -22,19 +25,20 @@ export function playersNeeded(gameId, count) {
 
 // A line on what the game looks like at the minimum, so a small group knows it works.
 const SMALL_GROUP = {
-  'heads-up': 'Plays from 4: 2 pickers and 2 sitters. More players, more pickers (up to 7).',
-  mafia: '5 is the classic minimum: 1 Mafia and a Doctor. From 6 a Detective joins, from 7 a second Mafia.',
-  'beside-them': 'From 4: 1 imposter and 3 crew. Auto GPS stations mean no setup.',
-  'spider-spider': 'Two is enough to start: one spider, one runner.',
-  lasertag: 'Two is enough for a 1v1 Free-for-all.',
-  chess: 'Invite one person you follow, or share the code.',
+  'heads-up': 'small_headsup',
+  mafia: 'small_mafia',
+  'beside-them': 'small_beside',
+  'spider-spider': 'small_spider',
+  lasertag: 'small_laser',
+  chess: 'small_chess',
 }
 
 export function NeedPlayersPanel({ gameId, count, code, gameName, onInvite, onShare, onText, style }) {
+  const t = useT(R)
   const id = resolveGameId(gameId)
   const need = playersNeeded(id, count)
   if (!need) return null
-  const name = gameName || MP_GAMES[id]?.name || 'this game'
+  const name = gameName || (MP_GAMES[id] ? mpGameName(id, MP_GAMES[id].name) : t('this_game_lower'))
   const share = () => {
     buzz('select')
     if (onShare) onShare()
@@ -45,16 +49,16 @@ export function NeedPlayersPanel({ gameId, count, code, gameName, onInvite, onSh
       <View style={styles.top}>
         <Ionicons name="people-outline" size={22} color={ST.objective} />
         <View style={{ flex: 1, minWidth: 0 }}>
-          <Text style={[stType.kicker, { color: ST.objective }]}>Need {need} more</Text>
+          <Text style={[stType.kicker, { color: ST.objective }]}>{t('need_n_more', { n: need })}</Text>
           <Text style={stType.body}>
-            {name} starts at {need + (Number(count) || 0)} players · {Number(count) || 0} here
+            {t('starts_at', { game: name, total: need + (Number(count) || 0), n: Number(count) || 0 })}
           </Text>
         </View>
       </View>
-      {SMALL_GROUP[id] ? <Text style={[stType.small, { marginTop: 8 }]}>{SMALL_GROUP[id]}</Text> : null}
+      {SMALL_GROUP[id] ? <Text style={[stType.small, { marginTop: 8 }]}>{t(SMALL_GROUP[id])}</Text> : null}
       <View style={styles.row}>
         <StButton
-          title="Share invite"
+          title={t('share_invite')}
           tone="objective"
           height={44}
           onPress={share}
@@ -62,9 +66,9 @@ export function NeedPlayersPanel({ gameId, count, code, gameName, onInvite, onSh
           left={<Ionicons name="share-outline" size={16} color={ST.ink} />}
           style={{ flex: 1 }}
         />
-        {onInvite ? <StButton title="Invite" tone="ghost" height={44} onPress={onInvite} style={{ flex: 1 }} /> : null}
+        {onInvite ? <StButton title={t('invite')} tone="ghost" height={44} onPress={onInvite} style={{ flex: 1 }} /> : null}
       </View>
-      {onText ? <StButton title="Invite by text" tone="ghost" height={40} onPress={onText} style={{ marginTop: 8 }} /> : null}
+      {onText ? <StButton title={t('invite_text')} tone="ghost" height={40} onPress={onText} style={{ marginTop: 8 }} /> : null}
     </StPanel>
   )
 }

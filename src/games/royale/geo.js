@@ -1,5 +1,9 @@
 // Small geo helpers for Battle Royale (pure, never throw on bad input).
 import { bearingDeg, compassLabel, distanceMeters, formatDistance } from '../../lib/multiplayer'
+import { translate } from '../../i18n'
+import S from '../../i18n/strings/royale'
+
+const tr = (k, v) => translate(S, k, v)
 
 export const isValidCoord = (lat, lng) =>
   Number.isFinite(lat) && Number.isFinite(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180
@@ -42,18 +46,21 @@ export function directionToCircle(me, circle) {
   if (!Number.isFinite(d)) return null
   const outside = d - circle.r
   if (outside <= 0) return null
-  const dir = DIRS[compassLabel(bearingDeg(me, circle))] || 'ahead'
-  return { meters: outside, dir, text: `${formatDistance(outside)} ${dir}` }
+  const dir = tr(DIRS[compassLabel(bearingDeg(me, circle))] || 'dir_ahead')
+  return { meters: outside, dir, text: tr('dist_dir', { d: formatDistance(outside), dir }) }
 }
 
-const DIRS = { N: 'north', NE: 'northeast', E: 'east', SE: 'southeast', S: 'south', SW: 'southwest', W: 'west', NW: 'northwest' }
-export const dirWord = (deg) => DIRS[compassLabel(deg)] || 'ahead'
+// Direction words in the viewer's language (i18n/strings/royale.js dir_*).
+const DIRS = { N: 'dir_north', NE: 'dir_northeast', E: 'dir_east', SE: 'dir_southeast', S: 'dir_south', SW: 'dir_southwest', W: 'dir_west', NW: 'dir_northwest' }
+export const dirWord = (deg) => tr(DIRS[compassLabel(deg)] || 'dir_ahead')
+/** "450 ft north" in the viewer's language. */
+export const distDir = (d, dir) => tr('dist_dir', { d, dir })
 
 export function formatMiles(m) {
   if (!Number.isFinite(m)) return '—'
   const mi = m / 1609.34
   if (mi < 0.1) return formatDistance(m)
-  return `${mi.toFixed(1)} miles`
+  return tr('miles', { n: mi.toFixed(1) })
 }
 
 export { formatDistance, bearingDeg }

@@ -13,6 +13,8 @@ import GameFollowButton from '../../components/GameFollowButton'
 import { useMyUserId } from '../../lib/profileNav'
 import { PlayerTapContext, ProgressRing } from '../MultiplayerUI'
 import { FONT, ST, StButton, StPanel, stType, withAlpha } from '../studio'
+import { useT } from '../../i18n'
+import P from '../../i18n/strings/partyGames'
 
 /** Full-height dark ground; scrolls by default. */
 export function StScreen({ children, scroll = true, style, contentStyle, keyboardShouldPersistTaps }) {
@@ -67,6 +69,7 @@ export function StTag({ text, color = ST.friendly, solid = false, style }) {
 
 /** Player row: tap opens the player card, Follow on everyone but you (unless follow={false}). */
 export function StPlayerRow({ player, subtitle, subtitleColor, right, dim, follow = true, color, selected, style }) {
+  const t = useT(P)
   const onTap = useContext(PlayerTapContext)
   const myId = useMyUserId()
   const showFollow = follow && !!onTap && !!player?.id && !!myId && player.id !== myId
@@ -74,7 +77,7 @@ export function StPlayerRow({ player, subtitle, subtitleColor, right, dim, follo
     <>
       <StAvatar uri={player.avatar} name={player.username} color={color} />
       <View style={{ flex: 1, minWidth: 0, marginLeft: 10 }}>
-        <Text style={stType.name} numberOfLines={1}>{player.username || 'Player'}</Text>
+        <Text style={stType.name} numberOfLines={1}>{player.username || t('kit_player')}</Text>
         {subtitle ? <Text style={[stType.small, { fontSize: 11, lineHeight: 15 }, subtitleColor && { color: subtitleColor }]} numberOfLines={1}>{subtitle}</Text> : null}
       </View>
     </>
@@ -105,6 +108,7 @@ export function StPlayerRow({ player, subtitle, subtitleColor, right, dim, follo
  * opens the player card (with Follow) so a pick grid never navigates away by accident.
  */
 export function StPlayerTile({ player, tag, selected, onPress, disabled, color = ST.friendly, dim, compact }) {
+  const t = useT(P)
   const onTap = useContext(PlayerTapContext)
   return (
     <Pressable
@@ -113,8 +117,8 @@ export function StPlayerTile({ player, tag, selected, onPress, disabled, color =
       delayLongPress={350}
       accessibilityRole="button"
       accessibilityState={{ selected: !!selected, disabled: !!disabled }}
-      accessibilityLabel={`${player.username || 'Player'}${tag ? `, ${tag}` : ''}`}
-      accessibilityHint={onTap && player?.id ? 'Long-press for their profile' : undefined}
+      accessibilityLabel={`${player.username || t('kit_player')}${tag ? `, ${tag}` : ''}`}
+      accessibilityHint={onTap && player?.id ? t('kit_longpress_hint') : undefined}
       style={({ pressed }) => [
         compact ? k.tileRow : k.tile,
         selected ? { borderWidth: 2, borderColor: color, backgroundColor: withAlpha(color, 0.18) } : null,
@@ -124,7 +128,7 @@ export function StPlayerTile({ player, tag, selected, onPress, disabled, color =
     >
       <StAvatar uri={player.avatar} name={player.username} size={compact ? 32 : 44} />
       <View style={compact ? { flex: 1, minWidth: 0 } : { alignItems: 'center', maxWidth: '100%' }}>
-        <Text style={[k.tileName, !compact && { textAlign: 'center' }]} numberOfLines={1}>{player.username || 'Player'}</Text>
+        <Text style={[k.tileName, !compact && { textAlign: 'center' }]} numberOfLines={1}>{player.username || t('kit_player')}</Text>
         {tag ? <Text style={[k.tileTag, !compact && { textAlign: 'center' }]} numberOfLines={1}>{tag}</Text> : null}
       </View>
     </Pressable>
@@ -159,12 +163,13 @@ export function StBanner({ text, sub, color = ST.friendly, icon, solid = false, 
 }
 
 /** Event feed list. */
-export function StFeed({ items, label = 'Feed', max = 8 }) {
+export function StFeed({ items, label, max = 8, localize }) {
+  const t = useT(P)
   if (!items?.length) return null
   return (
-    <StSection label={label}>
+    <StSection label={label ?? t('kit_feed')}>
       {items.slice(0, max).map((f, i) => (
-        <Text key={f.id ?? i} style={[stType.small, { color: i === 0 ? ST.text : ST.muted, marginVertical: 2 }]}>{f.text}</Text>
+        <Text key={f.id ?? i} style={[stType.small, { color: i === 0 ? ST.text : ST.muted, marginVertical: 2 }]}>{localize ? localize(f.text, f) : f.text}</Text>
       ))}
     </StSection>
   )
@@ -228,13 +233,14 @@ export function StStats({ items, style }) {
 
 /** MVP card (results). */
 export function StMvp({ player, line, color = ST.objective }) {
+  const t = useT(P)
   const onTap = useContext(PlayerTapContext)
   const inner = (
     <>
       <Ionicons name="star-outline" size={30} color={color} />
       <StAvatar uri={player.avatar} name={player.username} size={44} color={color} />
       <View style={{ flex: 1, minWidth: 0 }}>
-        <Text style={[stType.label, { color }]}>MVP</Text>
+        <Text style={[stType.label, { color }]}>{t('kit_mvp')}</Text>
         <Text style={[stType.name, { fontSize: 18 }]} numberOfLines={1}>{player.username}</Text>
         {line ? <Text style={stType.small} numberOfLines={1}>{line}</Text> : null}
       </View>
@@ -242,48 +248,53 @@ export function StMvp({ player, line, color = ST.objective }) {
   )
   const box = [k.mvp, { borderColor: color, backgroundColor: withAlpha(color, 0.08) }]
   if (onTap && player?.id) {
-    return <Pressable onPress={() => onTap(player)} style={({ pressed }) => [box, pressed && { opacity: 0.8 }]} accessibilityRole="button" accessibilityLabel={`MVP ${player.username}, view profile`}>{inner}</Pressable>
+    return <Pressable onPress={() => onTap(player)} style={({ pressed }) => [box, pressed && { opacity: 0.8 }]} accessibilityRole="button" accessibilityLabel={t('kit_mvp_a11y', { name: player.username })}>{inner}</Pressable>
   }
   return <View style={box}>{inner}</View>
 }
 
 /** Results footer: host rematch + leave. */
-export function StResultsFooter({ isHost, onAgain, onExit, againTitle = 'Rematch', waiting = 'Waiting for the host to start another round…' }) {
+export function StResultsFooter({ isHost, onAgain, onExit, againTitle, waiting }) {
+  const t = useT(P)
   return (
     <View style={{ gap: 8, marginTop: 4 }}>
-      {isHost ? <StButton title={againTitle} onPress={onAgain} /> : <Text style={[stType.small, { textAlign: 'center' }]}>{waiting}</Text>}
-      <StButton title="Leave" tone="ghost" onPress={onExit} />
+      {isHost ? <StButton title={againTitle ?? t('kit_rematch')} onPress={onAgain} /> : <Text style={[stType.small, { textAlign: 'center' }]}>{waiting ?? t('kit_waiting_host')}</Text>}
+      <StButton title={t('kit_leave')} tone="ghost" onPress={onExit} />
     </View>
   )
 }
 
 /** Studio version of MultiplayerUI's LocationGate (always dark, legible in light mode too). */
-export function StLocationGate({ status, onExit, what = 'This game' }) {
+export function StLocationGate({ status, onExit, what }) {
+  const t = useT(P)
   if (status === 'granted') return null
   if (status === 'pending') {
     return (
       <View style={[k.ground, k.fill, k.center]}>
         <ActivityIndicator color={ST.friendly} />
-        <Text style={[stType.label, { marginTop: 12 }]}>Getting your location</Text>
+        <Text style={[stType.label, { marginTop: 12 }]}>{t('kit_getting_loc')}</Text>
       </View>
     )
   }
   return (
     <View style={[k.ground, k.fill, k.center, { padding: 24 }]}>
       <Ionicons name="navigate-outline" size={36} color={ST.objective} />
-      <Text style={[stType.title, { textAlign: 'center', marginTop: 10 }]}>Location needed</Text>
+      <Text style={[stType.title, { textAlign: 'center', marginTop: 10 }]}>{t('kit_loc_needed')}</Text>
       <Text style={[stType.body, { textAlign: 'center', marginVertical: 12 }]}>
-        {what} is played in the real world, so it needs your location to know how close other players are. Your exact location is only shared with players in this match while you play.
+        {t('kit_loc_body', { game: what || t('kit_this_game') })}
       </Text>
-      {status === 'denied' ? <StButton title="Open settings" onPress={() => Linking.openSettings().catch(() => {})} style={{ alignSelf: 'stretch' }} /> : null}
-      {status === 'error' ? <Text style={[stType.small, { textAlign: 'center' }]}>Couldn’t read your location. Make sure Location Services are on.</Text> : null}
-      <StButton title="Leave game" tone="ghost" onPress={onExit} style={{ marginTop: 10, alignSelf: 'stretch' }} />
+      {status === 'denied' ? <StButton title={t('kit_open_settings')} onPress={() => Linking.openSettings().catch(() => {})} style={{ alignSelf: 'stretch' }} /> : null}
+      {status === 'error' ? <Text style={[stType.small, { textAlign: 'center' }]}>{t('kit_loc_error')}</Text> : null}
+      <StButton title={t('kit_leave_game')} tone="ghost" onPress={onExit} style={{ marginTop: 10, alignSelf: 'stretch' }} />
     </View>
   )
 }
 
 /** Studio version of Spectating. */
-export function StSpectating({ text = 'A round is in progress. You’ll be in the next one.', title = 'Round in progress' }) {
+export function StSpectating({ text: textProp, title: titleProp }) {
+  const t = useT(P)
+  const text = textProp ?? t('kit_spectating_text')
+  const title = titleProp ?? t('kit_spectating_title')
   return (
     <View style={[k.ground, k.fill, k.center, { padding: 24 }]}>
       <Ionicons name="eye-outline" size={32} color={ST.muted} />

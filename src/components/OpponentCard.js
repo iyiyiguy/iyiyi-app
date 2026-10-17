@@ -8,6 +8,8 @@ import { Image, Pressable, StyleSheet, Text, View } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { FONT, ST } from '../games/studio'
 import GameFollowButton from './GameFollowButton'
+import { useT } from '../i18n'
+import strings from '../i18n/strings/arcadeMisc'
 
 // Round avatar kept for screens that still use it (ChessScreen). square draws the studio tile.
 export function PlayerAvatar({ uri, name, size = 44, ring, square = false, accent }) {
@@ -34,9 +36,10 @@ export default function OpponentCard({
   player, rating, ratingLabel, sideLabel, captured, thinking, connected = true,
   onViewProfile, onChat, unread = 0, videoButton, bubble, actions = true, accent = ST.enemy,
 }) {
-  const name = player?.name || 'Opponent'
-  const status = !connected ? 'Offline' : thinking ? 'Thinking…' : null
-  const ratingText = typeof ratingLabel === 'string' && ratingLabel ? ratingLabel : rating != null ? `Rated ${rating}` : 'Unrated'
+  const t = useT(strings)
+  const name = player?.name || t('opponent')
+  const status = !connected ? t('offline') : thinking ? t('thinking') : null
+  const ratingText = typeof ratingLabel === 'string' && ratingLabel ? ratingLabel : rating != null ? t('rated', { n: rating }) : t('unrated')
   const meta = [ratingText, sideLabel, status].filter(Boolean).join(' · ')
   return (
     <View style={[styles.card, thinking && connected && { borderLeftWidth: 3, borderLeftColor: accent }]}>
@@ -44,7 +47,7 @@ export default function OpponentCard({
         onPress={onViewProfile}
         disabled={!onViewProfile}
         accessibilityRole="button"
-        accessibilityLabel={`View ${name}’s profile`}
+        accessibilityLabel={t('view_profile_name_a11y', { name })}
         style={({ pressed }) => [styles.who, pressed && { opacity: 0.75 }]}
       >
         <View>
@@ -60,12 +63,12 @@ export default function OpponentCard({
       <View style={styles.actions}>
         {player?.id ? <GameFollowButton userId={player.id} name={name} /> : null}
         {actions && onViewProfile ? (
-          <Pressable onPress={onViewProfile} style={({ pressed }) => [styles.action, pressed && styles.pressed]} accessibilityRole="button" accessibilityLabel="View profile">
+          <Pressable onPress={onViewProfile} style={({ pressed }) => [styles.action, pressed && styles.pressed]} accessibilityRole="button" accessibilityLabel={t('view_profile_a11y')}>
             <Ionicons name="person" size={16} color={ST.text} />
           </Pressable>
         ) : null}
         {actions && onChat ? (
-          <Pressable onPress={onChat} style={({ pressed }) => [styles.action, pressed && styles.pressed]} accessibilityRole="button" accessibilityLabel={unread ? `Chat, ${unread} unread` : 'Chat'}>
+          <Pressable onPress={onChat} style={({ pressed }) => [styles.action, pressed && styles.pressed]} accessibilityRole="button" accessibilityLabel={unread ? t('chat_unread_a11y', { n: unread }) : t('chat')}>
             <Ionicons name="chatbubble-ellipses" size={16} color={ST.text} />
             {unread > 0 ? <View style={styles.badge}><Text style={styles.badgeText}>{unread > 9 ? '9+' : unread}</Text></View> : null}
           </Pressable>
@@ -73,7 +76,7 @@ export default function OpponentCard({
         {actions ? videoButton : null}
       </View>
       {bubble ? (
-        <Pressable onPress={onChat} disabled={!onChat} style={styles.bubbleWrap} accessibilityRole="button" accessibilityLabel={`New message: ${bubble}`}>
+        <Pressable onPress={onChat} disabled={!onChat} style={styles.bubbleWrap} accessibilityRole="button" accessibilityLabel={t('new_message_a11y', { text: bubble })}>
           <View style={styles.bubbleTail} />
           <View style={styles.bubble}><Text style={styles.bubbleText} numberOfLines={2}>{bubble}</Text></View>
         </Pressable>

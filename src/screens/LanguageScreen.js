@@ -20,7 +20,7 @@ export default function LanguageScreen({ navigation, onDone }) {
     <View style={styles.screen}>
       <ScrollView contentContainerStyle={[styles.scroll, { paddingTop: insets.top + 12, paddingBottom: insets.bottom + 24 }]} showsVerticalScrollIndicator={false}>
         {!firstRun && navigation?.canGoBack?.() ? (
-          <View style={styles.topBar}><HeaderButton icon="chevron-back" onPress={() => navigation.goBack()} label="Back" /></View>
+          <View style={styles.topBar}><HeaderButton icon="chevron-back" onPress={() => navigation.goBack()} label={t('back')} /></View>
         ) : null}
         <FadeIn style={{ alignItems: 'center', marginTop: firstRun ? 24 : 4 }}>
           <LinearGradient colors={['#6b7cff', '#8f5bff']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.globe}>

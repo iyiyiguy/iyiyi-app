@@ -1,5 +1,7 @@
 import React, { useEffect, useRef } from 'react'
 import { Animated, Pressable, StyleSheet, Text, View } from 'react-native'
+import { useT } from '../../i18n'
+import camStrings from '../../i18n/strings/camera'
 
 const ITEM_W = 74
 export const MODE_ACTIVE_COLOR = '#ffd60a'
@@ -11,6 +13,7 @@ const MODES = [
 // "VIDEO · PHOTO" strip like the iPhone Camera app: the selected mode slides to the centre in
 // yellow. Tap a label (or swipe across the preview - handled by the screen) to switch.
 export default function ModeSwitcher({ mode, onChange, disabled }) {
+  const t = useT(camStrings)
   const idx = Math.max(0, MODES.findIndex((m) => m.key === mode))
   const shift = useRef(new Animated.Value(idx)).current
 
@@ -37,9 +40,9 @@ export default function ModeSwitcher({ mode, onChange, disabled }) {
               hitSlop={{ top: 10, bottom: 10 }}
               accessibilityRole="button"
               accessibilityState={{ selected: active }}
-              accessibilityLabel={`${m.label.toLowerCase()} mode`}
+              accessibilityLabel={t(`modeA11y_${m.key}`)}
             >
-              <Text style={[styles.label, active && styles.labelActive]}>{m.label}</Text>
+              <Text style={[styles.label, active && styles.labelActive]}>{t(`mode_${m.key}`)}</Text>
             </Pressable>
           )
         })}

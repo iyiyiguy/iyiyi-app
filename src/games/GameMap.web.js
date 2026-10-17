@@ -5,6 +5,8 @@ import React, { useEffect, useState } from 'react'
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native'
 import * as Location from 'expo-location'
 import { colors, radii, type } from '../theme'
+import { useT } from '../i18n'
+import AM from '../i18n/strings/arcadeMisc'
 
 export const isValidCoord = (lat, lng) =>
   Number.isFinite(lat) && Number.isFinite(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180
@@ -25,9 +27,10 @@ export function withAlpha(hex, a) {
 export const deltaForRadius = (r) => (r > 0 ? Math.min(60, Math.max(0.0025, (r * 2.6) / 111000)) : 0.003)
 
 export function GameMap({ style, height = 280 }) {
+  const t = useT(AM)
   return (
     <View style={[{ height, borderRadius: 20, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(127,127,127,0.12)' }, style]}>
-      <Text style={{ color: colors.textMuted }}>Maps are available in the iYiYi iOS app.</Text>
+      <Text style={{ color: colors.textMuted }}>{t('map_ios_only')}</Text>
     </View>
   )
 }

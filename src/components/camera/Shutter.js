@@ -1,5 +1,7 @@
 import React, { useEffect, useRef } from 'react'
 import { Animated, Easing, Pressable, StyleSheet, View } from 'react-native'
+import { useT } from '../../i18n'
+import camStrings from '../../i18n/strings/camera'
 
 const OUTER = 80
 const INNER = 64
@@ -9,6 +11,7 @@ const INNER = 64
 // preview in the carousel shows through the middle, Snapchat-style.
 // Hold to record (TikTok/Snapchat): onHoldStart after a short press-and-hold, onHoldEnd on release.
 export default function Shutter({ mode, recording, busy, onPress, onHoldStart, onHoldEnd, disabled, ringOnly = false }) {
+  const t = useT(camStrings)
   const held = useRef(false)
   const rec = useRef(new Animated.Value(recording ? 1 : 0)).current
   const press = useRef(new Animated.Value(1)).current
@@ -35,8 +38,8 @@ export default function Shutter({ mode, recording, busy, onPress, onHoldStart, o
         if (held.current) { held.current = false; onHoldEnd?.() }
       }}
       accessibilityRole="button"
-      accessibilityLabel={recording ? 'Stop recording' : isVideo ? 'Record video' : 'Take photo'}
-      accessibilityHint={onHoldStart ? 'Hold to record a video, release to stop' : undefined}
+      accessibilityLabel={recording ? t('stopRec') : isVideo ? t('recordVideo') : t('takePhoto')}
+      accessibilityHint={onHoldStart ? t('holdHint') : undefined}
       hitSlop={8}
     >
       <Animated.View style={[styles.outer, ringOnly && styles.outerRing, { transform: [{ scale: press }] }, busy && { opacity: 0.6 }]}>

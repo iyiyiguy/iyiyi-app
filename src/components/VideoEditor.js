@@ -10,19 +10,23 @@ import {
   CAPTION_FONTS, CAPTION_COLORS, CAPTION_STYLES, CROP_ASPECTS, Caption, PlacedCaption, aspectRatioOf, cleanEdit, useCaptionFonts,
 } from '../lib/videoEdit'
 import { Fader } from '../studio/ui'
+import { useT } from '../i18n'
+import strings from '../i18n/strings/editor'
 
 const C = { bg: '#000', panel: '#14171d', panel2: '#1c2029', line: 'rgba(255,255,255,0.1)', text: '#f2f4f7', muted: 'rgba(242,244,247,0.6)', accent: '#ff4fa3' }
 const TOOLS = [
-  { key: 'trim', icon: 'cut-outline', label: 'Trim' },
-  { key: 'crop', icon: 'crop-outline', label: 'Crop' },
-  { key: 'text', icon: 'text-outline', label: 'Text' },
-  { key: 'sound', icon: 'musical-notes-outline', label: 'Sound' },
+  { key: 'trim', icon: 'cut-outline', label: 'toolTrim' },
+  { key: 'crop', icon: 'crop-outline', label: 'toolCrop' },
+  { key: 'text', icon: 'text-outline', label: 'toolText' },
+  { key: 'sound', icon: 'musical-notes-outline', label: 'toolSound' },
 ]
 const fmt = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}.${Math.floor((s % 1) * 10)}`
 const newId = () => `t${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`
 
 export default function VideoEditor({ visible, item, initialSound, initialEdit, onCancel, onPost, onMakeBeat }) {
   useCaptionFonts()
+  // `t` is used for captions below, so the translator is `tr` here.
+  const tr = useT(strings)
   const insets = useSafeAreaInsets()
   const { width, height } = useWindowDimensions()
   const [tool, setTool] = useState('trim')
@@ -57,7 +61,7 @@ export default function VideoEditor({ visible, item, initialSound, initialEdit, 
   const set = (patch) => setEdit((e) => ({ ...e, ...patch }))
   const updateText = (id, patch) => setEdit((e) => ({ ...e, texts: e.texts.map((t) => (t.id === id ? { ...t, ...patch } : t)) }))
   const addText = () => {
-    const t = { id: newId(), text: 'Your text', x: 0.5, y: 0.45, size: 0.08, font: 'classic', color: '#ffffff', style: 'plain' }
+    const t = { id: newId(), text: tr('yourText'), x: 0.5, y: 0.45, size: 0.08, font: 'classic', color: '#ffffff', style: 'plain' }
     setEdit((e) => ({ ...e, texts: [...e.texts, t] }))
     setSelText(t.id)
     setTool('text')
@@ -93,9 +97,9 @@ export default function VideoEditor({ visible, item, initialSound, initialEdit, 
     <Modal visible={visible} animationType="slide" onRequestClose={onCancel} statusBarTranslucent>
       <KeyboardAvoidingView style={[st.screen, { paddingTop: insets.top + 6 }]} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <View style={st.top}>
-          <Pressable onPress={onCancel} hitSlop={10} style={st.topBtn}><Text style={st.topText}>Cancel</Text></Pressable>
-          <Text style={st.topTitle}>Edit video</Text>
-          <Pressable onPress={post} style={st.postBtn} accessibilityRole="button"><Text style={st.postText}>Next</Text></Pressable>
+          <Pressable onPress={onCancel} hitSlop={10} style={st.topBtn}><Text style={st.topText}>{tr('cancel')}</Text></Pressable>
+          <Text style={st.topTitle}>{tr('editVideo')}</Text>
+          <Pressable onPress={post} style={st.postBtn} accessibilityRole="button"><Text style={st.postText}>{tr('next')}</Text></Pressable>
         </View>
 
         <View style={{ height: areaH, alignItems: 'center', justifyContent: 'center' }}>
@@ -112,7 +116,7 @@ export default function VideoEditor({ visible, item, initialSound, initialEdit, 
             {edit.texts.map((t) => (
               <DraggableCaption key={t.id} t={t} w={fw} h={fh} selected={selText === t.id} onSelect={() => { setSelText(t.id); setTool('text') }} onMove={(x, y) => updateText(t.id, { x, y })} />
             ))}
-            <Pressable onPress={() => setPlaying((p) => !p)} style={st.playBadge} hitSlop={8} accessibilityLabel={playing ? 'Pause' : 'Play'}>
+            <Pressable onPress={() => setPlaying((p) => !p)} style={st.playBadge} hitSlop={8} accessibilityLabel={playing ? tr('pause') : tr('play')}>
               <Ionicons name={playing ? 'pause' : 'play'} size={16} color="#fff" />
             </Pressable>
           </View>
@@ -122,7 +126,7 @@ export default function VideoEditor({ visible, item, initialSound, initialEdit, 
           {TOOLS.map((t) => (
             <Pressable key={t.key} onPress={() => setTool(t.key)} style={st.toolBtn} accessibilityRole="tab" accessibilityState={{ selected: tool === t.key }}>
               <Ionicons name={t.icon} size={20} color={tool === t.key ? C.accent : C.muted} />
-              <Text style={[st.toolText, tool === t.key && { color: C.text }]}>{t.label}</Text>
+              <Text style={[st.toolText, tool === t.key && { color: C.text }]}>{tr(t.label)}</Text>
             </Pressable>
           ))}
         </View>
@@ -130,57 +134,57 @@ export default function VideoEditor({ visible, item, initialSound, initialEdit, 
         <ScrollView style={{ flex: 1 }} contentContainerStyle={[st.panelWrap, { paddingBottom: insets.bottom + 20 }]} keyboardShouldPersistTaps="handled">
           {tool === 'trim' ? (
             <View style={st.panel}>
-              <Text style={st.label}>Keep from {fmt(trim.start)} to {fmt(trim.end || duration)} · {fmt(Math.max(0, (trim.end || duration) - trim.start))}</Text>
+              <Text style={st.label}>{tr('keepRange', { start: fmt(trim.start), end: fmt(trim.end || duration), len: fmt(Math.max(0, (trim.end || duration) - trim.start)) })}</Text>
               {duration ? (
                 <TrimBar duration={duration} start={trim.start} end={trim.end || duration} onChange={(start, end) => set({ trim: { start, end } })} />
-              ) : <Text style={st.muted}>Loading video…</Text>}
-              <Pressable onPress={() => set({ trim: null })} style={st.linkBtn}><Text style={st.link}>Reset trim</Text></Pressable>
+              ) : <Text style={st.muted}>{tr('loadingVideo')}</Text>}
+              <Pressable onPress={() => set({ trim: null })} style={st.linkBtn}><Text style={st.link}>{tr('resetTrim')}</Text></Pressable>
             </View>
           ) : tool === 'crop' ? (
             <View style={st.panel}>
-              <Text style={st.label}>Shape</Text>
+              <Text style={st.label}>{tr('shape')}</Text>
               <View style={st.chips}>
                 {CROP_ASPECTS.map((a) => (
                   <Pressable key={String(a.key)} onPress={() => set({ crop: { ...edit.crop, aspect: a.key } })} style={[st.chip, (edit.crop?.aspect || null) === a.key && st.chipOn]}>
-                    <Text style={[st.chipText, (edit.crop?.aspect || null) === a.key && { color: '#000' }]}>{a.label}</Text>
+                    <Text style={[st.chipText, (edit.crop?.aspect || null) === a.key && { color: '#000' }]}>{a.key ? a.label : tr('aspectOriginal')}</Text>
                   </Pressable>
                 ))}
               </View>
-              <Text style={[st.label, { marginTop: 14 }]}>Zoom</Text>
+              <Text style={[st.label, { marginTop: 14 }]}>{tr('zoom')}</Text>
               <Fader value={edit.crop?.zoom || 1} min={1} max={3} onChange={(z) => set({ crop: { ...edit.crop, zoom: z } })} color={C.accent} />
-              <Text style={st.muted}>Zoom in, then drag the video to frame it.</Text>
+              <Text style={st.muted}>{tr('zoomHint')}</Text>
             </View>
           ) : tool === 'text' ? (
             <View style={st.panel}>
-              <Pressable onPress={addText} style={st.addBtn} accessibilityRole="button"><Ionicons name="add" size={18} color="#000" /><Text style={st.addText}>Add text</Text></Pressable>
+              <Pressable onPress={addText} style={st.addBtn} accessibilityRole="button"><Ionicons name="add" size={18} color="#000" /><Text style={st.addText}>{tr('addText')}</Text></Pressable>
               {sel ? (
                 <View style={{ gap: 12, marginTop: 12 }}>
-                  <TextInput value={sel.text} onChangeText={(text) => updateText(sel.id, { text })} style={st.input} placeholder="Type something" placeholderTextColor={C.muted} multiline maxLength={120} />
+                  <TextInput value={sel.text} onChangeText={(text) => updateText(sel.id, { text })} style={st.input} placeholder={tr('typeSomething')} placeholderTextColor={C.muted} multiline maxLength={120} />
                   <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
                     {CAPTION_FONTS.map((f) => (
                       <Pressable key={f.id} onPress={() => updateText(sel.id, { font: f.id })} style={[st.fontChip, sel.font === f.id && st.chipOn]}>
-                        <Text style={{ fontFamily: f.family, fontWeight: f.weight, fontSize: 15, color: sel.font === f.id ? '#000' : C.text }}>{f.label}</Text>
+                        <Text style={{ fontFamily: f.family, fontWeight: f.weight, fontSize: 15, color: sel.font === f.id ? '#000' : C.text }}>{tr(`font_${f.id}`)}</Text>
                       </Pressable>
                     ))}
                   </ScrollView>
                   <View style={st.colors}>
                     {CAPTION_COLORS.map((c) => (
-                      <Pressable key={c} onPress={() => updateText(sel.id, { color: c })} style={[st.swatch, { backgroundColor: c }, sel.color === c && st.swatchOn]} accessibilityLabel={`Color ${c}`} />
+                      <Pressable key={c} onPress={() => updateText(sel.id, { color: c })} style={[st.swatch, { backgroundColor: c }, sel.color === c && st.swatchOn]} accessibilityLabel={tr('colorA11y', { c })} />
                     ))}
                   </View>
                   <View style={st.chips}>
                     {CAPTION_STYLES.map((s) => (
                       <Pressable key={s.id} onPress={() => updateText(sel.id, { style: s.id })} style={[st.chip, sel.style === s.id && st.chipOn]}>
-                        <Text style={[st.chipText, sel.style === s.id && { color: '#000' }]}>{s.label}</Text>
+                        <Text style={[st.chipText, sel.style === s.id && { color: '#000' }]}>{tr(`style_${s.id}`)}</Text>
                       </Pressable>
                     ))}
                   </View>
-                  <Text style={st.label}>Size</Text>
+                  <Text style={st.label}>{tr('size')}</Text>
                   <Fader value={sel.size} min={0.04} max={0.16} onChange={(size) => updateText(sel.id, { size })} color={C.accent} />
-                  <Pressable onPress={() => removeText(sel.id)} style={st.linkBtn}><Text style={[st.link, { color: '#ff3d52' }]}>Delete text</Text></Pressable>
+                  <Pressable onPress={() => removeText(sel.id)} style={st.linkBtn}><Text style={[st.link, { color: '#ff3d52' }]}>{tr('deleteText')}</Text></Pressable>
                 </View>
               ) : (
-                <Text style={[st.muted, { marginTop: 10 }]}>{edit.texts.length ? 'Tap a text on the video to edit it. Drag to move.' : 'Add text, then drag it where you want.'}</Text>
+                <Text style={[st.muted, { marginTop: 10 }]}>{edit.texts.length ? tr('textHintHas') : tr('textHintEmpty')}</Text>
               )}
             </View>
           ) : (
@@ -190,19 +194,19 @@ export default function VideoEditor({ visible, item, initialSound, initialEdit, 
                   <View style={st.soundIcon}><Ionicons name="musical-notes" size={18} color={C.accent} /></View>
                   <View style={{ flex: 1 }}>
                     <Text style={st.soundTitle} numberOfLines={1}>{sound.title}</Text>
-                    <Text style={st.muted}>{sound.profiles?.username ? `@${sound.profiles.username}` : 'iYiYi sound'}</Text>
+                    <Text style={st.muted}>{sound.profiles?.username ? `@${sound.profiles.username}` : tr('iyiyiSound')}</Text>
                   </View>
                   <Pressable onPress={() => { setSound(null); set({ originalVolume: 1 }) }} hitSlop={8}><Ionicons name="close-circle" size={20} color={C.muted} /></Pressable>
                 </View>
               ) : null}
-              <Pressable onPress={() => setPickerOpen(true)} style={st.addBtn}><Ionicons name="musical-notes" size={16} color="#000" /><Text style={st.addText}>{sound ? 'Change sound' : 'Add sound'}</Text></Pressable>
+              <Pressable onPress={() => setPickerOpen(true)} style={st.addBtn}><Ionicons name="musical-notes" size={16} color="#000" /><Text style={st.addText}>{sound ? tr('changeSound') : tr('addSound')}</Text></Pressable>
               {sound ? (
                 <>
-                  <Text style={[st.label, { marginTop: 14 }]}>Sound volume</Text>
+                  <Text style={[st.label, { marginTop: 14 }]}>{tr('soundVolume')}</Text>
                   <Fader value={edit.soundVolume ?? 1} onChange={(v) => set({ soundVolume: v })} color={C.accent} />
                 </>
               ) : null}
-              <Text style={[st.label, { marginTop: 14 }]}>Original audio</Text>
+              <Text style={[st.label, { marginTop: 14 }]}>{tr('originalAudio')}</Text>
               <Fader value={edit.originalVolume ?? 1} onChange={(v) => set({ originalVolume: v })} color="#39d5ff" />
             </View>
           )}

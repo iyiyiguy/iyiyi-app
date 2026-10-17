@@ -19,6 +19,11 @@ import { Ionicons } from '@expo/vector-icons'
 import { AC } from '../games/arcadeUI'
 import { Avatar } from '../games/MultiplayerUI'
 import { FONT, ST } from '../games/studio'
+import { translate, useT } from '../i18n'
+import V from '../i18n/strings/videoCall'
+
+const tv = (k, v) => translate(V, k, v)
+const peerName = (p) => p?.name || tv('opponent')
 
 const RING_TIMEOUT_MS = 30000
 const RING_REPEAT_MS = 2500
@@ -187,7 +192,7 @@ export function useVideoCall(room, peer, peerPresent) {
     timers.current.connect = setTimeout(() => {
       if (st.current.status !== 'connecting') return
       send({ k: 'hangup', id })
-      reset('Couldn’t connect video. Your networks may block direct calls — try Wi-Fi.')
+      reset(tv('connect_failed'))
     }, CONNECT_TIMEOUT_MS)
   }, [set, send, reset])
 
@@ -202,7 +207,7 @@ export function useVideoCall(room, peer, peerPresent) {
   // ---- actions ----
   const start = useCallback(() => {
     if (!room || !peerId || st.current.status !== 'idle') return
-    if (!peerPresent) { showNotice(`${peerRef.current?.name || 'Your opponent'} isn’t connected right now.`); return }
+    if (!peerPresent) { showNotice(tv('not_connected', { name: peerRef.current?.name || tv('your_opponent') })); return }
     const id = newId()
     set({ status: 'outgoing', callId: id, role: 'caller' })
     const ring = () => send({ k: 'ring', id })
@@ -211,7 +216,7 @@ export function useVideoCall(room, peer, peerPresent) {
     timers.current.ring = setTimeout(() => {
       if (st.current.status !== 'outgoing') return
       send({ k: 'cancel', id })
-      reset('No answer.')
+      reset(tv('no_answer'))
     }, RING_TIMEOUT_MS)
   }, [room, peerId, peerPresent, send, set, reset, showNotice])
 
@@ -233,7 +238,7 @@ export function useVideoCall(room, peer, peerPresent) {
     const s = st.current
     if (s.status === 'idle') return
     send({ k: s.status === 'outgoing' ? 'cancel' : 'hangup', id: s.callId })
-    reset(s.status === 'outgoing' ? null : 'Call ended.')
+    reset(s.status === 'outgoing' ? null : tv('call_ended'))
   }, [send, reset])
 
   const toggleMute = useCallback(() => setMuted((m) => { inject({ t: 'mute', on: !m }); return !m }), [inject])
@@ -254,7 +259,7 @@ export function useVideoCall(room, peer, peerPresent) {
             if (s.status === 'idle') {
               set({ status: 'incoming', callId: data.id, role: 'callee' })
               clearTimer('incoming')
-              timers.current.incoming = setTimeout(() => { if (st.current.status === 'incoming') reset('Missed video call.') }, RING_TIMEOUT_MS + 5000)
+              timers.current.incoming = setTimeout(() => { if (st.current.status === 'incoming') reset(tv('missed')) }, RING_TIMEOUT_MS + 5000)
             } else if (s.status === 'outgoing' && !sameCall) {
               // Both called at once: the larger id gives way and answers the other call.
               const myId = room.me?.id || ''
@@ -266,16 +271,16 @@ export function useVideoCall(room, peer, peerPresent) {
             }
             return
           case 'cancel':
-            if (sameCall && s.status === 'incoming') reset('Missed video call.')
+            if (sameCall && s.status === 'incoming') reset(tv('missed'))
             return
           case 'accept':
             if (sameCall && s.status === 'outgoing') beginMedia('caller', s.callId)
             return
           case 'decline':
-            if (sameCall && s.status === 'outgoing') reset(`${peerRef.current?.name || 'Opponent'} declined the call.`)
+            if (sameCall && s.status === 'outgoing') reset(tv('declined', { name: peerName(peerRef.current) }))
             return
           case 'busy':
-            if (sameCall && s.status === 'outgoing') reset(`${peerRef.current?.name || 'Opponent'} is busy.`)
+            if (sameCall && s.status === 'outgoing') reset(tv('busy', { name: peerName(peerRef.current) }))
             return
           case 'ready':
             if (sameCall && s.role === 'caller') { s.peerReady = true; maybeOffer() }
@@ -286,7 +291,7 @@ export function useVideoCall(room, peer, peerPresent) {
             else if (s.queue.length < 200) s.queue.push(data.sig)
             return
           case 'hangup':
-            if (sameCall && s.status !== 'idle') reset(data.reason === 'failed' ? `${peerRef.current?.name || 'Opponent'} couldn’t start their camera.` : 'Call ended.')
+            if (sameCall && s.status !== 'idle') reset(data.reason === 'failed' ? tv('peer_cam_failed', { name: peerName(peerRef.current) }) : tv('call_ended'))
             return
           default:
         }
@@ -323,11 +328,11 @@ export function useVideoCall(room, peer, peerPresent) {
           if (s.status !== 'live') set({ status: 'live' })
         } else if (m.s === 'failed') {
           send({ k: 'hangup', id: s.callId })
-          reset('Couldn’t connect video. Your networks may block direct calls — try Wi-Fi.')
+          reset(tv('connect_failed'))
         } else if (m.s === 'disconnected' && s.status === 'live') {
           clearTimer('disc')
           timers.current.disc = setTimeout(() => {
-            if (st.current.status === 'live') { send({ k: 'hangup', id: st.current.callId }); reset('Video connection lost.') }
+            if (st.current.status === 'live') { send({ k: 'hangup', id: st.current.callId }); reset(tv('connection_lost')) }
           }, DISCONNECT_GRACE_MS)
         }
         return
@@ -337,13 +342,11 @@ export function useVideoCall(room, peer, peerPresent) {
           reset(null)
           const denied = m.name === 'NotAllowedError' || m.name === 'SecurityError'
           Alert.alert(
-            denied ? 'Camera access needed' : 'Video unavailable',
+            denied ? tv('cam_needed') : tv('video_unavailable'),
+            denied ? tv('allow_cam') : tv('cam_failed'),
             denied
-              ? 'Allow camera and microphone access for iYiYi in Settings to video call.'
-              : 'Your camera or microphone couldn’t be started.',
-            denied
-              ? [{ text: 'Not now', style: 'cancel' }, { text: 'Open Settings', onPress: () => { Linking.openSettings().catch(() => {}) } }]
-              : [{ text: 'OK' }],
+              ? [{ text: tv('not_now'), style: 'cancel' }, { text: tv('open_settings'), onPress: () => { Linking.openSettings().catch(() => {}) } }]
+              : [{ text: tv('ok') }],
           )
         } else {
           console.warn('video call', m.where, m.message)
@@ -360,7 +363,7 @@ export function useVideoCall(room, peer, peerPresent) {
     if (!timers.current.peerGone) {
       timers.current.peerGone = setTimeout(() => {
         delete timers.current.peerGone
-        if (st.current.status !== 'idle') reset(`${peerRef.current?.name || 'Opponent'} left the call.`)
+        if (st.current.status !== 'idle') reset(tv('left_call', { name: peerName(peerRef.current) }))
       }, PEER_GONE_MS)
     }
     return undefined
@@ -402,8 +405,9 @@ export function useVideoCall(room, peer, peerPresent) {
  * picture video panel. bounds: { width, height } of the area the panel may be dragged in.
  */
 export function VideoCallLayer({ call, bounds }) {
+  const t = useT(V)
   if (!call) return null
-  const peerName = call.peer?.name || 'Opponent'
+  const peerLabel = call.peer?.name || t('opponent')
   return (
     <>
       {call.active && call.role && call.callId ? <VideoPanel key={call.callId} call={call} bounds={bounds} /> : null}
@@ -412,8 +416,8 @@ export function VideoCallLayer({ call, bounds }) {
         <View style={styles.pillWrap} pointerEvents="box-none">
           <View style={styles.pill}>
             <Ionicons name="videocam" size={15} color={AC.live} />
-            <Text style={styles.pillText} numberOfLines={1}>Calling {peerName}…</Text>
-            <Pressable onPress={call.hangup} hitSlop={8} style={styles.pillEnd} accessibilityRole="button" accessibilityLabel="Cancel call">
+            <Text style={styles.pillText} numberOfLines={1}>{t('calling', { name: peerLabel })}</Text>
+            <Pressable onPress={call.hangup} hitSlop={8} style={styles.pillEnd} accessibilityRole="button" accessibilityLabel={t('cancel_call')}>
               <Ionicons name="close" size={14} color="#fff" />
             </Pressable>
           </View>
@@ -429,20 +433,20 @@ export function VideoCallLayer({ call, bounds }) {
       <Modal visible={call.status === 'incoming'} transparent animationType="fade" onRequestClose={call.decline}>
         <View style={styles.ringOverlay}>
           <View style={styles.ringCard}>
-            <View style={styles.ringAvatar}><Avatar uri={call.peer?.avatar} name={peerName} size={76} teamColor={ST.health} /></View>
-            <Text style={styles.ringName} numberOfLines={1}>{peerName}</Text>
-            <Text style={styles.ringSub}>wants to video call</Text>
+            <View style={styles.ringAvatar}><Avatar uri={call.peer?.avatar} name={peerLabel} size={76} teamColor={ST.health} /></View>
+            <Text style={styles.ringName} numberOfLines={1}>{peerLabel}</Text>
+            <Text style={styles.ringSub}>{t('wants_call')}</Text>
             <View style={styles.ringRow}>
-              <Pressable onPress={call.decline} style={({ pressed }) => [styles.ringBtn, { backgroundColor: AC.danger }, pressed && styles.pressed]} accessibilityRole="button" accessibilityLabel="Decline call">
+              <Pressable onPress={call.decline} style={({ pressed }) => [styles.ringBtn, { backgroundColor: AC.danger }, pressed && styles.pressed]} accessibilityRole="button" accessibilityLabel={t('decline_call')}>
                 <Ionicons name="call" size={26} color="#ffffff" style={{ transform: [{ rotate: '135deg' }] }} />
               </Pressable>
-              <Pressable onPress={call.accept} style={({ pressed }) => [styles.ringBtn, { backgroundColor: AC.live }, pressed && styles.pressed]} accessibilityRole="button" accessibilityLabel="Accept call">
+              <Pressable onPress={call.accept} style={({ pressed }) => [styles.ringBtn, { backgroundColor: AC.live }, pressed && styles.pressed]} accessibilityRole="button" accessibilityLabel={t('accept_call')}>
                 <Ionicons name="videocam" size={26} color={ST.ink} />
               </Pressable>
             </View>
             <View style={styles.ringLabels}>
-              <Text style={styles.ringLabel}>Decline</Text>
-              <Text style={styles.ringLabel}>Accept</Text>
+              <Text style={styles.ringLabel}>{t('decline')}</Text>
+              <Text style={styles.ringLabel}>{t('accept')}</Text>
             </View>
           </View>
         </View>
@@ -456,6 +460,7 @@ const LARGE = { w: 200, h: 268 }
 const BAR_H = 40
 
 function VideoPanel({ call, bounds }) {
+  const t = useT(V)
   const html = useMemo(() => callHtml(call.role === 'caller' ? 'caller' : 'callee'), [call.role])
   const [large, setLarge] = useState(false)
   const size = large ? LARGE : SMALL
@@ -498,9 +503,9 @@ function VideoPanel({ call, bounds }) {
 
   return (
     <Animated.View style={[styles.panel, { width: size.w, transform: pos.getTranslateTransform() }]} {...responder.panHandlers}>
-      <Pressable onPress={() => setLarge((v) => !v)} style={styles.grip} accessibilityRole="button" accessibilityLabel={large ? 'Shrink video' : 'Enlarge video'}>
+      <Pressable onPress={() => setLarge((v) => !v)} style={styles.grip} accessibilityRole="button" accessibilityLabel={large ? t('shrink') : t('enlarge')}>
         <View style={styles.gripBar} />
-        {call.status !== 'live' ? <Text style={styles.gripText}>Connecting…</Text> : null}
+        {call.status !== 'live' ? <Text style={styles.gripText}>{t('connecting')}</Text> : null}
       </Pressable>
       <View style={{ width: size.w, height: size.h, backgroundColor: '#070914' }}>
         <WebView
@@ -525,10 +530,10 @@ function VideoPanel({ call, bounds }) {
         />
       </View>
       <View style={styles.bar}>
-        <PanelBtn icon={call.muted ? 'mic-off' : 'mic'} on={call.muted} onPress={call.toggleMute} label={call.muted ? 'Unmute' : 'Mute'} />
-        <PanelBtn icon={call.camOff ? 'videocam-off' : 'videocam'} on={call.camOff} onPress={call.toggleCam} label={call.camOff ? 'Camera on' : 'Camera off'} />
-        <PanelBtn icon="camera-reverse" onPress={call.flip} label="Flip camera" />
-        <PanelBtn icon="call" danger onPress={call.hangup} label="Hang up" />
+        <PanelBtn icon={call.muted ? 'mic-off' : 'mic'} on={call.muted} onPress={call.toggleMute} label={call.muted ? t('unmute') : t('mute')} />
+        <PanelBtn icon={call.camOff ? 'videocam-off' : 'videocam'} on={call.camOff} onPress={call.toggleCam} label={call.camOff ? t('camera_on') : t('camera_off')} />
+        <PanelBtn icon="camera-reverse" onPress={call.flip} label={t('flip')} />
+        <PanelBtn icon="call" danger onPress={call.hangup} label={t('hang_up')} />
       </View>
     </Animated.View>
   )
@@ -544,13 +549,14 @@ function PanelBtn({ icon, onPress, label, on, danger }) {
 
 // Small round "video call" action used by the opponent card.
 export function VideoCallButton({ call, disabled }) {
+  const t = useT(V)
   const busy = call?.status && call.status !== 'idle'
   return (
     <Pressable
       onPress={busy ? call.hangup : call?.start}
       disabled={disabled}
       accessibilityRole="button"
-      accessibilityLabel={busy ? 'End video call' : 'Video call'}
+      accessibilityLabel={busy ? t('end_video_call') : t('video_call')}
       style={({ pressed }) => [{ opacity: disabled ? 0.4 : 1 }, pressed && styles.pressed]}
     >
       <View style={[styles.vbtn, { backgroundColor: busy ? ST.enemy : ST.health, borderColor: busy ? ST.enemy : ST.health }]}>

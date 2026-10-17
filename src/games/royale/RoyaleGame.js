@@ -22,7 +22,7 @@ import { buzz, useGamePrefs } from '../../lib/gamePrefs'
 import { ABSENT_ELIMINATE_MS, MELEE_ID, PICKUP_RANGE_M, ROYALE_COLORS, TRANSIT_GAS_GRACE_MS, areaLabelFor } from './constants'
 import { applyAction, gpsSlack, initialState, newHostMem, pickCenter, pickSlots, tick } from './engine'
 import { zoneAt, outsideBy } from './zone'
-import { dirWord, directionToCircle, dist, formatDistance, formatMiles, bearingDeg, validPos } from './geo'
+import { dirWord, directionToCircle, distDir, dist, formatDistance, formatMiles, bearingDeg, validPos } from './geo'
 import { useAnnouncer, usePlayersRemainingCallout } from './announcer'
 import { useRoyaleLocation, useThrottledPositions } from './useRoyaleLocation'
 import { useTransit } from './useTransit'
@@ -33,8 +33,14 @@ import {
   Banner, CountdownOverlay, Feed, Flash, MapPanel, PickupButton, ResultsView, SpectateView, StatusCard, TransitOverlay, WeaponSlots, ZonePill, fmtDuration, royaleScore,
 } from './RoyaleHud'
 import { RARITY_COLORS, START_WEAPON_IDS, getWeapon, playSfx, preloadSounds, releaseSounds } from './weaponsAdapter'
+import { translate } from '../../i18n'
+import S from '../../i18n/strings/royale'
+import { localizeRoyaleNotice } from './royaleText'
+
+const tr = (k, v) => translate(S, k, v)
 import { useUavControl } from '../../lib/uav'
 import { EnemyUavPill, RadarSweep, UavButton, UavSheet } from '../laser/Uav'
+import { localizeUavAlert } from '../laser/uavText'
 
 // UAV in Battle Royale: reveals the nearest enemies inside the current safe zone.
 const UAV_REVEAL_MAX = 5
@@ -175,11 +181,11 @@ function RoyaleMatch({ room, snap, onExit }) {
         const dmg = d?.dmg ? `−${d.dmg}` : ''
         const name = String(d?.name || '').slice(0, 24)
         const wName = String(weaponRef.current?.short || '').toUpperCase()
-        if (d?.killed) showFlash(`Eliminated ${name}`, true, { kind: 'kill', name, sub: [wName, d?.zone === 'head' ? 'HEADSHOT' : null].filter(Boolean).join(' · ') })
-        else if (d?.zone === 'head') showFlash(`HEADSHOT ${dmg}`, true, { kind: 'hit', head: true })
-        else showFlash(dmg || 'HIT', true, { kind: 'hit' })
+        if (d?.killed) showFlash(tr('flash_eliminated', { name }), true, { kind: 'kill', name, sub: [wName, d?.zone === 'head' ? tr('headshot') : null].filter(Boolean).join(' · ') })
+        else if (d?.zone === 'head') showFlash(`${tr('headshot')} ${dmg}`, true, { kind: 'hit', head: true })
+        else showFlash(dmg || tr('hit'), true, { kind: 'hit' })
       }),
-      room.onMessage('notice', (d) => showFlash(String(d?.text || ''), false)),
+      room.onMessage('notice', (d) => showFlash(localizeRoyaleNotice(d?.text || ''), false)),
       room.onMessage('picked', (d) => {
         if (typeof d?.w === 'string') {
           setWeaponId(d.w)
@@ -187,7 +193,7 @@ function RoyaleMatch({ room, snap, onExit }) {
           playSfx('tap')
           buzz('success')
           const dropped = typeof d?.dropped === 'string' ? getWeapon(d.dropped).short : null
-          showFlash(`Picked up ${w.name}${dropped ? ` · dropped ${dropped}` : ''}`, true)
+          showFlash(dropped ? tr('picked_dropped', { name: w.name, old: dropped }) : tr('picked_up', { name: w.name }), true)
         }
       }),
     ]
@@ -251,8 +257,8 @@ function RoyaleMatch({ room, snap, onExit }) {
   const gasText = !inGas
     ? null
     : finalClosed
-      ? `Zone closed −${zone.dps}/s · last one standing wins`
-      : `−${zone.dps}/s · safe zone ${formatDistance(Math.max(0, outside))} ${dirWord(bearingDeg(myPos, zone.current))}`
+      ? tr('gas_closed', { dps: zone.dps })
+      : tr('gas_outside', { dps: zone.dps, where: distDir(formatDistance(Math.max(0, outside)), dirWord(bearingDeg(myPos, zone.current))) })
   // Where the next circle is, for the zone callout.
   const nextDirNow = zone?.next && validPos(myPos) ? directionToCircle(myPos, zone.next) : null
   const zoneHint = !zone?.next
@@ -260,8 +266,8 @@ function RoyaleMatch({ room, snap, onExit }) {
     : !validPos(myPos)
       ? null
       : nextDirNow
-        ? `Next zone ${formatDistance(nextDirNow.meters)} ${nextDirNow.dir}${zone.stage === 'shrink' ? ' · move now' : ''}`
-        : 'You’re inside the next zone'
+        ? `${tr('next_zone_at', { where: distDir(formatDistance(nextDirNow.meters), nextDirNow.dir) })}${zone.stage === 'shrink' ? tr('move_now') : ''}`
+        : tr('inside_next')
 
   const callRef = useRef({ phase: null, stage: null, warned60: null, gasAt: 0 })
   useEffect(() => {
@@ -272,27 +278,27 @@ function RoyaleMatch({ room, snap, onExit }) {
       const first = c.phase == null
       c.phase = zone.phase
       c.stage = zone.stage
-      if (zone.isFinal) announce('Final zone', { sub: 'Hold your ground — the zone closes completely soon', tone: 'danger' })
-      else announce(nextDir ? `Next zone is ${formatMiles(nextDir.meters)} ${nextDir.dir}` : 'You’re inside the next zone', {
-        sub: first ? `Gas closes in ${fmtDuration(zone.msToShrink)} · weapons are scattered across the zone` : `Phase ${zone.phase} of ${zone.phases} · new weapons dropped in the next zone`,
+      if (zone.isFinal) announce(tr('final_zone'), { sub: tr('hold_ground'), tone: 'danger' })
+      else announce(nextDir ? tr('next_zone_is', { where: distDir(formatMiles(nextDir.meters), nextDir.dir) }) : tr('inside_next'), {
+        sub: first ? tr('gas_closes_in', { t: fmtDuration(zone.msToShrink) }) : tr('phase_of', { n: zone.phase, total: zone.phases }),
         tone: 'info',
       })
       return
     }
     if (zone.stage === 'wait' && zone.msToShrink <= 60000 && zone.msToShrink > 50000 && c.warned60 !== zone.phase) {
       c.warned60 = zone.phase
-      announce('Gas closing in 60 seconds', { sub: nextDir ? `Next zone is ${formatMiles(nextDir.meters)} ${nextDir.dir}` : 'You’re inside the next zone', tone: 'warn' })
+      announce(tr('gas_60'), { sub: nextDir ? tr('next_zone_is', { where: distDir(formatMiles(nextDir.meters), nextDir.dir) }) : tr('inside_next'), tone: 'warn' })
       return
     }
     if (zone.stage === 'shrink' && c.stage !== 'shrink') {
       c.stage = 'shrink'
-      announce(zone.isFinal ? 'The zone is collapsing!' : 'The gas is closing in!', { sub: nextDir ? `Head ${nextDir.dir} · ${formatMiles(nextDir.meters)}` : null, tone: 'danger' })
+      announce(tr(zone.isFinal ? 'zone_collapsing_call' : 'gas_closing_call'), { sub: nextDir ? tr('head_dir', { dir: nextDir.dir, d: formatMiles(nextDir.meters) }) : null, tone: 'danger' })
       return
     }
     if (zone.stage === 'wait') c.stage = 'wait'
     if (inGas && Date.now() - c.gasAt > 12000) {
       c.gasAt = Date.now()
-      announce('You’re in the gas!', { sub: gasText, tone: 'danger', ms: 3500 })
+      announce(tr('in_gas_call'), { sub: gasText, tone: 'danger', ms: 3500 })
     }
   }, [zone?.phase, zone?.stage, Math.floor((zone?.msToShrink || 0) / 5000), inGas, playing]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -305,10 +311,10 @@ function RoyaleMatch({ room, snap, onExit }) {
     const first = dropSeen.current == null && now - (drop.at || 0) > 30000 // joined/rejoined long after it landed
     dropSeen.current = drop.id
     if (first || !alive) return
-    const where = validPos(myPos) && validPos(drop) ? `${formatMiles(dist(myPos, drop))} ${dirWord(bearingDeg(myPos, drop))}` : 'on the map'
+    const where = validPos(myPos) && validPos(drop) ? distDir(formatMiles(dist(myPos, drop)), dirWord(bearingDeg(myPos, drop))) : tr('on_the_map')
     playSfx('beep')
     buzz('medium')
-    announce('Supply drop!', { sub: `Epic & legendary weapons · ${where} · ★ on the map`, tone: 'info', ms: 4000 })
+    announce(tr('supply_drop'), { sub: tr('supply_sub', { where }), tone: 'info', ms: 4000 })
   }, [drop?.id, playing]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Match start / eliminated / win callouts.
@@ -316,7 +322,7 @@ function RoyaleMatch({ room, snap, onExit }) {
   useEffect(() => {
     if (!me) return
     if (prevAlive.current === true && !me.a && state?.phase !== 'ended') {
-      announce(`Eliminated · #${me.pl}`, { sub: me.by === 'gas' ? 'The gas got you' : me.by && me.by !== 'left' && me.by !== 'signal' ? `By ${me.by}` : null, tone: 'danger' })
+      announce(tr('elim_place', { n: me.pl }), { sub: me.by === 'gas' ? tr('gas_got_you') : me.by && me.by !== 'left' && me.by !== 'signal' ? tr('by_name', { name: me.by }) : null, tone: 'danger' })
     }
     prevAlive.current = !!me.a
   }, [me?.a]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -388,7 +394,7 @@ function RoyaleMatch({ room, snap, onExit }) {
     room,
     matchKey: `${snap.code}:${roundNo}`,
     canUse: playing && alive && now >= (state?.startsAt || 0),
-    alert: (a) => announce(a.title, { sub: a.sub, tone: a.title.startsWith('Enemy') ? 'danger' : 'info', ms: 3000 }),
+    alert: (a) => { const l = localizeUavAlert(a); announce(l.title, { sub: l.sub, tone: a.title.startsWith('Enemy') ? 'danger' : 'info', ms: 3000 }) },
     payload: () => {
       const ids = pickRevealed()
       setUavIds(ids)
@@ -463,7 +469,7 @@ function RoyaleMatch({ room, snap, onExit }) {
 
   // ---- render ----
   if (loc.status !== 'granted') return <LocationGate status={loc.status} onExit={onExit} what="Battle Royale" />
-  if (!state) return <Spectating text="Starting the match… waiting for the host’s GPS fix." />
+  if (!state) return <Spectating text={tr('starting_match')} />
 
   if (state.phase === 'ended') {
     return (
@@ -509,7 +515,7 @@ function RoyaleMatch({ room, snap, onExit }) {
           canCycle={aliveIds.length > 1}
           onPrev={() => cycle(-1)}
           onNext={() => cycle(1)}
-          myLine={me ? `#${me.pl} · ${me.k || 0} kills · ${fmtDuration(survived)}` : 'joined late'}
+          myLine={me ? tr('my_line', { pl: me.pl, n: me.k || 0, t: fmtDuration(survived) }) : tr('joined_late')}
           mapProps={{ me: null, focus: fp && validPos(fp) ? { id: followId, lat: fp.lat, lng: fp.lng } : null, zone: mapZone, players: mapPlayers, loot: mapLoot, rangeM: 250, sizePx: 400 }}
           zone={zone}
           alive={totalAlive}
@@ -577,7 +583,7 @@ function RoyaleMatch({ room, snap, onExit }) {
             onPress={() => { buzz('select'); setMapOpen(true) }}
             style={[styles.mini, { width: hud.mapSize, height: hud.mapSize }]}
             accessibilityRole="button"
-            accessibilityLabel="Open the map"
+            accessibilityLabel={tr('open_map')}
           >
             <RoyaleMap {...mapProps} rangeM={300} sizePx={hud.mapSize} style={StyleSheet.absoluteFill} legalLabelInsets={miniLegal} />
             {uav.uavActive ? <RadarSweep size={hud.mapSize} /> : <View style={styles.miniRim} pointerEvents="none" />}
@@ -614,7 +620,7 @@ function RoyaleMatch({ room, snap, onExit }) {
         zone={zone}
         hint={zoneHint}
         mapProps={{ ...mapProps, rangeM: Math.max(300, Math.round(((zone?.current?.r || 800) * 1.15) / 100) * 100), sizePx: 360 }}
-        legend={uav.uavActive ? 'UAV online · red: nearest enemies in the zone · tags: weapons by rarity · ★ supply drop' : 'Amber ring: safe zone · dashed: next zone · enemies hidden (use a UAV) · tags: weapons by rarity · ★ supply drop'}
+        legend={tr(uav.uavActive ? 'legend_uav' : 'legend')}
       />
       <UavSheet
         visible={uav.sheetOpen}

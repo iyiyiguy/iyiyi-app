@@ -7,9 +7,11 @@ import { Ionicons } from '@expo/vector-icons'
 import { LinearGradient } from 'expo-linear-gradient'
 import { AC } from '../games/arcadeUI'
 import { font } from '../theme'
+import { useT } from '../i18n'
+import strings from '../i18n/strings/arcadeSocial'
 
 export const CHAT_MAX = 200
-const QUICK = ['👍', '😂', '😮', '🔥', 'GG', 'Good move!', 'Oops']
+const QUICK = ['👍', '😂', '😮', '🔥', 'GG', 'quick_good_move', 'quick_oops'] // quick_* are translated
 
 export function useUnreadChat(chat, myId, open) {
   const fromOthers = useMemo(() => (chat || []).filter((m) => m && m.from !== myId).length, [chat, myId])
@@ -19,6 +21,7 @@ export function useUnreadChat(chat, myId, open) {
 }
 
 export default function MatchChat({ visible, onClose, room, chat, myId, names, connected, bottomInset = 0 }) {
+  const tr = useT(strings)
   const [text, setText] = useState('')
   const listRef = useRef(null)
   const data = useMemo(() => (Array.isArray(chat) ? chat.filter((m) => m && m.text) : []), [chat])
@@ -40,15 +43,15 @@ export default function MatchChat({ visible, onClose, room, chat, myId, names, c
 
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
-      <Pressable style={styles.backdrop} onPress={onClose} accessibilityLabel="Close chat" />
+      <Pressable style={styles.backdrop} onPress={onClose} accessibilityLabel={tr('close_chat')} />
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.kav} pointerEvents="box-none" keyboardVerticalOffset={Platform.OS === 'ios' ? 100 : 0}>
         <View style={[styles.sheet, { paddingBottom: 10 + bottomInset }]}>
-          <Pressable onPress={onClose} style={styles.handleRow} accessibilityRole="button" accessibilityLabel="Close chat">
+          <Pressable onPress={onClose} style={styles.handleRow} accessibilityRole="button" accessibilityLabel={tr('close_chat')}>
             <View style={styles.handle} />
           </Pressable>
           <View style={styles.header}>
-            <Text style={styles.title}>Match chat</Text>
-            <Pressable onPress={onClose} hitSlop={10} accessibilityRole="button" accessibilityLabel="Close chat">
+            <Text style={styles.title}>{tr('match_chat')}</Text>
+            <Pressable onPress={onClose} hitSlop={10} accessibilityRole="button" accessibilityLabel={tr('close_chat')}>
               <Ionicons name="chevron-down" size={22} color={AC.muted} />
             </Pressable>
           </View>
@@ -59,13 +62,13 @@ export default function MatchChat({ visible, onClose, room, chat, myId, names, c
             style={styles.list}
             contentContainerStyle={{ paddingVertical: 6 }}
             onContentSizeChange={() => { try { listRef.current?.scrollToEnd({ animated: false }) } catch { /* ignore */ } }}
-            ListEmptyComponent={<Text style={styles.empty}>Say hi to your opponent 👋</Text>}
+            ListEmptyComponent={<Text style={styles.empty}>{tr('say_hi')}</Text>}
             renderItem={({ item }) => {
               const mine = item.from === myId
               return (
                 <View style={[styles.msgRow, mine ? styles.mineRow : null]}>
                   <View style={[styles.bubble, mine ? styles.mine : styles.theirs]}>
-                    {!mine ? <Text style={styles.from} numberOfLines={1}>{names?.[item.from] || 'Opponent'}</Text> : null}
+                    {!mine ? <Text style={styles.from} numberOfLines={1}>{names?.[item.from] || tr('opponent')}</Text> : null}
                     <Text style={styles.msg}>{String(item.text)}</Text>
                   </View>
                 </View>
@@ -73,17 +76,17 @@ export default function MatchChat({ visible, onClose, room, chat, myId, names, c
             }}
           />
           <View style={styles.quickRow}>
-            {QUICK.map((q) => (
-              <Pressable key={q} onPress={() => send(q)} disabled={!connected} style={({ pressed }) => [styles.quick, pressed && { opacity: 0.6 }, !connected && { opacity: 0.4 }]} accessibilityRole="button" accessibilityLabel={`Send ${q}`}>
+            {QUICK.map((k) => { const q = k.startsWith('quick_') ? tr(k) : k; return (
+              <Pressable key={k} onPress={() => send(q)} disabled={!connected} style={({ pressed }) => [styles.quick, pressed && { opacity: 0.6 }, !connected && { opacity: 0.4 }]} accessibilityRole="button" accessibilityLabel={tr('send_a11y', { q })}>
                 <Text style={styles.quickText}>{q}</Text>
               </Pressable>
-            ))}
+            ) })}
           </View>
           <View style={styles.inputRow}>
             <TextInput
               value={text}
               onChangeText={setText}
-              placeholder={connected ? 'Message' : 'Reconnecting…'}
+              placeholder={connected ? tr('message_ph') : tr('reconnecting')}
               placeholderTextColor={AC.faint}
               style={styles.input}
               maxLength={CHAT_MAX}
@@ -92,7 +95,7 @@ export default function MatchChat({ visible, onClose, room, chat, myId, names, c
               blurOnSubmit={false}
               keyboardAppearance="dark"
             />
-            <Pressable onPress={() => send()} disabled={!text.trim() || !connected} accessibilityRole="button" accessibilityLabel="Send" style={({ pressed }) => [{ opacity: !text.trim() || !connected ? 0.4 : 1 }, pressed && { transform: [{ scale: 0.92 }] }]}>
+            <Pressable onPress={() => send()} disabled={!text.trim() || !connected} accessibilityRole="button" accessibilityLabel={tr('send')} style={({ pressed }) => [{ opacity: !text.trim() || !connected ? 0.4 : 1 }, pressed && { transform: [{ scale: 0.92 }] }]}>
               <LinearGradient colors={AC.play} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.sendBtn}>
                 <Ionicons name="arrow-up" size={18} color="#fff" />
               </LinearGradient>

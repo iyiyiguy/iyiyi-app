@@ -13,6 +13,10 @@ import { isValidCoord, withAlpha } from '../GameMap'
 import { PulseDot, RadarSweep, ShotPing } from './Uav'
 import { angleDiff, bearingDeg, distanceMeters } from '../../lib/multiplayer'
 import { FONT, ST, stShadow, stType } from '../studio'
+import { translate } from '../../i18n'
+import H from '../../i18n/strings/laserHud'
+
+const tr = (k, v) => translate(H, k, v)
 
 // Google Maps (Android) in the game's dark palette: no POI clutter, muted roads, dark water.
 const DARK_MAP = [
@@ -38,9 +42,9 @@ export const MAP_RANGES = [
   { id: '1mi', label: '1 mi', r: 1609.34 },
   { id: '2mi', label: '2 mi', r: 3218.69 },
   { id: '5mi', label: '5 mi', r: 8046.72 },
-  { id: 'city', label: 'City', r: 16000 },
-  { id: 'state', label: 'State', r: 250000 },
-  { id: 'nation', label: 'Nation', r: 2500000 },
+  { id: 'city', get label() { return tr('range_city') }, r: 16000 },
+  { id: 'state', get label() { return tr('range_state') }, r: 250000 },
+  { id: 'nation', get label() { return tr('range_nation') }, r: 2500000 },
 ]
 export const DEFAULT_MAP_RANGE = '150ft'
 
@@ -145,7 +149,7 @@ function LaserMap({ me, headingDeg, rangeM, points, areas, boundary, rangeRingM,
   useEffect(() => () => clearTimeout(timer.current), [])
 
   if (!initial) {
-    return <View style={[style, s.noFix]}><Text style={s.noFixText}>Waiting for GPS…</Text></View>
+    return <View style={[style, s.noFix]}><Text style={s.noFixText}>{tr('waiting_gps')}</Text></View>
   }
 
   const validPoints = (points || []).filter((p) => p?.pos && isValidCoord(p.pos.lat, p.pos.lng))
@@ -271,7 +275,7 @@ function RadarMap({ me, headingDeg, rangeM, points, areas, boundary, rangeRingM,
           </View>
         )
       })}
-      {!hasMe ? <Text style={s.noFixText}>Waiting for GPS…</Text> : null}
+      {!hasMe ? <Text style={s.noFixText}>{tr('waiting_gps')}</Text> : null}
     </View>
   )
 }
@@ -298,7 +302,7 @@ export const MapMinimap = React.memo(function MapMinimap({ size = 140, me, headi
   const legalInsets = useMemo(() => ({ top: 0, left: 2, right: 0, bottom: 2 }), [])
   const nRad = (-(headingDeg || 0) * Math.PI) / 180
   return (
-    <Pressable onPress={onPress} style={{ width: size, height: size }} accessibilityRole="button" accessibilityLabel="Minimap. Double-tap to open the large map" accessibilityHint="Double-tap to open the map">
+    <Pressable onPress={onPress} style={{ width: size, height: size }} accessibilityRole="button" accessibilityLabel={tr('minimap_a11y')} accessibilityHint={tr('minimap_hint')}>
       <View style={[s.mini, { width: size, height: size }]}>
         <Body
           me={me}
@@ -330,18 +334,18 @@ export function MapOverlay({ visible, onClose, insets, me, rangeId, allowed, onR
   const Body = available ? LaserMap : RadarMap
   return (
     <View style={[StyleSheet.absoluteFill, s.overlayRoot]}>
-      <Pressable style={s.backdrop} onPress={onClose} accessibilityLabel="Close map" />
+      <Pressable style={s.backdrop} onPress={onClose} accessibilityLabel={tr('close_map')} />
       <View style={[s.overlayWrap, { paddingTop: (insets?.top || 0) + 12, paddingBottom: (insets?.bottom || 0) + 16 }]} pointerEvents="box-none">
         <View style={s.panel}>
           <View style={s.panelHead}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
               <View>
-                <Text style={stType.kicker}>TACTICAL</Text>
-                <Text style={s.panelTitle}>MAP</Text>
+                <Text style={stType.kicker}>{tr('tactical')}</Text>
+                <Text style={s.panelTitle}>{tr('map')}</Text>
               </View>
-              {!!uavActive && <Text style={s.uavTag}>UAV ONLINE</Text>}
+              {!!uavActive && <Text style={s.uavTag}>{tr('uav_online')}</Text>}
             </View>
-            <Pressable onPress={onClose} hitSlop={12} style={s.close} accessibilityRole="button" accessibilityLabel="Close map">
+            <Pressable onPress={onClose} hitSlop={12} style={s.close} accessibilityRole="button" accessibilityLabel={tr('close_map')}>
               <Ionicons name="close" size={20} color="#fff" />
             </Pressable>
           </View>
@@ -377,9 +381,9 @@ export function MapOverlay({ visible, onClose, insets, me, rangeId, allowed, onR
             style={available ? s.bigMap : s.bigRadar}
           />
           <Text style={s.panelNote}>
-            {allowed.length < MAP_RANGES.length ? 'Larger ranges are limited by this lobby’s play area.' : 'Pinch and drag to look around.'}
+            {tr(allowed.length < MAP_RANGES.length ? 'ranges_limited' : 'pinch_drag')}
           </Text>
-          <Text style={s.panelNote}>Enemies stay hidden: they flash red when they fire, or all show while a UAV is up.</Text>
+          <Text style={s.panelNote}>{tr('enemies_hidden')}</Text>
         </View>
       </View>
     </View>
