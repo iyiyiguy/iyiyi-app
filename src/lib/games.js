@@ -19,6 +19,7 @@ export const ARCADE_CATEGORIES = [
 export const GAMES = [
   {
     id: 'laser-tag',
+    pin: 1, // arcade: first in the grid and the hero carousel
     mobileOnly: true, // camera / GPS game: phones only (hidden behind a prompt on the web app)
     mpId: 'lasertag',
     route: 'LaserTagLobby',
@@ -35,6 +36,24 @@ export const GAMES = [
     accent: ['#ff2e63', '#7a1cff'],
     cover: require('../../assets/game-covers/laser-tag.jpg'),
     featured: true,
+  },
+  {
+    id: 'studio',
+    route: 'Studio',
+    name: 'The Lab - Drum Machine',
+    type: 'music',
+    kind: 'solo',
+    categories: ['music'],
+    icon: '🥁',
+    minPlayers: 1,
+    maxPlayers: 1,
+    tagline: 'Drum machine & sampler. Make a beat in seconds.',
+    description: '16 pads, 8 original kits, step sequencer, Auto beats and a sampler that chops any sound. Export your beat as a sound for videos.',
+    color: '#ffb21e',
+    accent: ['#ff4fa3', '#ffb21e'],
+    cover: require('../../assets/game-covers/the-lab.jpg'),
+    featured: true,
+    pin: 2, // arcade: right after Laser Tag
   },
   {
     id: 'battle-royale',
@@ -163,23 +182,6 @@ export const GAMES = [
     color: '#00c878',
     accent: ['#00c878', '#0a7b8c'],
     cover: require('../../assets/game-covers/whats-the-word.jpg'),
-  },
-  {
-    id: 'studio',
-    route: 'Studio',
-    name: 'The Lab',
-    type: 'music',
-    kind: 'solo',
-    categories: ['music'],
-    icon: '🥁',
-    minPlayers: 1,
-    maxPlayers: 1,
-    tagline: 'Drum machine & sampler. Make a beat in seconds.',
-    description: '16 pads, 8 original kits, step sequencer, Auto beats and a sampler that chops any sound. Export your beat as a sound for videos.',
-    color: '#ffb21e',
-    accent: ['#ff4fa3', '#ffb21e'],
-    cover: require('../../assets/game-covers/the-lab.jpg'),
-    featured: true,
   },
 ]
 

@@ -35,6 +35,20 @@ export function getContext() {
   return ctx
 }
 
+// iOS: playback only by default; switched to play-and-record while the mic is in use (the beat
+// keeps playing through the speaker / headphones / Bluetooth while you record over it).
+let recordSession = false
+export function setRecordSession(on) {
+  if (Platform.OS !== 'ios' || recordSession === on) return
+  recordSession = on
+  try {
+    AudioManager.setAudioSessionOptions(on
+      ? { iosCategory: 'playAndRecord', iosMode: 'default', iosOptions: ['defaultToSpeaker', 'allowBluetoothA2DP'] }
+      : { iosCategory: 'playback', iosMode: 'default', iosOptions: [] })
+    AudioManager.setAudioSessionActivity(true).catch(() => {})
+  } catch {}
+}
+
 export async function resumeAudio() {
   const c = getContext()
   // Browsers keep resume() pending until the user taps something: never block on it.
@@ -135,43 +149,101 @@ function swingOffset(step, bpm, swing) {
 
 /**
  * Starts looping the project's pattern. getProject() is read every tick so edits (steps, tempo,
- * volume) apply live. onStep(step) fires roughly when each step is heard (for the playhead).
- * Returns stop().
+ * volume) apply live. onStep(step, absStep) fires roughly when each step is heard (playhead).
+ * opts.startAt: audio-clock start time (so other sounds can be scheduled in sync).
+ * opts.song: () => ({ hits: [{ p, s }], steps, beatMute }) adds timeline pad hits (s = 16th
+ * steps from the start, may be fractional) and stops after `steps` (opts.onEnd fires then).
+ * Returns stop(); stop.startAt is the start time on the audio clock.
  */
-export function startSequencer(getProject, onStep) {
+export function startSequencer(getProject, onStep, opts = {}) {
   const c = getContext()
   let step = 0
-  let next = c.currentTime + 0.06
+  let abs = 0
+  const startAt = opts.startAt || c.currentTime + 0.06
+  let next = startAt
+  let ended = false
   const uiTimers = new Set()
+  const later = (at, fn) => {
+    const t = setTimeout(() => { uiTimers.delete(t); fn() }, Math.max(0, (at - c.currentTime) * 1000))
+    uiTimers.add(t)
+  }
   const tick = () => {
     const project = getProject()
-    if (!project) return
+    if (!project || ended) return
     const len = project.steps || 16
+    const song = opts.song ? opts.song() : null
     while (next < c.currentTime + LOOKAHEAD_S) {
+      if (song && abs >= song.steps) {
+        ended = true
+        later(next, () => opts.onEnd?.())
+        break
+      }
       const s = step % len
+      const dur = stepDuration(project.bpm)
       const at = next + swingOffset(s, project.bpm, project.swing)
-      for (let i = 0; i < project.pads.length; i++) {
-        const cell = project.pattern?.[i]?.[s]
-        if (cell && audible(project, i)) triggerPad(project, i, at, cell === 2 ? 1 : 0.8)
+      if (!song?.beatMute) {
+        for (let i = 0; i < project.pads.length; i++) {
+          const cell = project.pattern?.[i]?.[s]
+          if (cell && audible(project, i)) triggerPad(project, i, at, cell === 2 ? 1 : 0.8)
+        }
+      }
+      if (song?.hits?.length) {
+        for (const h of song.hits) {
+          if (h.s >= abs && h.s < abs + 1 && audible(project, h.p)) triggerPad(project, h.p, next + (h.s - abs) * dur, h.v || 1)
+        }
       }
       if (project.metronome && s % 4 === 0) click(at, s === 0)
-      const delayMs = Math.max(0, (at - c.currentTime) * 1000)
-      const t = setTimeout(() => { uiTimers.delete(t); onStep?.(s) }, delayMs)
-      uiTimers.add(t)
-      next += stepDuration(project.bpm)
+      const a = abs
+      later(at, () => onStep?.(s, a))
+      next += dur
       step = (step + 1) % len
+      abs += 1
     }
   }
   tick()
   const id = setInterval(tick, TICK_MS)
-  return () => {
+  const stop = () => {
     clearInterval(id)
     uiTimers.forEach(clearTimeout)
     uiTimers.clear()
     ringing.forEach((n) => { try { n.stop() } catch {} })
     ringing.clear()
-    onStep?.(-1)
+    onStep?.(-1, -1)
   }
+  stop.startAt = startAt
+  return stop
+}
+
+/** Count-in clicks (one bar of quarter notes) ending at `startAt`. */
+export function countIn(startAt, bpm, beats = 4) {
+  const beat = 60 / bpm
+  for (let k = 0; k < beats; k++) click(startAt - (beats - k) * beat, k === 0)
+}
+
+/** Plays a vocal buffer from `startAt` (audio clock); offset = seconds into the vocal. Returns stop(). */
+export function playBuffer(buf, startAt, offset = 0, gain = 1) {
+  if (!buf) return () => {}
+  const c = getContext()
+  const node = c.createBufferSource()
+  node.buffer = buf
+  const g = c.createGain()
+  g.gain.value = gain
+  node.connect(g)
+  g.connect(master)
+  let at = startAt
+  let from = offset
+  if (from < 0) { at -= from; from = 0 }
+  if (from >= buf.duration) return () => {}
+  try { node.start(Math.max(c.currentTime, at), from) } catch {}
+  return () => { try { node.stop() } catch {} }
+}
+
+/** Mono Float32 PCM -> AudioBuffer on the engine's context. */
+export function bufferFromPCM(data, sampleRate) {
+  const c = getContext()
+  const buf = c.createBuffer(1, Math.max(1, data.length), sampleRate)
+  buf.copyToChannel(data, 0)
+  return buf
 }
 
 function click(at, accent) {
@@ -199,45 +271,27 @@ export function playRegion(buf, start = 0, end) {
 }
 
 // ---- offline render (export) -------------------------------------------------------------
-/**
- * Mixes `loops` passes of the pattern into stereo Float32 PCM at the context's sample rate.
- * Pitch uses linear-interpolated resampling; choke groups truncate the earlier hit. A short
- * tail lets the last hits ring out. Soft-clips the bus so loud patterns don't hard-clip.
- */
-export function renderProject(project, loops = 2) {
-  const sr = getContext().sampleRate || 44100
-  const len = project.steps || 16
-  const stepS = stepDuration(project.bpm)
-  const total = Math.ceil((len * loops * stepS + 1.5) * sr)
-  const L = new Float32Array(total)
-  const R = new Float32Array(total)
-  const hits = []
-  for (let loop = 0; loop < loops; loop++) {
-    for (let s = 0; s < len; s++) {
-      const t0 = (loop * len + s) * stepS + swingOffset(s, project.bpm, project.swing)
-      for (let i = 0; i < project.pads.length; i++) {
-        const cell = project.pattern?.[i]?.[s]
-        if (cell && audible(project, i)) hits.push({ i, t0, vel: cell === 2 ? 1 : 0.8 })
-      }
-    }
-  }
+function groupOf(project, i) {
+  const p = project.pads[i]
+  return (p.src?.kind === 'kit' && CHOKE[p.src.pad]) || p.choke || null
+}
+
+// Mixes a list of pad hits ({ i, t0, vel }) into L/R. Pitch uses linear-interpolated
+// resampling; choke groups truncate the earlier hit (with a 2 ms fade so the cut doesn't click).
+function mixHits(project, hits, L, R, sr) {
+  const total = L.length
   hits.sort((a, b) => a.t0 - b.t0)
-  // choke: end time per hit = next hit in the same group
-  const groupOf = (i) => {
-    const p = project.pads[i]
-    return (p.src?.kind === 'kit' && CHOKE[p.src.pad]) || p.choke || null
-  }
   const endAt = new Array(hits.length).fill(Infinity)
   const lastInGroup = {}
   hits.forEach((h, k) => {
-    const g = groupOf(h.i)
+    const g = groupOf(project, h.i)
     if (!g) return
     if (lastInGroup[g] != null) endAt[lastInGroup[g]] = h.t0
     lastInGroup[g] = k
   })
   hits.forEach((h, k) => {
     const pad = project.pads[h.i]
-    const buf = cachedBuffer(pad.src)
+    const buf = pad?.src ? cachedBuffer(pad.src) : null
     if (!buf) return
     const ch0 = buf.getChannelData(0)
     const ch1 = buf.numberOfChannels > 1 ? buf.getChannelData(1) : ch0
@@ -254,24 +308,93 @@ export function renderProject(project, loops = 2) {
       if (pos >= srcEnd) break
       const o = outStart + n
       if (o >= total) break
+      if (o < 0) continue
       const i0 = pos | 0
       const f = pos - i0
-      // 2 ms fade-out when choked so the cut doesn't click
       const fade = maxOut - n < 96 ? (maxOut - n) / 96 : 1
       L[o] += (ch0[i0] + (ch0[i0 + 1] - ch0[i0]) * f) * gain * fade
       R[o] += (ch1[i0] + (ch1[i0 + 1] - ch1[i0]) * f) * gain * fade
     }
   })
-  for (let n = 0; n < total; n++) {
+}
+
+function patternHits(project, fromStep, toStep, out = []) {
+  const len = project.steps || 16
+  const stepS = stepDuration(project.bpm)
+  for (let a = fromStep; a < toStep; a++) {
+    const s = a % len
+    const t0 = a * stepS + swingOffset(s, project.bpm, project.swing)
+    for (let i = 0; i < project.pads.length; i++) {
+      const cell = project.pattern?.[i]?.[s]
+      if (cell && audible(project, i)) out.push({ i, t0, vel: cell === 2 ? 1 : 0.8 })
+    }
+  }
+  return out
+}
+
+function softClip(L, R) {
+  for (let n = 0; n < L.length; n++) {
     L[n] = Math.tanh(L[n])
     R[n] = Math.tanh(R[n])
   }
+}
+
+/**
+ * Mixes `loops` passes of the pattern into stereo Float32 PCM at the context's sample rate.
+ * A short tail lets the last hits ring out. Soft-clips the bus so loud patterns don't hard-clip.
+ */
+export function renderProject(project, loops = 2) {
+  const sr = getContext().sampleRate || 44100
+  const len = project.steps || 16
+  const stepS = stepDuration(project.bpm)
+  const total = Math.ceil((len * loops * stepS + 1.5) * sr)
+  const L = new Float32Array(total)
+  const R = new Float32Array(total)
+  mixHits(project, patternHits(project, 0, len * loops), L, R, sr)
+  softClip(L, R)
   return { sampleRate: sr, channels: [L, R], duration: total / sr }
 }
 
-/** Peak envelope (0..1) of a buffer for waveform drawing. */
-export function peaks(buf, buckets = 200) {
-  const d = buf.getChannelData(0)
+/**
+ * Renders the Song timeline: the looping beat (unless muted), the recorded pad hits and the
+ * vocal (an AudioBuffer, already auto-tuned if that's on) for song.bars bars.
+ */
+export function renderSong(project, vocalBuf) {
+  const sr = getContext().sampleRate || 44100
+  const song = project.song || {}
+  const steps = (song.bars || 8) * 16
+  const stepS = stepDuration(project.bpm)
+  const total = Math.ceil((steps * stepS + 1.5) * sr)
+  const L = new Float32Array(total)
+  const R = new Float32Array(total)
+  const hits = song.beatMute ? [] : patternHits(project, 0, steps)
+  for (const h of song.hits || []) {
+    if (h.s < steps && audible(project, h.p)) hits.push({ i: h.p, t0: h.s * stepS, vel: h.v || 1 })
+  }
+  mixHits(project, hits, L, R, sr)
+  const v = song.vocal
+  if (vocalBuf && v && !v.mute) {
+    const d = vocalBuf.getChannelData(0)
+    const gain = v.vol ?? 0.9
+    const off = v.offset || 0 // seconds of the recording before bar 1
+    for (let o = 0; o < total; o++) {
+      const pos = (o / sr + off) * (vocalBuf.sampleRate || sr)
+      if (pos < 0) continue
+      const i0 = pos | 0
+      if (i0 >= d.length - 1) break
+      const f = pos - i0
+      const x = (d[i0] + (d[i0 + 1] - d[i0]) * f) * gain
+      L[o] += x
+      R[o] += x
+    }
+  }
+  softClip(L, R)
+  return { sampleRate: sr, channels: [L, R], duration: total / sr }
+}
+
+/** Peak envelope (0..1) of a buffer (or raw Float32Array) for waveform drawing. */
+export function peaks(buf, buckets = 200, normalize = true) {
+  const d = buf.getChannelData ? buf.getChannelData(0) : buf
   const size = Math.max(1, Math.floor(d.length / buckets))
   const out = new Array(buckets).fill(0)
   for (let b = 0; b < buckets; b++) {
@@ -283,7 +406,9 @@ export function peaks(buf, buckets = 200) {
     }
     out[b] = m
   }
-  const top = Math.max(...out, 0.0001)
+  if (!normalize) return out
+  let top = 0.0001
+  for (const v of out) if (v > top) top = v
   return out.map((v) => v / top)
 }
 

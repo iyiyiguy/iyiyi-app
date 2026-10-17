@@ -1,6 +1,7 @@
 // Studio home: your saved beats (on this device) and your exported sounds (public/private).
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { View, Text, Pressable, StyleSheet, ScrollView, Alert, ActivityIndicator, Platform, useWindowDimensions } from 'react-native'
+import HScroll from '../components/HScroll'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useFocusEffect } from '@react-navigation/native'
 import { Ionicons } from '@expo/vector-icons'
@@ -88,7 +89,7 @@ export default function StudioHomeScreen({ navigation, route }) {
         </LinearGradient>
 
         <Text style={[sxType.label, { marginTop: 18, marginBottom: 8 }]}>{t('kitsLabel')}</Text>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 10 }}>
+        <HScroll fadeColor={SX.bg} iconColor={SX.accent} contentContainerStyle={{ gap: 10, paddingRight: 30 }}>
           {KITS.map((k, i) => {
             const col = KIT_COLORS[i % KIT_COLORS.length]
             return (
@@ -102,7 +103,7 @@ export default function StudioHomeScreen({ navigation, route }) {
               </Pressable>
             )
           })}
-        </ScrollView>
+        </HScroll>
         <Seg options={[{ key: 'beats', label: t('myBeats') }, { key: 'sounds', label: t('mySounds') }]} value={tab} onChange={setTab} style={{ marginTop: 16 }} />
 
         {tab === 'beats' ? (

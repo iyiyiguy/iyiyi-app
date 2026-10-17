@@ -2,7 +2,8 @@
 // sounds and your own (public or private). Tap to preview, bookmark to save, Use to pick.
 // Every sound here was made or uploaded by iYiYi members (Studio beats and samples).
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { View, Text, Pressable, StyleSheet, Modal, TextInput, FlatList, ActivityIndicator, Platform, ScrollView } from 'react-native'
+import { View, Text, Pressable, StyleSheet, Modal, TextInput, FlatList, ActivityIndicator, Platform } from 'react-native'
+import HScroll from './HScroll'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons'
 import { searchSounds, savedSounds, mySounds, setSaved, soundTags, recordPlay, formatCount as fmt } from '../lib/sounds'
@@ -98,15 +99,15 @@ export default function SoundPicker({ visible, onClose, onPick, onMakeBeat, sele
           <TextInput value={q} onChangeText={onSearch} placeholder={t('searchSoundsCreators')} placeholderTextColor={C.faint} style={st.searchInput} returnKeyType="search" autoCorrect={false} />
           {q ? <Pressable onPress={() => onSearch('')} hitSlop={8}><Ionicons name="close-circle" size={16} color={C.muted} /></Pressable> : null}
         </View>
-        <View style={st.tabs}>
+        <HScroll fadeColor={C.bg} style={st.tabsWrap} contentContainerStyle={st.tabs}>
           {TABS.map((tb) => (
             <Pressable key={tb.key} onPress={() => setTab(tb.key)} style={[st.tab, tab === tb.key && st.tabOn]} accessibilityRole="tab" accessibilityState={{ selected: tab === tb.key }}>
               <Text style={[st.tabText, tab === tb.key && { color: C.bg }]}>{t(tb.label)}</Text>
             </Pressable>
           ))}
-        </View>
+        </HScroll>
         {(tab === 'trending' || tab === 'discover') && tags.length ? (
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0, marginBottom: 10 }} contentContainerStyle={{ gap: 6 }}>
+          <HScroll fadeColor={C.bg} style={{ flexGrow: 0, marginBottom: 10 }} contentContainerStyle={{ gap: 6, paddingRight: 30 }}>
             {tags.map((t) => {
               const on = tag === t
               return (
@@ -115,7 +116,7 @@ export default function SoundPicker({ visible, onClose, onPick, onMakeBeat, sele
                 </Pressable>
               )
             })}
-          </ScrollView>
+          </HScroll>
         ) : null}
         {onMakeBeat ? (
           <Pressable onPress={() => { close(); onMakeBeat() }} style={st.make} accessibilityRole="button">
@@ -176,7 +177,8 @@ const st = StyleSheet.create({
   title: { color: C.text, fontSize: 22, fontWeight: '800' },
   search: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: C.panel, borderRadius: 12, paddingHorizontal: 12, height: 44, borderWidth: 1, borderColor: C.line },
   searchInput: { flex: 1, color: C.text, fontSize: 16 },
-  tabs: { flexDirection: 'row', gap: 8, marginTop: 12, marginBottom: 10 },
+  tabsWrap: { flexGrow: 0, marginTop: 12, marginBottom: 10 },
+  tabs: { flexDirection: 'row', gap: 8, paddingRight: 30 },
   tab: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 999, backgroundColor: C.panel, borderWidth: 1, borderColor: C.line },
   tabOn: { backgroundColor: C.text },
   tabText: { color: C.muted, fontWeight: '700', fontSize: 13 },

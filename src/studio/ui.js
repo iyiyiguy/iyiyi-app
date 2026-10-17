@@ -1,7 +1,7 @@
 // Studio UI kit: hardware-style controls on the studio palette (games/studio.js).
 import { useRef, useState } from 'react'
 import { View, Text, Pressable, StyleSheet, PanResponder } from 'react-native'
-import Svg, { Rect, Line } from 'react-native-svg'
+import Svg, { Rect, Line, Path } from 'react-native-svg'
 import { FONT, ST, withAlpha } from '../games/studio'
 
 export const SX = {
@@ -171,6 +171,29 @@ export function Waveform({ peaks = [], duration = 1, slices = [], selected = -1,
         ))}
       </Svg>
     </Pressable>
+  )
+}
+
+/** Waveform that draws while recording: levels (0..1 peaks, one per chunk) fill left to right. */
+export function LiveWave({ levels = [], capacity = 1000, height = 90, color = SX.rec }) {
+  const [w, setW] = useState(300)
+  let top = 0.05
+  for (const v of levels) if (v > top) top = v
+  let d = ''
+  const bw = Math.max(1, w / capacity)
+  for (let k = 0; k < levels.length; k++) {
+    const h = Math.max(1, (levels[k] / top) * (height - 8))
+    d += `M${((k / capacity) * w).toFixed(1)} ${((height - h) / 2).toFixed(1)}h${bw.toFixed(2)}v${h.toFixed(1)}h-${bw.toFixed(2)}Z`
+  }
+  const x = Math.min(w, (levels.length / capacity) * w)
+  return (
+    <View onLayout={(e) => setW(e.nativeEvent.layout.width)} style={[s.wave, { height }]}>
+      <Svg width={w} height={height}>
+        <Line x1={0} x2={w} y1={height / 2} y2={height / 2} stroke={SX.line} strokeWidth={1} />
+        {d ? <Path d={d} fill={color} /> : null}
+        <Line x1={x} x2={x} y1={0} y2={height} stroke="#fff" strokeWidth={1.5} />
+      </Svg>
+    </View>
   )
 }
 

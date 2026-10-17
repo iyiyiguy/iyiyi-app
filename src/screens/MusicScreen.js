@@ -13,6 +13,7 @@ import {
 } from '../lib/sounds'
 import { playQueue, toggle, useMusic } from '../lib/musicPlayer'
 import SoundRow, { MC } from '../components/SoundRow'
+import HScroll from '../components/HScroll'
 import MiniPlayer from '../components/MiniPlayer'
 import TagPicker from '../components/TagPicker'
 import { PlaylistSheet, shareSound } from '../components/SoundSheets'
@@ -153,7 +154,7 @@ export default function MusicScreen({ navigation, route }) {
             <TextInput value={q} onChangeText={onSearch} placeholder={t('searchPlaceholder')} placeholderTextColor={MC.faint} style={st.searchInput} autoCorrect={false} autoCapitalize="none" />
           </View>
           {tags.length ? (
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6, paddingVertical: 10 }}>
+            <HScroll fadeColor={MC.bg} contentContainerStyle={{ gap: 6, paddingVertical: 10, paddingRight: 30 }}>
               {tags.map((t) => {
                 const on = tag === t
                 return (
@@ -162,7 +163,7 @@ export default function MusicScreen({ navigation, route }) {
                   </Pressable>
                 )
               })}
-            </ScrollView>
+            </HScroll>
           ) : <View style={{ height: 10 }} />}
         </>
       ) : null}

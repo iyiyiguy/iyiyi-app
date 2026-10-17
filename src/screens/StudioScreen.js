@@ -11,18 +11,21 @@ import { Ionicons } from '@expo/vector-icons'
 import * as Haptics from 'expo-haptics'
 import { useFocusEffect } from '@react-navigation/native'
 import { LinearGradient } from 'expo-linear-gradient'
-import { useAudioRecorder, RecordingPresets, requestRecordingPermissionsAsync, setAudioModeAsync } from 'expo-audio'
 import { FONT, useStudioFonts, withAlpha } from '../games/studio'
-import { SX, sxType, Panel, HwButton, Seg, Fader, Stepper, Waveform } from '../studio/ui'
+import { SX, sxType, Panel, HwButton, Seg, Fader, Stepper, Waveform, LiveWave } from '../studio/ui'
 import { KITS } from '../studio/kits'
 import {
-  NUM_PADS, resumeAudio, prepareProject, loadSource, triggerPad, startSequencer, renderProject, peaks as getPeaks, chop, playRegion, cachedBuffer,
+  NUM_PADS, resumeAudio, prepareProject, loadSource, triggerPad, startSequencer, renderProject, renderSong, peaks as getPeaks, chop, playRegion, cachedBuffer, setRecordSession,
 } from '../studio/engine'
+import SongView from '../studio/SongView'
+import { ensureMic, startMic } from '../studio/mic'
+import { getSong, hasSongContent, saveWav, vocalForPlayback, songSeconds } from '../studio/song'
 import { newProject, loadProject, saveProject, withKit, setSteps, keepFile, PAD_COLORS } from '../studio/projects'
 import { generateBeat, STYLES, STYLE_BY_ID, styleForKit } from '../studio/generator'
 import { encodeWav } from '../studio/wav'
 import { publishSound } from '../lib/sounds'
 import TagPicker from '../components/TagPicker'
+import HScroll from '../components/HScroll'
 import { pauseMusic } from '../lib/musicPlayer'
 import { useT, translate } from '../i18n'
 import strings from '../i18n/strings/studio'
@@ -30,6 +33,7 @@ import strings from '../i18n/strings/studio'
 const TABS = [
   { key: 'pads', label: 'tabPads' },
   { key: 'steps', label: 'tabSteps' },
+  { key: 'song', label: 'tabSong' },
   { key: 'sampler', label: 'tabSampler' },
   { key: 'mix', label: 'tabMix' },
 ]
@@ -57,7 +61,10 @@ export default function StudioScreen({ navigation, route }) {
   const [renameOpen, setRenameOpen] = useState(false)
   const [flash, setFlash] = useState({})
   const stopRef = useRef(null)
+  const songStopRef = useRef(null)
+  const [focusSample, setFocusSample] = useState(null)
   const tapTimes = useRef([])
+  useEffect(() => () => setRecordSession(false), [])
 
   const setProject = useCallback((updater, { markDirty = true } = {}) => {
     setProjectState((prev) => {
@@ -91,7 +98,18 @@ export default function StudioScreen({ navigation, route }) {
   }, [route?.params?.projectId])
 
   // stop audio when leaving
-  useFocusEffect(useCallback(() => () => { stopRef.current?.(); stopRef.current = null; setPlaying(false) }, []))
+  useFocusEffect(useCallback(() => () => { stopRef.current?.(); stopRef.current = null; songStopRef.current?.(); setPlaying(false) }, []))
+
+  const stopLoop = useCallback(() => { stopRef.current?.(); stopRef.current = null; setPlaying(false) }, [])
+
+  // a sound file (e.g. the recorded vocal) into the sampler, then open it there
+  const addSampleFile = useCallback(async (uri, name) => {
+    const b = await loadSource({ kind: 'uri', uri })
+    const entry = { id: `s${Date.now().toString(36)}`, name: name.replace(/\.[^.]+$/, '').slice(0, 40), uri, duration: b?.duration || 0 }
+    setProject((p) => ({ ...p, samples: [...(p.samples || []), entry] }))
+    setFocusSample(entry.id)
+    setTab('sampler')
+  }, [setProject])
 
   const save = useCallback(async (quiet) => {
     const p = projRef.current
@@ -117,6 +135,7 @@ export default function StudioScreen({ navigation, route }) {
       setPlaying(false)
       return
     }
+    songStopRef.current?.()
     await resumeAudio()
     stopRef.current = startSequencer(() => projRef.current, (s) => { playStepRef.current = s; setPlayStep(s) })
     setPlaying(true)
@@ -209,7 +228,7 @@ export default function StudioScreen({ navigation, route }) {
             <Text style={sxType.title} numberOfLines={1}>{project.name}</Text>
           </Pressable>
           <HwButton icon={<Ionicons name="save-outline" size={16} color={SX.text} />} onPress={() => save()} accessibilityLabel={t('saveBeat')} style={{ paddingHorizontal: 10 }} />
-          <HwButton label={t('export')} active color={SX.accent} onPress={() => { stopRef.current?.(); stopRef.current = null; setPlaying(false); setExportOpen(true) }} icon={<Ionicons name="share-outline" size={15} color={SX.accent} />} />
+          <HwButton label={t('export')} active color={SX.accent} onPress={() => { stopRef.current?.(); stopRef.current = null; songStopRef.current?.(); setPlaying(false); setExportOpen(true) }} icon={<Ionicons name="share-outline" size={15} color={SX.accent} />} />
         </View>
 
         {/* LCD + transport deck (MPC-style): kit, tempo, position, playhead LEDs */}
@@ -260,13 +279,13 @@ export default function StudioScreen({ navigation, route }) {
         </Panel>
 
         {/* kit + auto */}
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={st.kitRow}>
+        <HScroll fadeColor={SX.bg} iconColor={SX.accent} style={{ marginTop: 10 }} contentContainerStyle={st.kitRow}>
           <HwButton label={t('auto')} active color={SX.hot} icon={<Ionicons name="sparkles" size={14} color={SX.hot} />} onPress={() => setAutoOpen(true)} />
           {KITS.map((k) => (
             <HwButton key={k.id} label={k.name} active={project.kit === k.id} onPress={() => changeKit(k.id)} />
           ))}
           <HwButton icon={<Ionicons name="trash-outline" size={14} color={SX.muted} />} onPress={clearPattern} accessibilityLabel={t('clearPattern')} />
-        </ScrollView>
+        </HScroll>
 
         <Seg options={TABS.map((x) => ({ ...x, label: t(x.label) }))} value={tab} onChange={(k) => { tap(); setTab(k) }} style={{ marginTop: 10 }} />
       </View>
@@ -276,8 +295,10 @@ export default function StudioScreen({ navigation, route }) {
           <PadsView project={project} selPad={selPad} flash={flash} onHit={hitPad} onUpdatePad={updatePad} playing={playing} rec={rec} />
         ) : tab === 'steps' ? (
           <StepsView project={project} playStep={playStep} bar={bar} setBar={setBar} onToggle={toggleStep} selPad={selPad} setSelPad={setSelPad} />
+        ) : tab === 'song' ? (
+          <SongView project={project} setProject={setProject} stopRef={songStopRef} onBeforeStart={stopLoop} onAddSample={addSampleFile} />
         ) : tab === 'sampler' ? (
-          <SamplerView project={project} setProject={setProject} selPad={selPad} />
+          <SamplerView project={project} setProject={setProject} selPad={selPad} focusSample={focusSample} onBeforeRecord={() => { stopLoop(); songStopRef.current?.() }} />
         ) : (
           <MixView project={project} onUpdatePad={updatePad} />
         )}
@@ -427,7 +448,7 @@ function StepsView({ project, playStep, bar, setBar, onToggle, selPad, setSelPad
 }
 
 // ---- Sampler ------------------------------------------------------------------------------
-function SamplerView({ project, setProject, selPad }) {
+function SamplerView({ project, setProject, selPad, focusSample, onBeforeRecord }) {
   const t = useT(strings)
   const [busy, setBusy] = useState(false)
   const [sampleIdx, setSampleIdx] = useState(0)
@@ -438,13 +459,23 @@ function SamplerView({ project, setProject, selPad }) {
   const [sel, setSel] = useState(-1)
   const stopRef = useRef(null)
   const sample = project.samples?.[sampleIdx]
-  // Record your voice (or anything) with the mic straight into the sampler.
-  const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY)
+  // Record your voice (or anything) with the mic straight into the sampler. The waveform draws
+  // live while you record.
+  const micRef = useRef(null)
   const [recAt, setRecAt] = useState(0) // > 0 while recording (start time)
   const [recNow, setRecNow] = useState(0)
+  const [levels, setLevels] = useState([])
+  const levelsRef = useRef([])
+  const lastDraw = useRef(0)
   const recTimer = useRef(null)
   const MAX_REC_S = 30
-  useEffect(() => () => { clearInterval(recTimer.current); try { recorder.stop() } catch {} }, [])
+  const CAPACITY = Math.round((MAX_REC_S * 48000) / 1024)
+  useEffect(() => () => { clearInterval(recTimer.current); micRef.current?.stop().catch(() => {}) }, [])
+  useEffect(() => {
+    if (!focusSample) return
+    const k = (project.samples || []).findIndex((x) => x.id === focusSample)
+    if (k >= 0) setSampleIdx(k)
+  }, [focusSample, project.samples?.length])
 
   useEffect(() => {
     let alive = true
@@ -481,8 +512,8 @@ function SamplerView({ project, setProject, selPad }) {
     }
   }
 
-  const addSample = async (srcUri, name) => {
-    const uri = await keepFile(srcUri, name)
+  const addSample = async (srcUri, name, keep = true) => {
+    const uri = keep ? await keepFile(srcUri, name) : srcUri
     const b = await loadSource({ kind: 'uri', uri })
     const entry = { id: `s${Date.now().toString(36)}`, name: name.replace(/\.[^.]+$/, '').slice(0, 40), uri, duration: b?.duration || 0 }
     setProject((p) => ({ ...p, samples: [...(p.samples || []), entry] }))
@@ -492,30 +523,50 @@ function SamplerView({ project, setProject, selPad }) {
   const stopVoice = async () => {
     clearInterval(recTimer.current)
     setRecAt(0)
+    const mic = micRef.current
+    micRef.current = null
+    if (!mic) return
     try {
-      await recorder.stop()
-      await setAudioModeAsync({ allowsRecording: false, playsInSilentMode: true }).catch(() => {})
-      const uri = recorder.uri
-      if (!uri) throw new Error(t('nothingRecorded'))
+      const r = await mic.stop()
+      // trim the silence before you started making sound (keeps a 50 ms lead-in)
+      const d = r.data
+      let peak = 0
+      for (let i = 0; i < d.length; i += 4) { const a = Math.abs(d[i]); if (a > peak) peak = a }
+      if (!d.length || peak < 0.003) throw new Error(t('nothingRecorded'))
+      let first = 0
+      while (first < d.length && Math.abs(d[first]) < peak * 0.08) first += 64
+      const data = d.slice(Math.max(0, first - Math.round(r.sampleRate * 0.05)))
       setBusy(true)
+      const uri = await saveWav(data, r.sampleRate, 's')
       const n = (project.samples || []).filter((x) => /^Voice/.test(x.name)).length + 1
-      await addSample(uri, `Voice ${n}.m4a`)
+      await addSample(uri, `Voice ${n}.wav`, false)
     } catch (e) {
       Alert.alert(t('recordFailed'), e?.message || t('tryAgain'))
     } finally {
       setBusy(false)
+      levelsRef.current = []
+      setLevels([])
     }
   }
 
   const recordVoice = async () => {
     if (recAt) { stopVoice(); return }
     try {
-      const perm = await requestRecordingPermissionsAsync()
-      if (!perm?.granted) { Alert.alert(t('micNeeded'), t('micNeededBody')); return }
+      if (!(await ensureMic())) { Alert.alert(t('micNeeded'), t('micNeededBody')); return }
       stopRef.current?.()
-      await setAudioModeAsync({ allowsRecording: true, playsInSilentMode: true })
-      await recorder.prepareToRecordAsync()
-      recorder.record()
+      onBeforeRecord?.()
+      await resumeAudio()
+      levelsRef.current = []
+      setLevels([])
+      micRef.current = await startMic({
+        onChunk: (chunk) => {
+          let m = 0
+          for (let i = 0; i < chunk.length; i += 4) { const a = Math.abs(chunk[i]); if (a > m) m = a }
+          levelsRef.current.push(m)
+          const now = Date.now()
+          if (now - lastDraw.current > 60) { lastDraw.current = now; setLevels(levelsRef.current.slice()) }
+        },
+      })
       const start = Date.now()
       setRecAt(start)
       setRecNow(start)
@@ -588,6 +639,7 @@ function SamplerView({ project, setProject, selPad }) {
           <Text style={st.voiceText}>{recAt ? `${t('stopRecording')} · ${Math.floor((recNow - recAt) / 1000)}s / ${MAX_REC_S}s` : t('recordVoice')}</Text>
           {!recAt ? <Ionicons name="mic" size={16} color={SX.rec} /> : null}
         </Pressable>
+        {recAt || levels.length ? <LiveWave levels={levels} capacity={CAPACITY} /> : null}
         <Text style={sxType.small}>{t('samplerIntro')}</Text>
         {project.samples?.length ? (
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
@@ -703,19 +755,30 @@ function ExportSheet({ visible, project, onClose, onSaved, navigation }) {
   const [vis, setVis] = useState('private')
   const [busy, setBusy] = useState('')
   const [tags, setTags] = useState([])
-  useEffect(() => { if (visible) { setTitle(project.name); setBusy(''); if (!tags.length && project.style) setTags([project.style]) } }, [visible])
-  const bars = (project.steps / 16) * loops
-  const secs = (bars * 16 * 60) / project.bpm / 4
+  const songOk = hasSongContent(project)
+  const [what, setWhat] = useState('song')
+  useEffect(() => { if (visible) { setTitle(project.name); setBusy(''); setWhat(hasSongContent(project) ? 'song' : 'loop'); if (!tags.length && project.style) setTags([project.style]) } }, [visible])
+  const isSong = songOk && what === 'song'
+  const bars = isSong ? getSong(project).bars : (project.steps / 16) * loops
+  const secs = isSong ? songSeconds(project) : (bars * 16 * 60) / project.bpm / 4
 
   const doExport = async () => {
     try {
       setBusy(t('rendering'))
       await prepareProject(project)
       await new Promise((r) => setTimeout(r, 30))
-      const out = renderProject(project, loops)
+      let out
+      const song = getSong(project)
+      if (isSong) {
+        const { buf } = song.vocal ? await vocalForPlayback(song.vocal) : { buf: null }
+        out = renderSong(project, buf)
+      } else {
+        out = renderProject(project, loops)
+      }
       const wav = encodeWav(out)
       setBusy(vis === 'public' ? t('uploadingChecking') : t('uploading'))
-      const sound = await publishSound({ wav, title, visibility: vis, durationS: Math.round(out.duration * 10) / 10, bpm: project.bpm, kind: 'beat', projectId: project.id, tags })
+      const kind = isSong && song.vocal && !song.vocal.mute ? 'song' : 'beat'
+      const sound = await publishSound({ wav, title, visibility: vis, durationS: Math.round(out.duration * 10) / 10, bpm: project.bpm, kind, projectId: project.id, tags })
       await onSaved?.()
       setBusy('')
       onClose()
@@ -739,8 +802,18 @@ function ExportSheet({ visible, project, onClose, onSaved, navigation }) {
     <Sheet visible={visible} onClose={busy ? () => {} : onClose} title={t('exportSound')}>
       <Text style={sxType.label}>{t('title')}</Text>
       <TextInput value={title} onChangeText={setTitle} style={st.input} maxLength={60} placeholderTextColor={SX.faint} />
-      <Text style={[sxType.label, { marginTop: 14 }]}>{t('length')}</Text>
-      <Seg small options={[{ key: 1, label: '1×' }, { key: 2, label: '2×' }, { key: 4, label: '4×' }]} value={loops} onChange={setLoops} />
+      {songOk ? (
+        <>
+          <Text style={[sxType.label, { marginTop: 14 }]}>{t('exportWhat')}</Text>
+          <Seg small options={[{ key: 'song', label: t('exportSong') }, { key: 'loop', label: t('exportLoop') }]} value={what} onChange={setWhat} />
+        </>
+      ) : null}
+      {!isSong ? (
+        <>
+          <Text style={[sxType.label, { marginTop: 14 }]}>{t('length')}</Text>
+          <Seg small options={[{ key: 1, label: '1×' }, { key: 2, label: '2×' }, { key: 4, label: '4×' }]} value={loops} onChange={setLoops} />
+        </>
+      ) : null}
       <Text style={[sxType.small, { marginTop: 6 }]}>{t(bars === 1 ? 'barsAboutOne' : 'barsAboutMany', { bars, s: Math.round(secs) })}</Text>
       <Text style={[sxType.label, { marginTop: 14 }]}>{t('whoCanUse')}</Text>
       <Seg small options={[{ key: 'private', label: t('onlyMe') }, { key: 'public', label: t('public') }]} value={vis} onChange={setVis} />
@@ -785,7 +858,7 @@ const st = StyleSheet.create({
   recBtn: { width: 34, height: 34, borderRadius: 17, borderWidth: 1, borderColor: SX.lineStrong, alignItems: 'center', justifyContent: 'center', backgroundColor: SX.panel2 },
   recDot: { width: 12, height: 12, borderRadius: 6, backgroundColor: 'rgba(255,61,82,0.5)' },
   miniBtn: { minHeight: 28, paddingHorizontal: 8 },
-  kitRow: { gap: 8, paddingTop: 10 },
+  kitRow: { gap: 8, paddingRight: 30 },
   padGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   pad: {
     borderRadius: 14, borderWidth: 1.5, backgroundColor: '#14171e', padding: 9, justifyContent: 'space-between',

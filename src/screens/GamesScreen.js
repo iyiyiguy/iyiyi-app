@@ -77,7 +77,8 @@ export default function GamesScreen({ navigation }) {
 
   // Hero carousel: featured first, then most played right now.
   const heroes = useMemo(() => {
-    const list = [...visible].sort((a, b) => (Number(!!b.featured) - Number(!!a.featured)) || (liveFor(b) - liveFor(a)))
+    const pin = (g) => g.pin || 99
+    const list = [...visible].sort((a, b) => (pin(a) - pin(b)) || (Number(!!b.featured) - Number(!!a.featured)) || (liveFor(b) - liveFor(a)))
     return list.slice(0, 4)
   }, [visible, live]) // eslint-disable-line react-hooks/exhaustive-deps
 
