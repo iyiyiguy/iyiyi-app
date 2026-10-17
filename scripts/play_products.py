@@ -256,3 +256,4 @@ if failures:
     sys.exit(1)
 print(f"All {len(ONE_TIME) + 1} Google Play products are set up.")
 # Release 1.4.1 (versionCode 199) to production.
+# Release 1.5.0 (versionCode 212) to production.
