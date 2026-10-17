@@ -37,16 +37,38 @@ export function getContext() {
 
 // iOS: playback only by default; switched to play-and-record while the mic is in use (the beat
 // keeps playing through the speaker / headphones / Bluetooth while you record over it).
-let recordSession = false
-export function setRecordSession(on) {
-  if (Platform.OS !== 'ios' || recordSession === on) return
-  recordSession = on
+// echoCancel uses the 'voiceChat' mode (Apple's voice processing, as in FaceTime): the beat coming
+// out of the phone speaker is cancelled from the mic, so you don't need headphones.
+let sessionMode = 'playback'
+export function setRecordSession(on, { echoCancel = false } = {}) {
+  const want = !on ? 'playback' : echoCancel ? 'voiceChat' : 'record'
+  if (Platform.OS !== 'ios' || sessionMode === want) return
+  sessionMode = want
   try {
-    AudioManager.setAudioSessionOptions(on
-      ? { iosCategory: 'playAndRecord', iosMode: 'default', iosOptions: ['defaultToSpeaker', 'allowBluetoothA2DP'] }
-      : { iosCategory: 'playback', iosMode: 'default', iosOptions: [] })
+    AudioManager.setAudioSessionOptions(want === 'playback'
+      ? { iosCategory: 'playback', iosMode: 'default', iosOptions: [] }
+      : { iosCategory: 'playAndRecord', iosMode: want === 'voiceChat' ? 'voiceChat' : 'default', iosOptions: ['defaultToSpeaker', 'allowBluetoothA2DP'] })
     AudioManager.setAudioSessionActivity(true).catch(() => {})
   } catch {}
+}
+
+/** true when sound is coming out of the phone itself (iOS), false for headphones/Bluetooth, null if unknown. */
+export async function outputIsSpeaker() {
+  if (Platform.OS !== 'ios') return null
+  try {
+    const info = await AudioManager.getDevicesInfo()
+    const outs = info?.currentOutputs || []
+    if (!outs.length) return null
+    return outs.some((o) => /speaker|receiver/i.test(o.category || ''))
+  } catch {
+    return null
+  }
+}
+
+/** Turns the whole mix down (level 0..1 of normal) with a short fade; duckBeat(1) restores it. */
+export function duckBeat(level = 1) {
+  const c = getContext()
+  try { master.gain.setTargetAtTime(0.85 * level, c.currentTime, 0.06) } catch { master.gain.value = 0.85 * level }
 }
 
 export async function resumeAudio() {

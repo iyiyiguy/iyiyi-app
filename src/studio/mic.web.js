@@ -25,7 +25,8 @@ export async function startMic({ onChunk } = {}) {
   const c = getContext()
   const ac = c.context
   const stream = await navigator.mediaDevices.getUserMedia({
-    audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
+    // the browser's echo canceller removes the beat this page is playing from the mic
+    audio: { echoCancellation: true, noiseSuppression: false, autoGainControl: false },
   })
   const src = ac.createMediaStreamSource(stream)
   const proc = ac.createScriptProcessor(1024, 1, 1)

@@ -8,7 +8,7 @@ import Svg, { Path, Line, G } from 'react-native-svg'
 import { Ionicons } from '@expo/vector-icons'
 import { SX, sxType, Panel, HwButton, Seg, Fader, Stepper } from './ui'
 import { FONT, withAlpha } from '../games/studio'
-import { getContext, resumeAudio, startSequencer, countIn, playBuffer, triggerPad, stepDuration, bufferFromPCM } from './engine'
+import { getContext, resumeAudio, startSequencer, countIn, playBuffer, triggerPad, stepDuration, bufferFromPCM, outputIsSpeaker, duckBeat } from './engine'
 import { ensureMic, startMic } from './mic'
 import {
   getSong, SONG_BARS, songSteps, vocalOffset, DEFAULT_LATENCY, getDeviceNudge, setDeviceNudge, saveWav, rememberVocal, loadVocal,
@@ -57,6 +57,7 @@ export default function SongView({ project, setProject, stopRef, onBeforeStart, 
   const liveRef = useRef([])
   const lastLiveDraw = useRef(0)
   const [flash, setFlash] = useState({})
+  const [ducked, setDucked] = useState(false)
 
   const seqStop = useRef(null)
   const vocalStop = useRef(null)
@@ -154,6 +155,8 @@ export default function SongView({ project, setProject, stopRef, onBeforeStart, 
     seqStop.current = null
     vocalStop.current?.()
     vocalStop.current = null
+    duckBeat(1)
+    setDucked(false)
     const wasMode = modeRef.current
     setModeBoth('idle')
     setCountN(0)
@@ -211,7 +214,12 @@ export default function SongView({ project, setProject, stopRef, onBeforeStart, 
       try {
         liveRef.current = []
         setLive([])
-        mic = await startMic({ onChunk })
+        // On the phone speaker the mic would hear the beat: cancel the echo (iOS) and turn the
+        // beat down while recording. With headphones/Bluetooth (speaker === false) nothing changes.
+        const speaker = await outputIsSpeaker()
+        mic = await startMic({ onChunk, echoCancel: speaker === true })
+        duckBeat(getSong(projRef.current).recBeatVol ?? 0.4)
+        setDucked(true)
       } catch (e) {
         Alert.alert(t('recordFailed'), e?.message || t('tryAgain'))
         return
@@ -249,6 +257,7 @@ export default function SongView({ project, setProject, stopRef, onBeforeStart, 
     seqStop.current?.()
     vocalStop.current?.()
     micRef.current?.stop().catch(() => {})
+    duckBeat(1)
   }, [])
 
   // ---- pads (play + record onto the timeline)
@@ -341,6 +350,7 @@ export default function SongView({ project, setProject, stopRef, onBeforeStart, 
             <Text style={[st.status, recording && { color: SX.rec }]} numberOfLines={1}>
               {mode === 'count' ? t('countingIn', { n: countN || 4 }) : mode === 'rec' ? `● ${t('recordingLive')} · ${barText}` : mode === 'play' ? barText : t('barsN', { n: song.bars })}
             </Text>
+            {ducked && recording ? <Text style={[sxType.small, { marginTop: 2 }]} numberOfLines={1}>{t('beatDucked')}</Text> : null}
             <View style={{ flexDirection: 'row', gap: 6, marginTop: 6 }}>
               <HwButton label={t('armVoice')} icon={<Ionicons name="mic" size={12} color={armVoice ? SX.rec : SX.muted} />} active={armVoice} color={SX.rec} onPress={() => setArmVoice((x) => !x)} disabled={busy} style={st.chip} />
               <HwButton label={t('armPads')} icon={<Ionicons name="grid" size={12} color={armPads ? SX.rec : SX.muted} />} active={armPads} color={SX.rec} onPress={() => setArmPads((x) => !x)} disabled={busy} style={st.chip} />
@@ -349,6 +359,23 @@ export default function SongView({ project, setProject, stopRef, onBeforeStart, 
           </View>
         </View>
         <Seg small options={SONG_BARS.map((n) => ({ key: n, label: t('barsN', { n }) }))} value={song.bars} onChange={(n) => !busy && updateSong({ bars: n })} />
+        <View>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+            <Text style={sxType.label}>{t('beatWhileRec')}</Text>
+            <Text style={[sxType.label, { color: SX.text }]}>{Math.round((song.recBeatVol ?? 0.4) * 100)}%</Text>
+          </View>
+          <Fader
+            value={song.recBeatVol ?? 0.4}
+            min={0.05}
+            max={1}
+            color={SX.rec}
+            onChange={(x) => {
+              const v = Math.round(x * 100) / 100
+              updateSong({ recBeatVol: v })
+              if (ducked && micRef.current) duckBeat(v) // live while recording
+            }}
+          />
+        </View>
       </Panel>
 
       {/* timeline */}

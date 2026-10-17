@@ -39,8 +39,8 @@ export function resample(data, from, to) {
  * Returns { stop(): Promise<{ data, sampleRate, startClock }> } where startClock is the audio-clock
  * time of the first recorded sample (estimated from chunk arrival, jitter-corrected).
  */
-export async function startMic({ onChunk } = {}) {
-  setRecordSession(true)
+export async function startMic({ onChunk, echoCancel = false } = {}) {
+  setRecordSession(true, { echoCancel })
   const c = getContext()
   const rec = new AudioRecorder()
   const chunks = []
@@ -68,6 +68,7 @@ export async function startMic({ onChunk } = {}) {
     async stop() {
       try { await rec.stop() } catch {}
       try { rec.clearOnAudioReady() } catch {}
+      setRecordSession(false)
       const data = resample(concatChunks(chunks, frames), rate, c.sampleRate)
       return { data, sampleRate: c.sampleRate, startClock: Number.isFinite(startClock) ? startClock : null }
     },
