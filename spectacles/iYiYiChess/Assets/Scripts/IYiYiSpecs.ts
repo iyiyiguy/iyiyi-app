@@ -282,6 +282,7 @@ export class IYiYiSpecs extends BaseScriptComponent {
           if (best) this.runButton(best)
           return
         }
+        if (this.mode !== "menu" && this.envTapped(tp)) return
         if (this.mode === "chess" && this.camComp && this.camT) {
           // menu tag hit test in screen space, otherwise a ray through the clicked pixel
           if (this.menuTag) {
@@ -303,6 +304,7 @@ export class IYiYiSpecs extends BaseScriptComponent {
   private onPinch(ray: vec3[]) {
     if (this.mode === "intro") { this.endIntro(); return }
     if (this.mode === "menu") { const g = this.gazed(); if (g) this.runButton(g); return }
+    if (!ray && this.mode !== "menu" && this.envPinch()) return // the WORLD tag: next environment
     if (!ray && !this.menuLookedAt() && this.ppPinch()) return // looking at an iYiYi person: their profile, mid-game
     if (this.mode !== "chess") return
     if (!ray && this.menuLookedAt()) { this.openMenu(); return }
@@ -321,6 +323,7 @@ export class IYiYiSpecs extends BaseScriptComponent {
     this.tickAnims(dt)
     this.tickFx(dt)
     this.ppTick(Date.now())
+    this.envTick(dt)
     if (Date.now() > this.toastUntil) this.toastT.text = ""
   }
 
@@ -532,6 +535,221 @@ export class IYiYiSpecs extends BaseScriptComponent {
   private ppBusy = false
   private ppNextNearby = 0
   private ppRefreshing = false
+
+  // ================================================================== WORLD environments (every Lens)
+  // A small "◐ WORLD" tag low on the right: look at it and pinch to switch Snow / Lava / Neon
+  // Hallway / Neon City / Tokyo Neon / off. The Specs scan the room with hit tests (surface
+  // classification): the floor gets the theme, and light strips run along the bottom of every wall
+  // found, glowing onto the floor (plus ceiling lines, neon outlines or signs per theme). With no
+  // scanning (Lens Studio preview) a stand-in ring of walls goes up around you.
+  // helpers of its own, so this chunk drops into any iYiYi Lens
+  private eW = new vec4(1, 1, 1, 1)
+  private eHex(h: number): vec4 { return new vec4(((h >> 16) & 255) / 255, ((h >> 8) & 255) / 255, (h & 255) / 255, 1) }
+  private eCam(): vec3 { return this.camT ? this.camT.getWorldPosition() : new vec3(0, 0, 0) }
+  private eFlat(a: vec3, b: vec3): number { return Math.sqrt((a.x - b.x) * (a.x - b.x) + (a.z - b.z) * (a.z - b.z)) }
+  private eZap(o: SceneObject) { if (o && !isNull(o)) o.destroy() }
+  private eRight(d: vec3): vec3 { return quat.angleAxis(-Math.PI / 2, vec3.up()).multiplyVec3(d) }
+  private eGaze(p: vec3): number { return Math.acos(Math.max(-1, Math.min(1, p.sub(this.eCam()).normalize().dot(this.viewDir())))) }
+  private envTheme = "none"
+  private envRoot: SceneObject = null
+  private envGround: SceneObject = null
+  private envGroundAt: vec3 = null
+  private envFlakes: {o: SceneObject; v: number}[] = []
+  private envTag: SceneObject = null
+  private envHits: ({p: vec3; n: vec3} | null)[] = []
+  private envSegs: {[k: string]: SceneObject} = {}
+  private envSession: any = null
+  private envScanI = 0
+  private envSince = 0
+  private envFallback: SceneObject = null
+  private envFloorSeen = false
+  private envLoaded = false
+  private ENV_THEMES = ["none", "snow", "lava", "hall", "city", "tokyo"]
+  private ENV_NAMES: {[k: string]: string} = {none: "OFF", snow: "SNOW DAY", lava: "LAVA", hall: "NEON HALLWAY", city: "NEON CITY", tokyo: "TOKYO NEON"}
+  private envCols(): vec4[] {
+    const t = this.envTheme
+    if (t === "snow") return [this.eHex(0x9be8ff)]
+    if (t === "lava") return [this.eHex(0xff4a1a), this.eHex(0xffb21e)]
+    if (t === "hall") return [this.eHex(0xb070ff), this.eHex(0xd9b3ff)]
+    if (t === "city") return [this.eHex(0xff2bd6), this.eHex(0x39d5ff), this.eHex(0x5cff7a), this.eHex(0xffe633)]
+    return [this.eHex(0xff2b7a), this.eHex(0x39d5ff), this.eHex(0xff3d3d), this.eHex(0xffb21e)]
+  }
+  private dim(c: vec4, k: number): vec4 { return new vec4(c.r * k, c.g * k, c.b * k, 1) }
+
+  private envTick(dt: number) {
+    if (!this.envLoaded) {
+      this.envLoaded = true
+      try { const s = global.persistentStorageSystem.store.getString("iyiyi_world_theme"); if (s && this.ENV_THEMES.indexOf(s) >= 0) this.envSet(s, false) } catch (e) {}
+    }
+    this.placeEnvTag()
+    if (this.envTheme === "none" || !this.camT) return
+    const cam = this.eCam()
+    // ground: anchored in the world, rebuilt when you've walked a few metres away
+    if (!this.envGroundAt || this.eFlat(cam, this.envGroundAt) > 300) this.envBuildGround()
+    // falling snow / rising embers / floating motes around you
+    for (const f of this.envFlakes) {
+      if (isNull(f.o)) continue
+      const tr = f.o.getTransform(), p = tr.getWorldPosition()
+      let y = p.y + f.v * dt, x = p.x + Math.sin(this.time + f.v) * dt * 12, z = p.z
+      if (y < this.floorY) y = this.floorY + 400
+      if (y > this.floorY + 400) y = this.floorY
+      if (x - cam.x > 500) x -= 1000; if (x - cam.x < -500) x += 1000; if (z - cam.z > 500) z -= 1000; if (z - cam.z < -500) z += 1000
+      tr.setWorldPosition(new vec3(x, y, z))
+    }
+    this.envScan()
+  }
+  private placeEnvTag() {
+    if (!this.camT || this.mode === "intro" || this.mode === "menu") { if (this.envTag) { this.eZap(this.envTag); this.envTag = null } return }
+    if (!this.envTag) this.envTag = this.makeText("", 2.4, LG.muted)
+    const cam = this.eCam(), d = this.flatDir(), tr = this.envTag.getTransform()
+    tr.setWorldPosition(cam.add(d.uniformScale(70)).add(this.eRight(d).uniformScale(40)).add(new vec3(0, -42, 0)))
+    tr.setWorldRotation(quat.lookAt(cam.sub(tr.getWorldPosition()).normalize(), vec3.up()))
+    const t = this.envTag.getComponent("Component.Text") as Text
+    t.text = "◐ WORLD: " + this.ENV_NAMES[this.envTheme]
+    t.textFill.color = this.envLookedAt() ? LG.objective : LG.muted
+  }
+  private envLookedAt(): boolean { return !!this.envTag && this.eGaze(this.envTag.getTransform().getWorldPosition()) < 8 * D2R }
+  /** Lens Studio preview: a click on the WORLD tag */
+  private envTapped(tp: vec2): boolean {
+    if (!this.envTag || !this.camComp) return false
+    const sp = this.camComp.worldSpaceToScreenSpace(this.envTag.getTransform().getWorldPosition())
+    if (Math.abs(sp.x - tp.x) < 0.1 && Math.abs(sp.y - tp.y) < 0.05) { const T = this.ENV_THEMES; this.envSet(T[(T.indexOf(this.envTheme) + 1) % T.length], true); return true }
+    return false
+  }
+  /** pinch while looking at the WORLD tag: next theme */
+  private envPinch(): boolean {
+    if (!this.envLookedAt()) return false
+    const T = this.ENV_THEMES
+    this.envSet(T[(T.indexOf(this.envTheme) + 1) % T.length], true)
+    return true
+  }
+  private envSet(id: string, announce: boolean) {
+    this.envClear()
+    this.envTheme = id
+    try { global.persistentStorageSystem.store.putString("iyiyi_world_theme", id) } catch (e) {}
+    if (announce) this.toast(id === "none" ? "WORLD OFF" : this.ENV_NAMES[id] + " · LOOK AROUND TO SCAN THE ROOM", 3500)
+    if (id === "none") return
+    this.envRoot = global.scene.createSceneObject("iyEnv")
+    this.envSince = Date.now()
+    this.envHits = []
+    for (let i = 0; i < 36; i++) this.envHits.push(null)
+    try {
+      if (!this.envSession) {
+        const wq = require("LensStudio:WorldQueryModule") as WorldQueryModule
+        const o = HitTestSessionOptions.create(); o.filter = false
+        try { o.classification = true } catch (e) {}
+        this.envSession = wq.createHitTestSessionWithOptions(o)
+      }
+      this.envSession.start()
+    } catch (e) { this.envSession = null }
+    const n = id === "snow" ? 70 : id === "lava" ? 40 : 24, c = id === "snow" ? this.eW : id === "lava" ? this.eHex(0xff7a1a) : this.envCols()[0]
+    const cam = this.eCam()
+    for (let i = 0; i < n; i++) {
+      const s = id === "snow" ? 2.5 : 2
+      const o = this.block(new vec3(cam.x + (Math.random() - 0.5) * 1000, this.floorY + Math.random() * 400, cam.z + (Math.random() - 0.5) * 1000), new vec3(s, s, s), c, this.envRoot)
+      if (o) this.envFlakes.push({o, v: id === "snow" ? -(40 + Math.random() * 50) : id === "lava" ? 30 + Math.random() * 70 : (Math.random() - 0.5) * 10})
+    }
+  }
+  private envClear() {
+    if (this.envRoot) this.eZap(this.envRoot)
+    this.envRoot = null; this.envGround = null; this.envGroundAt = null; this.envFlakes = []; this.envSegs = {}; this.envFallback = null
+    try { if (this.envSession) this.envSession.stop() } catch (e) {}
+  }
+  private envBuildGround() {
+    if (this.envGround) this.eZap(this.envGround)
+    const cam = this.eCam(), at = new vec3(Math.round(cam.x / 100) * 100, this.floorY, Math.round(cam.z / 100) * 100)
+    this.envGroundAt = at
+    const g = global.scene.createSceneObject("iyEnvGround"); g.setParent(this.envRoot); this.envGround = g
+    const y = this.floorY + 0.6, R = 450, t = this.envTheme, cols = this.envCols()
+    const flat = (x: number, z: number, sx: number, sz: number, c: vec4, rot: number = 0) => { const o = this.block(new vec3(at.x + x, y, at.z + z), new vec3(sx, 0.6, sz), c, g); if (o && rot) o.getTransform().setWorldRotation(quat.angleAxis(rot, vec3.up())); return o }
+    if (t === "snow") { for (let i = 0; i < 70; i++) { const r = Math.sqrt(Math.random()) * R, a = Math.random() * 6.283, s = 30 + Math.random() * 90; flat(Math.cos(a) * r, Math.sin(a) * r, s, s * (0.5 + Math.random() * 0.5), this.dim(this.eW, 0.22 + Math.random() * 0.2), Math.random() * 3) } }
+    else if (t === "lava") {
+      for (let k = 0; k < 9; k++) { let x = (Math.random() - 0.5) * 2 * R, z = (Math.random() - 0.5) * 2 * R, a = Math.random() * 6.283
+        for (let i = 0; i < 9; i++) { const nx = x + Math.cos(a) * 32, nz = z + Math.sin(a) * 32; flat((x + nx) / 2, (z + nz) / 2, 3.5, 34, i % 3 ? this.eHex(0xff6a1a) : this.eHex(0xffd060), -a + Math.PI / 2); x = nx; z = nz; a += (Math.random() - 0.5) * 1.2 } }
+      for (let i = 0; i < 6; i++) flat((Math.random() - 0.5) * 2 * R, (Math.random() - 0.5) * 2 * R, 40, 40, this.dim(this.eHex(0xff5a1a), 0.45), Math.random() * 3)
+    } else if (t === "city") { for (let i = -4; i <= 4; i++) { flat(i * 100, 0, 1.5, 2 * R, this.dim(this.eHex(0x39d5ff), 0.8)); flat(0, i * 100, 2 * R, 1.5, this.dim(this.eHex(0xff2bd6), 0.8)) } }
+    else if (t === "hall") { for (let i = 0; i < 18; i++) flat((Math.random() - 0.5) * 2 * R, (Math.random() - 0.5) * 2 * R, 8 + Math.random() * 14, 120 + Math.random() * 200, this.dim(cols[i % 2], 0.25)) }
+    else { for (let i = 0; i < 26; i++) flat((Math.random() - 0.5) * 2 * R, (Math.random() - 0.5) * 2 * R, 5 + Math.random() * 12, 60 + Math.random() * 160, this.dim(cols[i % cols.length], 0.35)) }
+  }
+  /** cast a few rays a frame around you: walls (classified, or upright normals) at chest height + the floor */
+  private envScan() {
+    const cam = this.eCam()
+    if (this.envSession) {
+      try {
+        // floor: straight down
+        if (this.envScanI % 6 === 0) this.envSession.hitTest(cam, cam.add(new vec3(0, -400, 0)), (h: WorldQueryHitTestResult) => { if (h && h.normal.y > 0.8 && cam.y - h.position.y > 80) { this.floorY = this.envFloorSeen ? this.floorY * 0.9 + h.position.y * 0.1 : h.position.y; this.envFloorSeen = true } })
+        for (let k = 0; k < 2; k++) {
+          const i = this.envScanI++ % 36, a = i * 10 * D2R, dir = new vec3(Math.sin(a), -0.15, -Math.cos(a)).normalize()
+          const from = cam.add(new vec3(0, -30, 0))
+          this.envSession.hitTest(from, from.add(dir.uniformScale(800)), (h: WorldQueryHitTestResult) => {
+            if (!this.envRoot) return
+            let wall = h && Math.abs(h.normal.y) < 0.35
+            try { if (h && h.classification === SurfaceClassification.Wall) wall = true; if (h && (h.classification === SurfaceClassification.Ground || h.classification === SurfaceClassification.Table)) wall = false } catch (e) {}
+            const prev = this.envHits[i]
+            this.envHits[i] = wall ? {p: h.position, n: new vec3(h.normal.x, 0, h.normal.z).normalize()} : null
+            if (!!prev !== !!this.envHits[i] || (prev && this.envHits[i] && prev.p.distance(this.envHits[i].p) > 40)) { this.envSeg(i); this.envSeg((i + 35) % 36) }
+          })
+        }
+      } catch (e) {}
+    }
+    // nothing found after a few seconds (Lens Studio preview): stand-in walls
+    const found = this.envHits.some((h) => !!h)
+    if (!found && !this.envFallback && Date.now() - this.envSince > 4000) this.envBuildFallback()
+    if (found && this.envFallback) { this.eZap(this.envFallback); this.envFallback = null }
+  }
+  /** the strip between scan bins i and i+1, when both hit the same wall */
+  private envSeg(i: number) {
+    const key = "s" + i
+    if (this.envSegs[key]) { this.eZap(this.envSegs[key]); delete this.envSegs[key] }
+    const a = this.envHits[i], b = this.envHits[(i + 1) % 36]
+    if (!a || !b || a.n.dot(b.n) < 0.8 || a.p.distance(b.p) > 180) return
+    const g = global.scene.createSceneObject("iyEnvSeg"); g.setParent(this.envRoot)
+    this.envWall(g, new vec3(a.p.x, this.floorY, a.p.z), new vec3(b.p.x, this.floorY, b.p.z), a.n.add(b.n).normalize(), 260, i)
+    this.envSegs[key] = g
+  }
+  /** decorate one wall: floor line a→b, room-facing normal n, wall height h (cm) */
+  private envWall(g: SceneObject, a: vec3, b: vec3, n: vec3, h: number, idx: number) {
+    const cols = this.envCols(), c1 = cols[idx % cols.length], c2 = cols[(idx + 1) % cols.length], t = this.envTheme
+    const line = (p: vec3, q: vec3, c: vec4, glowUp: number) => {
+      const len = p.distance(q); if (len < 8) return
+      const mid = p.add(q).uniformScale(0.5), rot = quat.lookAt(q.sub(p).normalize(), vec3.up())
+      const put = (pos: vec3, size: vec3, col: vec4) => { const o = this.block(pos, size, col, g); if (o) o.getTransform().setWorldRotation(rot) }
+      put(mid, new vec3(2.5, 2.5, len), this.eW)
+      put(mid, new vec3(6, 6, len + 3), c)
+      if (glowUp !== 0) {
+        put(mid.add(new vec3(0, glowUp * 22, 0)).add(n.uniformScale(1)), new vec3(0.5, 40, len), this.dim(c, 0.28)) // wash on the wall
+        if (glowUp > 0) put(new vec3(mid.x, this.floorY + 0.8, mid.z).add(n.uniformScale(35)), new vec3(66, 0.5, len), this.dim(c, 0.3)) // reflection on the floor
+      }
+    }
+    const up = (p: vec3, y: number) => new vec3(p.x, this.floorY + y, p.z)
+    line(up(a, 3), up(b, 3), c1, 1)
+    if (t === "hall") { line(up(a, Math.min(h, 250)), up(b, Math.min(h, 250)), c2, -1); line(up(a, 95).add(n), up(b, 95).add(n), cols[0], 0); line(up(a, 135).add(n), up(b, 135).add(n), cols[0], 0) }
+    else if (t === "city") { line(up(a, 3), up(a, h), c2, 0); line(up(b, 3), up(b, h), c2, 0); line(up(a, h), up(b, h), c1, 0) }
+    else if (t === "lava") line(up(a, 18).add(n), up(b, 18).add(n), c2, 0)
+    else if (t === "tokyo") {
+      const mid = a.add(b).uniformScale(0.5).add(n.uniformScale(4)), words = ["RAMEN", "TOKYO", "iYiYi", "24H", "BAR", "KARAOKE", "SUSHI", "GAME"]
+      const s = this.makeText(words[idx % words.length], 6, c2); s.setParent(g)
+      const tx = s.getComponent("Component.Text") as Text; tx.depthTest = true
+      s.getTransform().setWorldPosition(new vec3(mid.x, this.floorY + 200 + (idx % 3) * 35, mid.z)); s.getTransform().setWorldRotation(quat.lookAt(n, vec3.up()))
+      this.block(new vec3(mid.x, this.floorY + 200 + (idx % 3) * 35, mid.z).add(n.uniformScale(-1)), new vec3(Math.max(40, a.distance(b) * 0.8), 26, 1), this.dim(c2, 0.22), g)
+      for (let k = 0; k < 2; k++) { const lp = a.add(b.sub(a).uniformScale(0.25 + k * 0.5)).add(n.uniformScale(15)); this.block(new vec3(lp.x, this.floorY + 240, lp.z), new vec3(14, 20, 14), this.eHex(0xff3d3d), g) }
+    }
+  }
+  private envBuildFallback() {
+    const g = global.scene.createSceneObject("iyEnvFallback"); g.setParent(this.envRoot); this.envFallback = g
+    const cam = this.eCam(), d = this.flatDir()
+    if (this.envTheme === "hall") {
+      const r = this.eRight(d)
+      for (const s of [-1, 1]) { const a = cam.add(r.uniformScale(s * 160)).add(d.uniformScale(-300)), b = cam.add(r.uniformScale(s * 160)).add(d.uniformScale(1200)); this.envWall(g, new vec3(a.x, this.floorY, a.z), new vec3(b.x, this.floorY, b.z), r.uniformScale(-s), 260, s + 2) }
+      return
+    }
+    for (let i = 0; i < 8; i++) {
+      const a0 = (i / 8) * 6.283, a1 = ((i + 0.7) / 8) * 6.283, R = 550 + (i % 3) * 140
+      const a = new vec3(cam.x + Math.sin(a0) * R, this.floorY, cam.z + Math.cos(a0) * R), b = new vec3(cam.x + Math.sin(a1) * R, this.floorY, cam.z + Math.cos(a1) * R)
+      const mid = a.add(b).uniformScale(0.5), n = new vec3(cam.x - mid.x, 0, cam.z - mid.z).normalize()
+      this.envWall(g, a, b, n, this.envTheme === "city" ? 300 + (i % 4) * 150 : 300, i)
+    }
+  }
 
   private ppInit() {
     try { this.ppStore = global.persistentStorageSystem.store } catch (e) {}
