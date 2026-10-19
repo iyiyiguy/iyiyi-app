@@ -217,12 +217,15 @@ function redraw(p) { if (p && p.draw) { p.draw(); p.tex.needsUpdate = true } }
 function redrawAll() { for (const p of [homeP, listP, cardP, barP, hudP]) if (p.mesh.visible) redraw(p); people.forEach((t) => redraw(t.panel)) }
 
 // ---------- the panels ----------
-const homeP = makePanel(1000, 820, 0.9)
+const homeP = makePanel(1000, 950, 0.9)
 const listP = makePanel(1000, 1100, 0.9)
 const cardP = makePanel(1000, 900, 0.85)
 const barP = makePanel(1000, 170, 0.75) // small bar while looking around / in laser tag
 const hudP = makePanel(1000, 260, 0.6) // laser tag HUD, follows your view
-for (const p of [homeP, listP, cardP, barP]) { p.mesh.visible = false; ui.add(p.mesh) }
+const gamesP = makePanel(1000, 960, 0.9) // the games list
+const pickP = makePanel(1000, 960, 0.9) // a game's own choices (sport, board size, side...)
+const UIP = [homeP, listP, cardP, barP, gamesP, pickP]
+for (const p of UIP) { p.mesh.visible = false; ui.add(p.mesh) }
 hudP.mesh.visible = false; scene.add(hudP.mesh)
 
 homeP.draw = () => {
@@ -233,9 +236,10 @@ homeP.draw = () => {
   button(p, 60, 270, 880, 110, "WHO'S AROUND ME", 'around', { primary: true })
   button(p, 60, 400, 880, 110, 'PEOPLE NEARBY', 'nearby')
   button(p, 60, 530, 880, 110, 'LASER TAG', 'tag')
-  button(p, 60, 660, 200, 100, '◀', 'northL', { size: 44 })
-  textLine(p, 'TURN TAGS', 500, 705, 30, C.muted, 700, FONT_U, 'center'); textLine(p, 'IF THEY\'RE OFF', 500, 742, 26, C.faint, 600, FONT_U, 'center')
-  button(p, 740, 660, 200, 100, '▶', 'northR', { size: 44 })
+  button(p, 60, 660, 880, 110, 'GAMES', 'games', { meta: 'SPORTS · CHESS · MAFIA · MORE' })
+  button(p, 60, 800, 200, 100, '◀', 'northL', { size: 44 })
+  textLine(p, 'TURN TAGS', 500, 845, 30, C.muted, 700, FONT_U, 'center'); textLine(p, 'IF THEY\'RE OFF', 500, 882, 26, C.faint, 600, FONT_U, 'center')
+  button(p, 740, 800, 200, 100, '▶', 'northR', { size: 44 })
   void c
 }
 listP.draw = () => {
@@ -284,6 +288,14 @@ cardP.draw = () => {
 }
 barP.draw = () => {
   const p = barP; panelBg(p)
+  if (st.mode === 'game') {
+    const toastOn = st.toast && Date.now() < st.toastUntil
+    textLine(p, String(st.gameTitle || '').toUpperCase(), 44, 62, 30, C.friendly, 700)
+    textLine(p, String(toastOn ? st.toast : st.gameLine || '').toUpperCase().slice(0, 52), 44, 104, 30, toastOn ? C.objective : C.text, 700)
+    textLine(p, String(st.gameLine2 || '').toUpperCase().slice(0, 56), 44, 142, 24, C.muted, 600)
+    button(p, 760, 40, 200, 90, 'MENU', 'home', { size: 32 })
+    return
+  }
   const label = st.mode === 'tag' ? (tagLive() ? 'LASER TAG · POINT + PINCH TO FIRE' : 'LASER TAG · START A MATCH ON YOUR PHONE') : "WHO'S AROUND · POINT AT A NAME + PINCH"
   textLine(p, label, 44, 70, 32, C.friendly, 700)
   textLine(p, st.mode === 'tag' ? (st.tag.hud && st.tag.hud.score ? String(st.tag.hud.score) : '') : (st.aroundMsg || ''), 44, 125, 30, C.muted, 600)
@@ -306,6 +318,26 @@ hudP.draw = () => {
   else if (h.target) mid = '◎ @' + h.target.name + (h.target.dist ? '  ' + h.target.dist : '')
   textLine(p, mid, 500, 175, 44, h.target && !h.phase?.match?.(/countdown|lobby|ended/) ? C.objective : C.objective, 700, FONT_D, 'center')
   textLine(p, (h.gun || '') + (h.ammo != null ? ' · ' + h.ammo : ''), 30, 235, 30, C.muted, 600)
+}
+
+const GAME_LIST = [
+  ['sports', 'SPORTS', 'TENNIS · PICKLEBALL · PING PONG · HOOPS'],
+  ['chess', 'CHESS', 'TABLETOP · FLOOR · LIFE-SIZE'],
+  ['mafia', 'MAFIA', 'THE PENGUIN TOWN'],
+  ['beside', 'BESIDE THEM', 'TASKS · IMPOSTER · VOTES'],
+  ['missions', 'MISSIONS', 'JOBS · COPS & ROBBERS'],
+]
+gamesP.draw = () => {
+  const p = gamesP; panelBg(p, 'Games')
+  GAME_LIST.forEach(([id, name, meta], i) => button(p, 44, 100 + i * 140, 912, 120, name, 'play', { data: id, left: true, meta, primary: i === 0 }))
+  button(p, 44, 830, 912, 90, 'BACK', 'home', { size: 32 })
+}
+pickP.draw = () => {
+  const p = pickP, pk = st.pick || { title: '', items: [] }
+  panelBg(p, pk.title)
+  const n = pk.items.length, h = Math.min(120, Math.floor(700 / Math.max(1, n)) - 16)
+  pk.items.forEach(([label, value, meta], i) => button(p, 44, 100 + i * (h + 16), 912, h, label, 'pickit', { data: value, meta: meta || '', size: h < 90 ? 32 : 38, primary: i === 0 }))
+  button(p, 44, 840, 912, 90, 'MENU', 'home', { size: 32 })
 }
 
 // ---------- people tags (over heads) ----------
@@ -592,18 +624,23 @@ function placeInFront(mesh, dist = 1.3, dy = -0.1) {
   mesh.lookAt(v.x, v.y + dy, v.z)
 }
 function setMode(m) {
+  if (m !== 'game' && m !== 'pick' && game) stopGame()
   st.mode = m
+  gamesP.mesh.visible = m === 'games'
+  pickP.mesh.visible = m === 'pick'
+  if (m === 'games') { placeInFront(gamesP.mesh); redraw(gamesP) }
+  if (m === 'pick') { placeInFront(pickP.mesh, 1.3, -0.05); redraw(pickP) }
   homeP.mesh.visible = m === 'home'
   listP.mesh.visible = m === 'nearby'
   cardP.mesh.visible = m === 'card' || m === 'socials'
-  barP.mesh.visible = m === 'around' || m === 'tag'
+  barP.mesh.visible = m === 'around' || m === 'tag' || m === 'game'
   hudP.mesh.visible = m === 'tag'
   people.forEach((t) => { t.panel.mesh.visible = t.line.visible = m === 'around' })
   markers.forEach((mk) => (mk.group.visible = m === 'tag'))
   if (m === 'home') { placeInFront(homeP.mesh); redraw(homeP) }
   if (m === 'nearby') { placeInFront(listP.mesh, 1.35, -0.05); loadNearby() }
   if (m === 'card' || m === 'socials') { placeInFront(cardP.mesh, 1.2, -0.05); redraw(cardP) }
-  if (m === 'around' || m === 'tag') { placeInFront(barP.mesh, 1.2, -0.55); barP.mesh.rotation.x -= 0.0; redraw(barP) }
+  if (m === 'around' || m === 'tag' || m === 'game') { placeInFront(barP.mesh, 1.2, -0.55); redraw(barP) }
   if (m === 'around') loadAround()
   if (m === 'tag') joinTag()
 }
@@ -613,12 +650,71 @@ const ACT = {
   range: (b) => { st.range = b.data; redraw(listP) }, open: (b) => openProfile(b.data),
   socials: () => { st.mode = 'socials'; redraw(cardP) }, card: () => { st.mode = 'card'; redraw(cardP) },
   closecard: () => setMode(st.backTo || 'home'), follow, noop: () => {},
+  games: () => setMode('games'), play: (b) => startGame(b.data),
+  pickit: (b) => { const pk = st.pick; st.pick = null; setMode('game'); if (pk && pk.cb) pk.cb(b.data) },
+}
+
+// ======================================================================= games (./games/*.js)
+// A game module: export default { title, start(ctx), stop(), tick(dt, now), select(ray), release(ray) }.
+let game = null
+const gameGroup = new THREE.Group(); scene.add(gameGroup)
+async function startGame(id) {
+  if (game) stopGame()
+  st.gameTitle = id; st.gameLine = 'LOADING…'; st.gameLine2 = ''
+  setMode('game')
+  try {
+    const mod = await import('./games/' + id + '.js')
+    game = mod.default
+    st.gameTitle = 'iYiYi · ' + game.title
+    game.start(ctx)
+  } catch (e) { st.gameLine = 'COULD NOT LOAD: ' + (e.message || e); redraw(barP) }
+}
+function stopGame() {
+  try { if (game && game.stop) game.stop() } catch (e) {}
+  game = null
+  while (gameGroup.children.length) gameGroup.remove(gameGroup.children[0])
+  st.pick = null
+}
+const hand = { pos: null, prev: null, vel: new THREE.Vector3(), tracked: false }
+function updateHand(dt) {
+  let c = controllers.find((x) => x.userData.mode === 'tracked-pointer' && x.userData.hand === 'right') || controllers.find((x) => x.userData.mode === 'tracked-pointer')
+  hand.tracked = !!c
+  if (!c) { hand.pos = null; hand.prev = null; hand.vel.set(0, 0, 0); return }
+  const p = new THREE.Vector3(); c.getWorldPosition(p)
+  if (hand.prev && dt > 0) hand.vel.lerp(p.clone().sub(hand.prev).divideScalar(dt), 0.5)
+  hand.prev = p.clone(); hand.pos = p
+}
+const ctx = {
+  THREE, scene, group: gameGroup, C, PAL, FONT_D, FONT_U, D2R, TEST,
+  viewPos, viewDir, flatForward, hand, beep, burst, blockPile, mat, boxGeo, makePanel, panelBg, button, textLine, rr, redraw,
+  get holding() { return st.holding },
+  get preview() { return st.preview },
+  right(d) { return new THREE.Vector3(-d.z, 0, d.x) },
+  /** a point on the floor `m` meters from `from`, `deg` degrees to the right of `dir` */
+  floorAt(from, dir, deg, m) { const v = new THREE.Vector3(dir.x, 0, dir.z).normalize().applyAxisAngle(new THREE.Vector3(0, 1, 0), -deg * D2R); return new THREE.Vector3(from.x + v.x * m, 0, from.z + v.z * m) },
+  box(pos, size, color, parent) { const m = new THREE.Mesh(boxGeo, mat(color)); m.position.copy(pos); m.scale.set(size.x, size.y, size.z); (parent || gameGroup).add(m); return m },
+  part(parent, x, y, z, sx, sy, sz, color) { const m = new THREE.Mesh(boxGeo, mat(color)); m.position.set(x, y, z); m.scale.set(sx, sy, sz); parent.add(m); return m },
+  /** floating text card that always faces you */
+  label(text, color = C.text, widthM = 0.6, wPx = 640, hPx = 140) {
+    const p = makePanel(wPx, hPx, widthM); p.mesh.material.depthTest = true; p.mesh.renderOrder = 5
+    p.set = (t, col = color, bg = true) => { if (p.key === t + col) return; p.key = t + col; const c = p.ctx; c.clearRect(0, 0, p.w, p.h); if (t && bg) { rr(c, 4, 4, p.w - 8, p.h - 8, 12); c.fillStyle = C.panel; c.fill() } if (t) textLine(p, t, p.w / 2, p.h / 2 + p.h * 0.17, Math.round(p.h * 0.48), col, 700, FONT_U, 'center'); p.tex.needsUpdate = true }
+    p.set(text); p.mesh.userData.billboard = true; return p
+  },
+  face(obj) { const v = viewPos(); const w = new THREE.Vector3(); obj.getWorldPosition(w); obj.lookAt(v.x, w.y, v.z) },
+  line(a, b) { if (st.gameLine !== a || st.gameLine2 !== (b || '')) { st.gameLine = a; st.gameLine2 = b || ''; redraw(barP) } },
+  toast(t, ms = 2500) { st.toast = t; st.toastUntil = Date.now() + ms; redraw(barP); setTimeout(() => redraw(barP), ms + 50) },
+  choose(title, items, cb) { st.pick = { title, items, cb }; setMode('pick') },
+  menu() { setMode('home') },
+  angle(p) { return Math.acos(Math.max(-1, Math.min(1, p.clone().sub(viewPos()).normalize().dot(viewDir())))) },
+  rayHit(ray, objects) { raycaster.set(ray.origin, ray.dir); const h = raycaster.intersectObjects(objects, true); return h.length ? h[0] : null },
+  rayFloor(ray, y = 0) { if (ray.dir.y > -1e-4) return null; const t = (y - ray.origin.y) / ray.dir.y; return ray.origin.clone().addScaledVector(ray.dir, t) },
+  bolt: (from, dir, hex) => bolt(from, dir, hex),
 }
 const raycaster = new THREE.Raycaster()
 function hitTest(ray) {
   raycaster.set(ray.origin, ray.dir)
   const targets = []
-  for (const p of [homeP, listP, cardP, barP]) if (p.mesh.visible) targets.push(p.mesh)
+  for (const p of UIP) if (p.mesh.visible) targets.push(p.mesh)
   if (st.mode === 'around') people.forEach((t) => targets.push(t.panel.mesh))
   const hits = raycaster.intersectObjects(targets, false)
   if (!hits.length) return null
@@ -634,12 +730,14 @@ function onSelect(ray) {
   if (h && h.person) { beep('tap'); st.backTo = 'around'; openProfile(h.person.data); return }
   if (h && h.panel) { const b = h.panel.buttons[h.index]; if (b) { beep('tap'); st.backTo = st.mode === 'socials' ? st.backTo : st.mode === 'card' ? st.backTo : st.mode; ACT[b.action] && ACT[b.action](b) } return }
   if (st.mode === 'tag') fire(ray)
+  if (st.mode === 'game' && game && game.select) game.select(ray)
 }
+function onRelease(ray) { if (st.mode === 'game' && game && game.release) game.release(ray) }
 function updateHover(ray) {
   const h = hitTest(ray)
   const newTag = h && h.person ? h.person : null
   if (newTag !== hoverTag) { const old = hoverTag; hoverTag = newTag; if (old) redraw(old.panel); if (newTag) redraw(newTag.panel) }
-  for (const p of [homeP, listP, cardP, barP]) {
+  for (const p of UIP) {
     const idx = h && h.panel === p ? h.index : -1
     if (p.hover !== idx) { p.hover = idx; if (p.mesh.visible) redraw(p) }
   }
@@ -648,7 +746,9 @@ function updateHover(ray) {
 const controllers = [0, 1].map((i) => {
   const c = renderer.xr.getController(i)
   c.addEventListener('select', () => onSelect(rayFrom(c)))
-  c.addEventListener('connected', (e) => { c.userData.mode = e.data && e.data.targetRayMode })
+  c.addEventListener('selectstart', () => { st.holding = true })
+  c.addEventListener('selectend', () => { st.holding = false; onRelease(rayFrom(c)) })
+  c.addEventListener('connected', (e) => { c.userData.mode = e.data && e.data.targetRayMode; c.userData.hand = e.data && e.data.handedness })
   const line = new THREE.Mesh(new THREE.BoxGeometry(0.004, 0.004, 1), mat(0x39d5ff, 0.6)); line.position.z = -0.5; c.add(line); c.userData.line = line
   scene.add(c)
   return c
@@ -704,11 +804,16 @@ renderer.setAnimationLoop(() => {
     if (now - (barP.lastDraw || 0) > 1000) { barP.lastDraw = now; redraw(barP) }
     if (now - lastAim > 100) { lastAim = now; send('g_aim', { deg: Math.round(compassOf(flatForward()) * 10) / 10, at: now }) }
   }
+  // games
+  updateHand(dt)
+  if (game && (st.mode === 'game' || st.mode === 'pick')) { try { game.tick(dt, now) } catch (e) { console.error(e) } }
+  gameGroup.traverse((o) => { if (o.userData.billboard) { const v = viewPos(), w = new THREE.Vector3(); o.getWorldPosition(w); o.lookAt(v.x, w.y, v.z) } })
+  if (st.mode === 'game' && now - (barP.lastDraw || 0) > 500) { barP.lastDraw = now; redraw(barP) }
   // pointer hover + ray lines
   updateHover(activeRay())
   controllers.forEach((c) => (c.userData.line.visible = c.userData.mode === 'tracked-pointer'))
   // keep the open panel within reach if you turn away
-  for (const p of [homeP, listP, cardP]) if (p.mesh.visible) {
+  for (const p of [homeP, listP, cardP, gamesP, pickP]) if (p.mesh.visible) {
     const to = p.mesh.position.clone().sub(viewPos()); to.y = 0
     if (to.length() > 3 || to.normalize().dot(flatForward()) < Math.cos(55 * D2R)) placeInFront(p.mesh, p === homeP ? 1.3 : 1.25, -0.08)
   }
@@ -747,7 +852,7 @@ function enterPreview() {
   buildLogo(); setTimeout(() => { if (st.preview) setMode('home') }, 4200)
 }
 document.getElementById('exitpv').onclick = (e) => { e.preventDefault(); st.preview = false; renderer.domElement.style.display = 'none'; document.getElementById('previewbar').style.display = 'none'; startScreen() }
-renderer.domElement.addEventListener('pointerdown', (e) => { drag = { x: e.clientX, y: e.clientY }; moved = 0 })
+renderer.domElement.addEventListener('pointerdown', (e) => { drag = { x: e.clientX, y: e.clientY }; moved = 0; st.holding = true })
 window.addEventListener('pointermove', (e) => {
   if (!drag || !st.preview) return
   const dx = e.clientX - drag.x, dy = e.clientY - drag.y; moved += Math.abs(dx) + Math.abs(dy)
@@ -759,10 +864,11 @@ window.addEventListener('pointerup', (e) => {
     raycaster.setFromCamera(ndc, camera)
     onSelect({ origin: raycaster.ray.origin.clone(), dir: raycaster.ray.direction.clone() })
   }
+  if (drag && st.preview) { st.holding = false; const ndc = new THREE.Vector2((e.clientX / window.innerWidth) * 2 - 1, -(e.clientY / window.innerHeight) * 2 + 1); raycaster.setFromCamera(ndc, camera); onRelease({ origin: raycaster.ray.origin.clone(), dir: raycaster.ray.direction.clone() }) }
   drag = null
 })
 window.addEventListener('keydown', (e) => { if (!st.preview) return; const f = flatForward(), r = new THREE.Vector3(-f.z, 0, f.x); const k = e.key.toLowerCase(); if (k === 'w') camera.position.addScaledVector(f, 0.5); if (k === 's') camera.position.addScaledVector(f, -0.5); if (k === 'a') camera.position.addScaledVector(r, -0.5); if (k === 'd') camera.position.addScaledVector(r, 0.5) })
-if (TEST) window.__iyx = { st, setMode, onTagEvent, people, markers, camera, look: (y, p) => { yaw = y; pitch = p || 0 }, select: () => onSelect(headRay()) }
+if (TEST) window.__iyx = { st, setMode, onTagEvent, people, markers, camera, startGame, ctx, get game() { return game }, look: (y, p) => { yaw = y; pitch = p || 0 }, select: () => onSelect(headRay()), pick: (i) => { const pk = st.pick; if (pk) ACT.pickit({ data: pk.items[i][1] }) } }
 
 sb.auth.onAuthStateChange((ev, s) => { if (!TEST) st.user = s ? s.user : null })
 startScreen()
