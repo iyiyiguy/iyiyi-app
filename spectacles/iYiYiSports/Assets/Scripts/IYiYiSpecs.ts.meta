@@ -1,0 +1,46 @@
+- !<AssetImportMetadata/47e9163b-2277-4e78-bdca-11fabfabaf00>
+  ImportedAssetIds:
+    TypeScriptAsset: !<reference> cf9d2432-c0bc-420c-a84a-6023115d1db8
+  ImporterName: TypeScriptAssetImporter
+  PrimaryAsset: !<reference> cf9d2432-c0bc-420c-a84a-6023115d1db8
+  PackageType: NotAPackage
+  LegacyPackagePolicy: ~
+  ExtraData:
+    {}
+  AssetDataMap:
+    TypeScriptAsset: !<own> fdd5ac3b-713d-493f-aef0-39a2920847aa
+  DependentFiles:
+    []
+  ImporterSettings: !<AssetImporterSettings>
+    {}
+  CompressionSettings: !<own> 00000000-0000-0000-0000-000000000000
+- !<TypeScriptAssetData/fdd5ac3b-713d-493f-aef0-39a2920847aa>
+  SvgIcon: ""
+  SetupScript:
+    code: ""
+  Description: ""
+  VersionMajor: 0
+  VersionMinor: 0
+  VersionPatch: 0
+  VersionPrerelease: ""
+  UpdateOrder: 0
+  ComponentUid: 11bdc9cc-fe36-4a2d-b2de-616e3f12620c
+  ExportUid: 00000000-0000-0000-0000-000000000000
+  PackagePolicy: CanBeUnpacked
+  ScriptInputsHidden:
+    blockMaterial: false
+  ScriptTypesHidden:
+    {}
+  ReadMe: !<reference> 00000000-0000-0000-0000-000000000000
+  DeclarationFile: !<reference> 00000000-0000-0000-0000-000000000000
+  Tags:
+    []
+  Attachments:
+    []
+  DefaultScriptInputs:
+    - blockMaterial: !<reference.Material> 00000000-0000-0000-0000-000000000000
+  ScriptTypes:
+    -
+      {}
+  InputLines:
+    - '// @input Asset.Material blockMaterial {"hint":"Unlit material, used for blocks, tracers and worlds (cloned per colour)"}'
