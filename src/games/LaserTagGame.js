@@ -263,8 +263,11 @@ export function LaserTagGame({ room, onExit }) {
   const aim = useAim({ enabled: loc.status === 'granted', override: prefs.aimMode })
   // Meta Ray-Ban Display glasses (iyiyi.xyz/glasses): head aim + pinch to fire, HUD in the lens.
   const glassesFireRef = useRef(null)
-  const glasses = useGlasses({ enabled: !!room, onFire: (p) => glassesFireRef.current?.(p) })
+  const glassesWeaponRef = useRef(null)
+  const glasses = useGlasses({ enabled: !!room, onFire: (p) => glassesFireRef.current?.(p), onWeapon: (p) => glassesWeaponRef.current?.(p) })
   const { loadout, weaponId, select: selectWeapon } = useLoadout()
+  // Specs: left-hand pinch switches weapon (only to guns in your loadout)
+  glassesWeaponRef.current = (p) => { if (p?.id && loadout.some((w) => w.id === p.id)) selectWeapon(p.id) }
   const gun = useMemo(() => normalizeGun(getWeapon(weaponId)), [weaponId])
   const gunNameRef = useRef('')
   gunNameRef.current = gun?.name || 'Gun'
@@ -1686,6 +1689,27 @@ export function LaserTagGame({ room, onExit }) {
     return out
   }, [myStickies, state?.stickies, state?.landMines, state?.mode, meId, myTeam]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Bomb, bomb sites, your/your team's sticky bombs and land mines, as bearing + distance from you
+  // (the Specs Lens stands them where they are).
+  const glassesObjects = () => {
+    const out = []
+    if (!myPos || !state) return out
+    const add = (kind, lat, lng, extra = {}) => {
+      if (!Number.isFinite(lat) || !Number.isFinite(lng)) return
+      const p = { lat, lng }
+      const d = distanceMeters(myPos, p)
+      if (d > 200) return
+      out.push({ kind, bearing: Math.round(bearingDeg(myPos, p)), d: Math.round(d * 10) / 10, ...extra })
+    }
+    const mate = (by) => by === meId || (state.mode !== 'ffa' && state.players?.[by]?.team === myTeam)
+    for (const s of state.snd?.sites || []) add('site', s.lat, s.lng, { label: s.id })
+    const b = state.snd?.bomb
+    if (b && (b.state === 'planted' || b.state === 'dropped' || b.state === 'none') && b.lat != null) add('bomb', b.lat, b.lng, { planted: b.state === 'planted' })
+    for (const s of state.stickies || []) if (mate(s.by)) add('sticky', s.lat, s.lng)
+    for (const m of state.landMines || []) if (mate(m.by)) add('mine', m.lat, m.lng)
+    return out.slice(0, 12)
+  }
+
   // ---- glasses HUD (Meta Ray-Ban Display): sights, radar, HP, score, every ~250 ms ----
   useEffect(() => {
     if (!glasses.connected || !state) return
@@ -1697,7 +1721,7 @@ export function LaserTagGame({ room, onExit }) {
         for (const id of Object.keys(state.players)) {
           if (id === meId || state.players[id].team !== myTeam) continue
           const p = positions?.[id]
-          if (p && Date.now() - p.at <= 15000) mates.push({ bearing: Math.round(bearingDeg(myPos, p)), d: Math.round(distanceMeters(myPos, p)) })
+          if (p && Date.now() - p.at <= 15000) mates.push({ id, name: state.players[id].name, team: state.players[id].team, alive: !!state.players[id].alive, bearing: Math.round(bearingDeg(myPos, p)), d: Math.round(distanceMeters(myPos, p)) })
         }
       }
       const ts = state.teamScore || {}
@@ -1713,8 +1737,13 @@ export function LaserTagGame({ room, onExit }) {
         gun: gun?.name || '',
         range: Math.min(gun?.range || 60, COMPASS_MAX_RANGE_M),
         target: inSights ? { name: inSights.name, dist: formatDistance(inSights.d), chance: inSights.chance } : null,
-        enemies: enemies.slice(0, 12).map((o) => ({ bearing: Math.round(o.bearing), d: Math.round(o.d), alive: !!o.alive })),
+        enemies: enemies.slice(0, 12).map((o) => ({ id: o.id, name: o.name, team: o.team, bearing: Math.round(o.bearing), d: Math.round(o.d), alive: !!o.alive })),
         mates: mates.slice(0, 8),
+        teams: state.mode !== 'ffa' && !!myTeam,
+        myTeam,
+        gunId: gun?.id || null,
+        loadout: (loadout || []).slice(0, 8).map((w) => ({ id: w.id, name: w.name })),
+        objects: glassesObjects(),
       })
     } catch {}
   }, [now, glasses.connected]) // eslint-disable-line react-hooks/exhaustive-deps

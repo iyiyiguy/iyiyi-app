@@ -1,7 +1,7 @@
 // Meta Ray-Ban Display glasses: the iYiYi glasses web app (iyiyi.xyz/glasses) links to your
 // account with a code (migration 084, edge function glasses-link), then talks to this phone over
 // the realtime topic glasses:<user id>:<pair key>:
-//   glasses -> phone: g_hello, g_aim { deg, at } (~10/s), g_fire { deg, at }
+//   glasses -> phone: g_hello, g_aim { deg, at } (~10/s), g_fire { deg, at }, g_weapon { id } (Specs)
 //   phone -> glasses: p_hud { ... } (laser tag sights), p_event { kind, text, bearing }
 import { useEffect, useRef, useState, useCallback } from 'react'
 import AsyncStorage from '@react-native-async-storage/async-storage'
@@ -45,13 +45,15 @@ async function pairTopic() {
  * this phone). Returns { connected, headingRef, sendHud, sendEvent }.
  * headingRef.current = { deg, at } from the glasses compass (head aim) or null.
  */
-export function useGlasses({ enabled = true, onFire } = {}) {
+export function useGlasses({ enabled = true, onFire, onWeapon } = {}) {
   const [connected, setConnected] = useState(false)
   const headingRef = useRef(null)
   const chRef = useRef(null)
   const lastSeen = useRef(0)
   const fireRef = useRef(onFire)
   fireRef.current = onFire
+  const weaponRef = useRef(onWeapon)
+  weaponRef.current = onWeapon
 
   useEffect(() => {
     if (!enabled) return undefined
@@ -73,6 +75,7 @@ export function useGlasses({ enabled = true, onFire } = {}) {
         seen()
         try { fireRef.current?.(payload) } catch {}
       })
+      ch.on('broadcast', { event: 'g_weapon' }, ({ payload }) => { seen(); try { weaponRef.current?.(payload) } catch {} })
       ch.subscribe()
       chRef.current = ch
     })()

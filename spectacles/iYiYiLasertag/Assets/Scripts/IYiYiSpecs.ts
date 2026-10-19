@@ -15,6 +15,14 @@
 // - Worlds: pinch with your LEFT hand to change the world: lava floor, underwater, desert, snow,
 //   rainforest, space, iY monogram, off.
 //
+// Start: animated iYiYi LASER TAG logo, then a menu you pick from by looking at a button and
+// pinching: Solo practice (cartoon robots to shoot, works with no phone or account), Play with
+// iYiYi (link / your phone's match), World.
+// Weapons: cartoon guns held in your right hand; left-hand pinch switches weapon. Big bright laser
+// bolts, huge spiralling rockets. In a phone match, players show as cartoon avatars (team red /
+// blue, or their own colour in free-for-all) and the bomb, bomb sites, sticky bombs and mines
+// stand where they are.
+//
 // Inputs: blockMaterial = an Unlit material (cloned per colour). Without it the Lens still links,
 // shows names and fires; only the 3D blocks / worlds are skipped.
 import {SIK} from "SpectaclesInteractionKit.lspkg/SIK"
@@ -31,6 +39,22 @@ type Person = {id: string; username: string; avatar_url?: string; distance_m: nu
 type Fx = {obj: SceneObject; t: number; life: number; vel?: vec3; spin?: vec3; gravity?: boolean; floorY?: number; onDone?: () => void}
 
 const WORLDS = ["off", "lava", "underwater", "desert", "snow", "rainforest", "space", "monogram"]
+const WORLD_NAMES: {[k: string]: string} = {off: "Off", lava: "Hot lava", underwater: "Underwater", desert: "Desert", snow: "Snow", rainforest: "Rainforest", space: "Space", monogram: "iY monogram"}
+
+type Weapon = {id: string; name: string; color: vec4; gap: number; bolt: number; speed: number; pellets?: number; rocket?: boolean; damage: number}
+const WEAPONS: Weapon[] = [
+  {id: "pistol", name: "Laser Pistol", color: new vec4(0.2, 0.9, 1, 1), gap: 220, bolt: 5, speed: 3200, damage: 1},
+  {id: "rifle", name: "Pulse Rifle", color: new vec4(1, 0.3, 0.65, 1), gap: 120, bolt: 4.5, speed: 3800, damage: 1},
+  {id: "shotgun", name: "Blaster", color: new vec4(1, 0.82, 0.2, 1), gap: 650, bolt: 6, speed: 3000, pellets: 5, damage: 1},
+  {id: "sniper", name: "Rail Sniper", color: new vec4(0.45, 1, 0.4, 1), gap: 900, bolt: 4, speed: 8000, damage: 3},
+  {id: "rocket", name: "Rocket Launcher", color: new vec4(1, 0.45, 0.1, 1), gap: 1600, bolt: 0, speed: 1400, rocket: true, damage: 3},
+]
+const TEAM_RED = new vec4(1, 0.25, 0.3, 1)
+const TEAM_BLUE = new vec4(0.25, 0.55, 1, 1)
+const PALETTE = [new vec4(1, 0.31, 0.64, 1), new vec4(0.22, 0.84, 1, 1), new vec4(1, 0.82, 0.25, 1), new vec4(0.36, 0.95, 0.63, 1), new vec4(0.69, 0.42, 1, 1), new vec4(1, 0.5, 0.2, 1)]
+type Btn = {obj: SceneObject; text: Text; action: string}
+type Avatar = {root: SceneObject; name: Text; color: string; pos: vec3}
+type Robot = {root: SceneObject; pos: vec3; hp: number; phase: number; base: vec3}
 
 @component
 export class IYiYiSpecs extends BaseScriptComponent {
@@ -42,6 +66,7 @@ export class IYiYiSpecs extends BaseScriptComponent {
   private internet: InternetModule = require("LensStudio:InternetModule")
   private store = global.persistentStorageSystem.store
   private camT: Transform
+  private camComp: Camera = null
   private loc: LocationService
   private heading: number = null
   private headingAt = 0
@@ -83,6 +108,21 @@ export class IYiYiSpecs extends BaseScriptComponent {
   private hudText: Text
   private enemyMarks: SceneObject[] = []
 
+  // modes: intro -> menu -> solo | link | live (linked, names) | match (phone match running)
+  private mode = "intro"
+  private modeT = 0
+  private introObjs: SceneObject[] = []
+  private btns: Btn[] = []
+  private menuBtn: SceneObject = null
+  private weaponIdx = 0
+  private gun: SceneObject = null
+  private gunFor = ""
+  private robots: Robot[] = []
+  private soloScore = 0
+  private soloEnd = 0
+  private avatars: {[id: string]: Avatar} = {}
+  private objMarks: SceneObject[] = []
+
   // worlds
   private world = "off"
   private worldRoot: SceneObject = null
@@ -99,11 +139,31 @@ export class IYiYiSpecs extends BaseScriptComponent {
     this.hudText = hud.getComponent("Component.Text") as Text
     if (this.blockMaterial) this.cube = this.makeCube()
 
+    this.panelText.text = ""
     this.startSensors()
     this.loadSession()
     this.createEvent("UpdateEvent").bind(() => this.update())
     this.wireHands()
+    // Lens Studio preview: a mouse click / screen tap stands in for a right-hand pinch
+    try {
+      this.createEvent("TapEvent").bind((ev: TapEvent) => {
+        // in the menu a click picks the button under the mouse; elsewhere it acts like a pinch
+        if (this.mode === "menu" && this.camComp) {
+          const tp = ev.getTapPosition()
+          let best: Btn = null
+          let bestD = 0.12
+          for (const b of this.btns) {
+            const sp = this.camComp.worldSpaceToScreenSpace(b.obj.getTransform().getWorldPosition())
+            const dd = Math.abs(sp.y - tp.y)
+            if (dd < bestD) { bestD = dd; best = b }
+          }
+          if (best) { this.runButton(best); return }
+        }
+        this.onPrimaryPinch()
+      })
+    } catch (e) {}
     if (this.camT) this.floorY = this.camT.getWorldPosition().y - 150
+    this.startIntro()
   }
 
   // ---------------------------------------------------------------- input
@@ -113,13 +173,23 @@ export class IYiYiSpecs extends BaseScriptComponent {
       const right = hands.getHand("right")
       const left = hands.getHand("left")
       right.onPinchDown.add(() => this.onPrimaryPinch())
-      left.onPinchDown.add(() => this.nextWorld())
+      left.onPinchDown.add(() => this.onSecondaryPinch())
     } catch (e) {
       print("iYiYi: hand input unavailable " + e)
     }
   }
 
+  private onSecondaryPinch() {
+    if (this.mode === "solo" || this.mode === "match") this.switchWeapon()
+    else if (this.mode === "menu" || this.mode === "live") this.nextWorld()
+  }
+
   private onPrimaryPinch() {
+    if (this.mode === "intro") { this.endIntro(); return }
+    if (this.mode === "menu") { this.pickButton(); return }
+    if (this.menuGazed()) { this.openMenu(); return }
+    if (this.mode === "solo") { this.soloFire(); return }
+    if (this.mode === "link") return
     if (!this.session) return
     if (this.matchLive()) { this.fire(); return }
     // profile card flow
@@ -141,9 +211,18 @@ export class IYiYiSpecs extends BaseScriptComponent {
     const now = Date.now()
     this.placeHudObjects()
 
-    if (!this.session) {
-      this.tickLink(now)
-    } else {
+    this.modeT += dt
+    if (this.mode === "intro") this.tickIntro()
+    if (this.mode === "menu") this.tickMenu()
+    if (this.mode === "solo") this.tickSolo(dt, now)
+    this.tickGun()
+    this.tickMenuBtn()
+    if (this.mode === "link") {
+      if (this.session) { this.panelText.text = ""; this.setMode("live"); this.toast("Linked! Look around") }
+      else this.tickLink(now)
+    } else if (this.session && (this.mode === "live" || this.mode === "match")) {
+      if (this.mode === "live" && this.matchLive()) this.setMode("match")
+      if (this.mode === "match" && !this.matchLive() && Date.now() - this.hudAt > 6000) this.setMode("live")
       if (now > this.session.expires_at * 1000 - 60000) this.refreshSession()
       this.tickRealtime(now)
       if (now > this.nextNearby && !this.matchLive()) { this.nextNearby = now + 4000; this.loadNearby() }
@@ -158,7 +237,8 @@ export class IYiYiSpecs extends BaseScriptComponent {
   // ---------------------------------------------------------------- camera + placement helpers
   private findCamera(): Transform {
     const visit = (o: SceneObject): Transform => {
-      if (o.getComponent("Component.Camera")) return o.getTransform()
+      const cc = o.getComponent("Component.Camera") as Camera
+      if (cc) { this.camComp = cc; return o.getTransform() }
       for (let i = 0; i < o.getChildrenCount(); i++) {
         const r = visit(o.getChild(i))
         if (r) return r
@@ -198,7 +278,7 @@ export class IYiYiSpecs extends BaseScriptComponent {
     const p = t.getWorldPosition()
     const to = cam.sub(p)
     const flat = new vec3(to.x, 0, to.z)
-    if (flat.length > 0.001) t.setWorldRotation(quat.lookAt(flat.normalize().uniformScale(-1), vec3.up()))
+    if (flat.length > 0.001) t.setWorldRotation(quat.lookAt(flat.normalize(), vec3.up())) // +Z (the readable side) toward you
   }
 
   private placeHudObjects() {
@@ -390,7 +470,7 @@ export class IYiYiSpecs extends BaseScriptComponent {
   }
 
   private drawLabels() {
-    const show = !this.matchLive() && this.pos && this.headingFresh() && this.camT
+    const show = this.mode === "live" && this.pos && this.headingFresh() && this.camT
     const seen: {[id: string]: boolean} = {}
     if (show) {
       for (const p of this.people) {
@@ -515,15 +595,28 @@ export class IYiYiSpecs extends BaseScriptComponent {
   private lastFire = 0
   private fire() {
     const now = Date.now()
-    if (now - this.lastFire < 180) return
+    const w = this.currentWeapon()
+    if (now - this.lastFire < Math.max(150, w.gap)) return
     this.lastFire = now
     if (!this.headingFresh()) { this.toast("Compass calibrating, look around"); return }
-    this.broadcast("g_fire", {deg: Math.round(this.heading * 10) / 10, at: now})
-    // tracer from just below your eyes along your view
+    if (w.rocket) { this.toast("Rockets: aim with your phone for now"); }
+    else this.broadcast("g_fire", {deg: Math.round(this.heading * 10) / 10, at: now})
+    this.shootVisual(w, null)
+  }
+
+  /** Bolt / rocket visual from the gun (or below your eyes) along your view, optionally to a point. */
+  private shootVisual(w: Weapon, to: vec3) {
     const cam = this.camT.getWorldPosition()
     const d = this.viewDir()
-    const start = cam.add(d.uniformScale(30)).add(new vec3(0, -12, 0))
-    this.spawnTracer(start, d, new vec4(1, 0.82, 0.25, 1))
+    const muzzle = this.gunMuzzle() || cam.add(d.uniformScale(30)).add(new vec3(0, -12, 0))
+    const target = to || cam.add(d.uniformScale(2500))
+    if (w.rocket) { this.spawnRocket(muzzle, target); return }
+    const n = w.pellets || 1
+    for (let i = 0; i < n; i++) {
+      let dir = target.sub(muzzle).normalize()
+      if (n > 1) dir = dir.add(new vec3((Math.random() - 0.5) * 0.08, (Math.random() - 0.5) * 0.06, (Math.random() - 0.5) * 0.08)).normalize()
+      this.spawnBolt(muzzle, dir, w)
+    }
   }
 
   private onGameEvent(ev: any) {
@@ -563,33 +656,394 @@ export class IYiYiSpecs extends BaseScriptComponent {
 
   private drawHud() {
     if (!this.matchLive()) {
-      this.hudText.text = this.card ? "" : (this.people.length ? "" : "")
-      this.enemyMarks.forEach((o) => (o.enabled = false))
+      for (const id in this.avatars) this.avatars[id].root.enabled = false
+      this.objMarks.forEach((o) => (o.enabled = false))
+      if (this.mode === "match") this.hudText.text = ""
       return
     }
     const h = this.hud
     const t = h.target ? "◎ @" + h.target.name + "  " + (h.target.dist || "") + (h.target.chance != null ? "  " + Math.round(h.target.chance * 100) + "%" : "") : "+"
     const hp = Math.max(0, Math.min(10, Math.round(10 * (h.hp || 0) / (h.max || 100))))
     const bar = "█".repeat(hp) + "░".repeat(10 - hp)
-    this.hudText.text = t + "\n" + bar + "   " + (h.score || "") + "   " + (h.clock || "") +
+    this.hudText.text = t + "\n" + bar + "   " + (h.score || "") + "   " + (h.clock || "") + "\n" + (h.gun || "") +
       (h.phase === "countdown" ? "\nStarting " + (h.countdown || "") : h.alive === false ? "\nOUT" + (h.respawn ? " · back in " + h.respawn + "s" : "") : "")
-    // enemy markers floating where they are
-    const list = (h.enemies || []).slice(0, 8)
-    while (this.enemyMarks.length < list.length) this.enemyMarks.push(this.makeText("◆", 8, new vec4(1, 0.31, 0.64, 1)))
-    this.enemyMarks.forEach((o, i) => {
+    this.drawAvatars(h)
+    this.drawObjects(h)
+  }
+
+  // Players in the match as cartoon avatars where they stand: red / blue in team modes, their own
+  // colour in free-for-all. Name + health above. Phone players are placed from GPS.
+  private drawAvatars(h: any) {
+    const seen: {[id: string]: boolean} = {}
+    const list = ([] as any[]).concat((h.enemies || []).map((e: any) => ({...e, enemy: true})), (h.mates || []).map((e: any) => ({...e, enemy: false})))
+    list.slice(0, 16).forEach((e: any, i: number) => {
+      if (typeof e.bearing !== "number") return
+      const id = e.id || (e.enemy ? "e" : "m") + i
+      seen[id] = true
+      const color = h.teams ? (e.team === h.myTeam ? (h.myTeam === "A" ? TEAM_RED : TEAM_BLUE) : (h.myTeam === "A" ? TEAM_BLUE : TEAM_RED)) : PALETTE[this.hashStr(id) % PALETTE.length]
+      const ck = [color.r, color.g, color.b].join(",") + (e.alive === false ? "x" : "")
+      let a = this.avatars[id]
+      if (!a || a.color !== ck) {
+        if (a) a.root.destroy()
+        a = this.makeAvatar(e.alive === false ? new vec4(0.45, 0.45, 0.45, 1) : color)
+        a.color = ck
+        this.avatars[id] = a
+      }
+      const meters = Math.max(2, e.d || 5)
+      const at = this.worldAt(e.bearing, meters, 0)
+      if (!at) { a.root.enabled = false; return }
+      const ground = new vec3(at.x, this.floorY, at.z)
+      a.pos = a.pos ? vec3.lerp(a.pos, ground, 0.15) : ground
+      a.root.enabled = true
+      const tr = a.root.getTransform()
+      tr.setWorldPosition(a.pos)
+      this.faceCamera(tr)
+      // far players get a bigger avatar so they stay readable (GPS places them, not their body)
+      const sc = Math.max(1, meters / 12)
+      tr.setWorldScale(new vec3(sc, sc, sc))
+      const locked = h.target && e.name && h.target.name === e.name
+      a.name.text = (locked ? "◎ " : "") + "@" + (e.name || (e.enemy ? "enemy" : "teammate"))
+      a.name.textFill.color = locked ? new vec4(1, 0.82, 0.25, 1) : new vec4(1, 1, 1, 1)
+    })
+    for (const id in this.avatars) if (!seen[id]) this.avatars[id].root.enabled = false
+  }
+
+  private hashStr(s: string) { let x = 0; for (let i = 0; i < s.length; i++) x = (x * 31 + s.charCodeAt(i)) | 0; return Math.abs(x) }
+
+  private makeAvatar(color: vec4): Avatar {
+    const root = global.scene.createSceneObject("iyAvatar")
+    const part = (x: number, y: number, z: number, sx: number, sy: number, sz: number, c: vec4) => {
+      const o = this.block(new vec3(0, 0, 0), new vec3(sx, sy, sz), c, root)
+      if (o) { o.getTransform().setLocalPosition(new vec3(x, y, z)); o.getTransform().setLocalScale(new vec3(sx, sy, sz)) }
+    }
+    const dark = new vec4(color.r * 0.55, color.g * 0.55, color.b * 0.55, 1)
+    const skin = new vec4(1, 0.86, 0.7, 1)
+    part(0, 165, 0, 30, 30, 30, skin)          // head
+    part(-7, 170, 15.5, 5, 5, 1, new vec4(0.1, 0.1, 0.1, 1)) // eyes (front = +Z, faces you)
+    part(7, 170, 15.5, 5, 5, 1, new vec4(0.1, 0.1, 0.1, 1))
+    part(0, 182, 0, 33, 8, 33, dark)           // helmet
+    part(0, 115, 0, 40, 55, 24, color)         // body
+    part(-28, 118, 0, 12, 48, 12, color)       // arms
+    part(28, 118, 0, 12, 48, 12, color)
+    part(-11, 55, 0, 15, 70, 15, dark)         // legs
+    part(11, 55, 0, 15, 70, 15, dark)
+    const n = global.scene.createSceneObject("iyAvatarName")
+    n.setParent(root)
+    const t = n.createComponent("Component.Text") as Text
+    t.size = 90
+    t.horizontalAlignment = HorizontalAlignment.Center
+    t.depthTest = false
+    t.textFill.color = new vec4(1, 1, 1, 1)
+    n.getTransform().setLocalPosition(new vec3(0, 215, 0))
+    return {root, name: t, color: "", pos: null}
+  }
+
+  // The bomb, bomb sites, sticky bombs and land mines where they really are (from the phone match).
+  private drawObjects(h: any) {
+    const list = (h.objects || []).slice(0, 12)
+    while (this.objMarks.length < list.length) {
+      const o = global.scene.createSceneObject("iyObj")
+      const t = o.createComponent("Component.Text") as Text
+      t.size = 160
+      t.horizontalAlignment = HorizontalAlignment.Center
+      t.depthTest = false
+      this.objMarks.push(o)
+    }
+    const blink = Math.sin(this.time * 10) > 0
+    this.objMarks.forEach((o, i) => {
       const e = list[i]
       if (!e || typeof e.bearing !== "number") { o.enabled = false; return }
-      const at = this.worldAt(e.bearing, Math.max(2, e.d || 5), 30)
+      const meters = Math.max(1.5, e.d || 3)
+      const at = this.worldAt(e.bearing, meters, 0)
       if (!at) { o.enabled = false; return }
       o.enabled = true
       const tr = o.getTransform()
-      tr.setWorldPosition(at)
+      const t = o.getComponent("Component.Text") as Text
+      const k = e.kind
+      const y = k === "site" ? this.floorY + 60 : this.floorY + 25
+      tr.setWorldPosition(new vec3(at.x, y, at.z))
       this.faceCamera(tr)
-      const sc = Math.max(1, (e.d || 5) / 4)
+      const sc = Math.max(1, meters / 6)
       tr.setWorldScale(new vec3(sc, sc, sc))
-      const tx = o.getComponent("Component.Text") as Text
-      tx.textFill.color = e.alive === false ? new vec4(0.4, 0.4, 0.4, 1) : new vec4(1, 0.31, 0.64, 1)
+      if (k === "bomb") { t.text = e.planted ? "💣\nPLANTED" : "💣"; t.textFill.color = e.planted && blink ? new vec4(1, 0.2, 0.2, 1) : new vec4(1, 0.85, 0.3, 1) }
+      else if (k === "site") { t.text = e.label || "A"; t.textFill.color = new vec4(1, 0.82, 0.25, 1) }
+      else if (k === "sticky") { t.text = "●"; t.textFill.color = blink ? new vec4(1, 0.2, 0.2, 1) : new vec4(0.5, 0.05, 0.05, 1) }
+      else if (k === "mine") { t.text = "◉"; t.textFill.color = blink ? new vec4(1, 0.9, 0.2, 1) : new vec4(0.6, 0.5, 0.1, 1) }
+      else { t.text = "◆"; t.textFill.color = new vec4(1, 1, 1, 1) }
     })
+  }
+
+  // ---------------------------------------------------------------- modes: intro, menu, solo
+  private setMode(m: string) {
+    this.mode = m
+    this.modeT = 0
+    if (m !== "menu") { this.btns.forEach((b) => b.obj.destroy()); this.btns = [] }
+    if (m !== "solo") { this.robots.forEach((r) => r.root.destroy()); this.robots = [] }
+    if (m !== "live") for (const id in this.labels) this.labels[id].obj.enabled = false
+    if (m !== "match") { for (const id in this.avatars) this.avatars[id].root.enabled = false; this.objMarks.forEach((o) => (o.enabled = false)); this.hudText.text = "" }
+    if (m === "menu" || m === "intro") this.panelText.text = ""
+  }
+
+  private startIntro() {
+    this.setMode("intro")
+    if (!this.camT) return
+    const letters = ["i", "Y", "i", "Y", "i"]
+    const cols = [PALETTE[0], PALETTE[1], PALETTE[2], PALETTE[1], PALETTE[0]]
+    letters.forEach((ch, i) => {
+      const o = this.makeText(ch, 14, cols[i])
+      this.introObjs.push(o)
+    })
+    const sub = this.makeText("LASER TAG", 4.5, new vec4(1, 1, 1, 1))
+    this.introObjs.push(sub)
+  }
+  private tickIntro() {
+    if (!this.camT) { this.endIntro(); return }
+    const t = this.modeT
+    const cam = this.camT.getWorldPosition()
+    const d = this.flatDir()
+    const right = quat.angleAxis(-Math.PI / 2, vec3.up()).multiplyVec3(d)
+    const center = cam.add(d.uniformScale(220)).add(new vec3(0, 10, 0))
+    this.introObjs.forEach((o, i) => {
+      const tr = o.getTransform()
+      const isSub = i === 5
+      const delay = isSub ? 0.9 : i * 0.12
+      const k = Math.max(0, Math.min(1, (t - delay) / 0.35))
+      const bounce = k < 1 ? k * (1.25 - 0.25 * k) : 1 + Math.sin(t * 3 + i) * 0.03
+      const x = isSub ? 0 : (i - 2) * 34
+      const y = isSub ? -45 : Math.sin(t * 2.5 + i) * 3
+      tr.setWorldPosition(center.add(right.uniformScale(x)).add(new vec3(0, y, 0)))
+      tr.setWorldRotation(quat.lookAt(d.uniformScale(-1), vec3.up()))
+      const sc = Math.max(0.001, bounce)
+      tr.setWorldScale(new vec3(sc, sc, sc))
+    })
+    if (t > 0.6 && t - getDeltaTime() <= 0.6) this.burst(center, PALETTE[2], 24)
+    if (t > 1.3 && t - getDeltaTime() <= 1.3) this.burst(center.add(new vec3(0, -45, 0)), PALETTE[1], 18)
+    if (t > 3.2) this.endIntro()
+  }
+  private endIntro() {
+    this.introObjs.forEach((o) => o.destroy())
+    this.introObjs = []
+    this.openMenu()
+  }
+
+  private openMenu() {
+    this.setMode("menu")
+    if (!this.camT) return
+    const items: [string, string][] = [
+      ["SOLO PRACTICE", "solo"],
+      [this.session ? "PLAY WITH iYiYi" : "LINK iYiYi ACCOUNT", "play"],
+      ["WORLD: " + WORLD_NAMES[this.world].toUpperCase(), "world"],
+    ]
+    const cam = this.camT.getWorldPosition()
+    const d = this.flatDir()
+    items.forEach(([label, action], i) => {
+      const o = this.makeText(label, 6.5, new vec4(1, 1, 1, 1))
+      const t = o.getComponent("Component.Text") as Text
+      try { t.backgroundSettings.enabled = true; t.backgroundSettings.fill.color = new vec4(0.05, 0.08, 0.14, 0.9); t.backgroundSettings.cornerRadius = 1 } catch (e) {}
+      const tr = o.getTransform()
+      tr.setWorldPosition(cam.add(d.uniformScale(150)).add(new vec3(0, 30 - i * 32, 0)))
+      tr.setWorldRotation(quat.lookAt(d.uniformScale(-1), vec3.up()))
+      this.btns.push({obj: o, text: t, action})
+    })
+    this.panelText.text = ""
+    this.toast("Look at a button and pinch", 4000)
+  }
+  private gazedButton(): Btn {
+    if (!this.camT) return null
+    const cam = this.camT.getWorldPosition()
+    const d = this.viewDir()
+    let best: Btn = null
+    let bestA = 12 * D2R
+    for (const b of this.btns) {
+      const to = b.obj.getTransform().getWorldPosition().sub(cam).normalize()
+      const a = Math.acos(Math.max(-1, Math.min(1, to.dot(d))))
+      if (a < bestA) { bestA = a; best = b }
+    }
+    return best
+  }
+  private tickMenu() {
+    const g = this.gazedButton()
+    for (const b of this.btns) {
+      b.text.textFill.color = b === g ? new vec4(1, 0.82, 0.25, 1) : new vec4(1, 1, 1, 1)
+      const s = b === g ? 1.12 : 1
+      b.obj.getTransform().setWorldScale(new vec3(s, s, s))
+    }
+  }
+  private pickButton() {
+    const g = this.gazedButton()
+    if (!g) { this.toast("Look at a button and pinch"); return }
+    this.runButton(g)
+  }
+  private runButton(g: Btn) {
+    if (g.action === "solo") this.startSolo()
+    else if (g.action === "play") { if (this.session) this.setMode("live"); else { this.setMode("link"); this.linkCode = null } }
+    else if (g.action === "world") { this.nextWorld(); g.text.text = "WORLD: " + WORLD_NAMES[this.world].toUpperCase() }
+  }
+
+  // small MENU button floating low in front of you outside the menu; look down at it and pinch
+  private tickMenuBtn() {
+    const show = this.mode === "solo" || this.mode === "live" || this.mode === "link"
+    if (!show || !this.camT) { if (this.menuBtn) this.menuBtn.enabled = false; return }
+    if (!this.menuBtn) {
+      this.menuBtn = this.makeText("≡ MENU", 2.6, new vec4(0.7, 0.75, 0.85, 1))
+    }
+    this.menuBtn.enabled = true
+    const cam = this.camT.getWorldPosition()
+    const d = this.flatDir()
+    const tr = this.menuBtn.getTransform()
+    tr.setWorldPosition(cam.add(d.uniformScale(70)).add(new vec3(0, -55, 0)))
+    tr.setWorldRotation(quat.lookAt(cam.sub(tr.getWorldPosition()).normalize(), vec3.up()))
+    const t = this.menuBtn.getComponent("Component.Text") as Text
+    t.textFill.color = this.menuGazed() ? new vec4(1, 0.82, 0.25, 1) : new vec4(0.7, 0.75, 0.85, 1)
+  }
+  private menuGazed(): boolean {
+    if (!this.menuBtn || !this.menuBtn.enabled || !this.camT) return false
+    const cam = this.camT.getWorldPosition()
+    const to = this.menuBtn.getTransform().getWorldPosition().sub(cam).normalize()
+    return Math.acos(Math.max(-1, Math.min(1, to.dot(this.viewDir())))) < 10 * D2R
+  }
+
+  // Solo practice: cartoon robots around you; 60 s, score, works with no phone, GPS or account.
+  private startSolo() {
+    this.setMode("solo")
+    this.soloScore = 0
+    this.soloEnd = Date.now() + 60000
+    for (let i = 0; i < 4; i++) this.spawnRobot()
+    this.toast("Solo practice · pinch to shoot · left pinch switches gun", 4000)
+  }
+  private spawnRobot() {
+    if (!this.camT) return
+    const cam = this.camT.getWorldPosition()
+    const ang = (Math.random() - 0.5) * 120
+    const dist = 300 + Math.random() * 500
+    const dir = quat.angleAxis(ang * D2R, vec3.up()).multiplyVec3(this.flatDir())
+    const base = new vec3(cam.x + dir.x * dist, this.floorY, cam.z + dir.z * dist)
+    const a = this.makeAvatar(PALETTE[Math.floor(Math.random() * PALETTE.length)])
+    a.name.text = "ROBOT"
+    this.robots.push({root: a.root, pos: base, hp: 2, phase: Math.random() * 6, base})
+  }
+  private tickSolo(dt: number, now: number) {
+    const left = Math.max(0, Math.ceil((this.soloEnd - now) / 1000))
+    if (left > 0) {
+      this.hudText.text = "SOLO PRACTICE   Score " + this.soloScore + "   " + left + "s\n" + this.currentWeapon().name
+      for (const r of this.robots) {
+        r.phase += dt
+        const side = quat.angleAxis(Math.PI / 2, vec3.up()).multiplyVec3(this.flatDir())
+        r.pos = r.base.add(side.uniformScale(Math.sin(r.phase * 0.9) * 120)).add(new vec3(0, Math.abs(Math.sin(r.phase * 3)) * 15, 0))
+        const tr = r.root.getTransform()
+        tr.setWorldPosition(r.pos)
+        this.faceCamera(tr)
+      }
+    } else {
+      if (this.robots.length) { this.robots.forEach((r) => r.root.destroy()); this.robots = []; this.toast("Time! Score " + this.soloScore + " · pinch to play again", 6000) }
+      this.hudText.text = "FINAL SCORE " + this.soloScore + "\nPinch to play again"
+    }
+  }
+  private soloFire() {
+    if (Date.now() > this.soloEnd) { this.startSolo(); return }
+    const now = Date.now()
+    const w = this.currentWeapon()
+    if (now - this.lastFire < w.gap) return
+    this.lastFire = now
+    const cam = this.camT.getWorldPosition()
+    const d = this.viewDir()
+    let best: Robot = null
+    let bestA = 99
+    for (const r of this.robots) {
+      const c = r.pos.add(new vec3(0, 110, 0))
+      const to = c.sub(cam)
+      const dist = to.length
+      const a = Math.acos(Math.max(-1, Math.min(1, to.normalize().dot(d))))
+      const allowed = Math.atan(60 / dist) + (w.pellets ? 4 * D2R : 0) + (w.rocket ? 5 * D2R : 0)
+      if (a < allowed && a < bestA) { bestA = a; best = r }
+    }
+    const hitPoint = best ? best.pos.add(new vec3(0, 110, 0)) : null
+    this.shootVisual(w, hitPoint)
+    if (!best) return
+    const delay = this.createEvent("DelayedCallbackEvent")
+    const r = best
+    delay.bind(() => {
+      if (this.robots.indexOf(r) < 0) return
+      r.hp -= w.damage
+      this.burst(r.pos.add(new vec3(0, 110, 0)), w.color, w.rocket ? 26 : 8)
+      if (r.hp <= 0) {
+        this.soloScore += w.rocket ? 1 : 1
+        this.blockPile(r.pos)
+        r.root.destroy()
+        this.robots.splice(this.robots.indexOf(r), 1)
+        this.spawnRobot()
+      }
+    })
+    const flight = hitPoint.sub(cam).length / (w.rocket ? w.speed : w.speed)
+    delay.reset(Math.min(1.5, flight))
+  }
+
+  // ---------------------------------------------------------------- weapons in hand
+  private currentWeapon(): Weapon {
+    if (this.mode === "match" && this.hud && this.hud.gunId) {
+      const w = WEAPONS.find((x) => x.id === this.hud.gunId)
+      if (w) return w
+      return {...WEAPONS[1], id: this.hud.gunId, name: this.hud.gun || "Gun"}
+    }
+    return WEAPONS[this.weaponIdx % WEAPONS.length]
+  }
+  private switchWeapon() {
+    if (this.mode === "match" && this.hud && Array.isArray(this.hud.loadout) && this.hud.loadout.length) {
+      const ids = this.hud.loadout.map((x: any) => x.id)
+      const i = (ids.indexOf(this.hud.gunId) + 1) % ids.length
+      this.broadcast("g_weapon", {id: ids[i]})
+      this.toast(this.hud.loadout[i].name || ids[i])
+      return
+    }
+    this.weaponIdx = (this.weaponIdx + 1) % WEAPONS.length
+    this.toast(this.currentWeapon().name)
+  }
+  private tickGun() {
+    const show = this.mode === "solo" || this.mode === "match"
+    let hand: any = null
+    try { hand = SIK.HandInputData.getHand("right") } catch (e) {}
+    const tracked = hand && hand.isTracked()
+    const w = this.currentWeapon()
+    if (!show || !tracked || !this.cube) { if (this.gun) this.gun.enabled = false; return }
+    if (!this.gun || this.gunFor !== w.id) {
+      if (this.gun) this.gun.destroy()
+      this.gun = this.makeGun(w)
+      this.gunFor = w.id
+    }
+    this.gun.enabled = true
+    const wrist = hand.wrist.position
+    const knuckle = hand.indexKnuckle.position
+    const fwd = knuckle.sub(wrist).normalize()
+    const tr = this.gun.getTransform()
+    tr.setWorldPosition(knuckle.add(new vec3(0, -3, 0)))
+    tr.setWorldRotation(quat.lookAt(fwd, vec3.up()))
+  }
+  private gunMuzzle(): vec3 {
+    if (!this.gun || !this.gun.enabled) return null
+    const tr = this.gun.getTransform()
+    return tr.getWorldPosition().add(tr.forward.uniformScale(this.gunFor === "sniper" ? 42 : 26))
+  }
+  // Chunky cartoon guns (forward = +Z in the gun's space).
+  private makeGun(w: Weapon): SceneObject {
+    const root = global.scene.createSceneObject("iyGun")
+    const c = w.color
+    const dark = new vec4(0.15, 0.17, 0.22, 1)
+    const part = (x: number, y: number, z: number, sx: number, sy: number, sz: number, col: vec4) => {
+      const o = this.block(new vec3(0, 0, 0), new vec3(sx, sy, sz), col, root)
+      if (o) { o.getTransform().setLocalPosition(new vec3(x, y, z)); o.getTransform().setLocalScale(new vec3(sx, sy, sz)) }
+    }
+    if (w.id === "rocket") {
+      part(0, 3, 6, 7, 7, 34, new vec4(0.3, 0.45, 0.2, 1)); part(0, 3, 24, 9, 9, 4, c); part(0, -4, 2, 3, 8, 3, dark)
+    } else if (w.id === "sniper") {
+      part(0, 2, 6, 4, 5, 22, dark); part(0, 2.5, 26, 1.8, 1.8, 20, c); part(0, 6, 8, 2.5, 2.5, 9, c); part(0, -4, 0, 3, 8, 3, dark)
+    } else if (w.id === "shotgun") {
+      part(0, 2, 6, 6, 6, 20, c); part(0, 2, 18, 7, 7, 6, dark); part(0, -4, 0, 3.5, 8, 3.5, dark)
+    } else if (w.id === "rifle") {
+      part(0, 2, 6, 4, 6, 22, c); part(0, 2.5, 19, 2, 2, 10, dark); part(0, -2, 8, 3, 6, 3, dark); part(0, -4, 0, 3, 8, 3, dark)
+    } else {
+      part(0, 2, 4, 4, 6, 14, c); part(0, 2.5, 12, 2, 2, 5, dark); part(0, -4, 0, 3.5, 8, 3.5, dark)
+    }
+    return root
   }
 
   // ---------------------------------------------------------------- 3D effects
@@ -640,6 +1094,56 @@ export class IYiYiSpecs extends BaseScriptComponent {
     t.setWorldPosition(pos)
     t.setWorldScale(size)
     return o
+  }
+
+  private spawnBolt(start: vec3, dir: vec3, w: Weapon) {
+    const s = w.bolt
+    const core = this.block(start, new vec3(s, s, 60), new vec4(1, 1, 1, 1))
+    const glow = this.block(start, new vec3(s * 2.6, s * 2.6, 75), w.color)
+    for (const o of [core, glow]) {
+      if (!o) continue
+      o.getTransform().setWorldRotation(quat.lookAt(dir, vec3.up()))
+      this.fx.push({obj: o, t: 0, life: 0.9, vel: dir.uniformScale(w.speed)})
+    }
+  }
+
+  // Huge cartoon rocket that spirals to the target, puffing smoke, then a big boom.
+  private spawnRocket(start: vec3, target: vec3) {
+    const root = global.scene.createSceneObject("iyRocket")
+    const part = (z: number, sx: number, sy: number, sz: number, col: vec4) => {
+      const o = this.block(new vec3(0, 0, 0), new vec3(sx, sy, sz), col, root)
+      if (o) { o.getTransform().setLocalPosition(new vec3(0, 0, z)); o.getTransform().setLocalScale(new vec3(sx, sy, sz)) }
+    }
+    part(0, 14, 14, 55, new vec4(0.95, 0.95, 0.95, 1))
+    part(32, 10, 10, 12, new vec4(1, 0.25, 0.25, 1))
+    part(-26, 26, 4, 10, new vec4(1, 0.25, 0.25, 1))
+    part(-26, 4, 26, 10, new vec4(1, 0.25, 0.25, 1))
+    part(-36, 12, 12, 8, new vec4(1, 0.7, 0.1, 1))
+    const dist = target.sub(start).length
+    const dur = Math.max(0.5, Math.min(2.2, dist / 1400))
+    const dir = target.sub(start).normalize()
+    const side = dir.cross(vec3.up()).normalize()
+    const up = side.cross(dir).normalize()
+    let t = 0
+    let lastPuff = 0
+    const tr = root.getTransform()
+    tr.setWorldPosition(start)
+    const fx: Fx = {obj: root, t: 0, life: dur, onDone: () => this.burst(target, new vec4(1, 0.45, 0.1, 1), 30)}
+    const ev = this.createEvent("UpdateEvent")
+    ev.bind(() => {
+      if (!root || fx.t >= dur) { ev.enabled = false; return }
+      t = fx.t / dur
+      const spiral = Math.sin(t * Math.PI) * 40
+      const p = start.add(dir.uniformScale(dist * t)).add(side.uniformScale(Math.cos(t * 18) * spiral)).add(up.uniformScale(Math.sin(t * 18) * spiral + Math.sin(t * Math.PI) * 60))
+      tr.setWorldPosition(p)
+      tr.setWorldRotation(quat.lookAt(dir, vec3.up()).multiply(quat.angleAxis(t * 20, vec3.forward())))
+      if (fx.t - lastPuff > 0.04) {
+        lastPuff = fx.t
+        const puff = this.block(p.sub(dir.uniformScale(40)), new vec3(14, 14, 14), new vec4(0.85, 0.85, 0.85, 1))
+        if (puff) this.fx.push({obj: puff, t: 0, life: 0.6, vel: new vec3((Math.random() - 0.5) * 30, 25, (Math.random() - 0.5) * 30), spin: new vec3(2, 3, 1)})
+      }
+    })
+    this.fx.push(fx)
   }
 
   private spawnTracer(start: vec3, dir: vec3, color: vec4) {
