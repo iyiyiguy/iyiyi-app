@@ -2,14 +2,17 @@
 // name so the scene's component reference stays wired).
 //
 // Start: animated iYiYi SPORTS logo, rackets, paddles and balls rain down, then a look-and-pinch
-// menu: Tennis, Pickleball, Ping Pong, Basketball, plus Court size (Full / Backyard).
+// menu: Tennis, Pickleball, Ping Pong, Volleyball, Basketball, Bowling, Cornhole, plus Court size.
 // Racket sports: the court is laid on the real floor in front of you at its standard size (or a
 // backyard scale), net in the middle, the computer plays the far side. Your right hand is the
 // racket: swing through the ball to hit it (faster swing = faster ball). Real scoring:
 // tennis (15/30/40/deuce/advantage, games), pickleball and ping pong (to 11, win by 2).
 // Basketball: a hoop 4.6 m away; pinch, swing your hand up and let go to shoot.
 // Lens Studio preview: a click swings for you when the ball is near (no hands in preview).
-// Coming next: volleyball, bowling, cornhole, two players on one court, shop (balls, uniforms).
+// Volleyball: 59 × 29.5 ft, 7 ft 11 in net, no bounces, rally scoring to 25. Bowling: 60 ft lane,
+// 10 frames with strikes/spares. Cornhole: boards 27 ft away, 1 on the board, 3 in the hole, cancel
+// scoring to 21. Throws: pinch, swing, let go.
+// Coming next: two players on one court, shop (balls, uniforms).
 import {SIK} from "SpectaclesInteractionKit.lspkg/SIK"
 // 5x7 block font for the giant title logos (the iYiYi i's are 2 wide).
 const FONT5: {[k: string]: string[]} = {
@@ -36,11 +39,12 @@ const D2R = Math.PI / 180
 const FT = 30.48 // cm per foot
 const PAL = [new vec4(1, 0.31, 0.64, 1), new vec4(0.22, 0.84, 1, 1), new vec4(1, 0.82, 0.25, 1), new vec4(0.36, 0.95, 0.63, 1), new vec4(0.69, 0.42, 1, 1), new vec4(1, 0.5, 0.2, 1)]
 
-type Sport = {id: string; name: string; lenFt: number; widFt: number; netFt: number; ballCm: number; speed: number; scoring: "tennis" | "to11"; color: vec4; table?: boolean}
+type Sport = {id: string; name: string; lenFt: number; widFt: number; netFt: number; ballCm: number; speed: number; scoring: "tennis" | "to11" | "to25"; color: vec4; table?: boolean; nobounce?: boolean}
 const SPORTS: Sport[] = [
   {id: "tennis", name: "TENNIS", lenFt: 78, widFt: 27, netFt: 3, ballCm: 6.7, speed: 1500, scoring: "tennis", color: new vec4(0.85, 1, 0.2, 1)},
   {id: "pickleball", name: "PICKLEBALL", lenFt: 44, widFt: 20, netFt: 2.9, ballCm: 7.4, speed: 1050, scoring: "to11", color: new vec4(1, 0.9, 0.2, 1)},
   {id: "pingpong", name: "PING PONG", lenFt: 9, widFt: 5, netFt: 0.5, ballCm: 4, speed: 500, scoring: "to11", color: new vec4(1, 0.6, 0.2, 1), table: true},
+  {id: "volleyball", name: "VOLLEYBALL", lenFt: 59, widFt: 29.5, netFt: 7.96, ballCm: 21, speed: 900, scoring: "to25", color: new vec4(1, 0.95, 0.84, 1), nobounce: true},
 ]
 type Fx = {obj: SceneObject; t: number; life: number; vel?: vec3; spin?: vec3; gravity?: boolean; floorY?: number}
 type Btn = {obj: SceneObject; text: Text; action: string}
@@ -91,6 +95,25 @@ export class IYiYiSpecs extends BaseScriptComponent {
   private pts = {me: 0, cpu: 0}
   private games = {me: 0, cpu: 0}
 
+  // bowling + cornhole
+  private pins: {obj: SceneObject; pos: vec3; vel: vec3; hit: boolean; down: boolean; gone: boolean; tilt: number; axis: vec3}[] = []
+  private laneL = 1829
+  private rolling = false
+  private gutter = false
+  private frames: number[][] = []
+  private frame = 0
+  private roll = 0
+  private bowlOver = false
+  private bags: SceneObject[] = []
+  private bag: {obj: SceneObject; pos: vec3; vel: vec3; who: string} = null
+  private board: vec3 = null
+  private holeP: vec3 = null
+  private chTotal = {me: 0, cpu: 0}
+  private chRound = {me: 0, cpu: 0}
+  private chLeft = {me: 4, cpu: 4}
+  private chTurn = "me"
+  private chCpuAt = 0
+  private tilt = 0
   // basketball
   private hoop: vec3 = null
   private shots = 0
@@ -122,6 +145,7 @@ export class IYiYiSpecs extends BaseScriptComponent {
         }
         if (this.mode === "racket") { this.assistSwing(); return }
         if (this.mode === "hoops") { this.shoot(new vec3(0, 0, 0), true); return }
+        if (this.mode === "bowling" || this.mode === "cornhole") { this.throwIt(true); return }
         this.onPinch(true)
       })
     } catch (e) {}
@@ -136,6 +160,10 @@ export class IYiYiSpecs extends BaseScriptComponent {
       if (down) this.holding = true
       else if (this.holding) { this.holding = false; this.shoot(this.handVel, false) }
     }
+    if (this.mode === "bowling" || this.mode === "cornhole") {
+      if (down) this.holding = true
+      else if (this.holding) { this.holding = false; this.throwIt(false) }
+    }
   }
 
   private update() {
@@ -148,6 +176,8 @@ export class IYiYiSpecs extends BaseScriptComponent {
     if (this.mode === "menu") this.tickMenu()
     if (this.mode === "racket") this.tickRacket(dt)
     if (this.mode === "hoops") this.tickHoops(dt)
+    if (this.mode === "bowling") this.tickBowling(dt)
+    if (this.mode === "cornhole") this.tickCornhole(dt)
     this.tickFx(dt)
     if (Date.now() > this.toastUntil) this.toastT.text = ""
   }
@@ -245,7 +275,7 @@ export class IYiYiSpecs extends BaseScriptComponent {
   private setMode(m: string) {
     this.mode = m; this.modeT = 0
     if (m !== "menu") { this.btns.forEach((b) => b.obj.destroy()); this.btns = [] }
-    if (m !== "racket" && m !== "hoops") this.clearGame()
+    if (m !== "racket" && m !== "hoops" && m !== "bowling" && m !== "cornhole") this.clearGame()
     this.hud.text = ""
   }
   // ------------------------------------------------------------------ giant title logo
@@ -370,14 +400,14 @@ export class IYiYiSpecs extends BaseScriptComponent {
   private openMenu() {
     this.setMode("menu")
     if (!this.camT) return
-    const items: [string, string][] = [["TENNIS", "tennis"], ["PICKLEBALL", "pickleball"], ["PING PONG", "pingpong"], ["BASKETBALL", "hoops"], ["COURT: " + (this.backyard ? "BACKYARD" : "FULL SIZE"), "size"]]
+    const items: [string, string][] = [["TENNIS", "tennis"], ["PICKLEBALL", "pickleball"], ["PING PONG", "pingpong"], ["VOLLEYBALL", "volleyball"], ["BASKETBALL", "hoops"], ["BOWLING", "bowling"], ["CORNHOLE", "cornhole"], ["COURT: " + (this.backyard ? "BACKYARD" : "FULL SIZE"), "size"]]
     const cam = this.camT.getWorldPosition(), d = this.flatDir()
     items.forEach(([label, action], i) => {
       const o = this.makeText(label, 6, new vec4(1, 1, 1, 1))
       const t = o.getComponent("Component.Text") as Text
       try { t.backgroundSettings.enabled = true; t.backgroundSettings.fill.color = new vec4(0.05, 0.08, 0.14, 0.9) } catch (e) {}
       const tr = o.getTransform()
-      tr.setWorldPosition(cam.add(d.uniformScale(160)).add(new vec3(0, 44 - i * 26, 0)))
+      tr.setWorldPosition(cam.add(d.uniformScale(210)).add(new vec3(0, 52 - i * 14, 0))) // 8 rows that fit the Specs view
       tr.setWorldRotation(quat.lookAt(d.uniformScale(-1), vec3.up()))
       this.btns.push({obj: o, text: t, action})
     })
@@ -400,13 +430,15 @@ export class IYiYiSpecs extends BaseScriptComponent {
   private runButton(b: Btn) {
     if (b.action === "size") { this.backyard = !this.backyard; b.text.text = "COURT: " + (this.backyard ? "BACKYARD" : "FULL SIZE"); return }
     if (b.action === "hoops") { this.startHoops(); return }
+    if (b.action === "bowling") { this.startBowling(); return }
+    if (b.action === "cornhole") { this.startCornhole(); return }
     const s = SPORTS.find((x) => x.id === b.action)
     if (s) this.startRacket(s)
   }
   // a small MENU tag low in front of you during a game; look down at it and pinch
   private menuTag: SceneObject = null
   private menuLookedAt(): boolean {
-    if (this.mode !== "racket" && this.mode !== "hoops") return false
+    if (this.mode !== "racket" && this.mode !== "hoops" && this.mode !== "bowling" && this.mode !== "cornhole") return false
     if (!this.menuTag || !this.camT) return false
     const a = Math.acos(Math.max(-1, Math.min(1, this.menuTag.getTransform().getWorldPosition().sub(this.camT.getWorldPosition()).normalize().dot(this.viewDir()))))
     return a < 10 * D2R
@@ -424,6 +456,9 @@ export class IYiYiSpecs extends BaseScriptComponent {
   private clearGame() {
     for (const o of [this.court, this.ball, this.paddle, this.cpu]) if (o) o.destroy()
     this.court = this.ball = this.paddle = this.cpu = null
+    this.pins.forEach((p) => { if (!p.gone) p.obj.destroy() }); this.pins = []
+    this.bags.forEach((b) => b.destroy()); this.bags = []
+    if (this.bag) { this.bag.obj.destroy(); this.bag = null }
     if (this.menuTag) { this.menuTag.destroy(); this.menuTag = null }
     this.hoop = null
   }
@@ -458,7 +493,8 @@ export class IYiYiSpecs extends BaseScriptComponent {
     if (s.table) { this.block(this.P(0, 0, 0.5), new vec3(thick, 1, L), line, this.court); for (const x of [-W / 2 + 8, W / 2 - 8]) for (const z of [-L / 2 + 8, L / 2 - 8]) this.block(this.P(x, z, -tableH / 2), new vec3(5, tableH, 5), new vec4(0.3, 0.3, 0.35, 1), this.court) }
     // net + posts
     const netH = s.netFt * FT * (s.table ? 1 : this.scale)
-    this.block(this.P(0, 0, netH / 2), new vec3(W + 20, netH, 1.5), new vec4(0.85, 0.85, 0.9, 1), this.court)
+    if (s.nobounce) this.block(this.P(0, 0, netH - 45), new vec3(W + 20, 90, 1.5), new vec4(0.85, 0.85, 0.9, 1), this.court)
+    else this.block(this.P(0, 0, netH / 2), new vec3(W + 20, netH, 1.5), new vec4(0.85, 0.85, 0.9, 1), this.court)
     this.block(this.P(0, 0, netH), new vec3(W + 20, 3, 3), line, this.court)
     for (const x of [-(W / 2 + 10), W / 2 + 10]) this.block(this.P(x, 0, netH / 2 + 5), new vec3(5, netH + 10, 5), new vec4(0.4, 0.4, 0.45, 1), this.court)
     // ball, paddle, computer player
@@ -513,6 +549,7 @@ export class IYiYiSpecs extends BaseScriptComponent {
 
   /** Velocity that lands a ball from `from` at `to` with roughly `speed` horizontal cm/s. */
   private aimToward(to: vec3, from: vec3, speed: number): vec3 {
+    if (this.sport && this.sport.nobounce) speed *= 0.55 // volleyball: lob it high over the net
     const d = to.sub(from), flat = new vec3(d.x, 0, d.z), dist = flat.length
     const t = Math.max(0.35, dist / speed)
     const vy = (d.y + 0.5 * 980 * t * t) / t
@@ -550,6 +587,8 @@ export class IYiYiSpecs extends BaseScriptComponent {
       // bounce: in or out?
       const inX = Math.abs(local.x) <= W / 2 + 3, inZ = Math.abs(local.z) <= L / 2 + 3
       const onMySide = local.z < 0
+      // volleyball: the ball may never touch the floor
+      if (s.nobounce) { if (inX && inZ) this.endRally(onMySide ? "cpu" : "me", "Kill!"); else this.endRally(this.lastHitter === "me" ? "cpu" : "me", "Out!"); return }
       if (!inX || !inZ) { this.endRally(this.lastHitter === "me" ? "cpu" : "me", "Out!"); return }
       if ((onMySide && this.lastHitter === "me") || (!onMySide && this.lastHitter === "cpu")) { this.endRally(this.lastHitter === "me" ? "cpu" : "me", "Fault"); return }
       this.bounces++
@@ -566,13 +605,14 @@ export class IYiYiSpecs extends BaseScriptComponent {
     this.ballPos = p
     if (this.ball) this.ball.getTransform().setWorldPosition(p)
     // your hit: ball near the paddle and coming toward you
-    if (this.lastHitter !== "me" && this.handPrev && p.distance(this.handPrev) < (s.table ? 18 : 35)) this.hitByMe()
+    if (this.lastHitter !== "me" && this.handPrev && p.distance(this.handPrev) < (s.table ? 18 : s.nobounce ? 45 : 35)) this.hitByMe()
     // auto-serve if you don't swing
     if (this.server === "me" && this.lastHitter === "cpu" && this.bounces === 0 && local.z < -L / 2 + 10 && Date.now() - this.serveAt > 4000) this.hitByMe()
     // computer
     const target = this.lastHitter === "me" ? this.predictLanding() : this.P(0, L / 2 + 50, 0)
     this.moveCpu(dt, target)
-    if (this.lastHitter === "me" && local.z > 0 && this.bounces === 1 && p.distance(this.cpuPos.add(new vec3(0, 110, 0))) < (s.table ? 60 : 160)) this.hitByCpu()
+    const cpuReady = s.nobounce ? (this.ballVel.y < 0 && local.y < 260) : this.bounces === 1
+    if (this.lastHitter === "me" && local.z > 0 && cpuReady && p.distance(this.cpuPos.add(new vec3(0, 110, 0))) < (s.table ? 60 : s.nobounce ? 190 : 160)) this.hitByCpu()
   }
 
   private toCourt(p: vec3): vec3 { const d = p.sub(this.origin); return new vec3(d.dot(this.side), d.y, d.dot(this.fwd)) }
@@ -633,15 +673,16 @@ export class IYiYiSpecs extends BaseScriptComponent {
     this.ballLive = false
     this.burst(this.ballPos, winner === "me" ? PAL[3] : PAL[0], 10)
     const s = this.sport
-    if (s.scoring === "to11") {
+    if (s.scoring === "to11" || s.scoring === "to25") {
       if (winner === "me") this.pts.me++; else this.pts.cpu++
-      const a = this.pts.me, b = this.pts.cpu
-      if ((a >= 11 || b >= 11) && Math.abs(a - b) >= 2) {
+      const a = this.pts.me, b = this.pts.cpu, to = s.scoring === "to25" ? 25 : 11
+      if ((a >= to || b >= to) && Math.abs(a - b) >= 2) {
         this.toast((a > b ? "YOU WIN " : "COMPUTER WINS ") + a + "–" + b + " · look down at MENU to play another", 7000)
         this.pts = {me: 0, cpu: 0}
       } else this.toast(why + (winner === "me" ? "  Your point" : "  Their point"))
       // service: pickleball/ping pong simplified to alternate every 2 points
-      if ((a + b) % 2 === 0) this.server = this.server === "me" ? "cpu" : "me"
+      if (s.scoring === "to25") this.server = winner === "me" ? "me" : "cpu" // volleyball: rally winner serves
+      else if ((a + b) % 2 === 0) this.server = this.server === "me" ? "cpu" : "me"
     } else {
       // tennis
       const w = winner === "me" ? "me" : "cpu", l = w === "me" ? "cpu" : "me"
@@ -662,7 +703,7 @@ export class IYiYiSpecs extends BaseScriptComponent {
     const s = this.sport
     if (!s) return
     let line = ""
-    if (s.scoring === "to11") line = "YOU " + this.pts.me + "  –  " + this.pts.cpu + " CPU"
+    if (s.scoring !== "tennis") line = "YOU " + this.pts.me + "  –  " + this.pts.cpu + " CPU"
     else {
       const names = ["0", "15", "30", "40"]
       const a = this.pts.me, b = this.pts.cpu
@@ -733,5 +774,191 @@ export class IYiYiSpecs extends BaseScriptComponent {
     }
     if (this.ballPos.y < this.floorY + 12) { this.ballLive = false }
     if (this.ball) this.ball.getTransform().setWorldPosition(this.ballPos)
+  }
+
+  // ------------------------------------------------------------------ bowling (60 ft lane, 10 frames)
+  private startBowling() {
+    this.setMode("bowling")
+    this.laneL = this.backyard ? 800 : 1829
+    this.fwd = this.flatDir()
+    this.side = this.fwd.cross(vec3.up()).normalize().uniformScale(-1)
+    const cam = this.camT.getWorldPosition()
+    this.origin = new vec3(cam.x, this.floorY, cam.z).add(this.fwd.uniformScale(60))
+    this.court = global.scene.createSceneObject("iyLane")
+    const rot = quat.lookAt(this.fwd, vec3.up())
+    const lb = (x: number, z: number, y: number, sx: number, sy: number, sz: number, c: vec4) => { const o = this.block(this.P(x, z, y), new vec3(sx, sy, sz), c, this.court); if (o) o.getTransform().setWorldRotation(rot) }
+    lb(0, this.laneL / 2, 0.3, 105, 0.6, this.laneL, new vec4(0.77, 0.6, 0.36, 1))
+    for (const x of [-64, 64]) lb(x, this.laneL / 2, 0.3, 23, 0.6, this.laneL, new vec4(0.42, 0.46, 0.55, 1))
+    for (let i = 1; i <= 7; i++) lb((i - 4) * 12, 460 * (this.backyard ? 0.44 : 1), 0.8, 3, 0.4, 8, new vec4(1, 0.24, 0.32, 1))
+    lb(0, 0, 0.8, 105, 0.4, 2, new vec4(1, 1, 1, 1))
+    this.ball = this.block(this.P(0, 10, 11), new vec3(22, 22, 22), PAL[1])
+    this.frames = []; this.frame = 0; this.roll = 0; this.bowlOver = false; this.rolling = false
+    this.rack(true)
+    this.toast("Pinch, swing forward, let go to bowl", 5000)
+  }
+  private bowlFrom(): vec3 { const c = this.camT.getWorldPosition(); return this.P(Math.max(-45, Math.min(45, this.toCourt(c).x)), 10, 11) }
+  private rack(full: boolean) {
+    if (full) {
+      this.pins.forEach((p) => { if (!p.gone) p.obj.destroy() }); this.pins = []
+      const rows = [[0], [-0.5, 0.5], [-1, 0, 1], [-1.5, -0.5, 0.5, 1.5]]
+      rows.forEach((r, ri) => r.forEach((x) => {
+        const pos = this.P(x * 30.5, this.laneL - 90 + ri * 26.4, 0)
+        const g = global.scene.createSceneObject("iyPin")
+        for (const [y, w, h, c] of [[19, 12, 30, new vec4(1, 1, 1, 1)], [34, 7, 8, new vec4(1, 1, 1, 1)], [28, 12.5, 2.5, new vec4(1, 0.24, 0.32, 1)]] as [number, number, number, vec4][]) { const o = this.block(new vec3(0, 0, 0), new vec3(w, h, w), c, g); if (o) { o.getTransform().setLocalPosition(new vec3(0, y, 0)); o.getTransform().setLocalScale(new vec3(w, h, w)) } }
+        g.getTransform().setWorldPosition(pos)
+        this.pins.push({obj: g, pos, vel: new vec3(0, 0, 0), hit: false, down: false, gone: false, tilt: 0, axis: new vec3(1, 0, 0)})
+      }))
+    } else this.pins.forEach((p) => { if (p.down && !p.gone) { p.obj.destroy(); p.gone = true } })
+  }
+  private throwIt(assisted: boolean) {
+    if (this.mode === "bowling") {
+      if (this.rolling || this.bowlOver) return
+      this.ballPos = this.bowlFrom()
+      const v = this.handVel
+      if (!assisted && this.handPrev && v.length > 140) this.ballVel = new vec3(v.x, 0, v.z).uniformScale(1.4)
+      else { const target = this.P((Math.random() - 0.5) * 30, this.laneL - 60, 11); const d = target.sub(this.ballPos); this.ballVel = new vec3(d.x, 0, d.z).normalize().uniformScale(600 + Math.random() * 200) }
+      this.rolling = true
+      return
+    }
+    if (this.mode === "cornhole") {
+      if (this.bag || this.chTurn !== "me" || this.chLeft.me <= 0) return
+      const from = this.handPrev || this.camT.getWorldPosition().add(this.flatDir().uniformScale(40)).add(new vec3(0, -40, 0))
+      const v = this.handVel
+      let vel: vec3
+      if (!assisted && this.handPrev && v.length > 150) vel = v.uniformScale(1.4)
+      else vel = this.lob(from, this.holeP.add(new vec3((Math.random() - 0.5) * 35, 0, 0)).add(this.fwd.uniformScale((Math.random() - 0.5) * 40)), 1.15)
+      this.launchBag("me", from, vel)
+    }
+  }
+  private lob(from: vec3, to: vec3, t: number): vec3 { const d = to.sub(from); return new vec3(d.x / t, (d.y + 0.5 * 980 * t * t) / t, d.z / t) }
+  private tickBowling(dt: number) {
+    this.placeMenuTag()
+    this.hud.text = "BOWLING\nFrame " + Math.min(10, this.frame + 1) + " · roll " + (this.roll + 1) + "   Score " + this.bowlScore()
+    if (!this.rolling) { if (this.ball) this.ball.getTransform().setWorldPosition(this.bowlFrom()); return }
+    this.ballPos = this.ballPos.add(this.ballVel.uniformScale(dt))
+    this.ballVel = this.ballVel.uniformScale(1 - 0.08 * dt)
+    const bc = this.toCourt(this.ballPos)
+    if (Math.abs(bc.x) > 53 && !this.gutter) { this.gutter = true; this.ballVel = this.fwd.uniformScale(400) }
+    if (this.ball) this.ball.getTransform().setWorldPosition(this.gutter ? this.ballPos.add(new vec3(0, -8, 0)) : this.ballPos)
+    for (const p of this.pins) {
+      if (p.gone || this.gutter) continue
+      const flat = new vec3(this.ballPos.x - p.pos.x, 0, this.ballPos.z - p.pos.z)
+      if (!p.hit && flat.length < 17) { p.hit = true; p.vel = this.ballVel.uniformScale(0.7).add(this.side.uniformScale((Math.random() - 0.5) * 150)); this.ballVel = this.ballVel.uniformScale(0.93) }
+    }
+    for (const a of this.pins) if (a.hit && !a.gone) for (const b of this.pins) if (b !== a && !b.hit && !b.gone && a.pos.distance(b.pos) < 13) { b.hit = true; b.vel = a.vel.uniformScale(0.6).add(this.side.uniformScale((Math.random() - 0.5) * 120)) }
+    let moving = this.ballVel.length > 20 && bc.z < this.laneL + 40
+    for (const p of this.pins) {
+      if (!p.hit || p.gone) continue
+      p.pos = p.pos.add(p.vel.uniformScale(dt)); p.vel = p.vel.uniformScale(Math.max(0, 1 - 2.5 * dt))
+      if (!p.down) { p.down = true; const ax = new vec3(p.vel.z, 0, -p.vel.x); p.axis = ax.length > 0.01 ? ax.normalize() : new vec3(1, 0, 0) }
+      p.tilt = Math.min(Math.PI / 2, p.tilt + dt * 6)
+      const tr = p.obj.getTransform(); tr.setWorldPosition(p.pos); tr.setWorldRotation(quat.angleAxis(p.tilt, p.axis))
+      if (p.vel.length > 15) moving = true
+    }
+    if (!moving) this.endRoll()
+  }
+  private endRoll() {
+    this.rolling = false; this.gutter = false
+    const down = this.pins.filter((p) => p.down && !p.gone).length
+    if (!this.frames[this.frame]) this.frames[this.frame] = []
+    const f = this.frames[this.frame]
+    f.push(down)
+    const total = f.reduce((a, b) => a + b, 0), last = this.frame === 9
+    let next = false
+    if (!last) {
+      if (down === 10 && this.roll === 0) { this.toast("STRIKE!", 2500); this.burst(this.P(0, this.laneL - 60, 50), PAL[2], 40); next = true }
+      else if (this.roll === 1) { if (total === 10) this.toast("SPARE!"); next = true }
+    } else {
+      const r = f.length
+      if (r === 3 || (r === 2 && total < 10)) { this.bowlOver = true; this.toast("GAME OVER · " + this.bowlScore() + " · look down at MENU to play again", 8000) }
+      else if (down === 10 || (r === 2 && total >= 10)) { this.toast(down === 10 ? "STRIKE!" : "SPARE!"); this.rack(true); this.roll = r; return }
+    }
+    if (next) { this.frame++; this.roll = 0; this.rack(true) } else if (!this.bowlOver) { this.roll++; this.rack(false) }
+  }
+  private bowlScore(): number {
+    const rolls: number[] = [].concat(...this.frames)
+    let sc = 0, i = 0
+    for (let f = 0; f < 10 && i < rolls.length; f++) {
+      if (rolls[i] === 10) { sc += 10 + (rolls[i + 1] || 0) + (rolls[i + 2] || 0); i += 1 }
+      else if ((rolls[i] || 0) + (rolls[i + 1] || 0) === 10) { sc += 10 + (rolls[i + 2] || 0); i += 2 }
+      else { sc += (rolls[i] || 0) + (rolls[i + 1] || 0); i += 2 }
+    }
+    return sc
+  }
+
+  // ------------------------------------------------------------------ cornhole (27 ft, cancel scoring to 21)
+  private startCornhole() {
+    this.setMode("cornhole")
+    const dist = this.backyard ? 600 : 823
+    this.fwd = this.flatDir()
+    this.side = this.fwd.cross(vec3.up()).normalize().uniformScale(-1)
+    const cam = this.camT.getWorldPosition()
+    this.origin = new vec3(cam.x, this.floorY, cam.z)
+    this.board = this.P(0, dist, 0)
+    this.tilt = Math.atan2(23, 122)
+    this.court = global.scene.createSceneObject("iyBoard")
+    // the board: 4 × 2 ft, front 3 in up, back 12 in up, hole 6 in wide, 9 in from the top
+    const top = global.scene.createSceneObject("iyBoardTop"); top.setParent(this.court)
+    const parts: [number, number, number, number, number, number, vec4][] = [[0, 0, 0, 61, 2, 122, PAL[1]], [0, 1.2, 0, 50, 0.4, 110, new vec4(0.12, 0.44, 0.66, 1)]]
+    for (const [x, y, z, sx, sy, sz, c] of parts) { const o = this.block(new vec3(0, 0, 0), new vec3(sx, sy, sz), c, top); if (o) { o.getTransform().setLocalPosition(new vec3(x, y, z)); o.getTransform().setLocalScale(new vec3(sx, sy, sz)) } }
+    for (let i = 0; i < 12; i++) { const a = i / 12 * Math.PI * 2; const o = this.block(new vec3(0, 0, 0), new vec3(3, 1.5, 3), PAL[2], top); if (o) { o.getTransform().setLocalPosition(new vec3(Math.cos(a) * 8, 1.6, 38 + Math.sin(a) * 8)); o.getTransform().setLocalScale(new vec3(3, 1.5, 3)) } }
+    top.getTransform().setLocalPosition(new vec3(0, 19, 0))
+    top.getTransform().setLocalRotation(quat.angleAxis(-this.tilt, new vec3(1, 0, 0)))
+    this.court.getTransform().setWorldPosition(this.board)
+    this.court.getTransform().setWorldRotation(quat.lookAt(this.fwd, vec3.up()))
+    // hole centre in the world
+    this.holeP = this.board.add(this.fwd.uniformScale(38 * Math.cos(this.tilt))).add(new vec3(0, 19 + 38 * Math.sin(this.tilt) + 2, 0))
+    this.chTotal = {me: 0, cpu: 0}; this.chRound = {me: 0, cpu: 0}; this.chLeft = {me: 4, cpu: 4}; this.chTurn = "me"
+    this.toast("Pinch, swing underhand, let go to toss", 5000)
+  }
+  private launchBag(who: string, from: vec3, vel: vec3) {
+    const o = this.block(from, new vec3(15, 4, 15), who === "me" ? new vec4(1, 0.24, 0.32, 1) : PAL[2])
+    this.bag = {obj: o, pos: from, vel, who}
+    this.chLeft[who]--
+  }
+  private tickCornhole(dt: number) {
+    this.placeMenuTag()
+    this.hud.text = "CORNHOLE   YOU " + this.chTotal.me + " – " + this.chTotal.cpu + " CPU\nThis round " + this.chRound.me + "–" + this.chRound.cpu + " · bags: you " + this.chLeft.me + ", CPU " + this.chLeft.cpu + "\n" + (this.chTurn === "me" ? "Your toss" : "CPU tossing…")
+    const b = this.bag
+    if (b) {
+      b.vel = new vec3(b.vel.x, b.vel.y - 980 * dt, b.vel.z)
+      b.pos = b.pos.add(b.vel.uniformScale(dt))
+      if (b.obj) { b.obj.getTransform().setWorldPosition(b.pos); b.obj.getTransform().setWorldRotation(quat.angleAxis(this.time * 5, vec3.up())) }
+      const d = b.pos.sub(this.board), lx = d.dot(this.side), lz = d.dot(this.fwd)
+      const onBoard = Math.abs(lx) < 31 && lz > -61 && lz < 61
+      const surf = 19 + Math.tan(this.tilt) * lz
+      if (onBoard && d.y <= surf + 2 && b.vel.y < 0) {
+        const hole = new vec3(b.pos.x - this.holeP.x, 0, b.pos.z - this.holeP.z).length
+        if (hole < 8.5) { this.landBag(3); this.burst(this.holeP, PAL[2], 26); this.toast(b.who === "me" ? "CORNHOLE! +3" : "CPU cornhole"); if (b.obj) b.obj.enabled = false }
+        else this.landBag(1)
+      } else if (b.pos.y < this.floorY + 2) this.landBag(0)
+    } else if (this.chTurn === "cpu" && Date.now() > this.chCpuAt) {
+      const from = this.P(40, -20, 110)
+      const tgt = this.holeP.add(new vec3((Math.random() - 0.5) * 70, 0, 0)).add(this.fwd.uniformScale((Math.random() - 0.5) * 90))
+      this.launchBag("cpu", from, this.lob(from, tgt, 1.15))
+    }
+  }
+  private landBag(pts: number) {
+    const b = this.bag
+    this.chRound[b.who] += pts
+    if (b.obj) this.bags.push(b.obj)
+    if (pts === 1) this.toast((b.who === "me" ? "On the board" : "CPU on the board") + " +1", 1500)
+    this.bag = null
+    this.chTurn = b.who === "me" ? (this.chLeft.cpu > 0 ? "cpu" : "me") : (this.chLeft.me > 0 ? "me" : "cpu")
+    this.chCpuAt = Date.now() + 1300
+    if (this.chLeft.me === 0 && this.chLeft.cpu === 0) {
+      const ev = this.createEvent("DelayedCallbackEvent")
+      ev.bind(() => this.endRoundCh())
+      ev.reset(1.5)
+    }
+  }
+  private endRoundCh() {
+    if (this.mode !== "cornhole") return
+    const diff = this.chRound.me - this.chRound.cpu
+    if (diff > 0) this.chTotal.me += diff; else this.chTotal.cpu -= diff
+    this.toast(diff === 0 ? "Round cancels out" : diff > 0 ? "You score " + diff : "CPU scores " + -diff, 3000)
+    this.bags.forEach((o) => o.destroy()); this.bags = []
+    this.chRound = {me: 0, cpu: 0}; this.chLeft = {me: 4, cpu: 4}; this.chTurn = diff >= 0 ? "me" : "cpu"; this.chCpuAt = Date.now() + 2500
+    if (this.chTotal.me >= 21 || this.chTotal.cpu >= 21) { this.toast(this.chTotal.me >= 21 ? "YOU WIN 21!" : "CPU WINS 21", 6000); this.chTotal = {me: 0, cpu: 0} }
   }
 }

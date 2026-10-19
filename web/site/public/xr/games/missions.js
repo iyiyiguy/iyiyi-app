@@ -1,4 +1,4 @@
-// iYiYi MISSIONS for XR glasses: GTA-style jobs in your room, yard or park with the laser tag guns.
+// iYiYi WE OUTSIDE (missions + cops & robbers) for XR glasses: GTA-style jobs in your room, yard or park with the laser tag guns.
 // Places (bank, store, stash, drop-off, getaway car) stand around you; a beam marks where to go.
 //   MISSIONS: deliver a package (point + pinch to grab it, walk it to the drop-off), take out a crew,
 //   hold a spot for 30 s, beat the boss. Thugs fire slow red bolts: step out of the way.
@@ -16,7 +16,7 @@ const WEAPONS = [
 const CASH_KEY = 'iyx_missions_cash'
 let ctx, THREE, S
 export default {
-  title: 'MISSIONS',
+  title: 'WE OUTSIDE',
   start(c) { ctx = c; THREE = c.THREE; S = { area: 1, cash: Number(localStorage.getItem(CASH_KEY) || 0), w: 0 }; ask() },
   stop() { S = null },
   tick(dt, now) { if (S && S.places) tick(dt, now) },
@@ -28,7 +28,7 @@ const flat = (a, b) => Math.hypot(a.x - b.x, a.z - b.z)
 const camFloor = () => { const v = ctx.viewPos(); return V(v.x, 0, v.z) }
 const K = () => [1, 2.6, 6][S.area]
 function ask() {
-  ctx.choose('Missions', [['MISSIONS', 'missions', 'JOBS FOR CASH'], ['COPS & ROBBERS: ROBBER', 'robber', 'ROB THE BANK'], ['COPS & ROBBERS: COP', 'cop', 'STOP THE HEISTS'], ['AREA: ' + ['ROOM', 'YARD', 'PARK'][S.area], 'area', ['ABOUT 3 M', 'ABOUT 8 M', 'UP TO 20 M'][S.area]], ['WEAPON: ' + WEAPONS[S.w].name, 'weapon', 'TAP TO CHANGE']], (v) => {
+  ctx.choose('We Outside', [['MISSIONS', 'missions', 'JOBS FOR CASH'], ['COPS & ROBBERS: ROBBER', 'robber', 'ROB THE BANK'], ['COPS & ROBBERS: COP', 'cop', 'STOP THE HEISTS'], ['AREA: ' + ['ROOM', 'YARD', 'PARK'][S.area], 'area', ['ABOUT 3 M', 'ABOUT 8 M', 'UP TO 20 M'][S.area]], ['WEAPON: ' + WEAPONS[S.w].name, 'weapon', 'TAP TO CHANGE']], (v) => {
     if (v === 'area') { S.area = (S.area + 1) % 3; ask(); return }
     if (v === 'weapon') { S.w = (S.w + 1) % 3; ask(); return }
     newGame(v)

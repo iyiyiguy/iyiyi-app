@@ -1,4 +1,4 @@
-// iYiYi MISSIONS for Snap Spectacles (this project's one script; the file keeps the template's name
+// iYiYi WE OUTSIDE (missions + cops & robbers) for Snap Spectacles (this project's one script; the file keeps the template's name
 // so the scene's component reference stays wired).
 //
 // GTA-style jobs in your real room, yard or park, with the laser tag guns in your hand (the app's
@@ -632,7 +632,7 @@ export class IYiYiSpecs extends BaseScriptComponent {
   onAwake() {
     this.initKit()
     try { this.cash = global.persistentStorageSystem.store.getFloat(CASH_KEY) || 0 } catch (e) {}
-    this.startIntro("MISSIONS")
+    this.startIntro("WE OUTSIDE")
   }
   private introProps() {
     const d = this.flatDir(), r = this.rightOf(d), cam = this.camPos()
@@ -648,7 +648,7 @@ export class IYiYiSpecs extends BaseScriptComponent {
   private menuItems(): [string, string][] {
     const items: [string, string][] = []
     if (this.game && this.job !== "dead") items.push(["RESUME", "resume"])
-    items.push(["MISSIONS", "missions"], ["COPS & ROBBERS: ROBBER", "robber"], ["COPS & ROBBERS: COP", "cop"], ["AREA: " + ["ROOM", "YARD", "PARK"][this.area], "area"])
+    items.push(["MISSIONS (JOBS FOR CASH)", "missions"], ["COPS & ROBBERS: ROBBER", "robber"], ["COPS & ROBBERS: COP", "cop"], ["AREA: " + ["ROOM", "YARD", "PARK"][this.area], "area"])
     return items
   }
   private runButton(b: Btn) {
@@ -1088,7 +1088,7 @@ export class IYiYiSpecs extends BaseScriptComponent {
       line = "ROBBERS: " + left + "  " + (this.beaconAt ? this.arrowTo(this.beaconAt) : "")
       if (left === 0) { this.setBeacon(null, ST.text, ""); this.toast(this.escaped ? "Some got away · " + this.arrests + " tagged" : "ALL ROBBERS TAGGED", 3500); this.job = "between"; this.jobEnd = now + 3000 }
     } else if (this.job === "dead") line = "WASTED"
-    const title = this.game === "missions" ? "MISSIONS · JOB " + this.jobN : this.game === "robber" ? "COPS & ROBBERS · ROBBER" : "COPS & ROBBERS · COP"
+    const title = this.game === "missions" ? "WE OUTSIDE · JOB " + this.jobN : this.game === "robber" ? "COPS & ROBBERS · ROBBER" : "COPS & ROBBERS · COP"
     this.kicker.text = "iYiYi · " + title
     this.hud.text = "♥".repeat(Math.max(0, this.hp)) + "   $" + Math.round(this.cash) + "   " + this.currentWeapon().name + "\n" + line
     if (this.hitFlash > 0) { this.hitFlash -= dt; this.hud.textFill.color = ST.enemy } else this.hud.textFill.color = ST.text

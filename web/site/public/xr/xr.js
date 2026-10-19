@@ -325,7 +325,7 @@ const GAME_LIST = [
   ['chess', 'CHESS', 'TABLETOP · FLOOR · LIFE-SIZE'],
   ['mafia', 'MAFIA', 'THE PENGUIN TOWN'],
   ['beside', 'BESIDE THEM', 'TASKS · IMPOSTER · VOTES'],
-  ['missions', 'MISSIONS', 'JOBS · COPS & ROBBERS'],
+  ['missions', 'WE OUTSIDE', 'JOBS · COPS & ROBBERS'],
 ]
 gamesP.draw = () => {
   const p = gamesP; panelBg(p, 'Games')
