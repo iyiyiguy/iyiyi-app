@@ -208,7 +208,13 @@ export class IYiYiSpecs extends BaseScriptComponent {
     if (this.mode === "intro") { this.endIntro(); return }
     if (this.mode === "menu") { this.pickButton(); return }
     if (this.menuGazed()) { this.openMenu(); return }
-    if (this.mode === "solo") { this.soloFire(); return }
+    if (this.mode === "solo") {
+      // an iYiYi person in your sights: their profile instead of a shot
+      if (this.session && this.card) { if (this.card.page === "card" && this.socialsOf(this.card.profile).length) { this.card.page = "socials"; this.drawCard() } else { this.card = null; this.panelText.text = "" } return }
+      const pp = this.session ? this.lookedAtPerson() : null
+      if (pp && Math.abs(((this.bearingTo(pp.latitude, pp.longitude) - this.heading) % 360 + 540) % 360 - 180) < 6) { this.openCard(pp); return }
+      this.soloFire(); return
+    }
     if (this.mode === "link") return
     if (!this.session) return
     if (this.matchLive()) { this.fire(); return }
@@ -248,7 +254,12 @@ export class IYiYiSpecs extends BaseScriptComponent {
       if (now > this.nextNearby && !this.matchLive()) { this.nextNearby = now + 4000; this.loadNearby() }
       this.drawLabels()
       this.drawHud()
-    }
+    } else if (this.session && this.mode === "solo") {
+      // iYiYi people stay tagged during solo practice too
+      if (now > this.session.expires_at * 1000 - 60000) this.refreshSession()
+      if (now > this.nextNearby) { this.nextNearby = now + 4000; this.loadNearby() }
+      this.drawLabels()
+    } else this.drawLabels()
     this.tickFx(dt)
     this.tickWorld(dt)
     if (now > this.toastUntil) this.toastText.text = ""
@@ -490,7 +501,7 @@ export class IYiYiSpecs extends BaseScriptComponent {
   }
 
   private drawLabels() {
-    const show = this.mode === "live" && this.pos && this.headingFresh() && this.camT
+    const show = (this.mode === "live" || this.mode === "solo") && this.session && this.pos && this.headingFresh() && this.camT
     const seen: {[id: string]: boolean} = {}
     if (show) {
       for (const p of this.people) {

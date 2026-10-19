@@ -59,6 +59,13 @@ const FONT5: {[k: string]: string[]} = {
 
 const LG = {pal: PAL, text: ST.text, muted: ST.muted, friendly: ST.friendly, objective: ST.objective}
 
+// iYiYi people (every Lens): link your account once, then iYiYi members nearby who allow tagging get
+// a name tag over their head, even mid-game. Look at a tag and pinch: their profile, then socials.
+const PP_URL = "https://sqsjwcsrgcgcpxccxedp.supabase.co"
+const PP_ANON = "sb_publishable_dC1TtQAqZpdQWRMoLAa3-w_xCSbea1x"
+const PP_STORE = "iyiyi_specs_session_v1"
+const PP_LABELS: {[k: string]: string} = {instagram: "Instagram", tiktok: "TikTok", facebook: "Facebook", twitter: "X", snapchat: "Snapchat", linkedin: "LinkedIn", whatsapp: "WhatsApp", spotify: "Spotify", soundcloud: "SoundCloud", youtube: "YouTube", discord: "Discord", twitch: "Twitch", telegram: "Telegram"}
+
 const NAMES = ["PIP", "WADDLES", "TUX", "NOOT", "FLAPPY", "ICEY", "CHILLY", "SLIDE", "POPPY", "BIRDIE", "FROSTY"]
 const CREW_COLORS = [hex(0x39d5ff), hex(0x5cf2a0), hex(0xffb21e), hex(0xb06cff), hex(0xff4fa3), hex(0xff7a1a)]
 const STATIONS: {name: string; kind: string}[] = [
@@ -121,7 +128,7 @@ export class IYiYiSpecs extends BaseScriptComponent {
             const sp = this.camComp.worldSpaceToScreenSpace(b.obj.getTransform().getWorldPosition())
             if (Math.abs(sp.y - tp.y) < bd) { bd = Math.abs(sp.y - tp.y); best = b }
           }
-          if (best) this.runButton(best)
+          if (best) this.press(best)
           return
         }
         if (this.menuTag && this.camComp && this.mode !== "intro") {
@@ -131,12 +138,19 @@ export class IYiYiSpecs extends BaseScriptComponent {
         this.onTap(tp)
       })
     } catch (e) {}
+    this.ppInit()
+  }
+  /** a menu row: the shared LINK iYiYi row, or the game's own */
+  private press(b: Btn) {
+    if (b.action === "pplink") { this.ppMenuPress(); b.text.text = this.ppMenuLabel(); return }
+    this.runButton(b)
   }
 
   private pinch(right: boolean, down: boolean) {
     if (this.mode === "intro") { if (down) this.endIntro(); return }
-    if (this.mode === "menu") { if (down && right) { const g = this.gazedBtn(); if (g) this.runButton(g) } return }
+    if (this.mode === "menu") { if (down && right) { const g = this.gazedBtn(); if (g) this.press(g) } return }
     if (down && right && this.menuLookedAt()) { this.openMenu(); return }
+    if (down && right && this.ppPinch()) return // looking at an iYiYi person: their profile, mid-game
     this.onPinch(right, down)
   }
 
@@ -149,6 +163,7 @@ export class IYiYiSpecs extends BaseScriptComponent {
     else if (this.mode === "menu") this.tickMenu()
     else { this.placeMenuTag(); this.tick(dt) }
     this.tickFx(dt)
+    this.ppTick(Date.now())
     if (Date.now() > this.toastUntil) this.toastT.text = ""
   }
 
@@ -413,13 +428,13 @@ export class IYiYiSpecs extends BaseScriptComponent {
     this.onMenuOpen()
     if (!this.camT) return
     const cam = this.camPos(), d = this.flatDir()
-    const items = this.menuItems()
+    const items = this.menuItems().concat([[this.ppMenuLabel(), "pplink"]])
     items.forEach(([label, action], i) => {
-      const o = this.makeText(label, 8, ST.text)
+      const o = this.makeText(label, 7, ST.text)
       const t = o.getComponent("Component.Text") as Text
       this.panelize(t)
       const tr = o.getTransform()
-      tr.setWorldPosition(cam.add(d.uniformScale(160)).add(new vec3(0, 50 - i * 26, 0)))
+      tr.setWorldPosition(cam.add(d.uniformScale(210)).add(new vec3(0, 54 - i * 16, 0))) // up to 7 rows inside the Specs view
       tr.setWorldRotation(quat.lookAt(d.uniformScale(-1), vec3.up()))
       this.btns.push({obj: o, text: t, action})
     })
@@ -596,6 +611,222 @@ export class IYiYiSpecs extends BaseScriptComponent {
     return ang < 0 ? "◀ " + m : m + " ▶"
   }
   // ================================================================== end of shared kit
+
+  // ================================================================== iYiYi people (all games)
+  private ppStore: GeneralDataStore = null
+  private ppNet: InternetModule = null
+  private ppLoc: LocationService = null
+  private ppSession: {access_token: string; refresh_token: string; expires_at: number; user_id: string} = null
+  private ppPos: {lat: number; lng: number; acc: number} = null
+  private ppHeading: number = null
+  private ppHeadingAt = 0
+  private ppPeople: any[] = []
+  private ppLabels: {[id: string]: {obj: SceneObject; text: Text}} = {}
+  private ppCard: {id: string; page: string; profile: any} = null
+  private ppPanel: Text = null
+  private ppLinking = false
+  private ppCode: string = null
+  private ppSecret = ""
+  private ppCodeAt = 0
+  private ppNextPoll = 0
+  private ppBusy = false
+  private ppNextNearby = 0
+  private ppRefreshing = false
+
+  private ppInit() {
+    try { this.ppStore = global.persistentStorageSystem.store } catch (e) {}
+    try { this.ppNet = require("LensStudio:InternetModule") } catch (e) {}
+    try { const s = this.ppStore ? this.ppStore.getString(PP_STORE) : ""; if (s) this.ppSession = JSON.parse(s) } catch (e) { this.ppSession = null }
+    this.ppPanel = this.makeText("", 3, new vec4(0.95, 0.96, 0.97, 1)).getComponent("Component.Text") as Text
+    try { this.ppPanel.backgroundSettings.enabled = true; this.ppPanel.backgroundSettings.fill.color = new vec4(0.03, 0.04, 0.055, 0.9) } catch (e) {}
+    try {
+      this.ppLoc = GeoLocation.createLocationService()
+      this.ppLoc.accuracy = GeoLocationAccuracy.Navigation
+      this.ppLoc.onNorthAlignedOrientationUpdate.add((q: quat) => { this.ppHeading = (GeoLocation.getNorthAlignedHeading(q) % 360 + 360) % 360; this.ppHeadingAt = Date.now() })
+      const poll = this.createEvent("DelayedCallbackEvent")
+      poll.bind(() => {
+        if (this.ppSession) this.ppLoc.getCurrentPosition((g) => { this.ppPos = {lat: g.latitude, lng: g.longitude, acc: g.horizontalAccuracy} }, () => {})
+        poll.reset(2)
+      })
+      poll.reset(0.5)
+    } catch (e) { print("iYiYi people: location unavailable " + e) }
+  }
+  /** label for the menu row that links / unlinks your iYiYi account */
+  private ppMenuLabel(): string { return this.ppSession ? "iYiYi LINKED · TAP TO UNLINK" : this.ppLinking ? "CANCEL LINKING" : "LINK iYiYi (SEE PEOPLE)" }
+  private ppMenuPress() {
+    if (this.ppSession) { this.ppSession = null; try { this.ppStore.putString(PP_STORE, "") } catch (e) {} this.toast("iYiYi unlinked") }
+    else { this.ppLinking = !this.ppLinking; this.ppCode = null }
+  }
+  private async ppReq(path: string, method: string, body: any, auth: boolean): Promise<{status: number; data: any}> {
+    const headers: any = {"Content-Type": "application/json", apikey: PP_ANON}
+    if (auth && this.ppSession) headers.Authorization = "Bearer " + this.ppSession.access_token
+    const r = await this.ppNet.fetch(new Request(PP_URL + path, {method, headers, body: body === undefined ? undefined : JSON.stringify(body)}))
+    let data: any = null
+    try { data = await r.json() } catch (e) { data = null }
+    return {status: r.status, data}
+  }
+  private ppSave(s: any) {
+    this.ppSession = {access_token: s.access_token, refresh_token: s.refresh_token, expires_at: s.expires_at || Math.floor(Date.now() / 1000) + (s.expires_in || 3600), user_id: s.user ? s.user.id : this.ppSession && this.ppSession.user_id}
+    try { this.ppStore.putString(PP_STORE, JSON.stringify(this.ppSession)) } catch (e) {}
+  }
+  private async ppRefresh() {
+    if (this.ppRefreshing || !this.ppSession) return
+    this.ppRefreshing = true
+    try {
+      const r = await this.ppReq("/auth/v1/token?grant_type=refresh_token", "POST", {refresh_token: this.ppSession.refresh_token}, false)
+      if (r.status === 200 && r.data && r.data.access_token) this.ppSave(r.data)
+      else if (r.status === 400 || r.status === 401) { this.ppSession = null; try { this.ppStore.putString(PP_STORE, "") } catch (e) {} }
+    } catch (e) {}
+    this.ppRefreshing = false
+  }
+  private async ppSha256(s: string): Promise<string> {
+    // tiny SHA-256 (no crypto.subtle in Lens scripting)
+    const K = [0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5, 0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174, 0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da, 0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967, 0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85, 0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070, 0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3, 0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2]
+    const bytes: number[] = []
+    for (let i = 0; i < s.length; i++) bytes.push(s.charCodeAt(i) & 0xff) // ascii hex input
+    const l = bytes.length * 8
+    bytes.push(0x80)
+    while (bytes.length % 64 !== 56) bytes.push(0)
+    for (let i = 7; i >= 0; i--) bytes.push(i >= 4 ? 0 : (l >>> (i * 8)) & 0xff)
+    let h = [0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19]
+    const w = new Array(64)
+    const rotr = (x: number, n: number) => (x >>> n) | (x << (32 - n))
+    for (let o = 0; o < bytes.length; o += 64) {
+      for (let i = 0; i < 16; i++) w[i] = (bytes[o + i * 4] << 24) | (bytes[o + i * 4 + 1] << 16) | (bytes[o + i * 4 + 2] << 8) | bytes[o + i * 4 + 3]
+      for (let i = 16; i < 64; i++) {
+        const s0 = rotr(w[i - 15], 7) ^ rotr(w[i - 15], 18) ^ (w[i - 15] >>> 3)
+        const s1 = rotr(w[i - 2], 17) ^ rotr(w[i - 2], 19) ^ (w[i - 2] >>> 10)
+        w[i] = (w[i - 16] + s0 + w[i - 7] + s1) | 0
+      }
+      let [a, b, c, d, e, f, g, hh] = h
+      for (let i = 0; i < 64; i++) {
+        const S1 = rotr(e, 6) ^ rotr(e, 11) ^ rotr(e, 25)
+        const ch = (e & f) ^ (~e & g)
+        const t1 = (hh + S1 + ch + K[i] + w[i]) | 0
+        const S0 = rotr(a, 2) ^ rotr(a, 13) ^ rotr(a, 22)
+        const mj = (a & b) ^ (a & c) ^ (b & c)
+        const t2 = (S0 + mj) | 0
+        hh = g; g = f; f = e; e = (d + t1) | 0; d = c; c = b; b = a; a = (t1 + t2) | 0
+      }
+      h = [(h[0] + a) | 0, (h[1] + b) | 0, (h[2] + c) | 0, (h[3] + d) | 0, (h[4] + e) | 0, (h[5] + f) | 0, (h[6] + g) | 0, (h[7] + hh) | 0]
+    }
+    return h.map((x) => ("00000000" + (x >>> 0).toString(16)).slice(-8)).join("")
+  }
+
+
+  private async ppTickLink(now: number) {
+    if (this.ppBusy || !this.ppNet) return
+    this.ppBusy = true
+    try {
+      if (!this.ppCode || now - this.ppCodeAt > 9.5 * 60 * 1000) {
+        let s = ""
+        for (let i = 0; i < 32; i++) s += ("0" + Math.floor(Math.random() * 256).toString(16)).slice(-2)
+        this.ppSecret = s
+        const r = await this.ppReq("/rest/v1/rpc/glasses_link_start", "POST", {p_secret_hash: await this.ppSha256(this.ppSecret)}, false)
+        if (r.status === 200 && typeof r.data === "string") { this.ppCode = r.data; this.ppCodeAt = Date.now(); this.ppNextPoll = Date.now() + 2500 }
+        else this.ppPanel.text = "Can't reach iYiYi\nCheck the internet connection"
+      } else if (now > this.ppNextPoll) {
+        this.ppNextPoll = now + 2500
+        const r = await this.ppReq("/functions/v1/glasses-link", "POST", {code: this.ppCode, secret: this.ppSecret}, false)
+        if (r.status === 200 && r.data && r.data.token_hash) {
+          const v = await this.ppReq("/auth/v1/verify", "POST", {type: "magiclink", token_hash: r.data.token_hash}, false)
+          if (v.status === 200 && v.data && v.data.access_token) { this.ppSave(v.data); this.ppLinking = false; this.toast("Linked! iYiYi people now show while you play", 4000) }
+        } else if (r.status === 410) this.ppCode = null
+      }
+    } catch (e) {}
+    this.ppBusy = false
+  }
+  private async ppLoadNearby() {
+    if (!this.ppPos || this.ppBusy) return
+    this.ppBusy = true
+    try {
+      const r = await this.ppReq("/rest/v1/rpc/camera_nearby", "POST", {lat: this.ppPos.lat, lng: this.ppPos.lng, radius_m: 60}, true)
+      if (r.status === 200 && Array.isArray(r.data)) this.ppPeople = r.data.filter((p: any) => p && typeof p.latitude === "number")
+      else if (r.status === 401) this.ppRefresh()
+    } catch (e) {}
+    this.ppBusy = false
+  }
+  private ppBearing(lat: number, lng: number) {
+    const a = this.ppPos, R = Math.PI / 180
+    const y = Math.sin((lng - a.lng) * R) * Math.cos(lat * R)
+    const x = Math.cos(a.lat * R) * Math.sin(lat * R) - Math.sin(a.lat * R) * Math.cos(lat * R) * Math.cos((lng - a.lng) * R)
+    return (Math.atan2(y, x) / R + 360) % 360
+  }
+  private ppFresh() { return this.ppHeading !== null && Date.now() - this.ppHeadingAt < 3000 && !!this.ppPos }
+  private ppRel(b: number) { return ((b - this.ppHeading) % 360 + 540) % 360 - 180 }
+  private ppTick(now: number) {
+    if (!this.camT || !this.ppPanel) return
+    const cam = this.camT.getWorldPosition(), r = this.camT.getWorldRotation()
+    const fwd = r.multiplyVec3(new vec3(0, 0, -1)), up = r.multiplyVec3(new vec3(0, 1, 0))
+    const ptr = this.ppPanel.getSceneObject().getTransform()
+    ptr.setWorldPosition(cam.add(fwd.uniformScale(80)).add(up.uniformScale(2))); ptr.setWorldRotation(r)
+    if (this.ppLinking) {
+      this.ppTickLink(now)
+      if (this.ppCode) this.ppPanel.text = "LINK iYiYi\n\n" + this.ppCode.split("").join(" ") + "\n\nOn your phone: iYiYi > Settings >\nMeta glasses, type this code"
+      else this.ppPanel.text = "LINK iYiYi\n\nMaking a code…"
+    } else if (this.ppCard) this.ppDrawCard()
+    else this.ppPanel.text = ""
+    const seen: {[id: string]: boolean} = {}
+    if (this.ppSession) {
+      if (now > this.ppSession.expires_at * 1000 - 60000) this.ppRefresh()
+      if (now > this.ppNextNearby) { this.ppNextNearby = now + 4000; this.ppLoadNearby() }
+      if (this.ppFresh()) {
+        const flat = new vec3(fwd.x, 0, fwd.z).length > 0.001 ? new vec3(fwd.x, 0, fwd.z).normalize() : new vec3(0, 0, -1)
+        const look = this.ppLooked()
+        for (const p of this.ppPeople) {
+          seen[p.id] = true
+          let l = this.ppLabels[p.id]
+          if (!l) { const o = this.makeText("", 6, new vec4(0.22, 0.84, 1, 1)); l = {obj: o, text: o.getComponent("Component.Text") as Text}; this.ppLabels[p.id] = l }
+          const m = Math.max(2, p.distance_m || 2)
+          const dir = quat.angleAxis(-this.ppRel(this.ppBearing(p.latitude, p.longitude)) * Math.PI / 180, vec3.up()).multiplyVec3(flat)
+          const at = new vec3(cam.x + dir.x * m * 100, cam.y + 35 + m * 2, cam.z + dir.z * m * 100)
+          const t = l.obj.getTransform()
+          t.setWorldPosition(at)
+          const to = cam.sub(at), tf = new vec3(to.x, 0, to.z)
+          if (tf.length > 0.001) t.setWorldRotation(quat.lookAt(tf.normalize(), vec3.up()))
+          const sc = Math.max(1, m / 3); t.setWorldScale(new vec3(sc, sc, sc))
+          const hot = look && look.id === p.id
+          l.text.text = (hot ? "◎ " : "") + "@" + (p.username || "member") + "\n" + Math.max(5, Math.round(m * 3.28084 / 5) * 5) + " ft"
+          l.text.textFill.color = hot || (this.ppCard && this.ppCard.id === p.id) ? new vec4(1, 0.7, 0.12, 1) : new vec4(0.22, 0.84, 1, 1)
+          l.obj.enabled = true
+        }
+      }
+    }
+    for (const id in this.ppLabels) if (!seen[id]) this.ppLabels[id].obj.enabled = false
+  }
+  private ppLooked(): any {
+    if (!this.ppSession || !this.ppFresh()) return null
+    let best: any = null, off = 6
+    for (const p of this.ppPeople) { const rel = Math.abs(this.ppRel(this.ppBearing(p.latitude, p.longitude))); if (rel < off) { off = rel; best = p } }
+    return best
+  }
+  /** call first on every pinch: true when it opened / paged / closed a profile card (the game ignores that pinch) */
+  private ppPinch(): boolean {
+    if (this.ppCard) {
+      const soc = this.ppSocials(this.ppCard.profile)
+      if (this.ppCard.page === "card" && soc.length) this.ppCard.page = "socials"
+      else { this.ppCard = null; this.ppPanel.text = "" }
+      return true
+    }
+    const p = this.ppLooked()
+    if (!p) return false
+    this.ppOpen(p)
+    return true
+  }
+  private ppSocials(u: any): any[] { return ((u && u.social_links) || []).filter((l: any) => l && l.value && PP_LABELS[l.platform]) }
+  private async ppOpen(p: any) {
+    this.ppCard = {id: p.id, page: "card", profile: {username: p.username}}
+    try {
+      const r = await this.ppReq("/functions/v1/api/profiles/" + p.id, "GET", undefined, true)
+      if (r.status === 200 && r.data && this.ppCard && this.ppCard.id === p.id) this.ppCard.profile = r.data
+    } catch (e) {}
+  }
+  private ppDrawCard() {
+    const c = this.ppCard, u = c.profile || {}, soc = this.ppSocials(u)
+    const h = (v: string) => { v = String(v || "").trim(); const m = v.match(/^https?:\/\/[^/]+\/(.+)$/); if (m) v = m[1].split(/[/?#]/).filter(Boolean).pop() || v; return v.replace(/^@/, "") }
+    if (c.page === "card") this.ppPanel.text = "@" + (u.username || "") + "\n" + (u.bio ? String(u.bio).slice(0, 80) + "\n" : "") + (soc.length ? "\n" + soc.slice(0, 3).map((l: any) => PP_LABELS[l.platform]).join(" · ") + (soc.length > 3 ? " +" + (soc.length - 3) : "") + "\n\nPinch for socials" : "\nPinch to close")
+    else this.ppPanel.text = "@" + (u.username || "") + "\n\n" + soc.slice(0, 7).map((l: any) => PP_LABELS[l.platform] + "   @" + h(l.value)).join("\n") + "\n\nFollow them in iYiYi on your phone\nPinch to close"
+  }
 
   // ================================================================== Beside Them
   private bigArea = false
