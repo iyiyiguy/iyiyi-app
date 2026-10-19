@@ -17,6 +17,7 @@ import { THEME_OPTIONS, loadThemePref, saveThemePref } from '../lib/themePref'
 import { LaserTaggableSetting } from '../games/laser/Bystander'
 import { languageName, useLanguage, useT } from '../i18n'
 import strings from '../i18n/strings/settings'
+import glassesStrings from '../i18n/strings/glasses'
 import { signOutAndReset } from '../lib/reviewAccount'
 import useIsPro from '../lib/useIsPro'
 import BusinessToolsCard from '../components/business/BusinessToolsCard'
@@ -39,6 +40,7 @@ const FOLLOW_US = [
 
 export default function SettingsScreen({ navigation }) {
   const t = useT(strings)
+  const tg = useT(glassesStrings)
   const lang = useLanguage()
   const [statsPublic, setStatsPublic] = useState(false)
   const [notifyNearby, setNotifyNearby] = useState(false)
@@ -237,6 +239,7 @@ export default function SettingsScreen({ navigation }) {
           <Row label={t('viewers')} onPress={() => navigation.navigate('Viewers')} />
           <Row label={t('saved')} onPress={() => navigation.navigate('SavedContent')} />
           <Row label={t('blocked')} onPress={() => navigation.navigate('BlockedUsers')} />
+          <Row label={tg('settingsRow')} onPress={() => navigation.navigate('Glasses')} />
         </GlassPanel>
 
         <BusinessToolsCard navigation={navigation} variant="row" style={styles.card} />

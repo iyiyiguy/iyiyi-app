@@ -43,6 +43,7 @@ import SettingsScreen from './src/screens/SettingsScreen'
 import SubscriptionScreen from './src/screens/SubscriptionScreen'
 import UserProfileScreen from './src/screens/UserProfileScreen'
 import BlockedUsersScreen from './src/screens/BlockedUsersScreen'
+import GlassesScreen from './src/screens/GlassesScreen'
 import LocationConsentScreen from './src/screens/LocationConsentScreen'
 import PublicProfileScreen from './src/screens/PublicProfileScreen'
 import HistoryScreen from './src/screens/HistoryScreen'
@@ -161,6 +162,7 @@ const Aura = {
   AirdropScreen: withAura(AirdropScreen),
   AuthScreen: withAura(AuthScreen),
   BlockedUsersScreen: withAura(BlockedUsersScreen),
+  GlassesScreen: withAura(GlassesScreen),
   ChessScreen: withAura(ChessScreen),
   CreateEventScreen: withAura(CreateEventScreen),
   EventDetailsScreen: withAura(EventDetailsScreen),
@@ -495,6 +497,7 @@ export default function App() {
             <Stack.Screen name="UserProfile" component={Aura.UserProfileScreen} />
             <Stack.Screen name="PublicProfile" component={Aura.PublicProfileScreen} />
             <Stack.Screen name="BlockedUsers" component={Aura.BlockedUsersScreen} />
+            <Stack.Screen name="Glasses" component={Aura.GlassesScreen} />
             <Stack.Screen name="History" component={Aura.HistoryScreen} />
             <Stack.Screen name="FollowList" component={Aura.FollowListScreen} />
             <Stack.Screen name="SavedContent" component={Aura.SavedContentScreen} />

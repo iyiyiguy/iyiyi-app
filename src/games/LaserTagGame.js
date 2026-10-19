@@ -82,6 +82,8 @@ import { spendLandMine, useLandMineInventory } from '../lib/landMines'
 import { matchCheck } from '../lib/matchLimits'
 import { translate, useT } from '../i18n'
 import S from '../i18n/strings/laserTag'
+import { useGlasses, glassesHeading } from '../lib/glasses'
+import GS from '../i18n/strings/glasses'
 
 // Call-time lookup for callbacks and helpers outside render.
 const tr = (k, v) => translate(S, k, v)
@@ -259,6 +261,9 @@ export function LaserTagGame({ room, onExit }) {
   const [row1H, onRow1Layout] = useMeasuredHeight()
   const [aboveH, onAboveLayout] = useMeasuredHeight()
   const aim = useAim({ enabled: loc.status === 'granted', override: prefs.aimMode })
+  // Meta Ray-Ban Display glasses (iyiyi.xyz/glasses): head aim + pinch to fire, HUD in the lens.
+  const glassesFireRef = useRef(null)
+  const glasses = useGlasses({ enabled: !!room, onFire: (p) => glassesFireRef.current?.(p) })
   const { loadout, weaponId, select: selectWeapon } = useLoadout()
   const gun = useMemo(() => normalizeGun(getWeapon(weaponId)), [weaponId])
   const gunNameRef = useRef('')
@@ -925,7 +930,8 @@ export function LaserTagGame({ room, onExit }) {
 
   // ---- aiming ----
   const myPos = loc.coords
-  const heading = aim.heading
+  // Glasses compass wins while the glasses are sending (you aim with your head).
+  const heading = glassesHeading(glasses.headingRef) || aim.heading
   myPosRef.current = myPos
   headingRef.current = heading?.deg
   const enemies = useMemo(() => {
@@ -1118,6 +1124,40 @@ export function LaserTagGame({ room, onExit }) {
     let hits = 0
     for (let i = 0; i < shots; i++) if (Math.random() < chance) hits += 1
     sendHit(target.id, { hits, shots, zone: 'body', method: 'compass', firedAt, snap })
+  }
+
+  // A pinch on the glasses: compass aim along the glasses heading at that moment (the phone can
+  // stay in your pocket, so no camera matching). Same gates as a trigger pull.
+  glassesFireRef.current = (p) => {
+    if (dead || !playing || !Number.isFinite(p?.deg)) return
+    if (tooFastRef.current) return
+    if (gun.id === 'rocket') return // rockets need the phone's aim screen
+    const gap = minShotGapMs(gun)
+    const t0 = Date.now()
+    if (gap > 0 && t0 - (lastPullRef.current[gun.id] || 0) < gap) return
+    lastPullRef.current[gun.id] = t0
+    const pos = myPosRef.current
+    if (!pos) { glasses.sendEvent({ kind: 'note', text: tr('no_fix') }); return }
+    const deg = p.deg
+    aimRef.current = { ...aimRef.current, heading: { deg, accuracy: 3 } }
+    const shots = gun.shotsPerClick
+    shotsRef.current += shots
+    setShotTick((n) => n + 1)
+    playShot(gun)
+    broadcastShot(pos)
+    let best = null
+    for (const o of enemiesRef.current) {
+      if (!o.alive || !withinReach(o, pos, Math.min(gun.range, COMPASS_MAX_RANGE_M))) continue
+      const tol = compassTolerance(o.d, pos.acc, o.pos.acc, 3)
+      const off = Math.abs(angleDiff(o.bearing, deg))
+      if (off > tol) continue
+      const ratio = off / tol
+      if (!best || ratio < best.ratio) best = { ...o, ratio, chance: hitChance(o.d, gun.accuracy, ratio, gpsErr(pos.acc, o.pos.acc)) }
+    }
+    if (!best) return
+    let hits = 0
+    for (let i = 0; i < shots; i++) if (Math.random() < best.chance) hits += 1
+    sendHit(best.id, { hits, shots, zone: 'body', method: 'compass', firedAt: t0 })
   }
 
   // Where the hip-fire radar is on screen (its centre = you, top = the top edge of the phone).
@@ -1645,6 +1685,61 @@ export function LaserTagGame({ room, onExit }) {
     } catch {}
     return out
   }, [myStickies, state?.stickies, state?.landMines, state?.mode, meId, myTeam]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ---- glasses HUD (Meta Ray-Ban Display): sights, radar, HP, score, every ~250 ms ----
+  useEffect(() => {
+    if (!glasses.connected || !state) return
+    try {
+      const me = myState
+      const mm = (ms) => { const sec = Math.max(0, Math.ceil(ms / 1000)); return `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}` }
+      const mates = []
+      if (state.mode !== 'ffa' && myPos) {
+        for (const id of Object.keys(state.players)) {
+          if (id === meId || state.players[id].team !== myTeam) continue
+          const p = positions?.[id]
+          if (p && Date.now() - p.at <= 15000) mates.push({ bearing: Math.round(bearingDeg(myPos, p)), d: Math.round(distanceMeters(myPos, p)) })
+        }
+      }
+      const ts = state.teamScore || {}
+      glasses.sendHud({
+        phase: state.phase === 'playing' && now < (state.startsAt || 0) ? 'countdown' : state.phase,
+        countdown: state.startsAt && now < state.startsAt ? String(Math.ceil((state.startsAt - now) / 1000)) : null,
+        clock: state.endsAt && state.phase === 'playing' && !state.endless ? mm(state.endsAt - Math.max(now, state.startsAt || 0)) : '',
+        score: state.mode === 'ffa' || !myTeam ? `${me?.score || 0} pts · ${me?.kills || 0} K` : `${ts[myTeam] || 0} – ${ts[myTeam === 'A' ? 'B' : 'A'] || 0}`,
+        hp: me?.hp ?? 0,
+        max: engine.MAX_HP,
+        alive: me ? !!me.alive : false,
+        respawn: me?.respawnAt && me.respawnAt > now ? Math.ceil((me.respawnAt - now) / 1000) : null,
+        gun: gun?.name || '',
+        range: Math.min(gun?.range || 60, COMPASS_MAX_RANGE_M),
+        target: inSights ? { name: inSights.name, dist: formatDistance(inSights.d), chance: inSights.chance } : null,
+        enemies: enemies.slice(0, 12).map((o) => ({ bearing: Math.round(o.bearing), d: Math.round(o.d), alive: !!o.alive })),
+        mates: mates.slice(0, 8),
+      })
+    } catch {}
+  }, [now, glasses.connected]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => { if (glasses.connected) flash(translate(GS, 'glassesOn'), true) }, [glasses.connected]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Hits, tag-outs and explosions flash in the lens too.
+  useEffect(() => {
+    if (!room || !glasses.connected) return undefined
+    const bearingOf = (id) => {
+      const p = id ? positionsRef.current?.[id] : null
+      const me = myPosRef.current
+      return p && me ? Math.round(bearingDeg(me, p)) : null
+    }
+    const offs = [
+      room.onMessage('hit_ok', (d) => glasses.sendEvent({ kind: d?.killed ? 'kill' : 'hit', text: d?.killed && d?.name ? `You tagged out ${String(d.name).slice(0, 20)}` : null })),
+      room.onMessage('grenade_ok', (d) => glasses.sendEvent({ kind: 'boom', text: (d?.hits || []).some((h) => h.killed) ? 'Grenade tag-out' : null })),
+      room.onMessage('got_hit', (d, from) => {
+        const explosive = d?.zone === 'grenade' || d?.zone === 'sticky_bomb' || d?.zone === 'land_mine' || d?.zone === 'rocket'
+        if (explosive) glasses.sendEvent({ kind: 'boom' })
+        glasses.sendEvent({ kind: d?.killed ? 'died' : 'got_hit', bearing: bearingOf(d?.byId || from), text: d?.killed ? `Out by ${String(d?.by || 'someone').slice(0, 20)}` : null })
+      }),
+    ]
+    return () => offs.forEach((o) => o?.())
+  }, [room, glasses.connected]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ---- render ----
   if (!room || !snap) return null
