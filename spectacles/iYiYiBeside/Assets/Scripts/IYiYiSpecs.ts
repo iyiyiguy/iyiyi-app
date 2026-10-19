@@ -25,13 +25,13 @@ function hex(h: number): vec4 { return new vec4(((h >> 16) & 255) / 255, ((h >> 
 const ST = {
   friendly: hex(0x39d5ff), enemy: hex(0xff3d52), objective: hex(0xffb21e), health: hex(0x5cf2a0),
   armor: hex(0x7fb4ff), epic: hex(0xb06cff), night: hex(0xb9a6ff), text: hex(0xf2f4f7),
-  muted: new vec4(0.62, 0.64, 0.68, 1), line: new vec4(0.28, 0.31, 0.38, 1), panel: new vec4(0.03, 0.04, 0.055, 0.88),
+  muted: new vec4(0.62, 0.64, 0.68, 1), line: new vec4(0.42, 0.46, 0.55, 1), panel: new vec4(0.03, 0.04, 0.055, 0.88),
 }
 const PAL = [hex(0xff4fa3), ST.friendly, ST.objective, ST.health, ST.epic, hex(0xff7a1a)]
 const WHITE = new vec4(1, 1, 1, 1)
 // Penguins: the app's Mafia / Beside Them characters. Black is invisible on Specs (additive
-// display), so penguin "black" is a deep slate blue that still reads as a penguin.
-const PEN_DARK = new vec4(0.2, 0.25, 0.42, 1)
+// display: dark colours turn see-through), so penguin "black" is a bright navy blue.
+const PEN_DARK = new vec4(0.3, 0.4, 0.85, 1)
 const PEN_BELLY = new vec4(0.97, 0.97, 1, 1)
 const PEN_ORANGE = hex(0xffa21e)
 
@@ -96,6 +96,8 @@ export class IYiYiSpecs extends BaseScriptComponent {
   private toastUntil = 0
   private menuTag: SceneObject = null
 
+  /** destroy a scene object if it still exists (effects can destroy things first) */
+  private zap(o: SceneObject) { if (o && !isNull(o)) o.destroy() }
   private initKit() {
     this.camT = this.findCamera()
     if (this.blockMaterial) this.cube = this.makeCube()
@@ -191,9 +193,9 @@ export class IYiYiSpecs extends BaseScriptComponent {
     const cam = this.camPos(), d = this.viewDir(), r = this.camT.getWorldRotation()
     const up = r.multiplyVec3(new vec3(0, 1, 0))
     const put = (t: Text, y: number) => { const tr = t.getSceneObject().getTransform(); tr.setWorldPosition(cam.add(d.uniformScale(85)).add(up.uniformScale(y))); tr.setWorldRotation(r) }
-    put(this.kicker, 29)
-    put(this.hud, 22)
-    put(this.toastT, -17)
+    put(this.kicker, 19)
+    put(this.hud, 13.5)
+    put(this.toastT, -13)
   }
   /** turn an object (its +Z side) toward you, staying upright */
   private faceCamera(tr: Transform) {
@@ -258,6 +260,7 @@ export class IYiYiSpecs extends BaseScriptComponent {
   private tickFx(dt: number) {
     for (let i = this.fx.length - 1; i >= 0; i--) {
       const f = this.fx[i]
+      if (isNull(f.obj)) { this.fx.splice(i, 1); continue }
       f.t += dt
       const tr = f.obj.getTransform()
       if (f.vel) {
@@ -272,17 +275,17 @@ export class IYiYiSpecs extends BaseScriptComponent {
       }
       if (f.spin) tr.setWorldRotation(tr.getWorldRotation().multiply(quat.fromEulerAngles(f.spin.x * dt, f.spin.y * dt, f.spin.z * dt)))
       if (f.shrink) { const s = tr.getWorldScale(); tr.setWorldScale(s.uniformScale(Math.max(0.2, 1 - dt * 1.2))) }
-      if (f.t >= f.life) { f.obj.destroy(); this.fx.splice(i, 1); if (f.onDone) f.onDone() }
+      if (f.t >= f.life) { this.zap(f.obj); this.fx.splice(i, 1); if (f.onDone) f.onDone() }
     }
   }
-  private clearFx() { this.fx.forEach((f) => f.obj.destroy()); this.fx = [] }
+  private clearFx() { this.fx.forEach((f) => this.zap(f.obj)); this.fx = [] }
 
   // ------------------------------------------------------------------ intro + menu
   private setMode(m: string) {
     this.mode = m
     this.modeT = 0
-    if (m !== "menu") { this.btns.forEach((b) => b.obj.destroy()); this.btns = [] }
-    if (m === "menu" && this.menuTag) { this.menuTag.destroy(); this.menuTag = null }
+    if (m !== "menu") { this.btns.forEach((b) => this.zap(b.obj)); this.btns = [] }
+    if (m === "menu" && this.menuTag) { this.zap(this.menuTag); this.menuTag = null }
     this.hud.text = ""
     this.kicker.text = ""
   }
@@ -300,13 +303,13 @@ export class IYiYiSpecs extends BaseScriptComponent {
   }
   private endIntro() {
     this.destroyLogo()
-    this.introObjs.forEach((o) => o.destroy())
+    this.introObjs.forEach((o) => this.zap(o))
     this.introObjs = []
     this.clearFx()
     this.openMenu()
   }
   // ------------------------------------------------------------------ giant title logo
-  // A huge block-letter iYiYi (about 11.5 ft tall) stands 14 m in front of you, the game's name
+  // A huge block-letter iYiYi (about 11.5 ft tall) stands 17 m in front of you (so the whole thing fits in the Specs view), the game's name
   // under it, and "CREATED BY COLIN PHILLIPS" about 1 ft tall at the bottom, in a frame.
   private logoParts: {obj: SceneObject; x: number; y: number; delay: number; drop: number}[] = []
   private logoAnchor: vec3 = null
@@ -346,8 +349,10 @@ export class IYiYiSpecs extends BaseScriptComponent {
   }
   private buildLogo(sub: string) {
     this.destroyLogo()
-    const d = this.flatDir(), cam = this.camPos()
-    this.logoAnchor = new vec3(cam.x + d.x * 1400, this.floorY, cam.z + d.z * 1400)
+    const d = this.flatDir(), cam = this.camT.getWorldPosition()
+    // the Specs camera stops drawing at about 15 m: push the far plane out so the top isn't cut off
+    try { if (this.camComp && this.camComp.far < 4000) this.camComp.far = 4000 } catch (e) {}
+    this.logoAnchor = new vec3(cam.x + d.x * 1700, this.floorY, cam.z + d.z * 1700)
     this.logoFace = quat.lookAt(d.uniformScale(-1), vec3.up())
     const PX = 50 // 7 rows x 50 cm = 3.5 m (11.5 ft) tall letters
     const letters = ["i", "Y", "i", "Y", "i"], cols = [LG.pal[0], LG.pal[1], LG.pal[2], LG.pal[1], LG.pal[0]]
@@ -355,14 +360,14 @@ export class IYiYiSpecs extends BaseScriptComponent {
     let x = -total * PX / 2
     letters.forEach((ch, i) => {
       const w = FONT5[ch][0].length
-      this.logoParts.push({obj: this.voxelText(ch, PX, cols[i]), x: x + w * PX / 2, y: 330, delay: 0.15 + i * 0.16, drop: 700})
+      this.logoParts.push({obj: this.voxelText(ch, PX, cols[i]), x: x + w * PX / 2, y: 300, delay: 0.15 + i * 0.16, drop: 700})
       x += (w + 1) * PX
     })
-    this.logoParts.push({obj: this.voxelText(sub, 17, LG.text), x: 0, y: 150, delay: 1.1, drop: 0})            // game name, ~1.2 m
-    this.logoParts.push({obj: this.voxelText("CREATED BY COLIN PHILLIPS", 30 / 7, LG.muted), x: 0, y: 80, delay: 1.8, drop: 0}) // ~1 ft
+    this.logoParts.push({obj: this.voxelText(sub, 17, LG.text), x: 0, y: 160, delay: 1.1, drop: 0})            // game name, ~1.2 m
+    this.logoParts.push({obj: this.voxelText("CREATED BY COLIN PHILLIPS", 30 / 7, LG.muted), x: 0, y: 105, delay: 1.8, drop: 0}) // ~1 ft
     // frame: cyan rails with amber corner brackets (the app's game-cover style)
     const f = global.scene.createSceneObject("iyLogoFrame")
-    const W = 1240, top = 740, bot = 50, th = 8
+    const W = 1240, top = 690, bot = 80, th = 8
     if (this.cube) {
       this.logoPart(f, 0, top, 0, W, th, th, LG.friendly); this.logoPart(f, 0, bot, 0, W, th, th, LG.friendly)
       for (const sx of [-1, 1]) for (const sy of [-1, 1]) {
@@ -370,7 +375,7 @@ export class IYiYiSpecs extends BaseScriptComponent {
         this.logoPart(f, sx * (W / 2 - 50), y + sy * 14, 0, 120, 18, 18, LG.objective)
         this.logoPart(f, sx * (W / 2 + 14), y - sy * 50, 0, 18, 120, 18, LG.objective)
       }
-      this.logoPart(f, 0, 128, 0, 360, 5, 5, LG.objective) // rule between the name and the credit
+      this.logoPart(f, 0, 148, 0, 360, 5, 5, LG.objective) // rule between the name and the credit
     }
     this.logoParts.push({obj: f, x: 0, y: 0, delay: 0, drop: 0})
     this.tickLogo(0)
@@ -402,7 +407,7 @@ export class IYiYiSpecs extends BaseScriptComponent {
       if (o) this.fx.push({obj: o, t: 0, life: 0.9, vel: v, spin: new vec3(3, 4, 2)})
     }
   }
-  private destroyLogo() { this.logoParts.forEach((p) => p.obj.destroy()); this.logoParts = []; this.logoAnchor = null }
+  private destroyLogo() { this.logoParts.forEach((p) => this.zap(p.obj)); this.logoParts = []; this.logoAnchor = null }
   private openMenu() {
     this.setMode("menu")
     this.onMenuOpen()
@@ -410,11 +415,11 @@ export class IYiYiSpecs extends BaseScriptComponent {
     const cam = this.camPos(), d = this.flatDir()
     const items = this.menuItems()
     items.forEach(([label, action], i) => {
-      const o = this.makeText(label, 5.5, ST.text)
+      const o = this.makeText(label, 8, ST.text)
       const t = o.getComponent("Component.Text") as Text
       this.panelize(t)
       const tr = o.getTransform()
-      tr.setWorldPosition(cam.add(d.uniformScale(160)).add(new vec3(0, 52 - i * 24, 0)))
+      tr.setWorldPosition(cam.add(d.uniformScale(160)).add(new vec3(0, 50 - i * 26, 0)))
       tr.setWorldRotation(quat.lookAt(d.uniformScale(-1), vec3.up()))
       this.btns.push({obj: o, text: t, action})
     })
@@ -475,28 +480,28 @@ export class IYiYiSpecs extends BaseScriptComponent {
     const lab = global.scene.createSceneObject("iyPenguinName")
     lab.setParent(root)
     const t = lab.createComponent("Component.Text") as Text
-    t.size = 70 * Math.max(0.6, s)
+    t.size = 150 * Math.max(0.6, s)
     t.horizontalAlignment = HorizontalAlignment.Center
     t.depthTest = false
     t.text = name.toUpperCase()
     t.textFill.color = ST.text
-    lab.getTransform().setLocalPosition(new vec3(0, 135 * s, 0))
+    lab.getTransform().setLocalPosition(new vec3(0, 140 * s, 0))
     const bub = global.scene.createSceneObject("iyPenguinSay")
     bub.setParent(root)
     const b = bub.createComponent("Component.Text") as Text
-    b.size = 62 * Math.max(0.6, s)
+    b.size = 120 * Math.max(0.6, s)
     b.horizontalAlignment = HorizontalAlignment.Center
     b.depthTest = false
     b.textFill.color = ST.text
     this.panelize(b)
-    bub.getTransform().setLocalPosition(new vec3(0, 168 * s, 0))
+    bub.getTransform().setLocalPosition(new vec3(0, 175 * s, 0))
     peng.label = t
     peng.bubble = b
     root.getTransform().setWorldPosition(pos)
     return peng
   }
   private dressPenguin(p: Penguin, outfit: string, color: vec4, s: number = 1) {
-    for (let i = p.outfit.getChildrenCount() - 1; i >= 0; i--) p.outfit.getChild(i).destroy()
+    for (let i = p.outfit.getChildrenCount() - 1; i >= 0; i--) this.zap(p.outfit.getChild(i))
     const o = p.outfit
     const P = (x: number, y: number, z: number, sx: number, sy: number, sz: number, c: vec4) => this.part(o, x * s, y * s, z * s, sx * s, sy * s, sz * s, c)
     if (outfit === "vest") {
@@ -505,7 +510,7 @@ export class IYiYiSpecs extends BaseScriptComponent {
       P(0, 50, 22, 3, 3, 1, ST.objective); P(0, 40, 22, 3, 3, 1, ST.objective)        // buttons
       P(-5, 66, 22.5, 8, 6, 3, color); P(5, 66, 22.5, 8, 6, 3, color)                   // bow tie
     } else if (outfit === "mafia") {
-      const suit = new vec4(0.32, 0.33, 0.4, 1), stripe = new vec4(0.55, 0.56, 0.64, 1)
+      const suit = new vec4(0.5, 0.52, 0.62, 1), stripe = new vec4(0.8, 0.82, 0.9, 1)
       P(0, 40, 0, 54, 58, 44, suit)
       for (const x of [-18, -6, 6, 18]) P(x, 40, 22.2, 1.2, 56, 0.6, stripe)
       P(0, 58, 22.6, 12, 16, 1, PEN_BELLY); P(0, 50, 23.2, 5, 26, 1, ST.enemy)           // shirt + red tie
@@ -633,7 +638,7 @@ export class IYiYiSpecs extends BaseScriptComponent {
       const at = cam.add(d.uniformScale(260)).add(r.uniformScale((i - 2) * 48))
       const p = this.makePenguin(new vec3(at.x, this.floorY + 30, at.z), "crew", CREW_COLORS[i], "", 0.45)
       this.posePenguin(p)
-      this.fx.push({obj: p.root, t: 0, life: 4.2, vel: new vec3(0, 0, 0), spin: new vec3(0, 0, 0)})
+      this.introObjs.push(p.root)
     }
   }
   private onMenuOpen() { this.clearSigns() }
@@ -653,12 +658,12 @@ export class IYiYiSpecs extends BaseScriptComponent {
 
   // ------------------------------------------------------------------ setup
   private clearGame() {
-    this.stations.forEach((s) => s.obj.destroy())
-    this.bots.forEach((b) => b.peng.root.destroy())
-    this.bodies.forEach((b) => b.marker.destroy())
-    if (this.emergency) this.emergency.destroy()
-    if (this.beacon) this.beacon.destroy()
-    if (this.ejected) this.ejected.root.destroy()
+    this.stations.forEach((s) => this.zap(s.obj))
+    this.bots.forEach((b) => this.zap(b.peng.root))
+    this.bodies.forEach((b) => this.zap(b.marker))
+    if (this.emergency) this.zap(this.emergency)
+    if (this.beacon) this.zap(this.beacon)
+    if (this.ejected) this.zap(this.ejected.root)
     this.endTask()
     this.stations = []; this.bots = []; this.bodies = []; this.emergency = null; this.beacon = null; this.beaconFor = -1; this.ejected = null
     this.clearSigns()
@@ -739,7 +744,7 @@ export class IYiYiSpecs extends BaseScriptComponent {
     tr.setWorldRotation(quat.lookAt(d.uniformScale(-1), vec3.up()))
     this.signs.push({obj: o, text: t, action})
   }
-  private clearSigns() { this.signs.forEach((s) => s.obj.destroy()); this.signs = [] }
+  private clearSigns() { this.signs.forEach((s) => this.zap(s.obj)); this.signs = [] }
   private gazedSign(): Btn { for (const s of this.signs) if (this.gazeAngle(s.obj.getTransform().getWorldPosition()) < 7 * D2R) return s; return null }
 
   // ------------------------------------------------------------------ input
@@ -818,7 +823,7 @@ export class IYiYiSpecs extends BaseScriptComponent {
     } else if (s.kind === "fuel") this.toast("Look at the console and HOLD a pinch", 3000)
     else this.toast("Stand on the scanner", 3000)
   }
-  private endTask() { if (this.task) { this.task.pads.forEach((p) => p.destroy()); this.task = null } }
+  private endTask() { if (this.task) { this.task.pads.forEach((p) => this.zap(p)); this.task = null } }
   private padColor(k: number, lit: boolean) {
     const pad = this.task.pads[k]
     if (!pad) return
@@ -997,7 +1002,7 @@ export class IYiYiSpecs extends BaseScriptComponent {
       b.hunting = -1
       b.busyT = 0
     })
-    this.bodies.forEach((x) => x.marker.destroy())
+    this.bodies.forEach((x) => this.zap(x.marker))
     this.bodies = []
     // what they say
     this.talkQ = []
@@ -1133,7 +1138,7 @@ export class IYiYiSpecs extends BaseScriptComponent {
       for (const st of this.myTasks) { const dd = this.flatDist(this.stations[st].pos, this.camPos()); if (dd < bd) { bd = dd; next = st } }
     }
     if (next !== this.beaconFor) {
-      if (this.beacon) this.beacon.destroy()
+      if (this.beacon) this.zap(this.beacon)
       this.beacon = next >= 0 ? this.makeBeacon(this.stations[next].pos, ST.objective, "TASK") : null
       this.beaconFor = next
     }

@@ -805,7 +805,7 @@ export class IYiYiSpecs extends BaseScriptComponent {
   }
 
   // ------------------------------------------------------------------ giant title logo
-  // A huge block-letter iYiYi (about 11.5 ft tall) stands 14 m in front of you, the game's name
+  // A huge block-letter iYiYi (about 11.5 ft tall) stands 17 m in front of you (so the whole thing fits in the Specs view), the game's name
   // under it, and "CREATED BY COLIN PHILLIPS" about 1 ft tall at the bottom, in a frame.
   private logoParts: {obj: SceneObject; x: number; y: number; delay: number; drop: number}[] = []
   private logoAnchor: vec3 = null
@@ -845,8 +845,10 @@ export class IYiYiSpecs extends BaseScriptComponent {
   }
   private buildLogo(sub: string) {
     this.destroyLogo()
-    const d = this.flatDir(), cam = this.camPos()
-    this.logoAnchor = new vec3(cam.x + d.x * 1400, this.floorY, cam.z + d.z * 1400)
+    const d = this.flatDir(), cam = this.camT.getWorldPosition()
+    // the Specs camera stops drawing at about 15 m: push the far plane out so the top isn't cut off
+    try { if (this.camComp && this.camComp.far < 4000) this.camComp.far = 4000 } catch (e) {}
+    this.logoAnchor = new vec3(cam.x + d.x * 1700, this.floorY, cam.z + d.z * 1700)
     this.logoFace = quat.lookAt(d.uniformScale(-1), vec3.up())
     const PX = 50 // 7 rows x 50 cm = 3.5 m (11.5 ft) tall letters
     const letters = ["i", "Y", "i", "Y", "i"], cols = [LG.pal[0], LG.pal[1], LG.pal[2], LG.pal[1], LG.pal[0]]
@@ -854,14 +856,14 @@ export class IYiYiSpecs extends BaseScriptComponent {
     let x = -total * PX / 2
     letters.forEach((ch, i) => {
       const w = FONT5[ch][0].length
-      this.logoParts.push({obj: this.voxelText(ch, PX, cols[i]), x: x + w * PX / 2, y: 330, delay: 0.15 + i * 0.16, drop: 700})
+      this.logoParts.push({obj: this.voxelText(ch, PX, cols[i]), x: x + w * PX / 2, y: 300, delay: 0.15 + i * 0.16, drop: 700})
       x += (w + 1) * PX
     })
-    this.logoParts.push({obj: this.voxelText(sub, 17, LG.text), x: 0, y: 150, delay: 1.1, drop: 0})            // game name, ~1.2 m
-    this.logoParts.push({obj: this.voxelText("CREATED BY COLIN PHILLIPS", 30 / 7, LG.muted), x: 0, y: 80, delay: 1.8, drop: 0}) // ~1 ft
+    this.logoParts.push({obj: this.voxelText(sub, 17, LG.text), x: 0, y: 160, delay: 1.1, drop: 0})            // game name, ~1.2 m
+    this.logoParts.push({obj: this.voxelText("CREATED BY COLIN PHILLIPS", 30 / 7, LG.muted), x: 0, y: 105, delay: 1.8, drop: 0}) // ~1 ft
     // frame: cyan rails with amber corner brackets (the app's game-cover style)
     const f = global.scene.createSceneObject("iyLogoFrame")
-    const W = 1240, top = 740, bot = 50, th = 8
+    const W = 1240, top = 690, bot = 80, th = 8
     if (this.cube) {
       this.logoPart(f, 0, top, 0, W, th, th, LG.friendly); this.logoPart(f, 0, bot, 0, W, th, th, LG.friendly)
       for (const sx of [-1, 1]) for (const sy of [-1, 1]) {
@@ -869,7 +871,7 @@ export class IYiYiSpecs extends BaseScriptComponent {
         this.logoPart(f, sx * (W / 2 - 50), y + sy * 14, 0, 120, 18, 18, LG.objective)
         this.logoPart(f, sx * (W / 2 + 14), y - sy * 50, 0, 18, 120, 18, LG.objective)
       }
-      this.logoPart(f, 0, 128, 0, 360, 5, 5, LG.objective) // rule between the name and the credit
+      this.logoPart(f, 0, 148, 0, 360, 5, 5, LG.objective) // rule between the name and the credit
     }
     this.logoParts.push({obj: f, x: 0, y: 0, delay: 0, drop: 0})
     this.tickLogo(0)
