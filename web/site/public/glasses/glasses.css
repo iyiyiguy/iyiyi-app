@@ -101,3 +101,22 @@ button.fire { position: absolute; left: 0; top: 0; width: 1px; height: 1px; opac
 .hitmark::before, .hitmark::after { content: ''; position: absolute; left: -26px; top: -2px; width: 52px; height: 4px; background: #fff; }
 .hitmark::before { transform: rotate(45deg); }
 .hitmark::after { transform: rotate(-45deg); }
+
+/* who's in front: name tags float over where people are */
+.tag { position: absolute; transform: translate(-50%, -100%); text-align: center; white-space: nowrap; color: var(--c); }
+.tag b { display: block; font-weight: 900; }
+.tag small { display: block; font-size: 18px; color: var(--muted); font-weight: 700; }
+.tag i { display: block; width: 2px; height: 26px; margin: 4px auto 0; background: currentColor; opacity: .7; }
+.tag.sel { color: var(--gold); }
+.tag.sel b { padding: 2px 14px; border: 3px solid var(--gold); border-radius: 16px; }
+.edge { position: absolute; top: 280px; font-size: 24px; font-weight: 800; color: var(--muted); }
+.edge.l { left: 18px; } .edge.r { right: 18px; }
+.social.big { font-size: 26px; padding: 12px 2px; }
+#front .bottom { position: absolute; left: 40px; right: 40px; bottom: 28px; }
+#front .hint { display: flex; justify-content: space-between; font-size: 20px; color: var(--muted); font-weight: 700; }
+#front .tape { position: absolute; left: 150px; right: 150px; top: 30px; height: 34px; overflow: hidden; border-bottom: 2px solid #2a3344; }
+#front .tape span { position: absolute; top: 2px; transform: translateX(-50%); font-size: 18px; color: var(--muted); font-weight: 700; }
+#front .tape span.n { color: var(--red); }
+#front .tape i { position: absolute; left: 50%; bottom: -2px; width: 2px; height: 14px; background: var(--c); }
+#front .center-msg { position: absolute; left: 0; right: 0; top: 230px; text-align: center; font-size: 36px; font-weight: 900; color: var(--gold); }
+#front .center-msg small { display: block; font-size: 22px; color: var(--muted); font-weight: 700; margin-top: 8px; }

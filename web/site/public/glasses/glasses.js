@@ -147,6 +147,7 @@
 
   function render(st) {
     leaveTag()
+    leaveFront()
     state.screen = st.screen
     var fn = SCREENS[st.screen] || SCREENS.home
     fn(st.data)
@@ -156,6 +157,11 @@
   document.addEventListener('keydown', function (e) {
     if (state.screen === 'tag') {
       if (e.key === 'Enter') { e.preventDefault(); fire(); return }
+      return
+    }
+    if (state.screen === 'front') {
+      if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') { e.preventDefault(); frontStep(e.key === 'ArrowRight' ? 1 : -1); return }
+      if (e.key === 'Enter') { e.preventDefault(); frontOpen(); return }
       return
     }
     if (state.screen === 'nearby' && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
@@ -261,12 +267,14 @@
   SCREENS.home = function () {
     el('<div class="row"><h1>i<span class="y">Y</span>i<span class="y">Y</span>i</h1><div class="grow"></div><span class="sub" id="me"></span></div>' +
       '<div class="grow"></div>' +
-      '<button class="f primary" data-go="nearby"><span class="ic">◎</span>People nearby</button>' +
+      '<button class="f primary" data-go="front"><span class="ic">👁</span>Who\'s in front of me</button>' +
+      '<button class="f" data-go="nearby"><span class="ic">◎</span>People nearby</button>' +
       '<button class="f" data-go="tag"><span class="ic">✛</span>Laser tag sights</button>' +
       '<button class="f" data-go="settings"><span class="ic">⚙</span>Settings</button>')
     myName().then(function (n) { var m = document.getElementById('me'); if (m) m.textContent = '@' + n })
   }
   ACTIONS.nearby = function () { go('nearby') }
+  ACTIONS.front = function () { go('front') }
   ACTIONS.tag = function () { go('tag') }
   ACTIONS.settings = function () { go('settings') }
 
@@ -323,21 +331,31 @@
     var u = (data && data.preview) || {}
     drawProfile(u, true)
     if (data && data.id) api('/api/profiles/' + encodeURIComponent(data.id)).then(function (r) {
-      if (state.screen === 'profile') drawProfile(Object.assign({ id: data.id }, r, { avatar_url: r.avatar_url || r.avatar || r.photo_url || (data.preview && data.preview.avatar_url) }), false)
+      if (state.screen === 'profile') drawProfile(Object.assign({ id: data.id }, data.preview || {}, r, { avatar_url: r.avatar_url || r.avatar || r.photo_url || (data.preview && data.preview.avatar_url) }), false)
     }).catch(function (e) { toast(e.message) })
   }
+  function socialsOf(u) { return (u.social_links || []).filter(function (l) { return l && l.value && LABELS[l.platform] }) }
   function drawProfile(u, loading) {
-    var socials = (u.social_links || []).filter(function (l) { return l && l.value && LABELS[l.platform] }).slice(0, 4)
+    var socials = socialsOf(u)
     var following = !!u.is_following || u.follow_status === 'pending'
     state.profile = u
     el('<div class="row">' + avatarHtml(u) + '<div><div class="name">@' + esc(u.username || '') + '</div>' +
       '<div class="sub">' + esc(fmtDist(u) || (u.account_type === 'business' ? 'Business' : '')) + '</div></div></div>' +
       (u.bio ? '<p class="bio">' + esc(u.bio) + '</p>' : '') +
-      '<div style="margin-top:10px">' + (socials.length ? socials.map(function (l) {
-        return '<div class="social"><span>' + esc(LABELS[l.platform]) + '</span><span class="h">@' + esc(handleOf(l.platform, l.value)) + '</span></div>'
-      }).join('') : (loading ? '<p class="sub">Loading…</p>' : '<p class="sub">No socials linked yet.</p>')) + '</div>' +
+      (loading && !socials.length ? '<p class="sub">Loading…</p>' : '') +
       '<div class="grow"></div>' +
-      (u.id ? '<button class="f primary" data-go="follow" id="fbtn"><span class="ic">' + (following ? '✓' : '+') + '</span>' + (following ? (u.follow_status === 'pending' ? 'Requested' : 'Following on iYiYi') : 'Follow on iYiYi') + '</button>' : ''))
+      (socials.length ? '<button class="f primary" data-go="socials"><span class="ic">✦</span>Socials<span class="meta">' + socials.slice(0, 3).map(function (l) { return esc(LABELS[l.platform]) }).join(' · ') + (socials.length > 3 ? ' +' + (socials.length - 3) : '') + '</span></button>' : (loading ? '' : '<p class="sub">No socials linked yet.</p>')) +
+      (u.id ? '<button class="f" data-go="follow" id="fbtn"><span class="ic">' + (following ? '✓' : '+') + '</span>' + (following ? (u.follow_status === 'pending' ? 'Requested' : 'Following on iYiYi') : 'Follow on iYiYi') + '</button>' : ''))
+  }
+  ACTIONS.socials = function () { if (state.profile) go('socials', { profile: state.profile }) }
+  SCREENS.socials = function (data) {
+    var u = (data && data.profile) || state.profile || {}
+    var list = socialsOf(u).slice(0, 7)
+    el('<div class="row">' + avatarHtml(u, 'sm') + '<h2 style="margin:0">@' + esc(u.username || '') + '</h2></div>' +
+      '<div style="margin-top:14px">' + list.map(function (l) {
+        return '<div class="social big"><span>' + esc(LABELS[l.platform]) + '</span><span class="h">@' + esc(handleOf(l.platform, l.value)) + '</span></div>'
+      }).join('') + '</div><div class="grow"></div>' +
+      '<p class="sub">Follow them from your phone: their profile in iYiYi has a Follow everywhere button.</p>')
   }
   ACTIONS.follow = async function () {
     var u = state.profile
@@ -350,6 +368,105 @@
       beep('hit')
       toast(u.follow_status === 'pending' ? 'Request sent' : 'Following @' + u.username)
     } catch (e) { toast(e.message) }
+  }
+
+  // ---------- who's in front of me ----------
+  // People within ~150 ft who chose to be findable (allow tagging), placed by the direction you
+  // face: their name floats over where they are. Left / right picks, pinch opens the profile.
+  var front = { people: [], sel: null, selAt: 0, timer: null, watch: null, raf: null, lastDraw: 0, err: '' }
+  SCREENS.front = function () {
+    el('<div class="hud" id="front"><div class="center-msg">Looking around…<small>Face the people you want to see</small></div></div>')
+    if (!state.sensors) askSensors()
+    try {
+      front.watch = navigator.geolocation.watchPosition(function (p) {
+        state.pos = { lat: p.coords.latitude, lng: p.coords.longitude, acc: p.coords.accuracy }
+      }, function () {}, { enableHighAccuracy: true, maximumAge: 4000, timeout: 15000 })
+    } catch (e) {}
+    loadFront()
+    front.timer = setInterval(loadFront, 4000)
+    drawFront()
+  }
+  function leaveFront() {
+    clearInterval(front.timer)
+    cancelAnimationFrame(front.raf)
+    if (front.watch != null) { try { navigator.geolocation.clearWatch(front.watch) } catch (e) {} }
+    front.watch = null
+  }
+  async function loadFront() {
+    try {
+      var p = state.pos || (await where())
+      var r = await sb.rpc('camera_nearby', { lat: p.lat, lng: p.lng, radius_m: 60 })
+      if (r.error) throw r.error
+      front.people = (r.data || []).filter(function (x) { return x && typeof x.latitude === 'number' })
+      front.err = ''
+    } catch (e) { front.err = (e && e.message) || 'Could not look around' }
+  }
+  function bearingTo(a, b) {
+    var toR = Math.PI / 180
+    var y = Math.sin((b.lng - a.lng) * toR) * Math.cos(b.lat * toR)
+    var x = Math.cos(a.lat * toR) * Math.sin(b.lat * toR) - Math.sin(a.lat * toR) * Math.cos(b.lat * toR) * Math.cos((b.lng - a.lng) * toR)
+    return (Math.atan2(y, x) / toR + 360) % 360
+  }
+  var FOV = 45 // degrees either side shown across the lens
+  function frontVisible() {
+    if (!state.pos || !headingFresh()) return []
+    return front.people.map(function (x) {
+      var b = bearingTo(state.pos, { lat: x.latitude, lng: x.longitude })
+      return { p: x, rel: rel(b), d: x.distance_m }
+    }).filter(function (o) { return Math.abs(o.rel) <= FOV }).sort(function (a, b) { return a.rel - b.rel })
+  }
+  function frontStep(dir) {
+    var vis = frontVisible()
+    if (!vis.length) return
+    var i = vis.findIndex(function (o) { return o.p.id === front.sel })
+    i = i < 0 ? (dir > 0 ? 0 : vis.length - 1) : Math.max(0, Math.min(vis.length - 1, i + dir))
+    front.sel = vis[i].p.id
+    front.selAt = Date.now()
+    beep('hit')
+  }
+  function frontOpen() {
+    var o = front.people.find(function (x) { return x.id === front.sel })
+    if (o) go('profile', { id: o.id, preview: { id: o.id, username: o.username, avatar_url: o.avatar_url, distance_m: o.distance_m } })
+  }
+  function drawFront() {
+    if (state.screen !== 'front') return
+    front.raf = requestAnimationFrame(drawFront)
+    var now = Date.now()
+    if (now - front.lastDraw < 90) return
+    front.lastDraw = now
+    var root = document.getElementById('front')
+    if (!root) return
+    if (!headingFresh()) { root.innerHTML = '<div class="center-msg">Turn on motion<small>Allow motion access so the glasses know which way you face</small></div>'; return }
+    if (!state.pos) { root.innerHTML = '<div class="center-msg">Finding you…<small>Location comes from your phone</small></div>' + tape(); return }
+    var vis = frontVisible()
+    // auto-pick whoever is nearest the middle unless you picked someone in the last 4 s
+    if (vis.length && (now - front.selAt > 4000 || !vis.some(function (o) { return o.p.id === front.sel }))) {
+      var best = vis.reduce(function (a, b) { return Math.abs(b.rel) < Math.abs(a.rel) ? b : a })
+      front.sel = best.p.id
+    }
+    var left = 0, right = 0
+    front.people.forEach(function (x) {
+      var r = rel(bearingTo(state.pos, { lat: x.latitude, lng: x.longitude }))
+      if (r < -FOV) left++; else if (r > FOV) right++
+    })
+    var used = []
+    var tags = vis.map(function (o) {
+      var x = Math.max(95, Math.min(505, 300 + (o.rel / FOV) * 250))
+      var near = Math.max(0, Math.min(1, 1 - (o.d || 0) / 46))
+      var y = 250 - near * 70 // closer people float a little higher and bigger
+      used.forEach(function (u) { if (Math.abs(u.x - x) < 150 && Math.abs(u.y - y) < 70) y = u.y + 74 })
+      used.push({ x: x, y: y })
+      var sel = o.p.id === front.sel
+      var ft = Math.max(5, Math.round((o.d || 0) * 3.28084 / 5) * 5)
+      return '<div class="tag' + (sel ? ' sel' : '') + '" style="left:' + x.toFixed(0) + 'px;top:' + y.toFixed(0) + 'px;font-size:' + (sel ? 30 : 22 + near * 6).toFixed(0) + 'px">' +
+        '<b>@' + esc(o.p.username || 'member') + '</b><small>' + ft + ' ft</small><i></i></div>'
+    }).join('')
+    var msg = ''
+    if (!front.people.length) msg = '<div class="center-msg">Nobody findable nearby<small>' + esc(front.err || 'Only people who allow tagging show up here') + '</small></div>'
+    else if (!vis.length) msg = '<div class="center-msg" style="font-size:30px">Turn toward them<small>' + front.people.length + ' nearby, not in front of you</small></div>'
+    root.innerHTML = tape() + tags + msg +
+      (left ? '<div class="edge l">◀ ' + left + '</div>' : '') + (right ? '<div class="edge r">' + right + ' ▶</div>' : '') +
+      '<div class="bottom"><div class="hint"><span>◀ ▶ pick</span><span>' + (vis.length ? 'Pinch to open profile' : '') + '</span></div></div>'
   }
 
   SCREENS.settings = function () {
@@ -496,7 +613,7 @@
   }
 
   // test hook (only with ?iygtest in the URL): feed a HUD / event without a phone
-  if (/iygtest/.test(location.search)) window.__iyg = { hud: function (h) { tag.hud = h; tag.hudAt = Date.now() }, ev: onTagEvent, state: state }
+  if (/iygtest/.test(location.search)) window.__iyg = { hud: function (h) { tag.hud = h; tag.hudAt = Date.now() }, ev: onTagEvent, state: state, front: front }
 
   // ---------- boot ----------
   // First screen is always Start: sensor permission must come from a pinch, before any
