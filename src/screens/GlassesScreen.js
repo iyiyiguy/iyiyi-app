@@ -7,7 +7,7 @@ import { Ionicons } from '@expo/vector-icons'
 import BrandHeader from '../components/BrandHeader'
 import GlassPanel from '../components/GlassPanel'
 import { colors, radii, type } from '../theme'
-import { claimGlassesCode, isGlassesLinked, setGlassesLinked, GLASSES_URL } from '../lib/glasses'
+import { claimGlassesCode, isGlassesLinked, setGlassesLinked, GLASSES_URL, XR_URL } from '../lib/glasses'
 import { useT } from '../i18n'
 import strings from '../i18n/strings/glasses'
 
@@ -76,6 +76,21 @@ export default function GlassesScreen({ navigation }) {
           />
           <Pressable onPress={submit} disabled={busy} style={({ pressed }) => [styles.btn, (pressed || busy) && { opacity: 0.7 }]} accessibilityRole="button">
             {busy ? <ActivityIndicator color="#fff" /> : <Text style={styles.btnText}>{t('link')}</Text>}
+          </Pressable>
+        </GlassPanel>
+
+        <GlassPanel radius={radii.lg} style={styles.card}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+            <Ionicons name="cube-outline" size={24} color={colors.text} />
+            <View style={{ flex: 1 }}>
+              <Text style={type.title3}>{t('xrTitle')}</Text>
+              <Text style={[type.caption, { color: colors.textMuted }]}>{t('xrSub')}</Text>
+            </View>
+          </View>
+          <Text style={[type.body, { color: colors.textMuted }]}>{t('xrBody')}</Text>
+          <Pressable onPress={() => Share.share({ message: XR_URL }).catch(() => {})} accessibilityRole="button" style={styles.url}>
+            <Text style={styles.urlText}>{XR_URL.replace('https://', '')}</Text>
+            <Ionicons name="share-outline" size={16} color={colors.accent} />
           </Pressable>
         </GlassPanel>
 

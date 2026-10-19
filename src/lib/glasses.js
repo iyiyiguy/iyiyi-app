@@ -9,6 +9,8 @@ import { supabase } from './supabase'
 
 const LINKED_KEY = 'iyiyi_glasses_linked_v1'
 export const GLASSES_URL = 'https://iyiyi.xyz/glasses/'
+// XR glasses (XREAL Aura / Android XR / Meta Quest): the 3D version, same link code
+export const XR_URL = 'https://iyiyi.xyz/xr/'
 
 export async function isGlassesLinked() {
   try { return (await AsyncStorage.getItem(LINKED_KEY)) === '1' } catch { return false }

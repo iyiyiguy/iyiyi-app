@@ -1,0 +1,11 @@
+{
+  "name": "iYiYi XR",
+  "short_name": "iYiYi XR",
+  "description": "iYiYi in 3D on XR glasses: names over people's heads, profiles, and laser tag.",
+  "start_url": "/xr/",
+  "scope": "/xr/",
+  "display": "standalone",
+  "background_color": "#07090c",
+  "theme_color": "#07090c",
+  "icons": [{ "src": "../glasses/icon.png", "sizes": "180x180", "type": "image/png" }]
+}

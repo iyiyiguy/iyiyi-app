@@ -24,6 +24,9 @@ export default {
     stopOnPhone: "Stop using glasses on this phone",
     settingsRow: "Meta glasses",
     glassesOn: "Glasses connected: aim with your head",
+    xrTitle: "XR glasses in 3D",
+    xrSub: "XREAL Aura · Android XR · Meta Quest",
+    xrBody: "Names float over people's heads (pinch one to open their profile and socials), a nearby list by distance, and laser tag markers over players. Open this in the glasses' browser and link with the code box above:",
   },
   es: {
     title: "Gafas Meta",
@@ -49,6 +52,9 @@ export default {
     stopOnPhone: "Dejar de usar gafas en este teléfono",
     settingsRow: "Gafas Meta",
     glassesOn: "Gafas conectadas: apunta con la cabeza",
+    xrTitle: "Gafas XR en 3D",
+    xrSub: "XREAL Aura · Android XR · Meta Quest",
+    xrBody: "Los nombres flotan sobre la cabeza de la gente (pellizca uno para abrir su perfil y redes), una lista de cercanos por distancia y marcadores de laser tag sobre los jugadores. Ábrelo en el navegador de las gafas y vincúlalas con el código de arriba:",
   },
   pt: {
     title: "Óculos Meta",
@@ -74,6 +80,9 @@ export default {
     stopOnPhone: "Parar de usar óculos neste celular",
     settingsRow: "Óculos Meta",
     glassesOn: "Óculos conectados: mire com a cabeça",
+    xrTitle: "Óculos XR em 3D",
+    xrSub: "XREAL Aura · Android XR · Meta Quest",
+    xrBody: "Nomes flutuam sobre a cabeça das pessoas (pince um para abrir o perfil e as redes), uma lista de quem está perto por distância e marcadores de laser tag sobre os jogadores. Abra isto no navegador dos óculos e vincule com o código acima:",
   },
   zh: {
     title: "Meta 眼镜",
@@ -99,6 +108,9 @@ export default {
     stopOnPhone: "在此手机上停用眼镜",
     settingsRow: "Meta 眼镜",
     glassesOn: "眼镜已连接：用头部瞄准",
+    xrTitle: "3D XR 眼镜",
+    xrSub: "XREAL Aura · Android XR · Meta Quest",
+    xrBody: "名字悬浮在人们头顶（捏合即可打开其主页和社交账号），按距离显示附近的人，激光枪战标记显示在玩家头上。在眼镜的浏览器中打开，然后用上面的代码框关联：",
   },
   ja: {
     title: "Metaグラス",
@@ -124,6 +136,9 @@ export default {
     stopOnPhone: "このスマホでグラスの使用をやめる",
     settingsRow: "Metaグラス",
     glassesOn: "グラス接続中：頭で狙えます",
+    xrTitle: "3D の XR グラス",
+    xrSub: "XREAL Aura · Android XR · Meta Quest",
+    xrBody: "名前が人の頭上に浮かび（つまむとプロフィールと SNS を表示）、距離別の近くの人リスト、プレイヤーの頭上にレーザータグのマーカー。グラスのブラウザで開き、上のコード欄で連携してください：",
   },
   ko: {
     title: "Meta 안경",
@@ -149,6 +164,9 @@ export default {
     stopOnPhone: "이 휴대폰에서 안경 사용 중지",
     settingsRow: "Meta 안경",
     glassesOn: "안경 연결됨: 머리로 조준하세요",
+    xrTitle: "3D XR 글래스",
+    xrSub: "XREAL Aura · Android XR · Meta Quest",
+    xrBody: "사람들 머리 위에 이름이 떠 있고(집으면 프로필과 소셜 열기), 거리별 근처 목록, 플레이어 머리 위 레이저 태그 마커가 보입니다. 글래스의 브라우저에서 열고 위의 코드 칸으로 연결하세요:",
   },
   fr: {
     title: "Lunettes Meta",
@@ -174,6 +192,9 @@ export default {
     stopOnPhone: "Ne plus utiliser de lunettes sur ce téléphone",
     settingsRow: "Lunettes Meta",
     glassesOn: "Lunettes connectées : vise avec la tête",
+    xrTitle: "Lunettes XR en 3D",
+    xrSub: "XREAL Aura · Android XR · Meta Quest",
+    xrBody: "Les noms flottent au-dessus de la tête des gens (pincez-en un pour ouvrir son profil et ses réseaux), une liste des personnes proches par distance et des marqueurs de laser tag au-dessus des joueurs. Ouvrez ceci dans le navigateur des lunettes et associez-les avec le code ci-dessus :",
   },
   de: {
     title: "Meta-Brille",
@@ -199,6 +220,9 @@ export default {
     stopOnPhone: "Brille auf diesem Handy nicht mehr nutzen",
     settingsRow: "Meta-Brille",
     glassesOn: "Brille verbunden: ziel mit dem Kopf",
+    xrTitle: "XR-Brillen in 3D",
+    xrSub: "XREAL Aura · Android XR · Meta Quest",
+    xrBody: "Namen schweben über den Köpfen der Leute (einen antippen öffnet Profil und Socials), eine Liste in der Nähe nach Entfernung und Lasertag-Markierungen über den Spielern. Öffne das im Browser der Brille und verknüpfe sie mit dem Code oben:",
   },
   ar: {
     title: "نظارات Meta",
@@ -224,6 +248,9 @@ export default {
     stopOnPhone: "إيقاف استخدام النظارة على هذا الهاتف",
     settingsRow: "نظارات Meta",
     glassesOn: "النظارة متصلة: صوّب برأسك",
+    xrTitle: "نظارات XR ثلاثية الأبعاد",
+    xrSub: "XREAL Aura · Android XR · Meta Quest",
+    xrBody: "تطفو الأسماء فوق رؤوس الناس (اقرص اسمًا لفتح ملفه وحساباته)، وقائمة بالقريبين حسب المسافة، وعلامات ليزر تاغ فوق اللاعبين. افتح هذا في متصفح النظارات واربطها بخانة الرمز أعلاه:",
   },
   hi: {
     title: "Meta चश्मा",
@@ -249,6 +276,9 @@ export default {
     stopOnPhone: "इस फ़ोन पर चश्मा इस्तेमाल करना बंद करें",
     settingsRow: "Meta चश्मा",
     glassesOn: "चश्मा जुड़ा: सिर से निशाना लगाएँ",
+    xrTitle: "3D में XR चश्मे",
+    xrSub: "XREAL Aura · Android XR · Meta Quest",
+    xrBody: "लोगों के सिर के ऊपर नाम तैरते हैं (प्रोफ़ाइल और सोशल खोलने के लिए पिंच करें), दूरी के हिसाब से पास वालों की सूची, और खिलाड़ियों के ऊपर लेज़र टैग मार्कर। इसे चश्मे के ब्राउज़र में खोलें और ऊपर वाले कोड बॉक्स से लिंक करें:",
   },
   tl: {
     title: "Meta glasses",
@@ -274,5 +304,8 @@ export default {
     stopOnPhone: "Itigil ang paggamit ng glasses sa phone na ito",
     settingsRow: "Meta glasses",
     glassesOn: "Konektado ang glasses: mag-aim gamit ang ulo",
+    xrTitle: "XR glasses sa 3D",
+    xrSub: "XREAL Aura · Android XR · Meta Quest",
+    xrBody: "Lumulutang ang mga pangalan sa ibabaw ng ulo ng mga tao (i-pinch para buksan ang profile at socials), listahan ng malapit ayon sa layo, at mga laser tag marker sa ibabaw ng mga player. Buksan ito sa browser ng glasses at i-link gamit ang code box sa itaas:",
   },
 }

@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>iYiYi XR</title>
+  <meta name="description" content="iYiYi in 3D on XR glasses (XREAL Aura, Android XR, Meta Quest): names over people's heads, profiles, and laser tag in your real space.">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#07090c">
+  <link rel="icon" type="image/png" href="../glasses/icon.png">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@600;700&family=Barlow+Semi+Condensed:wght@500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root { --c: #39d5ff; --hot: #ff3d52; --gold: #ffb21e; --ok: #5cf2a0; --text: #f2f4f7; --muted: rgba(242,244,247,.62); --line: rgba(255,255,255,.14); --bg: #07090c; }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font-family: "Barlow Semi Condensed", system-ui, sans-serif; }
+    #flat { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; padding: 16px; z-index: 2; }
+    .card { width: min(460px, 100%); border: 1px solid var(--line); border-radius: 3px; background: rgba(8,10,14,.88); padding: 28px 24px; }
+    h1 { font-family: "Chakra Petch", sans-serif; font-size: 52px; letter-spacing: 4px; margin: 0; }
+    h1 .a { color: #ff4fa3 } h1 .b { color: var(--c) } h1 .g { color: var(--gold) }
+    .kick { color: var(--c); letter-spacing: 2.4px; font-size: 12px; text-transform: uppercase; font-weight: 700; margin-top: 6px; }
+    p { color: var(--muted); line-height: 1.4; font-size: 17px; }
+    button { display: block; width: 100%; margin: 10px 0; padding: 16px; border: 1px solid var(--line); border-radius: 3px; background: transparent; color: var(--text);
+      font: 700 18px "Barlow Semi Condensed", sans-serif; letter-spacing: 1.6px; text-transform: uppercase; cursor: pointer; }
+    button.primary { background: var(--c); color: #07090c; border-color: var(--c); }
+    button:disabled { opacity: .45; cursor: default; }
+    .code { font-family: "Chakra Petch", sans-serif; font-size: 56px; letter-spacing: 10px; color: var(--gold); text-align: center; margin: 14px 0; }
+    .small { font-size: 14px; color: var(--muted); }
+    .credit { margin-top: 18px; font-size: 11px; letter-spacing: 2px; color: var(--muted); text-transform: uppercase; }
+    canvas#gl { position: fixed; inset: 0; width: 100%; height: 100%; display: block; z-index: 1; }
+    #previewbar { position: fixed; left: 16px; right: 16px; bottom: 16px; z-index: 3; display: none; text-align: center; font-size: 13px; color: var(--muted); letter-spacing: 1px; }
+  </style>
+</head>
+<body>
+  <div id="flat"></div>
+  <div id="previewbar">PREVIEW · drag to look around · click to point and pinch · <a href="#" id="exitpv" style="color:#39d5ff">exit</a></div>
+  <script src="../glasses/supabase.js"></script>
+  <script type="module" src="xr.js"></script>
+</body>
+</html>
