@@ -26,6 +26,26 @@
 // Inputs: blockMaterial = an Unlit material (cloned per colour). Without it the Lens still links,
 // shows names and fires; only the 3D blocks / worlds are skipped.
 import {SIK} from "SpectaclesInteractionKit.lspkg/SIK"
+// 5x7 block font for the giant title logos (the iYiYi i's are 2 wide).
+const FONT5: {[k: string]: string[]} = {
+  A: [" ### ", "#   #", "#   #", "#####", "#   #", "#   #", "#   #"], B: ["#### ", "#   #", "#   #", "#### ", "#   #", "#   #", "#### "],
+  C: [" ####", "#    ", "#    ", "#    ", "#    ", "#    ", " ####"], D: ["#### ", "#   #", "#   #", "#   #", "#   #", "#   #", "#### "],
+  E: ["#####", "#    ", "#    ", "#### ", "#    ", "#    ", "#####"], F: ["#####", "#    ", "#    ", "#### ", "#    ", "#    ", "#    "],
+  G: [" ####", "#    ", "#    ", "#  ##", "#   #", "#   #", " ### "], H: ["#   #", "#   #", "#   #", "#####", "#   #", "#   #", "#   #"],
+  I: ["###", " # ", " # ", " # ", " # ", " # ", "###"], J: ["  ###", "   # ", "   # ", "   # ", "#  # ", "#  # ", " ##  "],
+  K: ["#   #", "#  # ", "# #  ", "##   ", "# #  ", "#  # ", "#   #"], L: ["#    ", "#    ", "#    ", "#    ", "#    ", "#    ", "#####"],
+  M: ["#   #", "## ##", "# # #", "# # #", "#   #", "#   #", "#   #"], N: ["#   #", "##  #", "# # #", "#  ##", "#   #", "#   #", "#   #"],
+  O: [" ### ", "#   #", "#   #", "#   #", "#   #", "#   #", " ### "], P: ["#### ", "#   #", "#   #", "#### ", "#    ", "#    ", "#    "],
+  Q: [" ### ", "#   #", "#   #", "#   #", "# # #", "#  # ", " ## #"], R: ["#### ", "#   #", "#   #", "#### ", "# #  ", "#  # ", "#   #"],
+  S: [" ####", "#    ", "#    ", " ### ", "    #", "    #", "#### "], T: ["#####", "  #  ", "  #  ", "  #  ", "  #  ", "  #  ", "  #  "],
+  U: ["#   #", "#   #", "#   #", "#   #", "#   #", "#   #", " ### "], V: ["#   #", "#   #", "#   #", "#   #", "#   #", " # # ", "  #  "],
+  W: ["#   #", "#   #", "#   #", "# # #", "# # #", "## ##", "#   #"], X: ["#   #", "#   #", " # # ", "  #  ", " # # ", "#   #", "#   #"],
+  Y: ["#   #", "#   #", " # # ", "  #  ", "  #  ", "  #  ", "  #  "], Z: ["#####", "    #", "   # ", "  #  ", " #   ", "#    ", "#####"],
+  i: ["##", "  ", "##", "##", "##", "##", "##"], " ": ["  ", "  ", "  ", "  ", "  ", "  ", "  "],
+}
+
+// title logo colours (the app's palette)
+const LG = {pal: [new vec4(1, 0.31, 0.64, 1), new vec4(0.22, 0.84, 1, 1), new vec4(1, 0.7, 0.12, 1)], text: new vec4(0.95, 0.96, 0.97, 1), muted: new vec4(0.62, 0.64, 0.68, 1), friendly: new vec4(0.22, 0.84, 1, 1), objective: new vec4(1, 0.7, 0.12, 1)}
 
 const SUPABASE_URL = "https://sqsjwcsrgcgcpxccxedp.supabase.co"
 const ANON = "sb_publishable_dC1TtQAqZpdQWRMoLAa3-w_xCSbea1x"
@@ -784,43 +804,115 @@ export class IYiYiSpecs extends BaseScriptComponent {
     if (m === "menu" || m === "intro") this.panelText.text = ""
   }
 
+  // ------------------------------------------------------------------ giant title logo
+  // A huge block-letter iYiYi (about 11.5 ft tall) stands 14 m in front of you, the game's name
+  // under it, and "CREATED BY COLIN PHILLIPS" about 1 ft tall at the bottom, in a frame.
+  private logoParts: {obj: SceneObject; x: number; y: number; delay: number; drop: number}[] = []
+  private logoAnchor: vec3 = null
+  private logoFace: quat = null
+  /** one mesh of cubes spelling `text` (FONT5), `px` cm per pixel, centred, bottom at y = 0 */
+  private voxelText(text: string, px: number, c: vec4): SceneObject {
+    const mb = new MeshBuilder([{name: "position", components: 3}, {name: "normal", components: 3}, {name: "texture0", components: 2}])
+    mb.topology = MeshTopology.Triangles
+    mb.indexType = MeshIndexType.UInt16
+    const glyphs = text.split("").map((ch) => FONT5[ch] || FONT5[ch.toUpperCase()] || FONT5[" "])
+    let cols = 0
+    glyphs.forEach((g, i) => (cols += g[0].length + (i ? 1 : 0)))
+    let x0 = -cols * px / 2, n = 0
+    const faces = [[[0, 0, 1], [-1, -1, 1], [1, -1, 1], [1, 1, 1], [-1, 1, 1]], [[0, 0, -1], [1, -1, -1], [-1, -1, -1], [-1, 1, -1], [1, 1, -1]], [[1, 0, 0], [1, -1, 1], [1, -1, -1], [1, 1, -1], [1, 1, 1]], [[-1, 0, 0], [-1, -1, -1], [-1, -1, 1], [-1, 1, 1], [-1, 1, -1]], [[0, 1, 0], [-1, 1, 1], [1, 1, 1], [1, 1, -1], [-1, 1, -1]], [[0, -1, 0], [-1, -1, -1], [1, -1, -1], [1, -1, 1], [-1, -1, 1]]]
+    const uv = [[0, 0], [1, 0], [1, 1], [0, 1]]
+    const h = px * 0.46, dz = px * 0.35
+    glyphs.forEach((g) => {
+      for (let r = 0; r < 7; r++) for (let cI = 0; cI < g[r].length; cI++) {
+        if (g[r][cI] !== "#" || n > 2600) continue
+        const cx = x0 + cI * px + px / 2, cy = (6 - r) * px + px / 2
+        faces.forEach((f) => {
+          const b = n * 24 + faces.indexOf(f) * 4
+          for (let k = 0; k < 4; k++) { const v = f[k + 1]; mb.appendVerticesInterleaved([cx + v[0] * h, cy + v[1] * h, v[2] * dz, f[0][0], f[0][1], f[0][2], uv[k][0], uv[k][1]]) }
+          mb.appendIndices([b, b + 1, b + 2, b, b + 2, b + 3])
+        })
+        n++
+      }
+      x0 += (g[0].length + 1) * px
+    })
+    const o = global.scene.createSceneObject("iyLogoText")
+    if (n === 0 || !this.blockMaterial) return o
+    mb.updateMesh()
+    const v = o.createComponent("Component.RenderMeshVisual") as RenderMeshVisual
+    v.mesh = mb.getMesh()
+    v.mainMaterial = this.mat(c)
+    return o
+  }
+  private buildLogo(sub: string) {
+    this.destroyLogo()
+    const d = this.flatDir(), cam = this.camPos()
+    this.logoAnchor = new vec3(cam.x + d.x * 1400, this.floorY, cam.z + d.z * 1400)
+    this.logoFace = quat.lookAt(d.uniformScale(-1), vec3.up())
+    const PX = 50 // 7 rows x 50 cm = 3.5 m (11.5 ft) tall letters
+    const letters = ["i", "Y", "i", "Y", "i"], cols = [LG.pal[0], LG.pal[1], LG.pal[2], LG.pal[1], LG.pal[0]]
+    const total = 2 + 5 + 2 + 5 + 2 + 4
+    let x = -total * PX / 2
+    letters.forEach((ch, i) => {
+      const w = FONT5[ch][0].length
+      this.logoParts.push({obj: this.voxelText(ch, PX, cols[i]), x: x + w * PX / 2, y: 330, delay: 0.15 + i * 0.16, drop: 700})
+      x += (w + 1) * PX
+    })
+    this.logoParts.push({obj: this.voxelText(sub, 17, LG.text), x: 0, y: 150, delay: 1.1, drop: 0})            // game name, ~1.2 m
+    this.logoParts.push({obj: this.voxelText("CREATED BY COLIN PHILLIPS", 30 / 7, LG.muted), x: 0, y: 80, delay: 1.8, drop: 0}) // ~1 ft
+    // frame: cyan rails with amber corner brackets (the app's game-cover style)
+    const f = global.scene.createSceneObject("iyLogoFrame")
+    const W = 1240, top = 740, bot = 50, th = 8
+    if (this.cube) {
+      this.logoPart(f, 0, top, 0, W, th, th, LG.friendly); this.logoPart(f, 0, bot, 0, W, th, th, LG.friendly)
+      for (const sx of [-1, 1]) for (const sy of [-1, 1]) {
+        const y = sy > 0 ? top : bot
+        this.logoPart(f, sx * (W / 2 - 50), y + sy * 14, 0, 120, 18, 18, LG.objective)
+        this.logoPart(f, sx * (W / 2 + 14), y - sy * 50, 0, 18, 120, 18, LG.objective)
+      }
+      this.logoPart(f, 0, 128, 0, 360, 5, 5, LG.objective) // rule between the name and the credit
+    }
+    this.logoParts.push({obj: f, x: 0, y: 0, delay: 0, drop: 0})
+    this.tickLogo(0)
+  }
+  private tickLogo(t: number) {
+    if (!this.logoAnchor) return
+    const r = this.logoFace.multiplyVec3(new vec3(1, 0, 0))
+    this.logoParts.forEach((p, i) => {
+      const k = Math.max(0, Math.min(1, (t - p.delay) / 0.45))
+      const ease = 1 - Math.pow(1 - k, 3)
+      const pop = k < 1 ? Math.max(0.001, k * (1.2 - 0.2 * k)) : 1 + (p.drop ? Math.sin(t * 2.4 + i) * 0.02 : 0)
+      const isFrame = i === this.logoParts.length - 1
+      const tr = p.obj.getTransform()
+      tr.setWorldPosition(this.logoAnchor.add(r.uniformScale(p.x)).add(new vec3(0, p.y + p.drop * (1 - ease), 0)))
+      tr.setWorldRotation(this.logoFace)
+      const fk = Math.max(0.001, Math.min(1, (t - 0.05) / 0.6))
+      tr.setWorldScale(isFrame ? new vec3(fk, 1, 1) : new vec3(pop, pop, pop))
+      if (p.drop && k >= 1 && t - 0.02 < p.delay + 0.47 && t > p.delay + 0.45) this.logoBurst(tr.getWorldPosition().add(new vec3(0, 20, 0)), LG.pal[i % LG.pal.length])
+    })
+  }
+  private logoPart(parent: SceneObject, x: number, y: number, z: number, sx: number, sy: number, sz: number, c: vec4) {
+    const o = this.block(new vec3(0, 0, 0), new vec3(sx, sy, sz), c, parent)
+    if (o) { o.getTransform().setLocalPosition(new vec3(x, y, z)); o.getTransform().setLocalScale(new vec3(sx, sy, sz)) }
+  }
+  private logoBurst(at: vec3, c: vec4) {
+    for (let i = 0; i < 24; i++) {
+      const v = new vec3(Math.random() - 0.5, Math.random() * 0.9, Math.random() - 0.5).normalize().uniformScale(300 + Math.random() * 400)
+      const o = this.block(at, new vec3(22, 22, 22), i % 3 === 0 ? new vec4(1, 1, 1, 1) : c)
+      if (o) this.fx.push({obj: o, t: 0, life: 0.9, vel: v, spin: new vec3(3, 4, 2)})
+    }
+  }
+  private destroyLogo() { this.logoParts.forEach((p) => p.obj.destroy()); this.logoParts = []; this.logoAnchor = null }
   private startIntro() {
     this.setMode("intro")
     if (!this.camT) return
-    const letters = ["i", "Y", "i", "Y", "i"]
-    const cols = [PALETTE[0], PALETTE[1], PALETTE[2], PALETTE[1], PALETTE[0]]
-    letters.forEach((ch, i) => {
-      const o = this.makeText(ch, 14, cols[i])
-      this.introObjs.push(o)
-    })
-    const sub = this.makeText("LASER TAG", 4.5, new vec4(1, 1, 1, 1))
-    this.introObjs.push(sub)
+    this.buildLogo("LASER TAG")
   }
   private tickIntro() {
     if (!this.camT) { this.endIntro(); return }
-    const t = this.modeT
-    const cam = this.camT.getWorldPosition()
-    const d = this.flatDir()
-    const right = quat.angleAxis(-Math.PI / 2, vec3.up()).multiplyVec3(d)
-    const center = cam.add(d.uniformScale(220)).add(new vec3(0, 10, 0))
-    this.introObjs.forEach((o, i) => {
-      const tr = o.getTransform()
-      const isSub = i === 5
-      const delay = isSub ? 0.9 : i * 0.12
-      const k = Math.max(0, Math.min(1, (t - delay) / 0.35))
-      const bounce = k < 1 ? k * (1.25 - 0.25 * k) : 1 + Math.sin(t * 3 + i) * 0.03
-      const x = isSub ? 0 : (i - 2) * 34
-      const y = isSub ? -45 : Math.sin(t * 2.5 + i) * 3
-      tr.setWorldPosition(center.add(right.uniformScale(x)).add(new vec3(0, y, 0)))
-      tr.setWorldRotation(quat.lookAt(d.uniformScale(-1), vec3.up()))
-      const sc = Math.max(0.001, bounce)
-      tr.setWorldScale(new vec3(sc, sc, sc))
-    })
-    if (t > 0.6 && t - getDeltaTime() <= 0.6) this.burst(center, PALETTE[2], 24)
-    if (t > 1.3 && t - getDeltaTime() <= 1.3) this.burst(center.add(new vec3(0, -45, 0)), PALETTE[1], 18)
-    if (t > 3.2) this.endIntro()
+    this.tickLogo(this.modeT)
+    if (this.modeT > 5.5) this.endIntro()
   }
-  private endIntro() {
+  private endIntro() { this.destroyLogo();
     this.introObjs.forEach((o) => o.destroy())
     this.introObjs = []
     this.openMenu()
