@@ -17,6 +17,7 @@
 // Test data: ?xrtest adds pretend people and a pretend laser tag match (no account needed).
 import * as THREE from './three.module.min.js'
 import * as SHOP from './shop.js'
+import * as ENV from './env.js'
 
 const SUPABASE_URL = 'https://sqsjwcsrgcgcpxccxedp.supabase.co'
 const ANON = 'sb_publishable_dC1TtQAqZpdQWRMoLAa3-w_xCSbea1x'
@@ -144,6 +145,7 @@ renderer.xr.enabled = true
 renderer.xr.setReferenceSpaceType('local-floor')
 document.body.appendChild(renderer.domElement)
 const scene = new THREE.Scene()
+ENV.initEnv(THREE, scene)
 const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.05, 3000)
 camera.position.set(0, 1.6, 0)
 scene.add(camera)
@@ -236,7 +238,8 @@ homeP.draw = () => {
   ;['i', 'Y', 'i', 'Y', 'i'].forEach((ch, i) => textLine(p, ch, 330 + i * 70, 180, 120, ['#ff4fa3', C.friendly, C.objective, C.friendly, '#ff4fa3'][i], 700, FONT_D, 'center'))
   textLine(p, st.northSrc === 'none' ? 'NORTH: LEARNING — WALK A FEW STEPS OR USE ◀ ▶' : 'NORTH: ' + (st.northSrc === 'compass' ? 'COMPASS' : st.northSrc === 'walk' ? 'LEARNED FROM WALKING' : st.northSrc === 'manual' ? 'SET BY HAND' : 'SAVED'), 500, 232, 26, C.muted, 600, FONT_U, 'center')
   button(p, 60, 270, 880, 110, "WHO'S AROUND ME", 'around', { primary: true })
-  button(p, 60, 400, 880, 110, 'PEOPLE NEARBY', 'nearby')
+  button(p, 60, 400, 580, 110, 'PEOPLE NEARBY', 'nearby')
+  button(p, 660, 400, 280, 110, 'WORLD', 'env', { meta: (ENV.THEMES.find((x) => x.id === ENV.currentTheme()) || {}).name || '', size: 34 })
   button(p, 60, 530, 880, 110, 'LASER TAG', 'tag')
   button(p, 60, 660, 580, 110, 'GAMES', 'games', { meta: 'PLAY FRIENDS' })
   button(p, 660, 660, 280, 110, 'SHOP', 'shop', { meta: SHOP.wallet().coins + '¢', size: 34 })
@@ -330,10 +333,11 @@ const GAME_LIST = [
   ['mafia', 'MAFIA', 'THE PENGUIN TOWN'],
   ['beside', 'BESIDE THEM', 'TASKS · IMPOSTER · VOTES'],
   ['missions', 'WE OUTSIDE', 'JOBS · COPS & ROBBERS'],
+  ['world', 'iYiYi WORLD', 'OBSTACLE COURSE · JUMP · DUCK'],
 ]
 gamesP.draw = () => {
   const p = gamesP; panelBg(p, 'Games')
-  GAME_LIST.forEach(([id, name, meta], i) => button(p, 44, 100 + i * 140, 912, 120, name, 'play', { data: id, left: true, meta, primary: i === 0 }))
+  GAME_LIST.forEach(([id, name, meta], i) => button(p, 44, 96 + i * 120, 912, 106, name, 'play', { data: id, left: true, meta, primary: i === 0, size: 36 }))
   button(p, 44, 830, 912, 90, 'BACK', 'home', { size: 32 })
 }
 pickP.draw = () => {
@@ -729,6 +733,7 @@ const ACT = {
   keygo: () => { const k = st.keys; if (!k || k.code.length !== 5) return; st.keys = null; setMode('game'); if (k.cb) k.cb(k.code) },
   pickit: (b) => { const pk = st.pick; st.pick = null; setMode((pk && pk.after) || 'game'); if (pk && pk.cb) pk.cb(b.data) },
   shop: () => openShop(), loadout: () => openLoadout(),
+  env: () => choosePanel('World · scan your space', ENV.THEMES.map((x) => [x.name + (x.id === ENV.currentTheme() ? '  ✓' : ''), x.id, x.meta]), (id) => { ENV.setTheme(id); try { localStorage.setItem('iyx_env', id) } catch (e) {} beep('hit'); redraw(homeP) }, 'home'),
 }
 
 // ======================================================================= games (./games/*.js)
@@ -863,9 +868,10 @@ function activeRay() {
 // ======================================================================= frame loop
 let lastAround = 0, lastAim = 0
 const clock = new THREE.Clock()
-renderer.setAnimationLoop(() => {
+renderer.setAnimationLoop((time, frame) => {
   const dt = Math.min(0.05, clock.getDelta()), now = Date.now()
   if (!st.xr && !st.preview) return
+  try { ENV.tickEnv(dt, frame || null, frame ? renderer.xr.getReferenceSpace() : null, viewPos()) } catch (e) { console.warn('env', e) }
   if (st.preview) applyPreviewLook()
   tickLogo(dt); tickFx(dt)
   if (styledBalls.size) { const c = SHOP.rainbow(); styledBalls.forEach((m) => { if (!m.parent) styledBalls.delete(m); else m.material = mat(c & 0xfffff0) }) }
@@ -919,11 +925,12 @@ renderer.setAnimationLoop(() => {
 // ======================================================================= enter / leave
 async function enterXR() {
   try {
-    const session = await navigator.xr.requestSession('immersive-ar', { optionalFeatures: ['local-floor', 'hand-tracking', 'bounded-floor'] })
+    const session = await navigator.xr.requestSession('immersive-ar', { optionalFeatures: ['local-floor', 'hand-tracking', 'bounded-floor', 'plane-detection'] })
     beep('tap')
     renderer.setClearColor(0x000000, 0)
     previewFloor.visible = false
     await renderer.xr.setSession(session)
+    try { ENV.setTheme(localStorage.getItem('iyx_env') || 'none') } catch (e) {}
     st.xr = true
     flat.style.display = 'none'; renderer.domElement.style.display = 'block'
     startLocation()
@@ -940,6 +947,7 @@ let yaw = 0, pitch = 0, drag = null, moved = 0
 function applyPreviewLook() { camera.quaternion.setFromEuler(new THREE.Euler(pitch, yaw, 0, 'YXZ')) }
 function enterPreview() {
   st.preview = true
+  try { ENV.setTheme(localStorage.getItem('iyx_env') || 'none') } catch (e) {}
   flat.style.display = 'none'; renderer.domElement.style.display = 'block'
   document.getElementById('previewbar').style.display = 'block'
   renderer.setClearColor(0x07090c, 1); previewFloor.visible = true
@@ -964,7 +972,7 @@ window.addEventListener('pointerup', (e) => {
   drag = null
 })
 window.addEventListener('keydown', (e) => { if (!st.preview) return; const f = flatForward(), r = new THREE.Vector3(-f.z, 0, f.x); const k = e.key.toLowerCase(); if (k === 'w') camera.position.addScaledVector(f, 0.5); if (k === 's') camera.position.addScaledVector(f, -0.5); if (k === 'a') camera.position.addScaledVector(r, -0.5); if (k === 'd') camera.position.addScaledVector(r, 0.5) })
-if (TEST) window.__iyx = { st, setMode, act: (a) => ACT[a]({}), onTagEvent, people, markers, camera, startGame, ctx, get game() { return game }, look: (y, p) => { yaw = y; pitch = p || 0 }, select: () => onSelect(headRay()), pick: (i) => { const pk = st.pick; if (pk) ACT.pickit({ data: pk.items[i][1] }) } }
+if (TEST) window.__iyx = { st, setMode, act: (a) => ACT[a]({}), env: (id) => ENV.setTheme(id), onTagEvent, people, markers, camera, startGame, ctx, get game() { return game }, look: (y, p) => { yaw = y; pitch = p || 0 }, select: () => onSelect(headRay()), pick: (i) => { const pk = st.pick; if (pk) ACT.pickit({ data: pk.items[i][1] }) } }
 
 sb.auth.onAuthStateChange((ev, s) => { if (!TEST) st.user = s ? s.user : null })
 startScreen()
