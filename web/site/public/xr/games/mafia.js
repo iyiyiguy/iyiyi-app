@@ -3,6 +3,7 @@
 // who goes, Doctor: who to save, Detective: who to check). Day: the penguins argue in speech
 // bubbles; point + pinch to accuse. Vote: point + pinch, or SKIP. Same rules as the app's Mafia.
 import { makePenguin, posePenguin, pointedAt, shuffle, ST, hexStr } from './kit.js'
+import * as ON from './mafia-online.js'
 
 const NAMES = ['PIP', 'WADDLES', 'TUX', 'NOOT', 'FLAPPY', 'ICEY', 'CHILLY', 'SLIDE', 'POPPY', 'BIRDIE', 'FROSTY']
 const RN = { town: 'TOWNSPERSON', mafia: 'MAFIA', doctor: 'DOCTOR', detective: 'DETECTIVE' }
@@ -14,15 +15,17 @@ let ctx, THREE, S
 export default {
   title: 'MAFIA',
   start(c) { ctx = c; THREE = c.THREE; S = { count: 8, big: false }; ask() },
-  stop() { if (S) clearTimeout(S.timer); S = null },
-  tick(dt, now) { if (S && S.pl) tick(dt, now) },
-  select(ray) { if (S && S.pl) select(ray) },
+  stop() { ON.stopOnline(); if (S) clearTimeout(S.timer); S = null },
+  tick(dt, now) { if (ON.onlineActive()) { ON.tick(dt, now); ON.testBots(now); return } if (S && S.pl) tick(dt, now) },
+  select(ray) { if (ON.onlineActive()) { ON.select(ray); return } if (S && S.pl) select(ray) },
 }
 const V = (x, y, z) => new THREE.Vector3(x, y, z)
 function ask() {
-  ctx.choose('Mafia', [['PLAY MAFIA', 'play', S.count + ' PLAYERS'], ['PLAYERS: ' + S.count, 'count', 'TAP TO CHANGE'], ['CIRCLE: ' + (S.big ? 'BIG ROOM' : 'SMALL ROOM'), 'circle', 'TAP TO CHANGE']], (v) => {
+  ctx.choose('Mafia', [['PLAY ONLINE · HOST', 'host', 'FRIENDS JOIN WITH YOUR CODE'], ['JOIN FRIENDS', 'join', 'ENTER THEIR CODE'], ['PLAY vs PENGUINS', 'play', S.count + ' PLAYERS'], ['PLAYERS: ' + S.count, 'count', 'TAP TO CHANGE'], ['CIRCLE: ' + (S.big ? 'BIG ROOM' : 'SMALL ROOM'), 'circle', 'TAP TO CHANGE']], (v) => {
     if (v === 'count') { S.count = S.count === 6 ? 8 : S.count === 8 ? 10 : 6; ask(); return }
     if (v === 'circle') { S.big = !S.big; ask(); return }
+    if (v === 'host') { S.pl = null; ON.startOnline(ctx, 'host', null, ask); return }
+    if (v === 'join') { ctx.keypad('Join Mafia', (code) => { if (code) { S.pl = null; ON.startOnline(ctx, 'join', code, ask) } else ask() }); return }
     newGame()
   })
 }
@@ -184,6 +187,7 @@ function checkWin() {
   if (mafiaAlive() === 0) S.winner = 'town'; else if (mafiaAlive() >= townAlive()) S.winner = 'mafia'
   if (!S.winner) return false
   const win = (S.winner === 'mafia') === (me().role === 'mafia')
+  if (win) setTimeout(() => ctx.earn && ctx.earn(30, 'MAFIA WIN'), 2600); 
   ctx.toast((S.winner === 'town' ? 'TOWN WINS!' : 'THE MAFIA WINS!') + (win ? '  YOU WIN' : '  YOU LOSE'), 15000)
   S.pl.forEach((p) => { if (p.peng && p.alive) { p.peng.dress(OUT[p.role], p.color); p.peng.label.set(p.name + ' · ' + RN[p.role], hexStr(RC[p.role])) } })
   for (let k = 0; k < 4; k++) ctx.burst(ctx.viewPos().clone().addScaledVector(ctx.flatForward(), 2).add(V((k - 1.5) * 0.6, 0.4, 0)), S.winner === 'town' ? ST.friendly : ST.enemy, 24, 0.06)

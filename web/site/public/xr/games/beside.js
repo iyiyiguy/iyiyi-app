@@ -245,6 +245,7 @@ function checkWin() {
 function finish(winner, why) {
   S.phase = 'end'; endTask()
   const win = (winner === 'imposter') === S.imImp
+  if (win) setTimeout(() => ctx.earn && ctx.earn(40, 'BESIDE THEM WIN'), 3000)
   ctx.toast((winner === 'crew' ? 'CREW WINS' : 'IMPOSTER WINS') + ' · ' + why + (win ? ' · YOU WIN' : ' · YOU LOSE'), 20000)
   S.bots.forEach((b) => { if (b.alive && b.imp) b.peng.label.set(b.name + ' · IMPOSTER', '#ff3d52') })
   for (let k = 0; k < 4; k++) ctx.burst(ctx.viewPos().clone().addScaledVector(ctx.flatForward(), 2).add(V((k - 1.5) * 0.6, 0.4, 0)), winner === 'crew' ? ST.friendly : ST.enemy, 24, 0.06)

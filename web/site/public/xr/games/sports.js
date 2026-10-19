@@ -74,7 +74,7 @@ function startRacket(id) {
   block(P(0, 0, S.top + netH / 2 + (id === 'volleyball' ? 0.45 : 0)), W + 0.2, id === 'volleyball' ? 0.9 : netH, 0.015, 0xd9dbe6)
   block(P(0, 0, S.top + netH), W + 0.2, 0.03, 0.03, 0xffffff)
   for (const x of [-(W / 2 + 0.1), W / 2 + 0.1]) block(P(x, 0, (S.top + netH + 0.1) / 2), 0.05, S.top + netH + 0.1, 0.05, 0x6b7590)
-  S.ball = new THREE.Mesh(new THREE.SphereGeometry(s.ball / 2, 16, 12), ctx.mat(s.color)); ctx.group.add(S.ball)
+  S.ball = new THREE.Mesh(new THREE.SphereGeometry(s.ball / 2, 16, 12), ctx.mat(s.color)); ctx.group.add(S.ball); ctx.styleBall(S.ball)
   // your paddle follows your hand
   S.paddle = new THREE.Group(); const ps = s.table ? 0.6 : id === 'volleyball' ? 0 : 1
   if (ps) { ctx.part(S.paddle, 0, 0.14 * ps, 0, 0.22 * ps, 0.26 * ps, 0.02, id === 'tennis' ? 0xe63350 : 0x39d5ff); ctx.part(S.paddle, 0, 0, 0, 0.03, 0.14 * ps, 0.03, 0x333844) }
@@ -198,10 +198,10 @@ function endRally(winner, why) {
   let msg = why
   const a = S.pts.me, b = S.pts.cpu
   if (s.scoring === 'tennis') {
-    if ((a >= 4 || b >= 4) && Math.abs(a - b) >= 2) { const w = a > b ? 'me' : 'cpu'; S.games[w]++; S.pts = { me: 0, cpu: 0 }; S.server = S.server === 'me' ? 'cpu' : 'me'; msg = w === 'me' ? 'GAME, YOU' : 'GAME, CPU'; if ((S.games.me >= 6 || S.games.cpu >= 6) && Math.abs(S.games.me - S.games.cpu) >= 2) { msg = S.games.me > S.games.cpu ? 'SET! YOU WIN' : 'SET TO THE CPU'; S.games = { me: 0, cpu: 0 } } }
+    if ((a >= 4 || b >= 4) && Math.abs(a - b) >= 2) { const w = a > b ? 'me' : 'cpu'; S.games[w]++; S.pts = { me: 0, cpu: 0 }; S.server = S.server === 'me' ? 'cpu' : 'me'; msg = w === 'me' ? 'GAME, YOU' : 'GAME, CPU'; if ((S.games.me >= 6 || S.games.cpu >= 6) && Math.abs(S.games.me - S.games.cpu) >= 2) { msg = S.games.me > S.games.cpu ? 'SET! YOU WIN' : 'SET TO THE CPU'; if (S.games.me > S.games.cpu) setTimeout(() => ctx.earn && ctx.earn(40, 'SET WON'), 2600);  S.games = { me: 0, cpu: 0 } } }
   } else {
     const to = s.scoring === 'to25' ? 25 : 11
-    if ((a >= to || b >= to) && Math.abs(a - b) >= 2) { msg = a > b ? 'YOU WIN THE GAME!' : 'CPU WINS THE GAME'; S.pts = { me: 0, cpu: 0 } }
+    if ((a >= to || b >= to) && Math.abs(a - b) >= 2) { msg = a > b ? 'YOU WIN THE GAME!' : 'CPU WINS THE GAME'; if (a > b) setTimeout(() => ctx.earn && ctx.earn(30, 'WIN'), 2600);  S.pts = { me: 0, cpu: 0 } }
     if (s.scoring === 'to25') S.server = winner
     else if ((S.pts.me + S.pts.cpu) % 2 === 0) S.server = S.server === 'me' ? 'cpu' : 'me'
   }
@@ -246,7 +246,7 @@ function startHoops() {
   block(P(0, dist + 0.4, 3.4), 1.83, 1.07, 0.04, 0xf2f2ff); block(P(0, dist + 0.38, 3.25), 0.59, 0.45, 0.02, 0xff4d4d)
   for (let i = 0; i < 12; i++) { const a = i / 12 * Math.PI * 2; block(S.hoop.clone().addScaledVector(S.side, Math.cos(a) * 0.23).addScaledVector(S.fwd, Math.sin(a) * 0.23), 0.05, 0.03, 0.05, 0xff7319) }
   block(P(0, dist + 0.8, 1.7), 0.12, 3.4, 0.12, 0x6b7590); block(P(0, dist, 0.005), 3.6, 0.01, 0.04, 0xffffff)
-  S.ball = new THREE.Mesh(new THREE.SphereGeometry(0.12, 18, 14), ctx.mat(0xff8026)); ctx.group.add(S.ball)
+  S.ball = new THREE.Mesh(new THREE.SphereGeometry(0.12, 18, 14), ctx.mat(0xff8026)); ctx.group.add(S.ball); ctx.styleBall(S.ball)
   S.throwFrom = () => (ctx.hand.pos ? ctx.hand.pos.clone() : ctx.viewPos().clone().addScaledVector(ctx.flatForward(), 0.55).addScaledVector(ctx.right(ctx.flatForward()), 0.2).add(V(0, -0.5, 0)))
   S.live = false
   ctx.toast('HOLD A PINCH, SWING UP AND LET GO', 4500)
@@ -274,7 +274,7 @@ function startBowling() {
   for (const x of [-w / 2 - 0.12, w / 2 + 0.12]) block(P(x, S.laneL / 2, 0.003), 0.23, 0.006, S.laneL, 0x6b7590)
   for (let i = 1; i <= 7; i++) block(P((i - 4) * 0.12, 4.6 * (S.backyard ? 0.44 : 1), 0.008), 0.03, 0.004, 0.08, 0xff3d52) // arrows
   block(P(0, 0, 0.008), w, 0.004, 0.02, 0xffffff) // foul line
-  S.ball = new THREE.Mesh(new THREE.SphereGeometry(0.11, 20, 16), ctx.mat(0x39d5ff)); ctx.group.add(S.ball)
+  S.ball = new THREE.Mesh(new THREE.SphereGeometry(0.11, 20, 16), ctx.mat(0x39d5ff)); ctx.group.add(S.ball); ctx.styleBall(S.ball)
   S.frames = []; S.frame = 0; S.roll = 0; S.over = false
   S.throwFrom = () => { const v = ctx.viewPos(); return P(Math.max(-0.45, Math.min(0.45, toCourt(V(v.x, 0, v.z)).x)), 0.1, 0.11) }
   rack(true)
@@ -402,6 +402,6 @@ function endRound() {
   ctx.toast(diff === 0 ? 'ROUND CANCELS OUT' : (diff > 0 ? 'YOU SCORE ' + diff : 'CPU SCORES ' + -diff), 3000)
   S.bags.forEach((b) => ctx.group.remove(b)); S.bags = []
   S.round = { me: 0, cpu: 0 }; S.left = { me: 4, cpu: 4 }; S.turn = diff >= 0 ? 'me' : 'cpu'; S.cpuAt = Date.now() + 2500
-  if (S.total.me >= 21 || S.total.cpu >= 21) { ctx.toast(S.total.me >= 21 ? 'YOU WIN 21!' : 'CPU WINS 21', 6000); S.total = { me: 0, cpu: 0 } }
+  if (S.total.me >= 21 || S.total.cpu >= 21) { ctx.toast(S.total.me >= 21 ? 'YOU WIN 21!' : 'CPU WINS 21', 6000); if (S.total.me >= 21) setTimeout(() => ctx.earn && ctx.earn(30, 'WIN'), 2600);  S.total = { me: 0, cpu: 0 } }
 }
 void shuffle

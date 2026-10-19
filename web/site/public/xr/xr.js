@@ -16,6 +16,7 @@
 // Preview: without XR (a laptop), "Preview" shows the same scene; drag to look, click to pinch.
 // Test data: ?xrtest adds pretend people and a pretend laser tag match (no account needed).
 import * as THREE from './three.module.min.js'
+import * as SHOP from './shop.js'
 
 const SUPABASE_URL = 'https://sqsjwcsrgcgcpxccxedp.supabase.co'
 const ANON = 'sb_publishable_dC1TtQAqZpdQWRMoLAa3-w_xCSbea1x'
@@ -224,7 +225,8 @@ const barP = makePanel(1000, 170, 0.75) // small bar while looking around / in l
 const hudP = makePanel(1000, 260, 0.6) // laser tag HUD, follows your view
 const gamesP = makePanel(1000, 960, 0.9) // the games list
 const pickP = makePanel(1000, 960, 0.9) // a game's own choices (sport, board size, side...)
-const UIP = [homeP, listP, cardP, barP, gamesP, pickP]
+const keyP = makePanel(1000, 960, 0.9) // code keypad for friend rooms
+const UIP = [homeP, listP, cardP, barP, gamesP, pickP, keyP]
 for (const p of UIP) { p.mesh.visible = false; ui.add(p.mesh) }
 hudP.mesh.visible = false; scene.add(hudP.mesh)
 
@@ -236,7 +238,8 @@ homeP.draw = () => {
   button(p, 60, 270, 880, 110, "WHO'S AROUND ME", 'around', { primary: true })
   button(p, 60, 400, 880, 110, 'PEOPLE NEARBY', 'nearby')
   button(p, 60, 530, 880, 110, 'LASER TAG', 'tag')
-  button(p, 60, 660, 880, 110, 'GAMES', 'games', { meta: 'SPORTS · CHESS · MAFIA · MORE' })
+  button(p, 60, 660, 580, 110, 'GAMES', 'games', { meta: 'PLAY FRIENDS' })
+  button(p, 660, 660, 280, 110, 'SHOP', 'shop', { meta: SHOP.wallet().coins + '¢', size: 34 })
   button(p, 60, 800, 200, 100, '◀', 'northL', { size: 44 })
   textLine(p, 'TURN TAGS', 500, 845, 30, C.muted, 700, FONT_U, 'center'); textLine(p, 'IF THEY\'RE OFF', 500, 882, 26, C.faint, 600, FONT_U, 'center')
   button(p, 740, 800, 200, 100, '▶', 'northR', { size: 44 })
@@ -297,8 +300,9 @@ barP.draw = () => {
     return
   }
   const label = st.mode === 'tag' ? (tagLive() ? 'LASER TAG · POINT + PINCH TO FIRE' : 'LASER TAG · START A MATCH ON YOUR PHONE') : "WHO'S AROUND · POINT AT A NAME + PINCH"
-  textLine(p, label, 44, 70, 32, C.friendly, 700)
+  textLine(p, label.slice(0, st.mode === 'tag' ? 30 : 60), 44, 70, 32, C.friendly, 700)
   textLine(p, st.mode === 'tag' ? (st.tag.hud && st.tag.hud.score ? String(st.tag.hud.score) : '') : (st.aroundMsg || ''), 44, 125, 30, C.muted, 600)
+  if (st.mode === 'tag') button(p, 540, 40, 200, 90, 'LOADOUT', 'loadout', { size: 28 })
   button(p, 760, 40, 200, 90, 'MENU', 'home', { size: 32 })
 }
 hudP.draw = () => {
@@ -337,8 +341,61 @@ pickP.draw = () => {
   panelBg(p, pk.title)
   const n = pk.items.length, h = Math.min(120, Math.floor(700 / Math.max(1, n)) - 16)
   pk.items.forEach(([label, value, meta], i) => button(p, 44, 100 + i * (h + 16), 912, h, label, 'pickit', { data: value, meta: meta || '', size: h < 90 ? 32 : 38, primary: i === 0 }))
-  button(p, 44, 840, 912, 90, 'MENU', 'home', { size: 32 })
+  button(p, 44, 840, 912, 90, pk.after === 'tag' ? 'BACK TO LASER TAG' : 'MENU', pk.after === 'tag' ? 'tag' : 'home', { size: 32 })
 }
+
+const KEYS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'
+keyP.draw = () => {
+  const p = keyP, k = st.keys || { title: '', code: '' }
+  panelBg(p, k.title || 'Join code')
+  rr(p.ctx, 44, 90, 912, 120, 8); p.ctx.fillStyle = 'rgba(255,255,255,0.06)'; p.ctx.fill()
+  textLine(p, (k.code + '_____').slice(0, 5).split('').join(' '), 500, 175, 84, k.code.length === 5 ? C.objective : C.text, 700, FONT_D, 'center')
+  KEYS.split('').forEach((ch, i) => button(p, 44 + (i % 8) * 114, 236 + Math.floor(i / 8) * 104, 102, 92, ch, 'key', { data: ch, size: 44 }))
+  button(p, 44 + 7 * 114, 236 + 3 * 104, 102, 92, '⌫', 'key', { data: 'back', size: 40 })
+  button(p, 44, 664, 444, 100, 'CANCEL', 'keycancel', { size: 34 })
+  button(p, 512, 664, 444, 100, 'JOIN', 'keygo', { size: 38, primary: k.code.length === 5 })
+  textLine(p, 'Ask your friend for their 5-letter code (phone or glasses).', 500, 820, 28, C.muted, 600, FONT_U, 'center')
+}
+
+// ---------- shop + loadout ----------
+let shopPrev = null
+function showPreview(look) {
+  if (shopPrev) { scene.remove(shopPrev); shopPrev = null }
+  if (!look) return
+  shopPrev = SHOP.buildAvatar(THREE, mat, look); shopPrev.scale.setScalar(0.75)
+  const v = viewPos(), f = flatForward(), r = new THREE.Vector3(-f.z, 0, f.x)
+  shopPrev.position.copy(v).addScaledVector(f, 1.45).addScaledVector(r, 0.68).add(new THREE.Vector3(0, -0.22, 0))
+  shopPrev.lookAt(v.x, shopPrev.position.y, v.z); scene.add(shopPrev)
+}
+function choosePanel(title, items, cb, after) { st.pick = { title, items, cb, after }; setMode('pick') }
+function openShop(cat) {
+  const w = SHOP.wallet()
+  showPreview(w.equip)
+  if (!cat) {
+    choosePanel('Shop · ' + w.coins + ' coins', SHOP.CATS.map(([id, name, meta]) => [name, id, meta]).concat([['HOW TO EARN', 'earn', 'WIN GAMES · LASER TAG HITS · JOBS']]), (v) => {
+      if (v === 'earn') { st.toast = 'WINS +25–60 · LASER TAG HIT +3, KO +15 · WE OUTSIDE JOB +20'; st.toastUntil = Date.now() + 6000; openShop(); return }
+      openShop(v)
+    }, 'home')
+    return
+  }
+  const list = SHOP.CATALOG[cat]
+  const items = list.map((it) => [it.name, it.id, w.equip[cat] === it.id ? 'EQUIPPED' : w.owned.includes(it.id) ? 'OWNED · TAP TO WEAR' : it.price + ' COINS'])
+  items.push(['‹ ALL CATEGORIES', '__back', w.coins + ' COINS'])
+  choosePanel('Shop · ' + cat + ' · ' + w.coins + '¢', items, (id) => {
+    if (id === '__back') { openShop(); return }
+    if (w.owned.includes(id)) { SHOP.equip(cat, id); beep('tap') }
+    else { const r = SHOP.buy(cat, id); if (r === 'ok') { beep('hit'); burst(viewPos().add(flatForward().multiplyScalar(1.2)), 0xffb21e, 22, 0.03) } else if (r === 'poor') { beep('ouch'); st.toast = 'NOT ENOUGH COINS YET · PLAY TO EARN'; st.toastUntil = Date.now() + 3000 } }
+    SHOP.shareLook(); openShop(cat)
+  }, 'home')
+}
+function openLoadout(cat) {
+  const w = SHOP.wallet()
+  showPreview(w.equip)
+  if (!cat) { choosePanel('Loadout', SHOP.CATS.slice(0, 4).map(([id, name]) => [name + ': ' + SHOP.equipped(id).name, id, 'SWITCH'] ), (v) => openLoadout(v), 'tag'); return }
+  const items = SHOP.CATALOG[cat].filter((it) => w.owned.includes(it.id)).map((it) => [it.name, it.id, w.equip[cat] === it.id ? 'ON' : ''])
+  choosePanel('Loadout · ' + cat, items, (id) => { SHOP.equip(cat, id); SHOP.shareLook(); beep('tap'); openLoadout() }, 'tag')
+}
+function earn(n, why) { const c = SHOP.earn(n); st.toast = '+' + n + ' COINS' + (why ? ' · ' + why : '') + ' · ' + c + '¢'; st.toastUntil = Date.now() + 2500; redraw(barP) }
 
 // ---------- people tags (over heads) ----------
 const people = new Map() // id -> { panel, line, pos(vec3), seen, data }
@@ -385,10 +442,10 @@ function blockPile(at) {
     addFx(m, 8, new THREE.Vector3((Math.random() - 0.5) * 1.2, 0.3 + Math.random() * 0.8, (Math.random() - 0.5) * 1.2), { gravity: true, floor: s / 2, spin: true })
   }
 }
-function bolt(from, dir, hex = 0x39d5ff) {
+function bolt(from, dir, hex = 0x39d5ff, w = 1, long = false) {
   const g = new THREE.Group()
-  const core = new THREE.Mesh(boxGeo, mat(0xffffff)); core.scale.set(0.02, 0.02, 0.6)
-  const glow = new THREE.Mesh(boxGeo, mat(hex, 0.75)); glow.scale.set(0.055, 0.055, 0.75)
+  const core = new THREE.Mesh(boxGeo, mat(0xffffff)); core.scale.set(0.02 * w, 0.02 * w, long ? 1.6 : 0.6)
+  const glow = new THREE.Mesh(boxGeo, mat(hex, 0.75)); glow.scale.set(0.055 * w, 0.055 * w, long ? 1.8 : 0.75)
   g.add(core, glow); g.position.copy(from); g.lookAt(from.clone().add(dir))
   addFx(g, 0.8, dir.clone().multiplyScalar(32))
 }
@@ -580,6 +637,14 @@ function drawMarkers(h) {
     const locked = h.target && e.name && h.target.name === e.name
     const col = e.alive === false ? 0x555a66 : locked ? 0xffb21e : e.kind === 'mate' ? 0x5cf2a0 : 0xff3d52
     m.ring.material = mat(col); m.diamond.material = mat(col); m.diamond.rotation.y += 0.04
+    const look = e.id ? SHOP.lookOf(e.id) : null, lkKey = look ? JSON.stringify(look) : ''
+    if (m.lookKey !== lkKey) {
+      m.lookKey = lkKey
+      if (m.fig) { m.group.remove(m.fig); m.fig = null }
+      if (look) { m.fig = SHOP.buildAvatar(THREE, mat, look); m.fig.position.y = 0.18; m.group.add(m.fig) }
+      m.diamond.visible = !look; m.label.mesh.position.y = look ? 0.98 : 0.62
+    }
+    if (m.fig) { m.fig.rotation.y = Math.sin(Date.now() / 700) * 0.5; m.fig.userData.rings.forEach((r, i) => (r.rotation.z += 0.02 * (i % 2 ? -1 : 1))) }
     const lk = (locked ? '◎ ' : '') + '@' + (e.name || (e.kind === 'mate' ? 'teammate' : 'enemy')) + '|' + col
     if (m.label.key !== lk) {
       m.label.key = lk
@@ -595,12 +660,13 @@ function onTagEvent(ev) {
   const ahead = viewPos().add(flatForward().multiplyScalar(6)); ahead.y = 1.4
   const tgt = st.tag.hud && st.tag.hud.target && [...markers.values()].find((m) => m.name.endsWith(':' + st.tag.hud.target.name))
   const at = tgt && tgt.pos ? tgt.pos.clone() : ahead
-  if (ev.kind === 'hit') { burst(at, 0xffb21e, 14, 0.07); beep('hit') }
-  else if (ev.kind === 'kill') { burst(at, 0xff3d52, 24, 0.09); blockPile(new THREE.Vector3(at.x, 0, at.z)); beep('boom') }
+  if (ev.kind === 'hit') { burst(at, 0xffb21e, 14, 0.07); beep('hit'); SHOP.earn(3) }
+  else if (ev.kind === 'kill') { burst(at, 0xff3d52, 24, 0.09); blockPile(new THREE.Vector3(at.x, 0, at.z)); beep('boom'); earn(15, 'KO') }
   else if (ev.kind === 'got_hit') { flashRed(); beep('ouch'); if (typeof ev.bearing === 'number') { const v = viewPos(), dir = dirOfCompass(ev.bearing); bolt(v.clone().add(dir.clone().multiplyScalar(14)).setY(1.6), dir.clone().negate().add(new THREE.Vector3(0.05, 0, 0)).normalize(), 0xff3d52) } }
   else if (ev.kind === 'boom') { burst(ahead, 0xff7a1a, 30, 0.12); beep('boom') }
   else if (ev.kind === 'died') flashRed()
 }
+if (TEST) { SHOP._testLook('e1', { avatar: 'robot', outfit: 'ninja', armor: 'gold' }); SHOP._testLook('e2', { avatar: 'cat', outfit: 'king', armor: 'neon' }); SHOP._testLook('m1', { avatar: 'dragon', outfit: 'cowboy', armor: 'tactical' }) }
 function fakeHud() {
   const t = Date.now() / 1000
   return { phase: 'playing', score: 'RED 3 · BLUE 2', clock: '2:14', hp: 70, max: 100, gun: 'PULSE RIFLE', ammo: '24/30', range: 60,
@@ -611,7 +677,8 @@ let lastFire = 0
 function fire(ray) {
   const now = Date.now(); if (now - lastFire < 180) return; lastFire = now
   const dir = ray.dir.clone()
-  bolt(ray.origin.clone().add(dir.clone().multiplyScalar(0.25)), dir)
+  const gun = SHOP.equipped('gun')
+  bolt(ray.origin.clone().add(dir.clone().multiplyScalar(0.25)), dir, SHOP.colorOf(gun.color), gun.w, gun.long)
   beep('pew')
   send('g_fire', { deg: Math.round(compassOf(new THREE.Vector3(dir.x, 0, dir.z).normalize()) * 10) / 10, at: now })
   if (TEST && st.tag.hud && st.tag.hud.target) setTimeout(() => onTagEvent({ kind: Math.random() < 0.3 ? 'kill' : 'hit' }), 250)
@@ -625,10 +692,14 @@ function placeInFront(mesh, dist = 1.3, dy = -0.1) {
 }
 const TAG_MODES = ['around', 'tag', 'game'] // name tags over iYiYi people show in these, even mid-game
 function setMode(m) {
-  if (m !== 'game' && m !== 'pick' && m !== 'card' && m !== 'socials' && game) stopGame()
+  if (m !== 'pick' && shopPrev) showPreview(null)
+  if (m === 'tag' && st.user && !TEST) SHOP.joinLooks(sb, st.user.id)
+  if (m !== 'game' && m !== 'pick' && m !== 'keys' && m !== 'card' && m !== 'socials' && game) stopGame()
   st.mode = m
   gamesP.mesh.visible = m === 'games'
   pickP.mesh.visible = m === 'pick'
+  keyP.mesh.visible = m === 'keys'
+  if (m === 'keys') { placeInFront(keyP.mesh, 1.3, -0.05); redraw(keyP) }
   if (m === 'games') { placeInFront(gamesP.mesh); redraw(gamesP) }
   if (m === 'pick') { placeInFront(pickP.mesh, 1.3, -0.05); redraw(pickP) }
   homeP.mesh.visible = m === 'home'
@@ -653,7 +724,11 @@ const ACT = {
   socials: () => { st.mode = 'socials'; redraw(cardP) }, card: () => { st.mode = 'card'; redraw(cardP) },
   closecard: () => setMode(st.backTo || 'home'), follow, noop: () => {},
   games: () => setMode('games'), play: (b) => startGame(b.data),
-  pickit: (b) => { const pk = st.pick; st.pick = null; setMode('game'); if (pk && pk.cb) pk.cb(b.data) },
+  key: (b) => { const k = st.keys; if (!k) return; k.code = b.data === 'back' ? k.code.slice(0, -1) : (k.code + b.data).slice(0, 5); beep('tap'); redraw(keyP) },
+  keycancel: () => { const k = st.keys; st.keys = null; setMode('game'); if (k && k.cb) k.cb(null) },
+  keygo: () => { const k = st.keys; if (!k || k.code.length !== 5) return; st.keys = null; setMode('game'); if (k.cb) k.cb(k.code) },
+  pickit: (b) => { const pk = st.pick; st.pick = null; setMode((pk && pk.after) || 'game'); if (pk && pk.cb) pk.cb(b.data) },
+  shop: () => openShop(), loadout: () => openLoadout(),
 }
 
 // ======================================================================= games (./games/*.js)
@@ -706,12 +781,30 @@ const ctx = {
   line(a, b) { if (st.gameLine !== a || st.gameLine2 !== (b || '')) { st.gameLine = a; st.gameLine2 = b || ''; redraw(barP) } },
   toast(t, ms = 2500) { st.toast = t; st.toastUntil = Date.now() + ms; redraw(barP); setTimeout(() => redraw(barP), ms + 50) },
   choose(title, items, cb) { st.pick = { title, items, cb }; setMode('pick') },
+  closePick() { if (st.mode === 'pick') { st.pick = null; setMode('game') } },
+  earn, shop: SHOP,
+  /** colour a sports ball with the equipped ball skin (rainbow ones keep cycling) */
+  styleBall(mesh, fallback) { const b = SHOP.equipped('ball'); if (!b.color) return fallback; if (b.color === 'rainbow') styledBalls.add(mesh); else mesh.material = mat(b.color); return b.color },
+  keypad(title, cb) { st.keys = { title, code: '', cb }; setMode('keys') },
+  sb,
+  async me() {
+    if (TEST) return { id: 'me-test', username: 'you', avatar: null }
+    const u = st.user || ((await sb.auth.getSession()).data.session || {}).user
+    if (!u) return null
+    if (!st.meProfile || st.meProfile.id !== u.id) {
+      let r = {}
+      try { r = await api('/api/profiles/' + encodeURIComponent(u.id)) } catch (e) {}
+      st.meProfile = { id: u.id, username: r.username || (u.user_metadata && u.user_metadata.username) || (u.email || 'player').split('@')[0], avatar: r.avatar_url || r.avatar || null }
+    }
+    return st.meProfile
+  },
   menu() { setMode('home') },
   angle(p) { return Math.acos(Math.max(-1, Math.min(1, p.clone().sub(viewPos()).normalize().dot(viewDir())))) },
   rayHit(ray, objects) { raycaster.set(ray.origin, ray.dir); const h = raycaster.intersectObjects(objects, true); return h.length ? h[0] : null },
   rayFloor(ray, y = 0) { if (ray.dir.y > -1e-4) return null; const t = (y - ray.origin.y) / ray.dir.y; return ray.origin.clone().addScaledVector(ray.dir, t) },
   bolt: (from, dir, hex) => bolt(from, dir, hex),
 }
+const styledBalls = new Set()
 const raycaster = new THREE.Raycaster()
 function hitTest(ray) {
   raycaster.set(ray.origin, ray.dir)
@@ -775,6 +868,7 @@ renderer.setAnimationLoop(() => {
   if (!st.xr && !st.preview) return
   if (st.preview) applyPreviewLook()
   tickLogo(dt); tickFx(dt)
+  if (styledBalls.size) { const c = SHOP.rainbow(); styledBalls.forEach((m) => { if (!m.parent) styledBalls.delete(m); else m.material = mat(c & 0xfffff0) }) }
   learnFromWalk()
   // who's around: name tags over heads
   if (TAG_MODES.includes(st.mode)) {
@@ -808,14 +902,14 @@ renderer.setAnimationLoop(() => {
   }
   // games
   updateHand(dt)
-  if (game && (st.mode === 'game' || st.mode === 'pick')) { try { game.tick(dt, now) } catch (e) { console.error(e) } }
+  if (game && (st.mode === 'game' || st.mode === 'pick' || st.mode === 'keys')) { try { game.tick(dt, now) } catch (e) { console.error(e) } }
   gameGroup.traverse((o) => { if (o.userData.billboard) { const v = viewPos(), w = new THREE.Vector3(); o.getWorldPosition(w); o.lookAt(v.x, w.y, v.z) } })
   if (st.mode === 'game' && now - (barP.lastDraw || 0) > 500) { barP.lastDraw = now; redraw(barP) }
   // pointer hover + ray lines
   updateHover(activeRay())
   controllers.forEach((c) => (c.userData.line.visible = c.userData.mode === 'tracked-pointer'))
   // keep the open panel within reach if you turn away
-  for (const p of [homeP, listP, cardP, gamesP, pickP]) if (p.mesh.visible) {
+  for (const p of [homeP, listP, cardP, gamesP, pickP, keyP]) if (p.mesh.visible) {
     const to = p.mesh.position.clone().sub(viewPos()); to.y = 0
     if (to.length() > 3 || to.normalize().dot(flatForward()) < Math.cos(55 * D2R)) placeInFront(p.mesh, p === homeP ? 1.3 : 1.25, -0.08)
   }
@@ -870,7 +964,7 @@ window.addEventListener('pointerup', (e) => {
   drag = null
 })
 window.addEventListener('keydown', (e) => { if (!st.preview) return; const f = flatForward(), r = new THREE.Vector3(-f.z, 0, f.x); const k = e.key.toLowerCase(); if (k === 'w') camera.position.addScaledVector(f, 0.5); if (k === 's') camera.position.addScaledVector(f, -0.5); if (k === 'a') camera.position.addScaledVector(r, -0.5); if (k === 'd') camera.position.addScaledVector(r, 0.5) })
-if (TEST) window.__iyx = { st, setMode, onTagEvent, people, markers, camera, startGame, ctx, get game() { return game }, look: (y, p) => { yaw = y; pitch = p || 0 }, select: () => onSelect(headRay()), pick: (i) => { const pk = st.pick; if (pk) ACT.pickit({ data: pk.items[i][1] }) } }
+if (TEST) window.__iyx = { st, setMode, act: (a) => ACT[a]({}), onTagEvent, people, markers, camera, startGame, ctx, get game() { return game }, look: (y, p) => { yaw = y; pitch = p || 0 }, select: () => onSelect(headRay()), pick: (i) => { const pk = st.pick; if (pk) ACT.pickit({ data: pk.items[i][1] }) } }
 
 sb.auth.onAuthStateChange((ev, s) => { if (!TEST) st.user = s ? s.user : null })
 startScreen()

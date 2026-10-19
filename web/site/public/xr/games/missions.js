@@ -100,7 +100,7 @@ function nextJob() {
     setBeacon(S.ring.position, ST.health, 'HOLD'); S.nextSpawn = Date.now() + 3000; ctx.toast('JOB ' + S.jobN + ': HOLD THE SPOT BY THE STORE FOR 30 S', 4000)
   } else { const b = spawn('boss', 10 + lvl * 4); b.label.set('BOSS'); spawn('thug', 2); setBeacon(null); ctx.toast('JOB ' + S.jobN + ': BEAT THE BOSS', 4000) }
 }
-function payout(n, why) { S.cash += n; S.earned += n; try { localStorage.setItem(CASH_KEY, String(S.cash)) } catch (e) {} ctx.toast(why + '  +$' + n, 3500); for (let k = 0; k < 3; k++) ctx.burst(ctx.viewPos().clone().addScaledVector(ctx.flatForward(), 1.5).add(V((k - 1) * 0.4, 0.2, 0)), ST.health, 16, 0.04) }
+function payout(n, why) { setTimeout(() => ctx.earn && ctx.earn(Math.max(5, Math.round(n / 10)), 'JOB'), 3600); S.cash += n; S.earned += n; try { localStorage.setItem(CASH_KEY, String(S.cash)) } catch (e) {} ctx.toast(why + '  +$' + n, 3500); for (let k = 0; k < 3; k++) ctx.burst(ctx.viewPos().clone().addScaledVector(ctx.flatForward(), 1.5).add(V((k - 1) * 0.4, 0.2, 0)), ST.health, 16, 0.04) }
 function jobDone(n, why) { payout(n, why); setBeacon(null); if (S.ring) { ctx.group.remove(S.ring); S.ring = null } S.job = 'between'; S.jobEnd = Date.now() + 3500 }
 function startHeist() { S.job = 'heist'; S.crack = 0; S.wanted = 0; setBeacon(S.places.bank.pos, ST.objective, 'BANK'); ctx.toast('ROB THE BANK: POINT AT THE VAULT AND HOLD A PINCH', 4500) }
 function dispatch() {
