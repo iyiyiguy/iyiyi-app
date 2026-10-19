@@ -623,8 +623,9 @@ function placeInFront(mesh, dist = 1.3, dy = -0.1) {
   mesh.position.set(v.x + f.x * dist, v.y + dy, v.z + f.z * dist)
   mesh.lookAt(v.x, v.y + dy, v.z)
 }
+const TAG_MODES = ['around', 'tag', 'game'] // name tags over iYiYi people show in these, even mid-game
 function setMode(m) {
-  if (m !== 'game' && m !== 'pick' && game) stopGame()
+  if (m !== 'game' && m !== 'pick' && m !== 'card' && m !== 'socials' && game) stopGame()
   st.mode = m
   gamesP.mesh.visible = m === 'games'
   pickP.mesh.visible = m === 'pick'
@@ -635,12 +636,13 @@ function setMode(m) {
   cardP.mesh.visible = m === 'card' || m === 'socials'
   barP.mesh.visible = m === 'around' || m === 'tag' || m === 'game'
   hudP.mesh.visible = m === 'tag'
-  people.forEach((t) => { t.panel.mesh.visible = t.line.visible = m === 'around' })
+  people.forEach((t) => { t.panel.mesh.visible = t.line.visible = TAG_MODES.includes(m) })
   markers.forEach((mk) => (mk.group.visible = m === 'tag'))
   if (m === 'home') { placeInFront(homeP.mesh); redraw(homeP) }
   if (m === 'nearby') { placeInFront(listP.mesh, 1.35, -0.05); loadNearby() }
   if (m === 'card' || m === 'socials') { placeInFront(cardP.mesh, 1.2, -0.05); redraw(cardP) }
   if (m === 'around' || m === 'tag' || m === 'game') { placeInFront(barP.mesh, 1.2, -0.55); redraw(barP) }
+  if (m === 'tag' || m === 'game') loadAround()
   if (m === 'around') loadAround()
   if (m === 'tag') joinTag()
 }
@@ -715,7 +717,7 @@ function hitTest(ray) {
   raycaster.set(ray.origin, ray.dir)
   const targets = []
   for (const p of UIP) if (p.mesh.visible) targets.push(p.mesh)
-  if (st.mode === 'around') people.forEach((t) => targets.push(t.panel.mesh))
+  if (TAG_MODES.includes(st.mode)) people.forEach((t) => targets.push(t.panel.mesh))
   const hits = raycaster.intersectObjects(targets, false)
   if (!hits.length) return null
   const h = hits[0], p = h.object.userData.panel
@@ -727,7 +729,7 @@ function hitTest(ray) {
 let hoverTag = null
 function onSelect(ray) {
   const h = hitTest(ray)
-  if (h && h.person) { beep('tap'); st.backTo = 'around'; openProfile(h.person.data); return }
+  if (h && h.person) { beep('tap'); st.backTo = st.mode; openProfile(h.person.data); return }
   if (h && h.panel) { const b = h.panel.buttons[h.index]; if (b) { beep('tap'); st.backTo = st.mode === 'socials' ? st.backTo : st.mode === 'card' ? st.backTo : st.mode; ACT[b.action] && ACT[b.action](b) } return }
   if (st.mode === 'tag') fire(ray)
   if (st.mode === 'game' && game && game.select) game.select(ray)
@@ -775,8 +777,8 @@ renderer.setAnimationLoop(() => {
   tickLogo(dt); tickFx(dt)
   learnFromWalk()
   // who's around: name tags over heads
-  if (st.mode === 'around') {
-    if (now - lastAround > 4000) { lastAround = now; loadAround().then(() => redraw(barP)) }
+  if (TAG_MODES.includes(st.mode)) {
+    if (now - lastAround > 4000) { lastAround = now; loadAround().then(() => st.mode === 'around' && redraw(barP)) }
     const v = viewPos(), seen = {}
     for (const u of st.people) {
       const pl = placeOf(u.latitude, u.longitude); if (!pl) continue
