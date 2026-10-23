@@ -246,6 +246,22 @@ blockquote.q cite{display:block;margin-top:14px;font:600 13px var(--cond);letter
 .asks p{margin:6px 0 0;color:var(--muted)}
 @media(max-width:560px){.asks div{grid-template-columns:64px 1fr}}
 
+/* wireframe canvas */
+.wfv{position:relative;height:min(78vh,760px);border-radius:24px;overflow:hidden;border:1px solid var(--line);background:#0e1220;background-image:radial-gradient(rgba(255,255,255,.07) 1px,transparent 1px);background-size:22px 22px;cursor:grab;touch-action:pan-y;user-select:none;-webkit-user-select:none;margin-top:36px}
+.wfv.grab{cursor:grabbing}
+.wfv.full{position:fixed;inset:0;height:auto;z-index:130;border-radius:0;margin:0;touch-action:none}
+.wfworld{position:absolute;left:0;top:0;transform-origin:0 0;will-change:transform}
+.wfb{position:absolute}
+.wfb .bt{position:absolute;left:0;top:-58px;font:700 34px/1 Inter,sans-serif;color:#cfd6ea;white-space:nowrap;letter-spacing:-.01em}
+.wfb img{display:block;width:100%;height:100%;border-radius:18px;box-shadow:0 20px 60px rgba(0,0,0,.45);pointer-events:none}
+.wfctl{position:absolute;display:flex;gap:8px;z-index:2}
+.wfctl.br{right:14px;bottom:14px}.wfctl.tl{left:14px;top:14px;flex-wrap:wrap;right:14px}
+.wfctl .chip2{height:34px;padding:0 12px;border-radius:999px;border:1px solid rgba(255,255,255,.16);background:rgba(18,24,40,.82);backdrop-filter:blur(8px);color:var(--muted);font:600 13px var(--cond);letter-spacing:.06em;text-transform:uppercase;cursor:pointer}
+.wfctl .chip2:hover{color:#04121b;background:var(--cyan);border-color:var(--cyan)}
+.wfhint{position:absolute;left:14px;bottom:16px;z-index:2;font:600 12px var(--cond);letter-spacing:.14em;text-transform:uppercase;color:rgba(255,255,255,.55);pointer-events:none}
+.wfz{font:700 13px var(--hud);color:var(--muted);align-self:center;min-width:46px;text-align:center}
+@media(max-width:700px){.wfctl.tl{display:none}}
+
 footer{padding:90px 0 60px;border-top:1px solid var(--line);background:radial-gradient(60% 100% at 50% 0%,rgba(57,213,255,.08),transparent)}
 footer .name{font:900 clamp(40px,7vw,80px)/1 Inter,sans-serif;letter-spacing:-.04em}
 footer .links{margin-top:22px}
@@ -258,7 +274,7 @@ footer .links{margin-top:22px}
 
 <nav><div class="wrap">
   <a class="logo" href="/"><img src="/logo.png" alt="" />iYiYi</a>
-  <div class="links"><a href="#what">The app</a><a href="#specs">Specs</a><a class="keep" href="#games">Games</a><a href="#snap">Why Snap</a><a href="#creators">Creators</a><a href="#asks">Asks</a></div>
+  <div class="links"><a href="#what">The app</a><a href="#specs">Specs</a><a class="keep" href="#games">Games</a><a href="#snap">Why Snap</a><a href="#creators">Creators</a><a href="#asks">Asks</a><a href="#wireframes">Wireframes</a></div>
 </div></nav>
 
 <header class="hero">
@@ -430,6 +446,18 @@ footer .links{margin-top:22px}
   </div>
 </div></section>
 
+<section id="wireframes"><div class="wrap">
+  <div class="kick">The app, screen by screen</div>
+  <h2>App <span class="grad">wireframes.</span></h2>
+  <p class="lead">All seven boards on one canvas. Drag to move around, pinch or use + and − to zoom, or open it full screen.</p>
+  <div class="wfv" id="wfv">
+    <div class="wfworld" id="wfworld"></div>
+    <div class="wfctl tl" id="wfjump"></div>
+    <div class="wfctl br"><button class="btn" id="wfOut" aria-label="Zoom out">−</button><span class="wfz" id="wfZ">100%</span><button class="btn" id="wfIn" aria-label="Zoom in">+</button><button class="btn" id="wfFit">Fit</button><button class="btn" id="wfFull">⤢ Full screen</button></div>
+    <div class="wfhint" id="wfHint">Drag to pan · pinch or ctrl + scroll to zoom</div>
+  </div>
+</div></section>
+
 <footer><div class="wrap">
   <div class="kick">Thank you</div>
   <div class="name">Colin Phillips</div>
@@ -579,6 +607,52 @@ loop();
 const rv = new IntersectionObserver(es => es.forEach(e => { if (e.isIntersecting) { e.target.classList.add('in'); rv.unobserve(e.target); } }), { threshold: 0.12 });
 document.querySelectorAll('.reveal').forEach(el => rv.observe(el));
 
+// ---------- wireframe canvas (Figma-style pan + zoom) ----------
+(() => {
+  const B = [['main','1 · Onboarding, sign-in & paywall',2080],['core','2 · Main tabs',2080],['profiles','3 · Profiles & following',2080],['social','4 · Events, stats & settings',2080],['arcade','5 · Arcade hub, lobbies & shops',2080],['games','6 · Games',2760],['business','7 · Business, glasses & media',2080]];
+  const v = document.getElementById('wfv'), w = document.getElementById('wfworld'), zl = document.getElementById('wfZ');
+  const GAP = 890, H = 770, CX = 2380, pos = i => [(i % 2) * CX, Math.floor(i / 2) * GAP], W = CX + 2760, TOT = GAP * Math.ceil(B.length / 2 - 1) + H;
+  w.innerHTML = B.map(([id, t, bw], i) => `<div class="wfb" style="left:${pos(i)[0]}px;top:${pos(i)[1]}px;width:${bw}px;height:${H}px"><div class="bt">${t}</div><img src="img/wf-${id}.webp" alt="Wireframes: ${t}" loading="lazy" decoding="async" /></div>`).join('');
+  document.getElementById('wfjump').innerHTML = B.map(([id, t], i) => `<button class="chip2" data-i="${i}">${t.split(' · ')[1]}</button>`).join('');
+  let s = 0.3, x = 0, y = 0;
+  const apply = () => { w.style.transform = `translate(${x}px,${y}px) scale(${s})`; zl.textContent = Math.round(s * 100) + '%'; };
+  const fitBox = (bx, by, bw, bh, pad = 40) => { const r = v.getBoundingClientRect(); const top = r.width > 700 ? 96 : 20; s = Math.min((r.width - pad * 2) / bw, (r.height - pad * 2 - top - 50) / bh); x = (r.width - bw * s) / 2 - bx * s; y = top + (r.height - top - 50 - bh * s) / 2 - by * s; apply(); };
+  const fit = () => fitBox(0, -70, W, TOT + 70, 24);
+  const zoomAt = (f, cx, cy) => { const ns = Math.min(3, Math.max(0.05, s * f)); x = cx - (cx - x) * ns / s; y = cy - (cy - y) * ns / s; s = ns; apply(); };
+  const center = () => { const r = v.getBoundingClientRect(); return [r.width / 2, r.height / 2]; };
+  document.getElementById('wfIn').onclick = () => zoomAt(1.4, ...center());
+  document.getElementById('wfOut').onclick = () => zoomAt(1 / 1.4, ...center());
+  document.getElementById('wfFit').onclick = fit;
+  document.getElementById('wfjump').onclick = e => { const i = e.target.dataset?.i; if (i == null) return; fitBox(pos(+i)[0], pos(+i)[1] - 70, B[i][2], H + 70, 24); };
+  const full = document.getElementById('wfFull');
+  const setFull = on => { v.classList.toggle('full', on); document.body.style.overflow = on ? 'hidden' : ''; full.textContent = on ? '✕ Close' : '⤢ Full screen'; requestAnimationFrame(fit); };
+  full.onclick = () => setFull(!v.classList.contains('full'));
+  addEventListener('keydown', e => { if (e.key === 'Escape' && v.classList.contains('full')) setFull(false); });
+  // pointers: one = pan, two = pinch
+  const pts = new Map(); let last = null, pinch = null;
+  v.addEventListener('pointerdown', e => {
+    if (e.target.closest('button')) return;
+    if (e.pointerType === 'touch' && !v.classList.contains('full')) { setFull(true); return; }
+    v.setPointerCapture(e.pointerId); pts.set(e.pointerId, [e.clientX, e.clientY]); v.classList.add('grab');
+    if (pts.size === 2) { const [a, b] = [...pts.values()]; pinch = { d: Math.hypot(a[0] - b[0], a[1] - b[1]) }; }
+    last = [e.clientX, e.clientY];
+  });
+  v.addEventListener('pointermove', e => {
+    if (!pts.has(e.pointerId)) return; pts.set(e.pointerId, [e.clientX, e.clientY]);
+    const r = v.getBoundingClientRect();
+    if (pts.size === 2 && pinch) { const [a, b] = [...pts.values()]; const d = Math.hypot(a[0] - b[0], a[1] - b[1]); zoomAt(d / pinch.d, (a[0] + b[0]) / 2 - r.left, (a[1] + b[1]) / 2 - r.top); pinch.d = d; return; }
+    x += e.clientX - last[0]; y += e.clientY - last[1]; last = [e.clientX, e.clientY]; apply();
+  });
+  const up = e => { pts.delete(e.pointerId); if (pts.size < 2) pinch = null; if (pts.size === 1) last = [...pts.values()][0]; if (!pts.size) v.classList.remove('grab'); };
+  v.addEventListener('pointerup', up); v.addEventListener('pointercancel', up);
+  v.addEventListener('wheel', e => {
+    const r = v.getBoundingClientRect();
+    if (e.ctrlKey || e.metaKey || v.classList.contains('full')) { e.preventDefault(); if (e.ctrlKey || e.metaKey) zoomAt(Math.exp(-e.deltaY * 0.01), e.clientX - r.left, e.clientY - r.top); else { x -= e.deltaX; y -= e.deltaY; apply(); } }
+  }, { passive: false });
+  v.addEventListener('dblclick', e => { const r = v.getBoundingClientRect(); zoomAt(2, e.clientX - r.left, e.clientY - r.top); });
+  new ResizeObserver(fit).observe(v); fit();
+})();
+
 // ---------- creators ----------
 const IG = u => `<blockquote class="instagram-media" data-instgrm-permalink="${u}?utm_source=ig_embed" data-instgrm-version="14"><a class="fallback" href="${u}" target="_blank" rel="noopener">View on Instagram <span>↗</span></a></blockquote>`;
 const YTV = (id, title) => `<div class="yt"><iframe src="https://www.youtube-nocookie.com/embed/${id}" title="${title}" loading="lazy" allow="accelerometer; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe></div>`;
@@ -599,7 +673,7 @@ const CREATORS = [
   { n:'The Rock Squad', i:'RS', av:'instagram/therocksquad', who:'Creator group on Instagram.', idea:'Group games: Beside Them and Mafia with the whole squad.',
     embeds:[IG('https://www.instagram.com/therocksquad/')], links:[] },
   { n:'Zach Cray', i:'ZC', av:'instagram/zachcray', who:'YouTube creator.', idea:'Football with holographic teams, plus drill mode.',
-    embeds:[IG('https://www.instagram.com/zachcray/')], links:[['YouTube','https://www.youtube.com/@zachcray']] },
+    embeds:[IG('https://www.instagram.com/zachcray')], links:[['YouTube','https://www.youtube.com/@zachcray']] },
   { n:'Kai W', i:'KW', av:'instagram/kaimanwong', who:'Camera and tech reviewer.', idea:'An honest hands-on review of Specs with iYiYi.',
     embeds:[IG('https://www.instagram.com/kaimanwong/')], links:[['YouTube','https://www.youtube.com/@KaiManWong']] },
 ];
