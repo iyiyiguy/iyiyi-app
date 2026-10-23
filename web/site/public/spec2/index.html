@@ -1,0 +1,575 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>iYiYi × SPECS · POV</title>
+<meta name="robots" content="noindex" />
+<meta name="description" content="iYiYi × Snap Specs: name tags over real people, and 14 hologram games for the real world." />
+<meta property="og:title" content="iYiYi × SPECS" />
+<meta property="og:description" content="Name tags over real people, and 14 hologram games for the real world." />
+<meta property="og:image" content="https://iyiyi.xyz/specs/img/laser-tag.webp" />
+<link rel="icon" href="/favicon.png" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@500;600;700&family=Chakra+Petch:wght@600;700&family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
+<style>
+:root{
+  --ink:#0b0f1c; --s1:#121828; --s2:#1a2236; --line:rgba(255,255,255,.09); --text:#eef1f8; --muted:#a4adc4; --dim:#6f7894;
+  --cyan:#39d5ff; --amber:#ffb21e; --red:#ff3d52; --green:#5cf2a0; --purple:#b06cff; --accent:#8fa2ff; --pink:#ff5fc8;
+  --hud:"Chakra Petch","Barlow Semi Condensed",system-ui,sans-serif; --cond:"Barlow Semi Condensed",system-ui,sans-serif;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--ink);color:var(--text);font:16px/1.6 Inter,system-ui,-apple-system,sans-serif;-webkit-font-smoothing:antialiased;overflow-x:hidden}
+a{color:var(--cyan);text-decoration:none} a:hover{text-decoration:underline}
+img{max-width:100%;display:block}
+.wrap{max-width:1180px;margin:0 auto;padding:0 20px}
+section{padding:96px 0;position:relative}
+.kick{font:600 13px/1 var(--hud);letter-spacing:.22em;text-transform:uppercase;color:var(--cyan);display:flex;align-items:center;gap:10px;margin-bottom:18px}
+.kick::before{content:"";width:28px;height:2px;background:currentColor;box-shadow:0 0 12px currentColor}
+h1,h2,h3{margin:0;font-family:Inter,system-ui,sans-serif;letter-spacing:-.03em;line-height:1.02}
+h2{font-size:clamp(34px,5.4vw,64px);font-weight:900;max-width:16ch}
+h3{font-size:22px;font-weight:800;letter-spacing:-.01em;line-height:1.2}
+.lead{font-size:clamp(17px,1.6vw,20px);color:var(--muted);max-width:62ch;margin:22px 0 0}
+.grad{background:linear-gradient(92deg,#fff 0%,#bfe9ff 35%,var(--cyan) 60%,var(--purple) 100%);-webkit-background-clip:text;background-clip:text;color:transparent}
+.hud{font-family:var(--hud)}
+
+/* nav */
+nav{position:fixed;inset:0 0 auto 0;z-index:40;backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);background:rgba(11,15,28,.62);border-bottom:1px solid var(--line)}
+nav .wrap{display:flex;align-items:center;gap:22px;height:58px}
+nav .logo{display:flex;align-items:center;gap:10px;font-weight:900;color:#fff;letter-spacing:-.02em}
+nav .logo img{width:28px;height:28px;border-radius:8px}
+nav .links{display:flex;gap:20px;margin-left:auto;font:600 14px var(--cond);letter-spacing:.06em;text-transform:uppercase}
+nav .links a{color:var(--muted)} nav .links a:hover{color:#fff;text-decoration:none}
+@media(max-width:760px){nav .links a:not(.keep){display:none}}
+
+/* hero */
+.hero{min-height:100vh;min-height:100svh;display:flex;align-items:flex-end;padding:120px 0 72px;overflow:hidden;isolation:isolate}
+.marquee{position:absolute;inset:0;z-index:-2;display:flex;flex-direction:column;gap:14px;justify-content:center;transform:rotate(-8deg) scale(1.25);opacity:.55}
+.row{display:flex;gap:14px;width:max-content;animation:slide 80s linear infinite}
+.row.rev{animation-direction:reverse;animation-duration:95s}
+.row img{width:340px;aspect-ratio:16/9;object-fit:cover;border-radius:14px}
+@keyframes slide{to{transform:translateX(-50%)}}
+.hero::after{content:"";position:absolute;inset:0;z-index:-1;background:radial-gradient(120% 80% at 20% 100%,rgba(11,15,28,.96) 30%,rgba(11,15,28,.7) 60%,rgba(11,15,28,.35)),linear-gradient(180deg,rgba(11,15,28,.5),transparent 30%,rgba(11,15,28,.9))}
+.hero h1{font-size:clamp(58px,12vw,168px);font-weight:900;letter-spacing:-.055em;line-height:.88}
+.hero h1 .x{font-family:var(--hud);font-weight:600;color:var(--cyan);font-size:.5em;vertical-align:.32em;margin:0 .1em;text-shadow:0 0 30px rgba(57,213,255,.7)}
+.hero h1 .specs{font-family:var(--hud);letter-spacing:.02em;background:linear-gradient(180deg,#fff,#bfe9ff 45%,#5a7fa8 52%,#e9f6ff 70%,#9ab6d3);-webkit-background-clip:text;background-clip:text;color:transparent;filter:drop-shadow(0 6px 30px rgba(57,213,255,.35))}
+.hero p{font-size:clamp(18px,2vw,23px);color:#dfe5f3;max-width:40ch;margin:26px 0 0}
+.hero .meta{display:flex;flex-wrap:wrap;gap:10px;margin-top:30px}
+.pill{display:inline-flex;align-items:center;gap:8px;padding:9px 16px;border-radius:999px;border:1px solid var(--line);background:rgba(18,24,40,.7);font:600 14px var(--cond);letter-spacing:.05em;text-transform:uppercase;color:var(--muted)}
+.pill b{color:#fff;font-weight:700}
+.pill.cta{background:var(--cyan);color:#04121b;border-color:var(--cyan)} .pill.cta:hover{text-decoration:none;filter:brightness(1.1)}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--green);box-shadow:0 0 10px var(--green)}
+
+/* letter */
+.letter{max-width:760px;font-size:clamp(19px,2.1vw,25px);line-height:1.5;color:#dfe5f3;font-weight:500}
+.letter strong{color:#fff}
+.sig-inline{margin-top:20px;font:600 15px var(--cond);letter-spacing:.08em;text-transform:uppercase;color:var(--dim)}
+
+/* what */
+.split{display:grid;grid-template-columns:1.05fr .95fr;gap:56px;align-items:center}
+@media(max-width:880px){.split{grid-template-columns:1fr;gap:36px}}
+.stat{border:1px solid var(--line);border-radius:28px;background:linear-gradient(160deg,var(--s2),var(--s1));padding:34px;position:relative;overflow:hidden}
+.stat .big{font:700 clamp(84px,12vw,148px)/.9 var(--hud);letter-spacing:-.02em}
+.stat .big small{font-size:.32em;color:var(--muted);letter-spacing:.04em;margin-left:.2em}
+.stat .vs{display:flex;align-items:flex-end;gap:22px;flex-wrap:wrap}
+.stat .of{color:var(--dim)} .stat .met{color:var(--cyan);text-shadow:0 0 30px rgba(57,213,255,.5)}
+.dots{display:grid;grid-template-columns:repeat(40,1fr);gap:3px;margin-top:26px}
+.dots i{aspect-ratio:1;border-radius:50%;background:#2a3350}
+.dots i.on{background:var(--cyan);box-shadow:0 0 6px var(--cyan)}
+.problems{display:grid;gap:14px;margin-top:30px}
+.problem{display:flex;gap:14px;align-items:flex-start;padding:16px 18px;border-radius:16px;background:var(--s1);border:1px solid var(--line)}
+.problem .n{font:700 14px var(--hud);color:var(--amber);padding-top:2px}
+.ranges{margin-top:64px;display:flex;align-items:stretch;gap:0;border:1px solid var(--line);border-radius:20px;overflow:hidden;background:var(--s1)}
+.ranges div{flex:1;padding:22px 10px;text-align:center;border-right:1px solid var(--line);position:relative}
+.ranges div:last-child{border-right:0}
+.ranges b{display:block;font:700 clamp(18px,2.4vw,28px)/1 var(--hud);color:#fff}
+.ranges span{font:600 12px var(--cond);letter-spacing:.14em;text-transform:uppercase;color:var(--dim)}
+.ranges div::before{content:"";position:absolute;left:0;right:0;bottom:0;height:3px;background:linear-gradient(90deg,var(--cyan),var(--purple));opacity:calc(var(--i) / 6)}
+@media(max-width:640px){.ranges{flex-wrap:wrap}.ranges div{flex:1 1 33%;border-bottom:1px solid var(--line)}}
+.feat{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-top:18px}
+@media(max-width:880px){.feat{grid-template-columns:repeat(2,1fr)}}
+.feat div{padding:20px;border-radius:18px;background:var(--s1);border:1px solid var(--line)}
+.feat h3{font-size:18px;margin-bottom:6px}.feat p{margin:0;color:var(--muted);font-size:14.5px}
+
+/* stage (3D) */
+.stage{position:relative;border-radius:28px;overflow:hidden;border:1px solid rgba(57,213,255,.25);background:radial-gradient(80% 70% at 50% 40%,#16203a,#0a0e1a 75%);box-shadow:0 30px 80px rgba(0,0,0,.45),inset 0 0 0 1px rgba(255,255,255,.03)}
+.stage canvas{display:block;width:100%;height:100%;touch-action:pan-y;cursor:grab}
+.stage canvas.grab{cursor:grabbing}
+.stage .hint{position:absolute;left:14px;bottom:12px;font:600 12px var(--cond);letter-spacing:.14em;text-transform:uppercase;color:rgba(255,255,255,.6);pointer-events:none;display:flex;gap:8px;align-items:center}
+.stage .hint::before{content:"";width:16px;height:16px;border:1.5px solid currentColor;border-radius:50%;border-left-color:transparent;animation:spin 2.4s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.scan{position:absolute;inset:0;pointer-events:none;background:repeating-linear-gradient(180deg,rgba(57,213,255,.035) 0 1px,transparent 1px 4px);mix-blend-mode:screen}
+.corner{position:absolute;width:22px;height:22px;border:2px solid var(--cyan);opacity:.7;pointer-events:none}
+.corner.tl{top:12px;left:12px;border-right:0;border-bottom:0}.corner.tr{top:12px;right:12px;border-left:0;border-bottom:0}
+.corner.bl{bottom:12px;left:12px;border-right:0;border-top:0}.corner.br{bottom:12px;right:12px;border-left:0;border-top:0}
+#tagStage{height:min(72vh,620px)}
+.bul{list-style:none;padding:0;margin:26px 0 0;display:grid;gap:12px}
+.bul li{display:flex;gap:12px;color:#dfe5f3}
+.bul li::before{content:"";flex:0 0 8px;height:8px;margin-top:10px;border-radius:2px;background:var(--cyan);box-shadow:0 0 10px var(--cyan);transform:rotate(45deg)}
+
+/* first-person lens HUD */
+.lens{position:absolute;inset:0;pointer-events:none;z-index:2;background:radial-gradient(120% 95% at 50% 50%,transparent 58%,rgba(4,8,16,.35) 78%,rgba(2,4,10,.85) 100%)}
+.lens::before{content:"";position:absolute;left:50%;top:50%;width:26px;height:26px;margin:-13px 0 0 -13px;border:1.5px solid rgba(57,213,255,.75);border-radius:50%;box-shadow:0 0 10px rgba(57,213,255,.5)}
+.lens::after{content:"";position:absolute;left:50%;top:50%;width:4px;height:4px;margin:-2px 0 0 -2px;border-radius:50%;background:var(--cyan)}
+.lens .ro{position:absolute;top:12px;left:50%;transform:translateX(-50%);font:600 11px var(--hud);letter-spacing:.18em;color:rgba(57,213,255,.85);white-space:nowrap;text-shadow:0 0 8px rgba(57,213,255,.6)}
+.fs .lens .ro{top:auto;bottom:22px}
+.gcard .noimg{position:absolute;inset:0;background:radial-gradient(80% 70% at 50% 45%,#17223e,#070a13 75%)}
+
+/* games grid */
+.games{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:22px;margin-top:48px}
+@media(max-width:640px){.games{grid-template-columns:1fr}}
+.gcard{position:relative;border-radius:24px;overflow:hidden;border:1px solid var(--line);background:#0a0e1a;transition:border-color .2s,transform .2s}
+.gcard:hover{border-color:rgba(57,213,255,.45)}
+.gcard .view{position:relative;aspect-ratio:4/3}
+.gcard canvas{position:absolute;inset:0;width:100%;height:100%;touch-action:pan-y;cursor:grab}
+.gcard canvas.grab{cursor:grabbing}
+.gcard .cover{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;transition:opacity .6s}
+.gcard.live .cover{opacity:0;pointer-events:none}
+.gcard .top{position:absolute;left:0;right:0;top:0;padding:16px 18px 40px;background:linear-gradient(180deg,rgba(8,11,20,.85),transparent);pointer-events:none;display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
+.gcard .num{font:700 13px var(--hud);color:var(--cyan);letter-spacing:.14em}
+.gcard h3{font:700 clamp(22px,2.6vw,30px)/1 var(--hud);letter-spacing:.01em;text-transform:uppercase;margin-top:6px}
+.gcard .tagline{color:var(--muted);font-size:14px;margin-top:6px;max-width:32ch}
+.gcard .thumb{width:92px;aspect-ratio:16/9;border-radius:8px;object-fit:cover;border:1px solid rgba(255,255,255,.25);flex-shrink:0;pointer-events:auto;cursor:pointer}
+.gcard .bar{position:absolute;left:0;right:0;bottom:0;padding:12px 16px;display:flex;justify-content:space-between;align-items:center;background:linear-gradient(0deg,rgba(8,11,20,.85),transparent);pointer-events:none}
+.gcard .bar span{font:600 12px var(--cond);letter-spacing:.14em;text-transform:uppercase;color:rgba(255,255,255,.65)}
+.gcard .exp{pointer-events:auto;width:38px;height:38px;border-radius:12px;border:1px solid rgba(255,255,255,.2);background:rgba(18,24,40,.75);color:#fff;display:grid;place-items:center;cursor:pointer}
+.gcard .exp:hover{background:var(--cyan);color:#04121b}
+
+/* fullscreen */
+.fs{position:fixed;inset:0;z-index:100;background:#070a13;display:none;grid-template-columns:1fr 400px}
+.fs.open{display:grid;animation:fsin .35s ease}
+@keyframes fsin{from{opacity:0;transform:scale(.98)}}
+.fs .stagefs{position:relative;overflow:hidden;background:radial-gradient(80% 70% at 50% 45%,#17223e,#070a13 75%)}
+.fs canvas{width:100%;height:100%;display:block;touch-action:none;cursor:grab}
+.fs canvas.grab{cursor:grabbing}
+.fs aside{border-left:1px solid var(--line);background:var(--s1);overflow:auto;padding:26px 26px 40px}
+.fs aside img{border-radius:14px;width:100%;aspect-ratio:16/9;object-fit:cover;border:1px solid var(--line)}
+.fs aside h3{font:700 34px/1 var(--hud);text-transform:uppercase;margin:22px 0 8px}
+.fs aside .tagline{color:var(--muted)}
+.fs .modes{display:flex;flex-wrap:wrap;gap:8px;margin-top:18px}
+.fs .modes span{padding:6px 12px;border-radius:999px;border:1px solid rgba(57,213,255,.35);color:var(--cyan);font:600 13px var(--cond);letter-spacing:.08em;text-transform:uppercase}
+.fs .ctl{position:absolute;display:flex;gap:8px}
+.fs .ctl.tr{top:16px;right:16px}.fs .ctl.bl{bottom:16px;left:16px}.fs .ctl.br{bottom:16px;right:16px}
+.btn{height:44px;min-width:44px;padding:0 14px;border-radius:14px;border:1px solid rgba(255,255,255,.18);background:rgba(18,24,40,.8);backdrop-filter:blur(8px);color:#fff;font:600 14px var(--cond);letter-spacing:.08em;text-transform:uppercase;display:inline-flex;align-items:center;justify-content:center;gap:8px;cursor:pointer}
+.btn:hover{background:var(--cyan);color:#04121b;border-color:var(--cyan)}
+.fs .title-ov{position:absolute;top:18px;left:20px;pointer-events:none}
+.fs .title-ov b{display:block;font:700 clamp(26px,4vw,48px)/1 var(--hud);text-transform:uppercase;text-shadow:0 4px 30px rgba(0,0,0,.6)}
+.fs .title-ov span{font:600 13px var(--cond);letter-spacing:.18em;text-transform:uppercase;color:var(--cyan)}
+@media(max-width:900px){.fs{grid-template-columns:1fr;grid-template-rows:62vh 1fr}.fs aside{border-left:0;border-top:1px solid var(--line)}}
+
+/* cards */
+.cards{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:44px}
+@media(max-width:900px){.cards{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:600px){.cards{grid-template-columns:1fr}}
+.card{padding:26px;border-radius:22px;background:linear-gradient(160deg,var(--s2),var(--s1));border:1px solid var(--line);position:relative;overflow:hidden}
+.card .ic{font:700 13px var(--hud);letter-spacing:.16em;color:var(--c,var(--cyan));margin-bottom:16px;display:flex;align-items:center;gap:8px}
+.card .ic::before{content:"";width:10px;height:10px;border-radius:3px;background:currentColor;box-shadow:0 0 12px currentColor}
+.card p{color:var(--muted);margin:10px 0 0;font-size:15px}
+.card.wide{grid-column:span 2} @media(max-width:600px){.card.wide{grid-column:auto}}
+blockquote.q{margin:0;font-size:clamp(20px,2.4vw,28px);line-height:1.35;font-weight:700;letter-spacing:-.015em;color:#fff}
+blockquote.q cite{display:block;margin-top:14px;font:600 13px var(--cond);letter-spacing:.14em;text-transform:uppercase;color:var(--dim);font-style:normal}
+
+/* roadmap */
+.road{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:44px}
+@media(max-width:900px){.road{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:560px){.road{grid-template-columns:1fr}}
+.road div{padding:22px;border-radius:18px;border:1px solid var(--line);background:var(--s1);position:relative}
+.road div::after{content:attr(data-k);position:absolute;top:18px;right:18px;font:700 11px var(--hud);letter-spacing:.16em;color:var(--c,var(--purple))}
+.road h3{font-size:19px}.road p{color:var(--muted);font-size:14.5px;margin:8px 0 0}
+
+/* status */
+.timeline{margin-top:44px;display:grid;grid-template-columns:repeat(4,1fr);gap:0;border-top:2px solid var(--line)}
+@media(max-width:760px){.timeline{grid-template-columns:1fr 1fr}}
+.timeline div{padding:22px 18px 0 0;position:relative}
+.timeline div::before{content:"";position:absolute;top:-8px;left:0;width:14px;height:14px;border-radius:50%;background:var(--c,var(--dim));box-shadow:0 0 14px var(--c,transparent)}
+.timeline b{font:700 13px var(--hud);letter-spacing:.14em;color:var(--c,var(--dim));text-transform:uppercase}
+.timeline p{margin:6px 0 18px;color:#dfe5f3;font-size:15px}
+
+/* creators */
+.creators{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:22px;margin-top:44px}
+@media(max-width:820px){.creators{grid-template-columns:1fr}}
+.cr{border-radius:24px;border:1px solid var(--line);background:var(--s1);padding:22px;display:flex;flex-direction:column;gap:14px;min-width:0;overflow:hidden}
+.cr.span{grid-column:1/-1}
+@media(max-width:600px){.wrap{padding:0 16px}.cr{padding:14px;border-radius:20px}}
+.cr header{display:flex;align-items:center;gap:14px}
+.cr .av{width:60px;height:60px;border-radius:50%;flex-shrink:0;display:grid;place-items:center;font:700 18px var(--hud);color:#04121b;background:linear-gradient(135deg,var(--cyan),var(--purple));position:relative;overflow:hidden;box-shadow:0 0 0 2px var(--ink),0 0 0 4px rgba(57,213,255,.6)}
+.cr .av img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.cr h3{font-size:21px}
+.cr .who{color:var(--muted);font-size:14.5px;margin:0}
+.cr .idea{padding:12px 14px;border-radius:14px;background:rgba(57,213,255,.07);border:1px solid rgba(57,213,255,.2);font-size:14.5px;color:#dfe5f3}
+.cr .idea b{font:700 12px var(--hud);letter-spacing:.14em;color:var(--cyan);display:block;margin-bottom:3px}
+.embeds{min-width:0;overflow:hidden;display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));align-items:start}
+.embeds iframe{max-width:100%!important}
+.embeds .instagram-media{min-width:0!important;width:100%!important;max-width:100%!important;margin:0!important;border-radius:14px!important}
+.embeds iframe.instagram-media{background:#fff}
+.yt{position:relative;aspect-ratio:16/9;border-radius:14px;overflow:hidden;background:#000}
+.yt iframe{position:absolute;inset:0;width:100%;height:100%;border:0}
+.fallback{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:14px 16px;border-radius:14px;border:1px solid var(--line);background:var(--s2);color:#fff;font-weight:600}
+.fallback span{font:600 12px var(--cond);letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+.links{display:flex;flex-wrap:wrap;gap:8px}
+.links a{font:600 13px var(--cond);letter-spacing:.08em;text-transform:uppercase;padding:7px 12px;border-radius:999px;border:1px solid var(--line);color:var(--muted)}
+.links a:hover{color:#fff;border-color:var(--cyan);text-decoration:none}
+
+/* asks */
+.asks{margin-top:40px;display:grid;gap:0;counter-reset:a}
+.asks div{display:grid;grid-template-columns:110px 1fr;gap:20px;align-items:baseline;padding:26px 0;border-bottom:1px solid var(--line)}
+.asks div::before{counter-increment:a;content:"0" counter(a);font:700 clamp(40px,6vw,64px)/1 var(--hud);color:transparent;-webkit-text-stroke:1.5px var(--cyan)}
+.asks h3{font-size:clamp(22px,3vw,34px);font-weight:800}
+.asks p{margin:6px 0 0;color:var(--muted)}
+@media(max-width:560px){.asks div{grid-template-columns:64px 1fr}}
+
+footer{padding:90px 0 60px;border-top:1px solid var(--line);background:radial-gradient(60% 100% at 50% 0%,rgba(57,213,255,.08),transparent)}
+footer .name{font:900 clamp(40px,7vw,80px)/1 Inter,sans-serif;letter-spacing:-.04em}
+footer .links{margin-top:22px}
+.reveal{opacity:0;transform:translateY(24px);transition:opacity .8s ease,transform .8s ease}
+.reveal.in{opacity:1;transform:none}
+@media(prefers-reduced-motion:reduce){.row{animation:none}.reveal{opacity:1;transform:none}}
+</style>
+</head>
+<body>
+
+<nav><div class="wrap">
+  <a class="logo" href="/"><img src="/logo.png" alt="" />iYiYi</a>
+  <div class="links"><a href="#what">The app</a><a href="#specs">Specs</a><a class="keep" href="#games">Games</a><a href="#snap">Why Snap</a><a href="#creators">Creators</a><a href="#asks">Asks</a></div>
+</div></nav>
+
+<header class="hero">
+  <div class="marquee" aria-hidden="true">
+    <div class="row" id="row1"></div>
+    <div class="row rev" id="row2"></div>
+    <div class="row" id="row3"></div>
+  </div>
+  <div class="wrap">
+    <div class="kick">Follow-up · for Jean Luo · POV edition</div>
+    <h1>iYiYi<span class="x">×</span><br/><span class="specs">SPECS</span></h1>
+    <p>See who's around you. Play with the people right in front of you. Names, socials and holograms, floating in the real world.</p>
+    <div class="meta">
+      <a class="pill cta" href="#games">Explore the 14 games ↓</a>
+      <span class="pill"><span class="dot"></span><b>Live</b> on iOS &amp; Android</span>
+      <span class="pill">Built for <b>Snap Specs</b></span>
+    </div>
+  </div>
+</header>
+
+<section id="hi"><div class="wrap">
+  <div class="kick">Following up on our call</div>
+  <div class="letter reveal">
+    <p>Hi Jean, here's the overview of <strong>iYiYi</strong> and how it connects to <strong>Snap</strong> that I promised. Instead of a long email, I made it a page, so you can see the Specs games as 3D holograms. Drag any of them to look around.</p>
+    <div class="sig-inline">— Colin Phillips, founder of iYiYi</div>
+  </div>
+</div></section>
+
+<section id="what"><div class="wrap">
+  <div class="split">
+    <div class="reveal">
+      <div class="kick">What iYiYi is</div>
+      <h2>A social app that shows <span class="grad">who's around you.</span></h2>
+      <p class="lead">Open iYiYi and see the people, creators and businesses near you, with their socials one tap away.</p>
+      <div class="problems">
+        <div class="problem"><span class="n">01</span><div>At a big event you only meet a small slice of the room. Everyone else leaves as a stranger.</div></div>
+        <div class="problem"><span class="n">02</span><div>Businesses can't reach back out to the customers who walk through their door.</div></div>
+        <div class="problem"><span class="n">03</span><div>Creators can't find or follow up with the fans standing right in front of them.</div></div>
+      </div>
+    </div>
+    <div class="stat reveal">
+      <div class="kick" style="color:var(--amber)">A 1,000-person event</div>
+      <div class="vs"><div class="big of">1,000<small>there</small></div><div class="big met">~50<small>met</small></div></div>
+      <div class="dots" id="dots"></div>
+      <p style="color:var(--muted);margin:18px 0 0">iYiYi turns the other 950 into profiles you can follow.</p>
+    </div>
+  </div>
+  <div class="ranges reveal">
+    <div style="--i:1"><b>150 ft</b><span>Nearby</span></div>
+    <div style="--i:2"><b>1 mi</b><span>Block</span></div>
+    <div style="--i:3"><b>5 mi</b><span>Area</span></div>
+    <div style="--i:4"><b>City</b><span>Local</span></div>
+    <div style="--i:5"><b>State</b><span>Region</span></div>
+    <div style="--i:6"><b>USA</b><span>Nationwide</span></div>
+  </div>
+  <div class="feat reveal">
+    <div><h3>Socials</h3><p>Instagram, TikTok, YouTube, Snapchat, X and Spotify on one profile.</p></div>
+    <div><h3>Follow</h3><p>Follow anyone you meet, then keep up with them everywhere.</p></div>
+    <div><h3>Feed</h3><p>Posts from the people around you and the people you've met.</p></div>
+    <div><h3>Arcade</h3><p>Laser Tag, Beside Them (Among Us-style), Mafia and Chess.</p></div>
+  </div>
+</div></section>
+
+<section id="specs"><div class="wrap">
+  <div class="split">
+    <div class="stage reveal" id="tagStage"><canvas id="tagCanvas" aria-label="First-person 3D demo: name tags over people seen through Specs"></canvas><div class="lens"><span class="ro">SPECS · IYIYI NEARBY · 4</span></div><div class="scan"></div><i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i><div class="hint">Drag to look around</div></div>
+    <div class="reveal">
+      <div class="kick">SPECS × iYiYi</div>
+      <h2>Names float over <span class="grad">real people.</span></h2>
+      <ul class="bul">
+        <li>Put on Specs and see an @name over everyone nearby who's on iYiYi.</li>
+        <li>Tags appear automatically. Nobody has to scan or tag anyone.</li>
+        <li>Look at a tag and pinch to open their profile and socials, then follow.</li>
+        <li>Businesses get a tag too, so a café can be followed from across the street.</li>
+      </ul>
+    </div>
+  </div>
+</div></section>
+
+<section id="games"><div class="wrap">
+  <div class="kick">The Specs Lenses</div>
+  <h2>14 games. <span class="grad">Real friends, holographic everything else.</span></h2>
+  <p class="lead">This version puts you behind the lenses. Every scene is first person, the way you would see it wearing Specs: real friends in front of you, holograms layered on the real world. Drag to look around, tap to open full screen.</p>
+  <div class="games" id="gameGrid"></div>
+</div></section>
+
+<div class="fs" id="fs" role="dialog" aria-modal="true" aria-label="Game detail">
+  <div class="stagefs">
+    <canvas id="fsCanvas"></canvas><div class="scan"></div><div class="lens"><span class="ro" id="fsRo">SPECS</span></div>
+    <div class="title-ov"><span id="fsNum"></span><b id="fsTitle"></b></div>
+    <div class="ctl tr"><button class="btn" id="fsClose" aria-label="Close">✕ Close</button></div>
+    <div class="ctl bl"><button class="btn" id="fsPrev" aria-label="Previous game">‹</button><button class="btn" id="fsNext" aria-label="Next game">›</button></div>
+    <div class="ctl br"><button class="btn" id="zIn" aria-label="Zoom in">+</button><button class="btn" id="zOut" aria-label="Zoom out">−</button><button class="btn" id="zReset">Reset</button></div>
+  </div>
+  <aside>
+    <img id="fsImg" alt="" />
+    <h3 id="fsName"></h3>
+    <div class="tagline" id="fsTag"></div>
+    <ul class="bul" id="fsBul"></ul>
+    <div class="modes" id="fsModes"></div>
+  </aside>
+</div>
+
+<section id="snap"><div class="wrap">
+  <div class="kick">Why Snap owning iYiYi matters</div>
+  <h2>New ad dollars, <span class="grad">from every platform.</span></h2>
+  <div class="cards">
+    <div class="card reveal"><div class="ic">CROSS-PLATFORM</div><h3>Reach beyond Snapchat</h3><p>iYiYi profiles link Instagram, TikTok, YouTube and more, so advertisers can reach people who aren't on Snapchat yet.</p></div>
+    <div class="card reveal" style="--c:var(--green)"><div class="ic">REAL-WORLD SIGNAL</div><h3>Where people actually meet</h3><p>Opt-in location and linked socials show where people gather and who they follow. That's real-world context advertisers can't get anywhere else.</p></div>
+    <div class="card reveal" style="--c:var(--amber)"><div class="ic">SMB</div><h3>Small businesses &amp; creators</h3><p>Cafés, gyms, shops and local creators become new paying customers, which fits Snap's push toward small and medium advertisers.</p></div>
+    <div class="card wide reveal"><blockquote class="q">Large brands make up most of traditional ad spend. The growth is in small and medium businesses.<cite>Paraphrasing Evan Spiegel on Tiger Sisters</cite></blockquote></div>
+    <div class="card reveal" style="--c:var(--red)"><div class="ic">ARCADE</div><h3>In-game products</h3><p>Weapons, upgrades and characters for Laser Tag and the other Lenses.</p></div>
+    <div class="card reveal" style="--c:var(--purple)"><div class="ic">ENGAGEMENT</div><h3>A reason to go outside</h3><p>Games played with friends in person bring people back day after day, and give Specs a daily habit.</p></div>
+    <div class="card wide reveal" style="--c:var(--green)"><div class="ic">ANALYTICS</div><h3>Reach back out to the people who showed up</h3><p>Businesses see who walked in and creators see who came to their show, and both can follow up with them, with insights on impressions, profile taps, follows and link clicks.</p></div>
+  </div>
+</div></section>
+
+<section id="lenses"><div class="wrap">
+  <div class="kick">More Lenses</div>
+  <h2>Beyond games. <span class="grad">Specs for every day.</span></h2>
+  <p class="lead">Six more Lenses, also seen first person: music, the world around you, fitness and food.</p>
+  <div class="games" id="lensGrid"></div>
+</div></section>
+
+<section id="status"><div class="wrap">
+  <div class="kick">Where things stand</div>
+  <h2>Ready to build. <span class="grad">Waiting on hardware.</span></h2>
+  <div class="timeline">
+    <div class="reveal" style="--c:var(--green)"><b>Done</b><p>The iYiYi app is live on the App Store and Google Play.</p></div>
+    <div class="reveal" style="--c:var(--green)"><b>Done</b><p>Registered a Snap developer account and built the Lenses.</p></div>
+    <div class="reveal" style="--c:var(--amber)"><b>Blocked</b><p>Can't submit for the new SPECS until its firmware is out. Can submit for Spectacles (2024), but I don't have a pair to test on.</p></div>
+    <div class="reveal" style="--c:var(--cyan)"><b>Next</b><p>A device demo ready in 1–2 weeks once I have hardware.</p></div>
+  </div>
+</div></section>
+
+<section id="creators"><div class="wrap">
+  <div class="kick">Marketing</div>
+  <h2>Put Specs on <span class="grad">the right creators.</span></h2>
+  <p class="lead">My idea: give pairs to YouTubers and creators and let them play. Here are the people I'd start with, and the Lens I'd hand each of them.</p>
+  <div class="creators" id="creatorGrid"></div>
+</div></section>
+
+<section id="asks"><div class="wrap">
+  <div class="kick">How Snap could help</div>
+  <h2>The asks.</h2>
+  <div class="asks">
+    <div class="reveal"><span><h3>Help marketing SPECS</h3><p>Launch iYiYi's Lenses alongside Specs.</p></span></div>
+    <div class="reveal"><span><h3>A featured or pushed Lens</h3><p>Placement for Laser Tag or the name-tag Lens.</p></span></div>
+    <div class="reveal"><span><h3>Content made for Spectacles</h3><p>Creator videos built around the games.</p></span></div>
+    <div class="reveal"><span><h3>A pair or two of Spectacles</h3><p>So I can test on device and have a demo ready in 1–2 weeks.</p></span></div>
+    <div class="reveal"><span><h3>An unrestricted developer account</h3><p>Access to location and multiplayer features at full scale.</p></span></div>
+  </div>
+</div></section>
+
+<footer><div class="wrap">
+  <div class="kick">Thank you</div>
+  <div class="name">Colin Phillips</div>
+  <p style="color:var(--muted);margin:8px 0 0">Founder, iYiYi</p>
+  <div class="links">
+    <a href="https://www.iyiyi.xyz">iyiyi.xyz</a>
+    <a href="https://apps.apple.com/app/id6445996160" target="_blank" rel="noopener">App Store</a>
+    <a href="https://play.google.com/store/apps/details?id=com.iyiyi.app" target="_blank" rel="noopener">Google Play</a>
+    <a href="https://www.youtube.com/@iYiYiapp" target="_blank" rel="noopener">YouTube</a>
+    <a href="https://www.instagram.com/iyiyiapp" target="_blank" rel="noopener">Instagram</a>
+  </div>
+</div></footer>
+
+<script type="module">
+import { SceneView, attachDrag, loadHumans } from './specs.js?v=3';
+
+const GAMES = [
+  { id:'football', img:'football', name:'Football', tag:'Your backyard becomes a stadium.', modes:['Fun','Drill','Online'],
+    bul:['Play any position: QB, receiver or defense.','Holographic teammates and opponents in full gear line up on the correct sides.','Auto-assist highlights the most open receiver to throw to.','Friends in another room or city join as avatars on a shared virtual field.'] },
+  { id:'laser-tag', img:'laser-tag', name:'Laser Tag', tag:'The whole city is the arena.', modes:['Team Deathmatch','Search & Destroy','Battle Royale'],
+    bul:['Zones of 1, 5 or 10 miles, or statewide.','Lasers, explosions and shop weapons and upgrades.','Health bars and @names float over real players.','Holographic cover appears around you.'] },
+  { id:'tennis', img:'tennis', name:'Tennis', tag:'Wimbledon on any patch of grass.', modes:['Regulation','Wimbledon','US Open'],
+    bul:['A regulation court is drawn on any open field.','Play a holographic pro or a remote friend.','Serve speed, line calls and a floating scoreboard.'] },
+  { id:'pickleball', img:'pickleball', name:'Pickleball', tag:'Court and kitchen, anywhere flat.', modes:['Singles','Doubles'],
+    bul:['Lines, net and kitchen zone drawn on the ground.','Kitchen faults called automatically.','Doubles with friends nearby or remote.'] },
+  { id:'ping-pong', img:'ping-pong', name:'Ping Pong', tag:'A full-size table in your living room.', modes:['Quick game','Best of 5'],
+    bul:['A real-size holographic table and net.','Swing like you would with a real paddle.','Your opponent can be across the table or across the country.'] },
+  { id:'volleyball', img:'volleyball', name:'Volleyball', tag:'Beach rules, holographic chaos.', modes:['Tomato Ball','Gravity Change','Drill'],
+    bul:['Recognizes a real court, or draws one on sand or grass.','Tomato ball, low-gravity rounds and drill mode.','2v2 with friends, holograms or remote players.'] },
+  { id:'basketball', img:'basketball', name:'Basketball', tag:'A hoop wherever you stand.', modes:['21','HORSE','3PT Contest'],
+    bul:['Drop a holographic hoop anywhere, or play on a real one.','Shot arcs and a live shot meter.','Lines, paint and a scoreboard drawn on the ground.'] },
+  { id:'bowling', img:'bowling', name:'Bowling', tag:'A 60-foot lane down any hallway.', modes:['Classic 10 frames','Party'],
+    bul:['A holographic lane, arrows and pins.','Roll a real-motion ball and watch the pins scatter.','Automatic frame scoring.'] },
+  { id:'cornhole', img:'cornhole', name:'Cornhole', tag:'Boards at regulation distance, no boards to carry.', modes:['First to 21','Teams'],
+    bul:['Two boards placed 27 ft apart.','Bag-toss arcs and live scoring.','Play 1v1 or as teams.'] },
+  { id:'chess', img:'chess', name:'Chess', tag:'Life-size, in the park.', modes:['Local','Online','Timed'],
+    bul:['A life-size board in the real world.','Walk up to a piece to move it.','An online opponent\'s pieces move on their own.'] },
+  { id:'mafia', img:'mafia', name:'Mafia', tag:'Secret roles only you can see.', modes:['Classic','Night & Day'],
+    bul:['Your role card floats where only your lenses can see it.','Night and day phases with a holographic moon.','Point to vote. Roles are revealed in the air.'] },
+  { id:'beside-them', img:'beside-them', name:'Beside Them', tag:'Among Us-style, in your real space.', modes:['Crew','Impostor'],
+    bul:['Task stations are placed around the real room or park.','Impostors, vents and sabotage.','Hit the holographic emergency button to call a meeting.'] },
+  { id:'we-outside', img:'we-outside', name:'We Outside', tag:'Cops & Robbers across the whole state.', modes:['Heist','Chase','Bounty'],
+    bul:['Pull a heist at a holographic bank.','Cops are notified, and you evade or surrender, on foot or driving.','Bounties, weapons and wanted levels, statewide.','The dream version would be a licensed GTA partnership with Rockstar.'] },
+  { id:'world', img:'world', name:'iYiYi World', tag:'A Fall Guys-style course in your backyard.', modes:['Race','Survival','Party'],
+    bul:['Sweepers, candy bars and floating platforms appear around you.','Shop characters race alongside real friends.','Swap the world: lava streets, snowy alps, neon Tokyo.'] },
+];
+const LENSES = [
+  { id:'spotify', img:null, name:'Spotify Lens', tag:'See what people nearby are listening to.', modes:['Nearby','Listen in','Profiles'],
+    bul:['Now-playing tags float over people nearby who share their music.','Tap to listen in on the same track.','Jump to their iYiYi profile and favorite artists.'] },
+  { id:'nature', img:null, name:'Nature Simulator', tag:'The floor is lava, on your real streets.', modes:['Lava','Snowy Alps','Rainforest'],
+    bul:['Mapped to real streets and buildings with Google Maps.','Streets become lava and skyscrapers become volcanoes.','Swap to snowy alps or rainforest.'] },
+  { id:'workout', img:null, name:'Workout Coach', tag:'Your next machine, highlighted.', modes:['Strength','Circuit','Custom plan'],
+    bul:['Highlights the gym equipment to use next.','Counts your reps and checks your form.','Asks if you want another set.'] },
+  { id:'running', img:null, name:'Running', tag:'Every split, in your view.', modes:['40-yard dash','400m','Distance run'],
+    bul:['Distance, speed and pace while you run.','40-yard dash and track times.','Race a ghost of your best run, then see your run map.'] },
+  { id:'calorie', img:null, name:'Calorie Counter', tag:'Look at your food. Calories logged.', modes:['Meals','Daily goal'],
+    bul:['Look at a plate and each item is recognized.','Calories and macros float over the food.','Your daily total updates automatically.'] },
+  { id:'yoga', img:null, name:'Yoga', tag:'A holographic instructor in your space.', modes:['Flow','Hold','Breathing'],
+    bul:['A holographic instructor leads the flow.','Pose guides overlay your body and score your match.','Breathing cues pace each hold.'] },
+];
+const ALL = GAMES.concat(LENSES);
+
+// ---------- hero marquee ----------
+const imgs = GAMES.map(g => `../specs/img/${g.img}-sm.webp`);
+['row1','row2','row3'].forEach((id, r) => {
+  const order = imgs.slice(r * 4).concat(imgs.slice(0, r * 4));
+  const html = order.concat(order).map(s => `<img src="${s}" alt="" loading="${r ? 'lazy' : 'eager'}" />`).join('');
+  document.getElementById(id).innerHTML = html;
+});
+// 1000 dots, 50 lit
+const dots = document.getElementById('dots'); const lit = new Set(); while (lit.size < 20) lit.add(Math.floor(Math.random() * 400));
+dots.innerHTML = Array.from({ length: 400 }, (_, i) => `<i class="${lit.has(i) ? 'on' : ''}"></i>`).join('');
+
+// ---------- games + lenses grids ----------
+const cardHTML = (g, i, n, total, label) => `
+  <article class="gcard reveal" data-i="${i}">
+    <div class="view">
+      ${g.img ? `<img class="cover" src="../specs/img/${g.img}-sm.webp" alt="${g.name} cover art" loading="lazy" />` : '<div class="cover noimg"></div>'}
+      <canvas aria-label="First-person 3D view of ${g.name}"></canvas>
+      <div class="lens"><span class="ro">SPECS · ${label}</span></div>
+      <div class="top"><div><div class="num">${String(n).padStart(2, '0')} / ${total}</div><h3>${g.name}</h3><div class="tagline">${g.tag}</div></div>
+        ${g.img ? `<img class="thumb" src="../specs/img/${g.img}-sm.webp" alt="" title="View cover" />` : ''}</div>
+      <div class="bar"><span>Drag to look around · tap to expand</span><button class="exp" aria-label="Open ${g.name} full screen">⤢</button></div>
+    </div>
+  </article>`;
+document.getElementById('gameGrid').innerHTML = GAMES.map((g, i) => cardHTML(g, i, i + 1, GAMES.length, 'AR GAME')).join('');
+document.getElementById('lensGrid').innerHTML = LENSES.map((g, i) => cardHTML(g, GAMES.length + i, i + 1, LENSES.length, 'LENS')).join('');
+
+const cards = [...document.querySelectorAll('.gcard')].sort((a, b) => a.dataset.i - b.dataset.i);
+const views = new Array(ALL.length).fill(null);
+const visible = new Set();
+const io = new IntersectionObserver(es => es.forEach(e => { const i = +e.target.dataset.i; e.isIntersecting ? visible.add(i) : visible.delete(i); }), { rootMargin: '150px' });
+cards.forEach((c, i) => {
+  io.observe(c);
+  const cv = c.querySelector('canvas');
+  attachDrag(cv, () => views[i], () => openFS(i));
+  c.querySelector('.exp').addEventListener('click', e => { e.stopPropagation(); openFS(i); });
+  c.querySelector('.thumb')?.addEventListener('click', e => { e.stopPropagation(); window.open(`../specs/img/${ALL[i].img}.webp`, '_blank'); });
+});
+
+// ---------- hero tag scene ----------
+const tagCanvas = document.getElementById('tagCanvas'); let tagView = null, tagVis = false;
+new IntersectionObserver(e => { tagVis = e[0].isIntersecting; }, { rootMargin: '150px' }).observe(tagCanvas);
+attachDrag(tagCanvas, () => tagView);
+
+// ---------- fullscreen ----------
+const fs = document.getElementById('fs'), fsCanvas = document.getElementById('fsCanvas'); let fsIdx = -1;
+attachDrag(fsCanvas, () => fsIdx >= 0 ? views[fsIdx] : null);
+function ensure(i) { if (!views[i]) views[i] = new SceneView(ALL[i].id, { fp: true }); cards[i].classList.add('live'); return views[i]; }
+function openFS(i) {
+  fsIdx = (i + ALL.length) % ALL.length; const g = ALL[fsIdx]; ensure(fsIdx); const isLens = fsIdx >= GAMES.length;
+  document.getElementById('fsNum').textContent = isLens ? `Lens ${fsIdx - GAMES.length + 1} / ${LENSES.length} · first person` : `${String(fsIdx + 1).padStart(2, '0')} / ${GAMES.length} · Specs AR game · first person`; document.getElementById('fsRo').textContent = 'SPECS · ' + (isLens ? 'LENS' : 'AR GAME') + ' · ' + g.name.toUpperCase();
+  document.getElementById('fsTitle').textContent = g.name; document.getElementById('fsName').textContent = isLens ? g.name : 'iYiYi ' + g.name;
+  document.getElementById('fsTag').textContent = g.tag; const im = document.getElementById('fsImg'); im.style.display = g.img ? '' : 'none'; if (g.img) { im.src = `../specs/img/${g.img}.webp`; im.alt = `${g.name} cover art`; }
+  document.getElementById('fsBul').innerHTML = g.bul.map(b => `<li>${b}</li>`).join('');
+  document.getElementById('fsModes').innerHTML = g.modes.map(m => `<span>${m}</span>`).join('');
+  if (!fs.classList.contains('open')) { fs.classList.add('open'); document.body.style.overflow = 'hidden'; history.pushState({ fs: 1 }, ''); }
+}
+function closeFS(fromPop) { if (!fs.classList.contains('open')) return; fs.classList.remove('open'); document.body.style.overflow = ''; fsIdx = -1; if (!fromPop && history.state?.fs) history.back(); }
+document.getElementById('fsClose').onclick = () => closeFS();
+document.getElementById('fsPrev').onclick = () => openFS(fsIdx - 1);
+document.getElementById('fsNext').onclick = () => openFS(fsIdx + 1);
+document.getElementById('zIn').onclick = () => views[fsIdx]?.zoom(0.8);
+document.getElementById('zOut').onclick = () => views[fsIdx]?.zoom(1.25);
+document.getElementById('zReset').onclick = () => views[fsIdx]?.reset();
+addEventListener('popstate', () => closeFS(true));
+addEventListener('keydown', e => { if (fsIdx < 0) return; if (e.key === 'Escape') closeFS(); if (e.key === 'ArrowRight') openFS(fsIdx + 1); if (e.key === 'ArrowLeft') openFS(fsIdx - 1); });
+
+// ---------- render loop: one WebGL renderer, only what's on screen ----------
+let ok = true; try { const t = document.createElement('canvas'); ok = !!(t.getContext('webgl2') || t.getContext('webgl')); } catch { ok = false; }
+const DPR = Math.min(devicePixelRatio || 1, 2);
+const t0 = performance.now();
+let ready = false;
+Promise.race([loadHumans().catch(e => console.warn('humans', e)), new Promise(r => setTimeout(r, 12000))]).then(() => { ready = true; });
+function loop() {
+  requestAnimationFrame(loop); if (!ok || !ready || document.hidden) return;
+  const t = (performance.now() - t0) / 1000;
+  try {
+    if (fsIdx >= 0) { views[fsIdx].draw(t, fsCanvas, DPR); return; }
+    if (tagVis) { tagView ||= new SceneView('tags', { fp: true }); tagView.draw(t, tagCanvas, DPR); }
+    for (const i of visible) ensure(i).draw(t, cards[i].querySelector('canvas'), DPR);
+  } catch (err) { console.error(err); ok = false; }
+}
+loop();
+
+// ---------- reveal on scroll ----------
+const rv = new IntersectionObserver(es => es.forEach(e => { if (e.isIntersecting) { e.target.classList.add('in'); rv.unobserve(e.target); } }), { threshold: 0.12 });
+document.querySelectorAll('.reveal').forEach(el => rv.observe(el));
+
+// ---------- creators ----------
+const IG = u => `<blockquote class="instagram-media" data-instgrm-permalink="${u}?utm_source=ig_embed" data-instgrm-version="14"><a class="fallback" href="${u}" target="_blank" rel="noopener">View on Instagram <span>↗</span></a></blockquote>`;
+const YTV = (id, title) => `<div class="yt"><iframe src="https://www.youtube-nocookie.com/embed/${id}" title="${title}" loading="lazy" allow="accelerometer; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe></div>`;
+const YTC = (u, label) => `<a class="fallback" href="${u}" target="_blank" rel="noopener">${label} <span>YouTube ↗</span></a>`;
+const CREATORS = [
+  { n:'Naznotfunny', i:'NZ', av:'instagram/naznotfunny', who:'Comedy skit creator on Instagram.', idea:'Skits shot through Specs, with name tags popping up over strangers.', span:true,
+    embeds:[IG('https://www.instagram.com/reel/Dd-ARr_syZQ/'), IG('https://www.instagram.com/reel/DdpmPeAAVsU/')], links:[] },
+  { n:'Kai Cenat', i:'KC', av:'instagram/kaicenat', who:'One of the biggest live streamers. He came back to streaming in July 2026 after a nine-month break.', idea:'Stream a statewide We Outside heist live, with chat watching the cops close in.', span:true,
+    embeds:[YTV('WQwSEB76nmM','Kai Cenat video')], links:[] },
+  { n:'MrBeast', i:'MB', av:'instagram/mrbeast', who:'The most-subscribed creator on YouTube, known for huge challenge videos.', idea:'A city-wide Laser Tag Battle Royale with a giant prize.',
+    embeds:[IG('https://www.instagram.com/mrbeast/')], links:[] },
+  { n:'DDG & Woo Wop', i:'DW', av:'instagram/ddg', who:'Rapper and YouTuber DDG, and creator Woo Wop.', idea:'Laser Tag against their fans in the street.',
+    embeds:[IG('https://www.instagram.com/ddg/'), IG('https://www.instagram.com/babywoowop/')], links:[['DDG Live Clips','https://www.youtube.com/@DDGLiveClips']] },
+  { n:'Ashton Hall', i:'AH', av:'instagram/ashtonhall', who:'Fitness creator whose extreme morning-routine video went viral worldwide in 2025.', idea:'Morning routine with the Workout Coach and Calorie Counter Lenses.',
+    embeds:[IG('https://www.instagram.com/ashtonhall/')], links:[] },
+  { n:'Stevewilldoit', i:'SW', av:'instagram/stevewilldoit', who:'Stunt and challenge creator.', idea:'An all-out iYiYi World obstacle course in a backyard.',
+    embeds:[IG('https://www.instagram.com/stevewilldoit/')], links:[] },
+  { n:'The Rock Squad', i:'RS', av:'instagram/therocksquad', who:'Creator group on Instagram.', idea:'Group games: Beside Them and Mafia with the whole squad.',
+    embeds:[IG('https://www.instagram.com/therocksquad/')], links:[] },
+  { n:'Zach Cray', i:'ZC', av:'youtube/zachcray', who:'YouTube creator.', idea:'Football with holographic teams, plus drill mode.',
+    embeds:[YTC('https://www.youtube.com/@zachcray','Zach Cray channel')], links:[] },
+  { n:'Kai W', i:'KW', av:'youtube/KaiManWong', who:'Camera and tech reviewer.', idea:'An honest hands-on review of Specs with iYiYi.',
+    embeds:[YTC('https://www.youtube.com/@KaiManWong','Kai W channel')], links:[] },
+];
+document.getElementById('creatorGrid').innerHTML = CREATORS.map(c => `
+  <div class="cr reveal ${c.span ? 'span' : ''}">
+    <header><div class="av">${c.i}${c.av ? `<img src="https://unavatar.io/${c.av}?fallback=false" alt="${c.n}" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()" />` : ''}</div><div><h3>${c.n}</h3><p class="who">${c.who}</p></div></header>
+    <div class="idea"><b>SPECS IDEA</b>${c.idea}</div>
+    <div class="embeds">${c.embeds.join('')}</div>
+    ${c.links.length ? `<div class="links">${c.links.map(([l, u]) => `<a href="${u}" target="_blank" rel="noopener">${l} ↗</a>`).join('')}</div>` : ''}
+  </div>`).join('');
+document.querySelectorAll('#creatorGrid .reveal').forEach(el => rv.observe(el));
+// load Instagram's embed script only when the section gets close
+new IntersectionObserver((es, o) => { if (!es[0].isIntersecting) return; o.disconnect(); const s = document.createElement('script'); s.async = true; s.src = 'https://www.instagram.com/embed.js'; document.body.appendChild(s); }, { rootMargin: '900px' }).observe(document.getElementById('creators'));
+</script>
+</body>
+</html>
