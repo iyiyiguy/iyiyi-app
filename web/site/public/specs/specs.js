@@ -758,30 +758,29 @@ Object.assign(SCENES, {
 
   // AR: the real street turns to lava; pedestrians keep to the sidewalk
   nature(k) {
-    const RX0 = 3.3, RX1 = 9.6, RW = RX1 - RX0, RC = (RX0 + RX1) / 2;
-    const lavaM = lavaMaterial(RW / 2.6, 90 / 2.6);
-    const river = new THREE.Mesh(new THREE.PlaneGeometry(RW, 90), lavaM); river.rotation.x = -Math.PI / 2; river.position.set(RC, 0.02, -40); k.root.add(river);
+    // the real street runs slightly to the right of straight ahead: everything on it lives in a rotated group
+    const TH = (typeof window !== 'undefined' && window.__ROT != null) ? window.__ROT : -0.15;
+    const CURB = (typeof window !== 'undefined' && window.__CURB != null) ? window.__CURB : 0.75;
+    const rg = new THREE.Group(); rg.rotation.y = TH; k.root.add(rg);
+    const RX0 = CURB + 1.9, RX1 = CURB + 9.0, RW = RX1 - RX0, RC = (RX0 + RX1) / 2;
+    const lavaM = lavaMaterial(RW / 2.6, 120 / 2.6);
+    const river = new THREE.Mesh(new THREE.PlaneGeometry(RW, 120), lavaM); river.rotation.x = -Math.PI / 2; river.position.set(RC, 0.02, -55); rg.add(river);
     k.ups.push(t => { lavaM.uniforms.t.value = t; });
     volcanicRange(k);
-    // glowing edge where lava meets the curb + heat haze
-    [RX0, RX1].forEach(x => { const e = new THREE.Mesh(new THREE.PlaneGeometry(0.9, 90), k.holo(0xff6a00, 0.55)); e.rotation.x = -Math.PI / 2; e.position.set(x, 0.03, -40); k.root.add(e); });
-    for (let z = 0; z > -40; z -= 8) { const L = new THREE.PointLight(0xff6a1a, 14, 10, 1.8); L.position.set(RC - 2, 0.6, z); k.root.add(L); }
-    // embers and smoke
-    for (let p = 0; p < 60; p++) { const e = new THREE.Mesh(new THREE.SphereGeometry(0.035, 6, 4), k.holo(p % 3 ? C.amber : 0xff4010, 0.95)); k.root.add(e); const ph = Math.random(), x = RX0 + Math.random() * RW, z = -Math.random() * 40; k.ups.push(t => { const u = (t * 0.45 + ph) % 1; e.position.set(x + Math.sin(u * 6 + ph * 9) * 0.3, 0.1 + u * 3.2, z); e.material.opacity = 1 - u; }); }
+    [RX0, RX1].forEach(x => { const e = new THREE.Mesh(new THREE.PlaneGeometry(0.7, 120), k.holo(0xff6a00, 0.5)); e.rotation.x = -Math.PI / 2; e.position.set(x, 0.03, -55); rg.add(e); });
+    for (let z = 0; z > -40; z -= 8) { const L = new THREE.PointLight(0xff6a1a, 14, 10, 1.8); L.position.set(RC - 2, 0.6, z); rg.add(L); }
+    for (let p = 0; p < 60; p++) { const e = new THREE.Mesh(new THREE.SphereGeometry(0.035, 6, 4), k.holo(p % 3 ? C.amber : 0xff4010, 0.95)); rg.add(e); const ph = Math.random(), x = RX0 + Math.random() * RW, z = -Math.random() * 40; k.ups.push(t => { const u = (t * 0.45 + ph) % 1; e.position.set(x + Math.sin(u * 6 + ph * 9) * 0.3, 0.1 + u * 3.2, z); e.material.opacity = 1 - u; }); }
     const smk = document.createElement('canvas'); smk.width = smk.height = 64; const sg = smk.getContext('2d'); const sgr = sg.createRadialGradient(32, 32, 0, 32, 32, 32); sgr.addColorStop(0, 'rgba(70,60,55,0.55)'); sgr.addColorStop(1, 'rgba(70,60,55,0)'); sg.fillStyle = sgr; sg.fillRect(0, 0, 64, 64);
     const smTex = new THREE.CanvasTexture(smk);
-    for (let p = 0; p < 26; p++) { const m = new THREE.SpriteMaterial({ map: smTex, transparent: true, depthWrite: false, toneMapped: false }); const sp = new THREE.Sprite(m); k.root.add(sp); const ph = Math.random(), x = RX0 + Math.random() * RW, z = -2 - Math.random() * 45; k.ups.push(t => { const u = (t * 0.08 + ph) % 1; sp.position.set(x + u * 1.5, 0.5 + u * 7, z); const sc = 1.5 + u * 5; sp.scale.set(sc, sc, 1); m.opacity = 0.7 * Math.sin(Math.PI * u); }); }
-    // pedestrians on the sidewalk
-    const walker = k.walker;
-    walker({ tag: '@rio.sky' }, 0.9, -4, -26, 1.2, 0.1);
-    walker({}, 1.6, -9, -30, 1.1, 0.7);
-    walker({ pose: 'run', tag: '@kai.p' }, 0.4, -22, -3, 3.2, 0.3);
-    walker({}, -0.6, -14, -40, 1.0, 1.2);
-    k.at(k.person({ ...RF, tag: '@maya.v', pose: 'point' }), -1.5, 0, -3.6, 0.9);
+    for (let p = 0; p < 26; p++) { const m = new THREE.SpriteMaterial({ map: smTex, transparent: true, depthWrite: false, toneMapped: false }); const sp = new THREE.Sprite(m); rg.add(sp); const ph = Math.random(), x = RX0 + Math.random() * RW, z = -2 - Math.random() * 45; k.ups.push(t => { const u = (t * 0.08 + ph) % 1; sp.position.set(x + u * 1.5, 0.5 + u * 7, z); const sc = 1.5 + u * 5; sp.scale.set(sc, sc, 1); m.opacity = 0.7 * Math.sin(Math.PI * u); }); }
+    // pedestrians stay on the sidewalk, walking along the street's direction
+
+    [[{ tag: '@rio.sky' }, CURB - 0.8, -4, -30, 1.2, 0.1], [{}, CURB - 1.6, -9, -34, 1.1, 0.7], [{ pose: 'run', tag: '@kai.p' }, CURB - 0.5, -24, -3, 3.2, 0.3], [{}, CURB - 2.4, -14, -44, 1.0, 1.2]].forEach(a => { const p = k.walker(...a); rg.add(p); });
+    const maya = k.at(k.person({ ...RF, tag: '@maya.v', pose: 'point' }), CURB - 2.2, 0, -3.6, 0.9); rg.add(maya);
+    const hot = k.label('1,200°C', 0xff6a00, { w: 1, style: 'glass', sub: 'DON\'T STEP IN' }); hot.position.set(RX0 + 1.2, 1.1, -4.5); rg.add(hot); k.bob(hot, 0.03);
     // AR labels
-    k.panel('THE FLOOR IS LAVA', 0xff6a00, RC - 2.5, 3.2, -9, 2.4, 'STAY ON THE SIDEWALK');
+    const fl = k.panel('THE FLOOR IS LAVA', 0xff6a00, RC - 2.5, 3.2, -9, 2.4, 'STAY ON THE SIDEWALK'); rg.attach(fl);
     const gm = k.label('GOOGLE MAPS · MAIN ST', C.cyan, { w: 1.6, style: 'glass', sub: 'REAL STREETS · LAVA MODE' }); gm.position.set(-1.4, 1.9, -6);
-    const hot = k.label('1,200°C', 0xff6a00, { w: 1, style: 'glass', sub: 'DON\'T STEP IN' }); hot.position.set(RX0 + 1.4, 1.1, -4.5); k.bob(hot, 0.03);
     k.at(k.person({ ...RQ, tag: '@colin' }), 0, 0, 0, Math.PI);
     return { dist: 14, h: 6, sky: 'lava', fog: [0x5a4034, 70, 270] };
   },
