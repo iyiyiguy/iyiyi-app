@@ -13,3 +13,5 @@
 /cart                         https://shop.iyiyi.xyz/cart  302
 /apk                          https://github.com/iyiyiguy/iyiyi-app/releases/latest/download/iYiYi.apk  302
 /download/android             https://github.com/iyiyiguy/iyiyi-app/releases/latest/download/iYiYi.apk  302
+/spec2                        /specs/  301
+/spec2/*                      /specs/  301

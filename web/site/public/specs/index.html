@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-<title>iYiYi × SPECS</title>
+<title>iYiYi × SPECS · POV</title>
 <meta name="robots" content="noindex" />
 <meta name="description" content="iYiYi × Snap Specs: name tags over real people, and 14 hologram games for the real world." />
 <meta property="og:title" content="iYiYi × SPECS" />
@@ -108,6 +108,14 @@ nav .links a{color:var(--muted)} nav .links a:hover{color:#fff;text-decoration:n
 .bul{list-style:none;padding:0;margin:26px 0 0;display:grid;gap:12px}
 .bul li{display:flex;gap:12px;color:#dfe5f3}
 .bul li::before{content:"";flex:0 0 8px;height:8px;margin-top:10px;border-radius:2px;background:var(--cyan);box-shadow:0 0 10px var(--cyan);transform:rotate(45deg)}
+
+/* first-person lens HUD */
+.lens{position:absolute;inset:0;pointer-events:none;z-index:2;background:radial-gradient(120% 95% at 50% 50%,transparent 58%,rgba(4,8,16,.35) 78%,rgba(2,4,10,.85) 100%)}
+.lens::before{content:"";position:absolute;left:50%;top:50%;width:26px;height:26px;margin:-13px 0 0 -13px;border:1.5px solid rgba(57,213,255,.75);border-radius:50%;box-shadow:0 0 10px rgba(57,213,255,.5)}
+.lens::after{content:"";position:absolute;left:50%;top:50%;width:4px;height:4px;margin:-2px 0 0 -2px;border-radius:50%;background:var(--cyan)}
+.lens .ro{position:absolute;top:12px;left:50%;transform:translateX(-50%);font:600 11px var(--hud);letter-spacing:.18em;color:rgba(57,213,255,.85);white-space:nowrap;text-shadow:0 0 8px rgba(57,213,255,.6)}
+.fs .lens .ro{top:auto;bottom:22px}
+.gcard .noimg{position:absolute;inset:0;background:radial-gradient(80% 70% at 50% 45%,#17223e,#070a13 75%)}
 
 /* games grid */
 .games{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:22px;margin-top:48px}
@@ -234,7 +242,7 @@ footer .links{margin-top:22px}
     <div class="row" id="row3"></div>
   </div>
   <div class="wrap">
-    <div class="kick">Follow-up · for Jean Luo</div>
+    <div class="kick">Follow-up · for Jean Luo · POV edition</div>
     <h1>iYiYi<span class="x">×</span><br/><span class="specs">SPECS</span></h1>
     <p>See who's around you. Play with the people right in front of you. Names, socials and holograms, floating in the real world.</p>
     <div class="meta">
@@ -290,7 +298,7 @@ footer .links{margin-top:22px}
 
 <section id="specs"><div class="wrap">
   <div class="split">
-    <div class="stage reveal" id="tagStage"><canvas id="tagCanvas" aria-label="3D demo: name tags over people seen through Specs"></canvas><div class="scan"></div><i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i><div class="hint">Drag to look around</div></div>
+    <div class="stage reveal" id="tagStage"><canvas id="tagCanvas" aria-label="First-person 3D demo: name tags over people seen through Specs"></canvas><div class="lens"><span class="ro">SPECS · IYIYI NEARBY · 4</span></div><div class="scan"></div><i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i><div class="hint">Drag to look around</div></div>
     <div class="reveal">
       <div class="kick">SPECS × iYiYi</div>
       <h2>Names float over <span class="grad">real people.</span></h2>
@@ -307,13 +315,13 @@ footer .links{margin-top:22px}
 <section id="games"><div class="wrap">
   <div class="kick">The Specs Lenses</div>
   <h2>14 games. <span class="grad">Real friends, holographic everything else.</span></h2>
-  <p class="lead">Every game mixes real people wearing Specs with holograms: courts, teammates, opponents, scoreboards. These are display models of how each one works. Drag to rotate, tap to open full screen.</p>
+  <p class="lead">This version puts you behind the lenses. Every scene is first person, the way you would see it wearing Specs: real friends in front of you, holograms layered on the real world. Drag to look around, tap to open full screen.</p>
   <div class="games" id="gameGrid"></div>
 </div></section>
 
 <div class="fs" id="fs" role="dialog" aria-modal="true" aria-label="Game detail">
   <div class="stagefs">
-    <canvas id="fsCanvas"></canvas><div class="scan"></div>
+    <canvas id="fsCanvas"></canvas><div class="scan"></div><div class="lens"><span class="ro" id="fsRo">SPECS</span></div>
     <div class="title-ov"><span id="fsNum"></span><b id="fsTitle"></b></div>
     <div class="ctl tr"><button class="btn" id="fsClose" aria-label="Close">✕ Close</button></div>
     <div class="ctl bl"><button class="btn" id="fsPrev" aria-label="Previous game">‹</button><button class="btn" id="fsNext" aria-label="Next game">›</button></div>
@@ -342,17 +350,11 @@ footer .links{margin-top:22px}
   </div>
 </div></section>
 
-<section id="roadmap"><div class="wrap">
-  <div class="kick">More Lenses on the roadmap</div>
-  <h2>Beyond games.</h2>
-  <div class="road">
-    <div class="reveal" data-k="MUSIC" style="--c:var(--green)"><h3>Spotify Lens</h3><p>See what people nearby are listening to, listen in, and jump to their profile and favorite artists.</p></div>
-    <div class="reveal" data-k="WORLD" style="--c:var(--red)"><h3>Nature Simulator</h3><p>Lava, snowy alps or rainforest mapped to real streets with Google Maps. Streets become lava and skyscrapers become volcanoes.</p></div>
-    <div class="reveal" data-k="FITNESS" style="--c:var(--amber)"><h3>Workout Coach</h3><p>Highlights the gym equipment to use next, counts reps and asks about another set.</p></div>
-    <div class="reveal" data-k="FITNESS" style="--c:var(--amber)"><h3>Running</h3><p>Distance, speed, 40-yard dash and track times, with a run map.</p></div>
-    <div class="reveal" data-k="HEALTH" style="--c:var(--cyan)"><h3>Calorie Counter</h3><p>Look at your food and get calories logged.</p></div>
-    <div class="reveal" data-k="WELLNESS" style="--c:var(--purple)"><h3>Yoga</h3><p>A holographic instructor and pose guides in your space.</p></div>
-  </div>
+<section id="lenses"><div class="wrap">
+  <div class="kick">More Lenses</div>
+  <h2>Beyond games. <span class="grad">Specs for every day.</span></h2>
+  <p class="lead">Six more Lenses, also seen first person: music, the world around you, fitness and food.</p>
+  <div class="games" id="lensGrid"></div>
 </div></section>
 
 <section id="status"><div class="wrap">
@@ -399,7 +401,7 @@ footer .links{margin-top:22px}
 </div></footer>
 
 <script type="module">
-import { SceneView, attachDrag } from './specs.js?v=2';
+import { SceneView, attachDrag, loadHumans } from './specs.js?v=3';
 
 const GAMES = [
   { id:'football', img:'football', name:'Football', tag:'Your backyard becomes a stadium.', modes:['Fun','Drill','Online'],
@@ -431,6 +433,21 @@ const GAMES = [
   { id:'world', img:'world', name:'iYiYi World', tag:'A Fall Guys-style course in your backyard.', modes:['Race','Survival','Party'],
     bul:['Sweepers, candy bars and floating platforms appear around you.','Shop characters race alongside real friends.','Swap the world: lava streets, snowy alps, neon Tokyo.'] },
 ];
+const LENSES = [
+  { id:'spotify', img:null, name:'Spotify Lens', tag:'See what people nearby are listening to.', modes:['Nearby','Listen in','Profiles'],
+    bul:['Now-playing tags float over people nearby who share their music.','Tap to listen in on the same track.','Jump to their iYiYi profile and favorite artists.'] },
+  { id:'nature', img:null, name:'Nature Simulator', tag:'The floor is lava, on your real streets.', modes:['Lava','Snowy Alps','Rainforest'],
+    bul:['Mapped to real streets and buildings with Google Maps.','Streets become lava and skyscrapers become volcanoes.','Swap to snowy alps or rainforest.'] },
+  { id:'workout', img:null, name:'Workout Coach', tag:'Your next machine, highlighted.', modes:['Strength','Circuit','Custom plan'],
+    bul:['Highlights the gym equipment to use next.','Counts your reps and checks your form.','Asks if you want another set.'] },
+  { id:'running', img:null, name:'Running', tag:'Every split, in your view.', modes:['40-yard dash','400m','Distance run'],
+    bul:['Distance, speed and pace while you run.','40-yard dash and track times.','Race a ghost of your best run, then see your run map.'] },
+  { id:'calorie', img:null, name:'Calorie Counter', tag:'Look at your food. Calories logged.', modes:['Meals','Daily goal'],
+    bul:['Look at a plate and each item is recognized.','Calories and macros float over the food.','Your daily total updates automatically.'] },
+  { id:'yoga', img:null, name:'Yoga', tag:'A holographic instructor in your space.', modes:['Flow','Hold','Breathing'],
+    bul:['A holographic instructor leads the flow.','Pose guides overlay your body and score your match.','Breathing cues pace each hold.'] },
+];
+const ALL = GAMES.concat(LENSES);
 
 // ---------- hero marquee ----------
 const imgs = GAMES.map(g => `img/${g.img}-sm.webp`);
@@ -443,21 +460,23 @@ const imgs = GAMES.map(g => `img/${g.img}-sm.webp`);
 const dots = document.getElementById('dots'); const lit = new Set(); while (lit.size < 20) lit.add(Math.floor(Math.random() * 400));
 dots.innerHTML = Array.from({ length: 400 }, (_, i) => `<i class="${lit.has(i) ? 'on' : ''}"></i>`).join('');
 
-// ---------- games grid ----------
-const grid = document.getElementById('gameGrid');
-grid.innerHTML = GAMES.map((g, i) => `
+// ---------- games + lenses grids ----------
+const cardHTML = (g, i, n, total, label) => `
   <article class="gcard reveal" data-i="${i}">
     <div class="view">
-      <img class="cover" src="img/${g.img}-sm.webp" alt="${g.name} cover art" loading="lazy" />
-      <canvas aria-label="3D model of ${g.name}"></canvas>
-      <div class="top"><div><div class="num">${String(i + 1).padStart(2, '0')} / 14</div><h3>${g.name}</h3><div class="tagline">${g.tag}</div></div>
-        <img class="thumb" src="img/${g.img}-sm.webp" alt="" title="View cover" /></div>
-      <div class="bar"><span>Drag to rotate · tap to expand</span><button class="exp" aria-label="Open ${g.name} full screen">⤢</button></div>
+      ${g.img ? `<img class="cover" src="img/${g.img}-sm.webp" alt="${g.name} cover art" loading="lazy" />` : '<div class="cover noimg"></div>'}
+      <canvas aria-label="First-person 3D view of ${g.name}"></canvas>
+      <div class="lens"><span class="ro">SPECS · ${label}</span></div>
+      <div class="top"><div><div class="num">${String(n).padStart(2, '0')} / ${total}</div><h3>${g.name}</h3><div class="tagline">${g.tag}</div></div>
+        ${g.img ? `<img class="thumb" src="img/${g.img}-sm.webp" alt="" title="View cover" />` : ''}</div>
+      <div class="bar"><span>Drag to look around · tap to expand</span><button class="exp" aria-label="Open ${g.name} full screen">⤢</button></div>
     </div>
-  </article>`).join('');
+  </article>`;
+document.getElementById('gameGrid').innerHTML = GAMES.map((g, i) => cardHTML(g, i, i + 1, GAMES.length, 'AR GAME')).join('');
+document.getElementById('lensGrid').innerHTML = LENSES.map((g, i) => cardHTML(g, GAMES.length + i, i + 1, LENSES.length, 'LENS')).join('');
 
-const cards = [...grid.querySelectorAll('.gcard')];
-const views = new Array(GAMES.length).fill(null);
+const cards = [...document.querySelectorAll('.gcard')].sort((a, b) => a.dataset.i - b.dataset.i);
+const views = new Array(ALL.length).fill(null);
 const visible = new Set();
 const io = new IntersectionObserver(es => es.forEach(e => { const i = +e.target.dataset.i; e.isIntersecting ? visible.add(i) : visible.delete(i); }), { rootMargin: '150px' });
 cards.forEach((c, i) => {
@@ -465,7 +484,7 @@ cards.forEach((c, i) => {
   const cv = c.querySelector('canvas');
   attachDrag(cv, () => views[i], () => openFS(i));
   c.querySelector('.exp').addEventListener('click', e => { e.stopPropagation(); openFS(i); });
-  c.querySelector('.thumb').addEventListener('click', e => { e.stopPropagation(); window.open(`img/${GAMES[i].img}.webp`, '_blank'); });
+  c.querySelector('.thumb')?.addEventListener('click', e => { e.stopPropagation(); window.open(`img/${ALL[i].img}.webp`, '_blank'); });
 });
 
 // ---------- hero tag scene ----------
@@ -476,12 +495,12 @@ attachDrag(tagCanvas, () => tagView);
 // ---------- fullscreen ----------
 const fs = document.getElementById('fs'), fsCanvas = document.getElementById('fsCanvas'); let fsIdx = -1;
 attachDrag(fsCanvas, () => fsIdx >= 0 ? views[fsIdx] : null);
-function ensure(i) { if (!views[i]) views[i] = new SceneView(GAMES[i].id); cards[i].classList.add('live'); return views[i]; }
+function ensure(i) { if (!views[i]) views[i] = new SceneView(ALL[i].id, { fp: true }); cards[i].classList.add('live'); return views[i]; }
 function openFS(i) {
-  fsIdx = (i + GAMES.length) % GAMES.length; const g = GAMES[fsIdx]; ensure(fsIdx);
-  document.getElementById('fsNum').textContent = `${String(fsIdx + 1).padStart(2, '0')} / 14 · Specs AR game`;
-  document.getElementById('fsTitle').textContent = g.name; document.getElementById('fsName').textContent = 'iYiYi ' + g.name;
-  document.getElementById('fsTag').textContent = g.tag; const im = document.getElementById('fsImg'); im.src = `img/${g.img}.webp`; im.alt = `${g.name} cover art`;
+  fsIdx = (i + ALL.length) % ALL.length; const g = ALL[fsIdx]; ensure(fsIdx); const isLens = fsIdx >= GAMES.length;
+  document.getElementById('fsNum').textContent = isLens ? `Lens ${fsIdx - GAMES.length + 1} / ${LENSES.length} · first person` : `${String(fsIdx + 1).padStart(2, '0')} / ${GAMES.length} · Specs AR game · first person`; document.getElementById('fsRo').textContent = 'SPECS · ' + (isLens ? 'LENS' : 'AR GAME') + ' · ' + g.name.toUpperCase();
+  document.getElementById('fsTitle').textContent = g.name; document.getElementById('fsName').textContent = isLens ? g.name : 'iYiYi ' + g.name;
+  document.getElementById('fsTag').textContent = g.tag; const im = document.getElementById('fsImg'); im.style.display = g.img ? '' : 'none'; if (g.img) { im.src = `img/${g.img}.webp`; im.alt = `${g.name} cover art`; }
   document.getElementById('fsBul').innerHTML = g.bul.map(b => `<li>${b}</li>`).join('');
   document.getElementById('fsModes').innerHTML = g.modes.map(m => `<span>${m}</span>`).join('');
   if (!fs.classList.contains('open')) { fs.classList.add('open'); document.body.style.overflow = 'hidden'; history.pushState({ fs: 1 }, ''); }
@@ -500,12 +519,14 @@ addEventListener('keydown', e => { if (fsIdx < 0) return; if (e.key === 'Escape'
 let ok = true; try { const t = document.createElement('canvas'); ok = !!(t.getContext('webgl2') || t.getContext('webgl')); } catch { ok = false; }
 const DPR = Math.min(devicePixelRatio || 1, 2);
 const t0 = performance.now();
+let ready = false;
+Promise.race([loadHumans().catch(e => console.warn('humans', e)), new Promise(r => setTimeout(r, 12000))]).then(() => { ready = true; });
 function loop() {
-  requestAnimationFrame(loop); if (!ok || document.hidden) return;
+  requestAnimationFrame(loop); if (!ok || !ready || document.hidden) return;
   const t = (performance.now() - t0) / 1000;
   try {
     if (fsIdx >= 0) { views[fsIdx].draw(t, fsCanvas, DPR); return; }
-    if (tagVis) { tagView ||= new SceneView('tags'); tagView.draw(t, tagCanvas, DPR); }
+    if (tagVis) { tagView ||= new SceneView('tags', { fp: true }); tagView.draw(t, tagCanvas, DPR); }
     for (const i of visible) ensure(i).draw(t, cards[i].querySelector('canvas'), DPR);
   } catch (err) { console.error(err); ok = false; }
 }
