@@ -805,7 +805,7 @@ Object.assign(SCENES, {
 // real-world 360° photos (CC0, Poly Haven): [image, u-coordinate to face forward]
 export const PANO = {
   football: ['grass', 0.5], tennis: ['grass', 0.5], 'laser-tag': ['plaza-night', 0.5], pickleball: ['court', 0.5], 'ping-pong': ['playroom', 0.62],
-  volleyball: ['beach', 0.5], basketball: ['courtyard', 0.5], bowling: ['hall', 0.5], cornhole: ['backyard', 0.5], chess: ['park', 0.5],
+  volleyball: ['beach', 0.5], basketball: ['courtyard', 0.5], bowling: ['warehouse', 0.8], cornhole: ['backyard', 0.5], chess: ['park', 0.5],
   mafia: ['yard-night', 0.5], 'beside-them': ['lobby', 0.62], 'we-outside': ['square-night', 0.5], world: ['field', 0.5], tags: ['street', 0.5],
   spotify: ['city', 0.75], nature: ['avenue', 0.5], workout: ['gym', 0.5], running: ['stadium', 0.5], calorie: ['cafe', 0.5], yoga: ['yoga', 0.5],
 };
