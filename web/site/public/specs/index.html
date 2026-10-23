@@ -256,7 +256,7 @@ footer .links{margin-top:22px}
 <section id="hi"><div class="wrap">
   <div class="kick">Following up on our call</div>
   <div class="letter reveal">
-    <p>Hi Jean, here's the overview of <strong>iYiYi</strong> and how it connects to <strong>Snap</strong> that I promised. Instead of a long email, I made it a page, so you can see the Specs games as 3D holograms. Drag any of them to look around.</p>
+    <p>Hi Jean, here's the overview of <strong>iYiYi</strong> and how it connects to <strong>Snap</strong>. Instead of a long email, I made it a page, so you can see the Specs games as 3D holograms. Drag any of them to look around.</p>
     <div class="sig-inline">— Colin Phillips, founder of iYiYi</div>
   </div>
 </div></section>
@@ -340,7 +340,7 @@ footer .links{margin-top:22px}
   <div class="kick">Why Snap owning iYiYi matters</div>
   <h2>New ad dollars, <span class="grad">from every platform.</span></h2>
   <div class="cards">
-    <div class="card reveal"><div class="ic">CROSS-PLATFORM</div><h3>Reach beyond Snapchat</h3><p>iYiYi profiles link Instagram, TikTok, YouTube and more, so advertisers can reach people who aren't on Snapchat yet.</p></div>
+    <div class="card reveal"><div class="ic">CROSS-PLATFORM</div><h3>Reach beyond Snapchat</h3><p>iYiYi profiles link Instagram, TikTok, YouTube and more, so Snap can leverage user data from all those platforms in addition to Snapchat.</p></div>
     <div class="card reveal" style="--c:var(--green)"><div class="ic">REAL-WORLD SIGNAL</div><h3>Where people actually meet</h3><p>Opt-in location and linked socials show where people gather and who they follow. That's real-world context advertisers can't get anywhere else.</p></div>
     <div class="card reveal" style="--c:var(--amber)"><div class="ic">SMB</div><h3>Small businesses &amp; creators</h3><p>Cafés, gyms, shops and local creators become new paying customers, which fits Snap's push toward small and medium advertisers.</p></div>
     <div class="card wide reveal"><blockquote class="q">Large brands make up most of traditional ad spend. The growth is in small and medium businesses.<cite>Paraphrasing Evan Spiegel on Tiger Sisters</cite></blockquote></div>
@@ -381,7 +381,7 @@ footer .links{margin-top:22px}
   <div class="asks">
     <div class="reveal"><span><h3>Help marketing SPECS</h3><p>Launch iYiYi's Lenses alongside Specs.</p></span></div>
     <div class="reveal"><span><h3>A featured or pushed Lens</h3><p>Placement for Laser Tag or the name-tag Lens.</p></span></div>
-    <div class="reveal"><span><h3>Content made for Spectacles</h3><p>Creator videos built around the games.</p></span></div>
+    <div class="reveal"><span><h3>Content made for Spectacles</h3><p>Myself and the listed creators can make content based on the games.</p></span></div>
     <div class="reveal"><span><h3>A pair or two of Spectacles</h3><p>So I can test on device and have a demo ready in 1–2 weeks.</p></span></div>
     <div class="reveal"><span><h3>An unrestricted developer account</h3><p>Access to location and multiplayer features at full scale.</p></span></div>
   </div>
@@ -555,10 +555,10 @@ const CREATORS = [
     embeds:[IG('https://www.instagram.com/stevewilldoit/')], links:[] },
   { n:'The Rock Squad', i:'RS', av:'instagram/therocksquad', who:'Creator group on Instagram.', idea:'Group games: Beside Them and Mafia with the whole squad.',
     embeds:[IG('https://www.instagram.com/therocksquad/')], links:[] },
-  { n:'Zach Cray', i:'ZC', av:'youtube/zachcray', who:'YouTube creator.', idea:'Football with holographic teams, plus drill mode.',
-    embeds:[YTC('https://www.youtube.com/@zachcray','Zach Cray channel')], links:[] },
-  { n:'Kai W', i:'KW', av:'youtube/KaiManWong', who:'Camera and tech reviewer.', idea:'An honest hands-on review of Specs with iYiYi.',
-    embeds:[YTC('https://www.youtube.com/@KaiManWong','Kai W channel')], links:[] },
+  { n:'Zach Cray', i:'ZC', av:'instagram/zachcray', who:'YouTube creator.', idea:'Football with holographic teams, plus drill mode.',
+    embeds:[IG('https://www.instagram.com/zachcray/')], links:[['YouTube','https://www.youtube.com/@zachcray']] },
+  { n:'Kai W', i:'KW', av:'instagram/kaimanwong', who:'Camera and tech reviewer.', idea:'An honest hands-on review of Specs with iYiYi.',
+    embeds:[IG('https://www.instagram.com/kaimanwong/')], links:[['YouTube','https://www.youtube.com/@KaiManWong']] },
 ];
 document.getElementById('creatorGrid').innerHTML = CREATORS.map(c => `
   <div class="cr reveal ${c.span ? 'span' : ''}">
