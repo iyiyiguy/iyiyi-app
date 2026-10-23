@@ -67,12 +67,38 @@ nav .links a{color:var(--muted)} nav .links a:hover{color:#fff;text-decoration:n
 .letter strong{color:#fff}
 .sig-inline{margin-top:20px;font:600 15px var(--cond);letter-spacing:.08em;text-transform:uppercase;color:var(--dim)}
 
+/* intro + sample profile card */
+.hi-grid{display:grid;grid-template-columns:1.15fr .85fr;gap:56px;align-items:center}
+@media(max-width:900px){.hi-grid{grid-template-columns:1fr;gap:40px}}
+.pwrap{position:relative;justify-self:center;width:100%;max-width:380px}
+.pwrap .plabel{font:600 12px var(--cond);letter-spacing:.18em;text-transform:uppercase;color:var(--dim);margin:0 0 10px 6px}
+.pcard{border-radius:28px;overflow:hidden;background:var(--s1);border:1px solid rgba(143,162,255,.25);box-shadow:0 30px 80px rgba(0,0,0,.5),0 0 0 1px rgba(255,255,255,.03),0 0 60px rgba(143,162,255,.12);transform:rotate(1.5deg)}
+.pcard .cov{height:120px;background:center/cover;position:relative}
+.pcard .cov::after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,transparent 40%,var(--s1))}
+.pcard .near{position:absolute;top:12px;right:12px;z-index:1;display:flex;align-items:center;gap:6px;padding:5px 10px;border-radius:999px;background:rgba(12,15,26,.75);backdrop-filter:blur(6px);font:600 12px var(--cond);letter-spacing:.06em;color:#fff}
+.pcard .body{padding:0 20px 20px;margin-top:-44px;position:relative}
+.pcard .pav{width:84px;height:84px;border-radius:50%;background:center/cover;border:4px solid var(--s1);box-shadow:0 0 0 2px var(--accent)}
+.pcard .nm{display:flex;align-items:center;gap:8px;margin-top:10px;font-weight:800;font-size:20px;letter-spacing:-.01em}
+.pcard .ck{width:18px;height:18px;border-radius:50%;background:var(--accent);color:#0c0f1a;font-size:11px;display:grid;place-items:center;font-weight:900}
+.pcard .hd{color:var(--muted);font-size:14px}
+.pcard .bio{color:#dfe5f3;font-size:14px;margin:10px 0 0}
+.pcard .stats{display:flex;gap:18px;margin:14px 0}
+.pcard .stats b{display:block;font-size:17px;color:#fff}.pcard .stats span{font-size:12px;color:var(--muted)}
+.pcard .soc{display:flex;gap:7px;flex-wrap:wrap}
+.pcard .soc i{width:34px;height:34px;border-radius:10px;display:grid;place-items:center;font:800 10px Inter,sans-serif;font-style:normal;color:#fff}
+.pcard .acts{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:14px}
+.pcard .acts span{padding:10px;border-radius:999px;text-align:center;font-weight:700;font-size:14px;border:1px solid rgba(255,255,255,.18);background:var(--s2)}
+.pcard .acts .fol{background:var(--accent);border-color:var(--accent);color:#0c0f1a}
+.pcard .grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;margin-top:14px;border-radius:12px;overflow:hidden}
+.pcard .grid3 div{aspect-ratio:1;background:center/cover}
+@media(max-width:600px){.pcard{transform:none}}
+
 /* what */
 .split{display:grid;grid-template-columns:1.05fr .95fr;gap:56px;align-items:center}
 @media(max-width:880px){.split{grid-template-columns:1fr;gap:36px}}
 .stat{border:1px solid var(--line);border-radius:28px;background:linear-gradient(160deg,var(--s2),var(--s1));padding:34px;position:relative;overflow:hidden}
-.stat .big{font:700 clamp(84px,12vw,148px)/.9 var(--hud);letter-spacing:-.02em}
-.stat .big small{font-size:.32em;color:var(--muted);letter-spacing:.04em;margin-left:.2em}
+.stat .big{font:700 clamp(56px,7vw,104px)/.9 var(--hud);letter-spacing:-.02em;white-space:nowrap}
+.stat .big small{display:block;font-size:.24em;color:var(--muted);letter-spacing:.14em;text-transform:uppercase;margin:10px 0 0 4px}
 .stat .vs{display:flex;align-items:flex-end;gap:22px;flex-wrap:wrap}
 .stat .of{color:var(--dim)} .stat .met{color:var(--cyan);text-shadow:0 0 30px rgba(57,213,255,.5)}
 .dots{display:grid;grid-template-columns:repeat(40,1fr);gap:3px;margin-top:26px}
@@ -253,13 +279,30 @@ footer .links{margin-top:22px}
   </div>
 </header>
 
-<section id="hi"><div class="wrap">
+<section id="hi"><div class="wrap"><div class="hi-grid"><div>
   <div class="kick">Following up on our call</div>
   <div class="letter reveal">
     <p>Hi Jean, here's the overview of <strong>iYiYi</strong> and how it connects to <strong>Snap</strong>. Instead of a long email, I made it a page, so you can see the Specs games as 3D holograms. Drag any of them to look around.</p>
     <div class="sig-inline">— Colin Phillips, founder of iYiYi</div>
   </div>
-</div></section>
+  </div>
+  <div class="pwrap reveal">
+    <div class="plabel">A sample iYiYi profile</div>
+    <div class="pcard" aria-label="Sample iYiYi profile card">
+      <div class="cov" style="background-image:url(img/card-02.jpg)"><span class="near"><span class="dot"></span>40 ft away</span></div>
+      <div class="body">
+        <div class="pav" style="background-image:url(img/card-01.jpg)"></div>
+        <div class="nm">Maya V. <span class="ck">✓</span></div>
+        <div class="hd">@maya.v · Creator · Las Vegas</div>
+        <p class="bio">Photographer &amp; streetwear. Say hi if you see me around.</p>
+        <div class="stats"><div><b>12.4k</b><span>followers</span></div><div><b>318</b><span>following</span></div><div><b>86</b><span>posts</span></div></div>
+        <div class="soc"><i style="background:#c13584">IG</i><i style="background:#000;border:1px solid #25f4ee;color:#25f4ee">TT</i><i style="background:#e00028">YT</i><i style="background:#fffc00;color:#000">SC</i><i style="background:#14171a;border:1px solid #444">X</i><i style="background:#1db954;color:#000">SP</i></div>
+        <div class="acts"><span class="fol">Follow</span><span>Message</span></div>
+        <div class="grid3"><div style="background-image:url(img/card-03.jpg)"></div><div style="background-image:url(img/card-04.jpg)"></div><div style="background-image:url(img/card-05.jpg)"></div></div>
+      </div>
+    </div>
+  </div>
+</div></div></section>
 
 <section id="what"><div class="wrap">
   <div class="split">
