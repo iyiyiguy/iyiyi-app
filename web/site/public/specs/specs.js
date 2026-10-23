@@ -638,6 +638,82 @@ function lavaTexture() {
   for (let i = 0; i < 60; i++) { g.fillStyle = `rgba(40,8,0,${0.35 + Math.random() * 0.5})`; g.beginPath(); g.ellipse(Math.random() * 256, Math.random() * 256, 8 + Math.random() * 26, 5 + Math.random() * 14, Math.random() * 3, 0, 7); g.fill(); }
   const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace; t.wrapS = t.wrapT = THREE.RepeatWrapping; return t;
 }
+// molten lava: domain-warped noise, flowing crust with glowing cracks
+function lavaMaterial(sx, sy) {
+  return new THREE.ShaderMaterial({
+    uniforms: { t: { value: 0 }, scale: { value: new THREE.Vector2(sx, sy) } }, toneMapped: false, fog: false,
+    vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+    fragmentShader: `uniform float t; uniform vec2 scale; varying vec2 vUv;
+      float h(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+      float n(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 * f); return mix(mix(h(i), h(i + vec2(1, 0)), u.x), mix(h(i + vec2(0, 1)), h(i + vec2(1, 1)), u.x), u.y); }
+      float fbm(vec2 p){ float v = 0.0, a = 0.5; for (int i = 0; i < 6; i++) { v += a * n(p); p = p * 2.02 + 3.1; a *= 0.5; } return v; }
+      void main(){
+        vec2 p = vUv * scale; p.y += t * 0.12;
+        vec2 q = vec2(fbm(p + vec2(0.0, t * 0.04)), fbm(p + vec2(5.2, 1.3) - t * 0.03));
+        vec2 r = vec2(fbm(p + 3.0 * q + vec2(1.7, 9.2) + t * 0.02), fbm(p + 3.0 * q + vec2(8.3, 2.8)));
+        float f = fbm(p + 2.5 * r);
+        float crust = smoothstep(0.30, 0.52, f);
+        float ridge = 1.0 - abs(fbm(p * 2.6 + r * 2.0) * 2.0 - 1.0);
+        float crack = smoothstep(0.88, 0.98, ridge) * crust;
+        float heat = clamp((1.0 - crust) + crack * 0.9, 0.0, 1.0);
+        vec3 c = mix(vec3(0.035, 0.018, 0.014), vec3(0.16, 0.05, 0.03), fbm(p * 6.0));
+        c = mix(c, vec3(0.6, 0.07, 0.0), smoothstep(0.05, 0.45, heat));
+        c = mix(c, vec3(1.0, 0.36, 0.02), smoothstep(0.4, 0.8, heat));
+        c = mix(c, vec3(1.0, 0.82, 0.38), smoothstep(0.82, 1.0, heat));
+        c *= 0.9 + 0.2 * sin(t * 1.7 + f * 12.0);
+        gl_FragColor = vec4(c * 1.05, 1.0);
+      }`,
+  });
+}
+// smoky volcanic mountains rising behind the city, with lava running down and ash in the air
+function volcanicRange(k) {
+  const rock = new THREE.MeshStandardMaterial({ color: 0x241e1b, roughness: 1 });
+  const mountain = (x, z, r, h, seed, volcano = false) => {
+    const g = new THREE.ConeGeometry(r, h, 128, 32, true); const p = g.attributes.position;
+    for (let i = 0; i < p.count; i++) {
+      const vx = p.getX(i), vy = p.getY(i), vz = p.getZ(i), a = Math.atan2(vz, vx), t = (vy + h / 2) / h;
+      const rough = 1 + 0.16 * Math.sin(a * 5 + seed) + 0.08 * Math.sin(a * 13 + seed * 2 + vy * 0.05) + 0.05 * Math.sin(a * 31 + vy * 0.3) + 0.03 * Math.sin(a * 67 + vy * 0.7);
+      const crater = volcano && t > 0.9 ? 1.6 : 1; p.setX(i, vx * rough * crater); p.setZ(i, vz * rough * crater); p.setY(i, vy + Math.sin(a * 7 + seed) * h * 0.03 * (1 - t));
+    }
+    g.computeVertexNormals(); const m = new THREE.Mesh(g, rock); m.position.set(x, h / 2 - 4, z); k.root.add(m); return m;
+  };
+  mountain(-70, -200, 70, 75, 3.7); mountain(95, -205, 75, 90, 2.1); mountain(-150, -190, 60, 55, 1.3);
+  const V0 = V(18, 0, -190), H = 125; mountain(V0.x, V0.z, 85, H, 0.7, true);
+  const top = V(V0.x, H - 4, V0.z);
+  // glowing crater + lava streams down the flanks
+  const glow = new THREE.Mesh(new THREE.SphereGeometry(9, 20, 12), new THREE.MeshBasicMaterial({ color: 0xff7a1a, toneMapped: false })); glow.position.copy(top).setY(H - 8); k.root.add(glow);
+  const cl = new THREE.PointLight(0xff5a10, 4000, 260, 1.6); cl.position.copy(top).setY(H + 6); k.root.add(cl);
+  const lavaFlow = new THREE.MeshBasicMaterial({ color: 0xff6a10, toneMapped: false });
+  [[-0.5, 0], [0.15, 1], [0.8, 2], [1.5, 3]].forEach(([a, s]) => {
+    const pts = []; for (let i = 0; i <= 24; i++) { const t = i / 24, rr = 6 + t * 80, aa = a + Math.PI / 2 + Math.sin(t * 6 + s) * 0.08; pts.push(V(V0.x + Math.cos(aa) * rr, H - 6 - t * (H - 2), V0.z + Math.sin(aa) * rr * 0.6 + 18 * t)); }
+    k.root.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 60, 1.6 - s * 0.2, 6), lavaFlow));
+  });
+  // eruption plume and drifting smoke
+  const smk = document.createElement('canvas'); smk.width = smk.height = 128; const sg = smk.getContext('2d');
+  for (let i = 0; i < 18; i++) { const x = 64 + (Math.random() - 0.5) * 40, y = 64 + (Math.random() - 0.5) * 40, r = 20 + Math.random() * 30; const gr = sg.createRadialGradient(x, y, 0, x, y, r); gr.addColorStop(0, 'rgba(60,52,48,0.35)'); gr.addColorStop(1, 'rgba(60,52,48,0)'); sg.fillStyle = gr; sg.fillRect(0, 0, 128, 128); }
+  const sTex = new THREE.CanvasTexture(smk);
+  for (let i = 0; i < 46; i++) {
+    const m = new THREE.SpriteMaterial({ map: sTex, transparent: true, depthWrite: false, fog: false, color: i % 5 === 0 ? 0xc0643a : 0x8a7f78 }); const sp = new THREE.Sprite(m); k.root.add(sp);
+    const ph = Math.random(), dx = (Math.random() - 0.5) * 30;
+    k.ups.push(t => { const u = (t * 0.03 + ph) % 1; sp.position.set(top.x + dx * u - u * 60, top.y + 6 + u * 140, top.z + u * 25); const sc = 30 + u * 140; sp.scale.set(sc, sc, 1); m.opacity = 0.85 * Math.sin(Math.PI * Math.min(1, u * 1.4)); });
+  }
+  for (let i = 0; i < 14; i++) {
+    const m = new THREE.SpriteMaterial({ map: sTex, transparent: true, depthWrite: false, fog: false, color: 0x6e625c }); const sp = new THREE.Sprite(m); k.root.add(sp);
+    const ph = Math.random(), z = -30 - Math.random() * 110, y = 10 + Math.random() * 30;
+    k.ups.push(t => { const u = (t * 0.01 + ph) % 1; sp.position.set(-150 + u * 300, y, z); sp.scale.set(70, 40, 1); m.opacity = 0.55 * Math.sin(Math.PI * u); });
+  }
+  // smoky sky: a translucent ash layer over the real sky
+  const haze = new THREE.Mesh(new THREE.SphereGeometry(180, 48, 24), new THREE.ShaderMaterial({
+    transparent: true, depthWrite: false, side: THREE.BackSide, toneMapped: false,
+    vertexShader: 'varying vec3 vP; void main(){ vP = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+    fragmentShader: 'varying vec3 vP; void main(){ float y = vP.y; vec3 lo = vec3(0.55, 0.22, 0.08), hi = vec3(0.12, 0.10, 0.10); vec3 c = mix(lo, hi, smoothstep(-0.02, 0.45, y)); float a = mix(0.42, 0.62, smoothstep(0.0, 0.5, y)) * smoothstep(-0.25, 0.02, y); gl_FragColor = vec4(c, a); }',
+  })); haze.renderOrder = -0.5; k.root.add(haze);
+  // falling ash around you
+  const N = 900, pos = new Float32Array(N * 3); for (let i = 0; i < N; i++) { pos[i * 3] = (Math.random() - 0.5) * 40; pos[i * 3 + 1] = Math.random() * 14; pos[i * 3 + 2] = 4 - Math.random() * 44; }
+  const ag = new THREE.BufferGeometry(); ag.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  const ash = new THREE.Points(ag, new THREE.PointsMaterial({ color: 0x77706b, size: 0.03, transparent: true, opacity: 0.6, depthWrite: false })); k.root.add(ash);
+  let last = 0; k.ups.push(t => { const dt = Math.min(0.1, t - last); last = t; for (let i = 0; i < N; i++) { let y = pos[i * 3 + 1] - dt * (0.5 + (i % 7) * 0.08); pos[i * 3] += Math.sin(t + i) * dt * 0.2; if (y < 0) y += 14; pos[i * 3 + 1] = y; } ag.attributes.position.needsUpdate = true; });
+}
 function realLava() {
   const N = 512, cv = document.createElement('canvas'); cv.width = cv.height = N; const g = cv.getContext('2d');
   g.fillStyle = '#ff7a10'; g.fillRect(0, 0, N, N);
@@ -683,10 +759,10 @@ Object.assign(SCENES, {
   // AR: the real street turns to lava; pedestrians keep to the sidewalk
   nature(k) {
     const RX0 = 3.3, RX1 = 9.6, RW = RX1 - RX0, RC = (RX0 + RX1) / 2;
-    const lt = realLava(); lt.repeat.set(RW / 6, 70 / 6);
-    const lavaM = new THREE.MeshBasicMaterial({ map: lt, toneMapped: false });
+    const lavaM = lavaMaterial(RW / 2.6, 90 / 2.6);
     const river = new THREE.Mesh(new THREE.PlaneGeometry(RW, 90), lavaM); river.rotation.x = -Math.PI / 2; river.position.set(RC, 0.02, -40); k.root.add(river);
-    k.ups.push(t => { lt.offset.y = -t * 0.02; lt.offset.x = Math.sin(t * 0.25) * 0.03; });
+    k.ups.push(t => { lavaM.uniforms.t.value = t; });
+    volcanicRange(k);
     // glowing edge where lava meets the curb + heat haze
     [RX0, RX1].forEach(x => { const e = new THREE.Mesh(new THREE.PlaneGeometry(0.9, 90), k.holo(0xff6a00, 0.55)); e.rotation.x = -Math.PI / 2; e.position.set(x, 0.03, -40); k.root.add(e); });
     for (let z = 0; z > -40; z -= 8) { const L = new THREE.PointLight(0xff6a1a, 14, 10, 1.8); L.position.set(RC - 2, 0.6, z); k.root.add(L); }
@@ -707,7 +783,7 @@ Object.assign(SCENES, {
     const gm = k.label('GOOGLE MAPS · MAIN ST', C.cyan, { w: 1.6, style: 'glass', sub: 'REAL STREETS · LAVA MODE' }); gm.position.set(-1.4, 1.9, -6);
     const hot = k.label('1,200°C', 0xff6a00, { w: 1, style: 'glass', sub: 'DON\'T STEP IN' }); hot.position.set(RX0 + 1.4, 1.1, -4.5); k.bob(hot, 0.03);
     k.at(k.person({ ...RQ, tag: '@colin' }), 0, 0, 0, Math.PI);
-    return { dist: 14, h: 6, sky: 'lava' };
+    return { dist: 14, h: 6, sky: 'lava', fog: [0x5a4034, 70, 270] };
   },
 
   workout(k) {
@@ -848,7 +924,8 @@ export class SceneView {
     this.k = makeKit(this.root, this.fpMode); this.k.ar = !!pano; const cfg = SCENES[name](this.k) || {};
     const kind = cfg.sky || SKY[name] || 'day', d = SKYDEF[kind]; this.exp = d.exp;
     sc.environment = envFor(kind);
-    if (!pano) sc.fog = new THREE.Fog(d.fog, kind === 'indoor' ? 14 : 30, kind === 'indoor' ? 40 : 110);
+    if (cfg.fog) sc.fog = new THREE.Fog(...cfg.fog);
+    else if (!pano) sc.fog = new THREE.Fog(d.fog, kind === 'indoor' ? 14 : 30, kind === 'indoor' ? 40 : 110);
     sc.add(new THREE.HemisphereLight(d.hemi[0], d.hemi[1], d.hemi[2]));
     const sun = new THREE.DirectionalLight(d.sun[0], d.sun[1]); sun.position.set(...d.sunPos); sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048); sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.02;
     Object.assign(sun.shadow.camera, { left: -12, right: 12, top: 12, bottom: -12, near: 0.5, far: 60 }); sc.add(sun);
