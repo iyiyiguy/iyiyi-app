@@ -1,0 +1,371 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="iYiYi shows your social media to everyone within 150 feet. A partnership proposal for VaynerMedia and VaynerSports.">
+<meta property="og:title" content="iYiYi × VaynerMedia">
+<meta property="og:description" content="Everyone in the room, one tap away. A partnership proposal for VaynerMedia and VaynerSports.">
+<meta property="og:image" content="https://iyiyi.xyz/vayner/screens.jpg">
+<meta property="og:url" content="https://iyiyi.xyz/vayner">
+<link rel="icon" href="/favicon.png">
+<title>iYiYi × VaynerMedia</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap">
+<style>
+html { padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); background: #0b0a1a; }
+body { margin: 0; }
+img { max-width: 100%; }
+/* Layout: one long dark scroll like a pitch deck, each section a "slide" band; 150 ft radar rings are the recurring motif. Single dark look by choice (matches the app). */
+:root {
+  --ink: #0b0a1a;
+  --panel: #15132b;
+  --line: #2a2650;
+  --fg: #f3f0ff;
+  --muted: #a9a3c9;
+  --cyan: #46dcff;
+  --pink: #ff4fb8;
+  --violet: #8f7bff;
+  --display: "Bricolage Grotesque", "Avenir Next", "Segoe UI", sans-serif;
+  --body: "Plus Jakarta Sans", "Segoe UI", system-ui, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } * { animation: none !important; } }
+body { background: var(--ink); color: var(--fg); font-family: var(--body); font-size: 17px; line-height: 1.6; overflow-x: hidden; }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--ink); }
+a { color: var(--cyan); }
+a:focus-visible, button:focus-visible { outline: 2px solid var(--cyan); outline-offset: 3px; border-radius: 4px; }
+.wrap { max-width: 1120px; margin: 0 auto; padding-left: max(20px, env(safe-area-inset-left, 0px)); padding-right: max(20px, env(safe-area-inset-right, 0px)); }
+section { padding-block: 88px; border-top: 1px solid var(--line); position: relative; }
+h1, h2, h3 { font-family: var(--display); text-wrap: balance; margin: 0; line-height: 1.05; }
+h2 { font-size: clamp(34px, 5vw, 56px); font-weight: 800; letter-spacing: -0.02em; max-width: 18ch; }
+h3 { font-size: 22px; font-weight: 700; line-height: 1.2; }
+p { margin: 0; }
+.eyebrow { font-family: var(--mono); font-size: 13px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--pink); margin-bottom: 18px; display: block; }
+.lede { color: var(--muted); font-size: 19px; max-width: 62ch; margin-top: 20px; }
+.grad { background: linear-gradient(90deg, var(--cyan), var(--violet) 50%, var(--pink)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+
+/* nav */
+nav.top { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20; background: color-mix(in srgb, var(--ink) 86%, transparent); backdrop-filter: blur(12px); border-bottom: 1px solid var(--line); }
+nav.top .wrap { display: flex; align-items: center; gap: 18px; padding-block: 12px; }
+nav.top img { width: 34px; height: auto; }
+nav.top .links { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; min-width: 0; }
+nav.top .links a { color: var(--muted); text-decoration: none; font-size: 14px; font-weight: 600; padding: 6px 12px; border-radius: 999px; white-space: nowrap; }
+nav.top .links a:hover { color: var(--fg); background: var(--panel); }
+
+/* hero */
+.hero { position: relative; border-top: 0; padding-block: 96px 72px; overflow: hidden; }
+.rings { position: absolute; right: -180px; top: 40px; width: 720px; height: 720px; pointer-events: none; opacity: 0.55; }
+.rings span { position: absolute; inset: 0; border-radius: 50%; border: 1.5px solid var(--violet); opacity: 0.35; animation: ping 6s ease-out infinite; }
+.rings span:nth-child(2) { inset: 18%; border-color: var(--cyan); animation-delay: 1.5s; }
+.rings span:nth-child(3) { inset: 36%; border-color: var(--pink); animation-delay: 3s; }
+@keyframes ping { 0% { transform: scale(0.92); opacity: 0.45; } 70% { opacity: 0.2; } 100% { transform: scale(1.04); opacity: 0.35; } }
+.hero .pair { display: flex; align-items: center; gap: 14px; font-family: var(--mono); font-size: 14px; color: var(--muted); margin-bottom: 28px; }
+.hero .pair img { width: 56px; }
+.hero h1 { font-size: clamp(48px, 8.4vw, 104px); font-weight: 800; letter-spacing: -0.03em; max-width: 12ch; position: relative; }
+.hero .lede { font-size: 21px; }
+.chips { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 32px; }
+.chip { display: inline-flex; align-items: center; gap: 8px; border: 1px solid var(--line); background: var(--panel); border-radius: 999px; padding: 9px 16px; font-weight: 600; font-size: 15px; color: var(--fg); text-decoration: none; }
+.chip:hover { border-color: var(--violet); }
+.chip .dot { width: 8px; height: 8px; border-radius: 50%; background: #3ee08f; box-shadow: 0 0 10px #3ee08f; }
+
+/* problem */
+.two { display: grid; grid-template-columns: 1.05fr 1fr; gap: 56px; align-items: center; }
+.two > * { min-width: 0; }
+.dots { display: grid; grid-template-columns: repeat(40, 1fr); gap: 4px; padding: 22px; background: var(--panel); border: 1px solid var(--line); border-radius: 20px; }
+.dots i { aspect-ratio: 1; border-radius: 50%; background: #2c2852; }
+.dots i.on { background: var(--pink); box-shadow: 0 0 6px var(--pink); }
+.legend { display: flex; gap: 22px; margin-top: 14px; font-size: 14px; color: var(--muted); flex-wrap: wrap; }
+.legend b { color: var(--fg); font-family: var(--mono); }
+.stat { font-family: var(--display); font-size: clamp(64px, 9vw, 112px); font-weight: 800; line-height: 1; letter-spacing: -0.03em; }
+.stat small { font-size: 0.32em; color: var(--muted); font-weight: 500; letter-spacing: 0; display: block; margin-top: 8px; font-family: var(--body); }
+.cases { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; margin-top: 56px; }
+.case { border-left: 2px solid var(--line); padding: 4px 0 4px 20px; }
+.case h3 { font-size: 19px; margin-bottom: 8px; }
+.case p { color: var(--muted); font-size: 16px; }
+
+/* how */
+.steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 28px; margin-top: 48px; }
+.step .n { font-family: var(--mono); color: var(--cyan); font-size: 14px; display: block; margin-bottom: 10px; }
+.step p { color: var(--muted); margin-top: 8px; }
+.strip { margin-top: 56px; overflow-x: auto; border-radius: 18px; border: 1px solid var(--line); scrollbar-color: var(--violet) transparent; }
+.strip img { display: block; max-width: none; height: min(560px, 70vh); width: auto; }
+.cap { font-size: 14px; color: var(--muted); margin-top: 12px; }
+
+/* clients */
+.feat { display: grid; grid-template-columns: repeat(2, 1fr); gap: 18px; margin-top: 48px; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 20px; padding: 28px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.card p { color: var(--muted); }
+.card.hl { background: linear-gradient(150deg, #2a1650, #15132b 70%); border-color: #4a2f86; }
+.badge { align-self: flex-start; font-family: var(--mono); font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; padding: 4px 10px; border-radius: 999px; border: 1px solid var(--pink); color: var(--pink); }
+.badge.live { border-color: #3ee08f; color: #3ee08f; }
+.metrics { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
+.metrics span { font-size: 14px; background: #0f0d22; border: 1px solid var(--line); border-radius: 8px; padding: 5px 10px; color: var(--fg); }
+.note { font-size: 14px; color: var(--muted); border-top: 1px dashed var(--line); padding-top: 12px; margin-top: 6px; }
+
+/* unfair advantage */
+.adv { margin-top: 48px; display: grid; gap: 0; border: 1px solid var(--line); border-radius: 20px; overflow: hidden; }
+.adv .row { display: grid; grid-template-columns: 1fr 28px 1fr; gap: 18px; align-items: center; padding: 22px 26px; border-top: 1px solid var(--line); background: var(--panel); }
+.adv .row:first-child { border-top: 0; }
+.adv .row.head { background: #0f0d22; font-family: var(--mono); font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); padding-block: 14px; }
+.adv .row > * { min-width: 0; }
+.adv h3 { font-size: 19px; }
+.adv .arrow { color: var(--pink); font-size: 20px; text-align: center; }
+.adv p { color: var(--muted); font-size: 16px; }
+.quote { margin-top: 28px; font-family: var(--display); font-size: clamp(22px, 2.6vw, 30px); font-weight: 500; max-width: 34ch; line-height: 1.25; }
+
+/* ads */
+.ads { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 14px; margin-top: 48px; }
+.ad { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 20px; display: flex; flex-direction: column; gap: 8px; }
+.ad .who { font-family: var(--mono); font-size: 12px; color: var(--cyan); letter-spacing: 0.06em; text-transform: uppercase; }
+.ad h3 { font-size: 18px; }
+.ad p { color: var(--muted); font-size: 15px; }
+.ad.flag { border-color: #4a2f86; background: linear-gradient(150deg, #2a1650, #15132b 70%); }
+
+/* model */
+.model { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-top: 48px; }
+.price { font-family: var(--display); font-size: 40px; font-weight: 800; line-height: 1; }
+.price small { font-size: 15px; color: var(--muted); font-weight: 500; font-family: var(--body); }
+
+/* ask */
+.ladder { list-style: none; padding: 0; margin: 48px 0 0; display: grid; gap: 14px; counter-reset: s; }
+.ladder li { counter-increment: s; display: grid; grid-template-columns: 64px 1fr; gap: 20px; align-items: start; background: var(--panel); border: 1px solid var(--line); border-radius: 18px; padding: 22px 24px; }
+.ladder li::before { content: counter(s); font-family: var(--display); font-weight: 800; font-size: 40px; line-height: 1; color: var(--violet); }
+.ladder li:first-child { border-color: var(--pink); }
+.ladder li:first-child::before { color: var(--pink); }
+.ladder li > div { min-width: 0; }
+.ladder p { color: var(--muted); margin-top: 6px; }
+
+/* about */
+.roles { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 18px; }
+.roles span { border: 1px solid var(--violet); border-radius: 999px; padding: 8px 16px; font-weight: 600; font-size: 15px; }
+.skills { list-style: none; padding: 0; margin: 18px 0 0; display: grid; gap: 10px; }
+.skills li { padding-left: 22px; position: relative; color: var(--muted); }
+.skills li::before { content: ""; position: absolute; left: 0; top: 0.62em; width: 8px; height: 8px; border-radius: 50%; background: var(--cyan); }
+
+footer { border-top: 1px solid var(--line); padding-block: 56px 72px; }
+footer .links { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-top: 28px; }
+footer .links a { display: block; background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 18px; text-decoration: none; color: var(--fg); min-width: 0; overflow-wrap: anywhere; }
+footer .links a b { display: block; font-family: var(--display); font-size: 18px; }
+footer .links a span { font-size: 14px; color: var(--cyan); }
+
+@media (max-width: 860px) {
+  section { padding-block: 64px; }
+  .two, .feat { grid-template-columns: 1fr; gap: 32px; }
+  .cases, .steps { grid-template-columns: 1fr; gap: 22px; }
+  .model, footer .links { grid-template-columns: repeat(2, 1fr); }
+  .adv .row { grid-template-columns: 1fr; gap: 6px; }
+  .adv .arrow { display: none; }
+  .adv .row.head { display: none; }
+  .rings { width: 460px; height: 460px; right: -220px; top: 10px; }
+  .dots { grid-template-columns: repeat(25, 1fr); gap: 3px; padding: 14px; }
+}
+@media (max-width: 480px) {
+  body { font-size: 16px; }
+  .model, footer .links { grid-template-columns: 1fr; }
+  .ladder li { grid-template-columns: 40px 1fr; gap: 12px; }
+  .ladder li::before { font-size: 30px; }
+}
+</style>
+</head>
+<body>
+
+
+<nav class="top" aria-label="Sections">
+  <div class="wrap">
+    <img src="/logo.png" alt="iYiYi">
+    <div class="links">
+      <a href="#problem">Problem</a>
+      <a href="#how">How it works</a>
+      <a href="#clients">For clients</a>
+      <a href="#advantage">Unfair advantage</a>
+      <a href="#ads">Ad campaign</a>
+      <a href="#model">Model</a>
+      <a href="#ask">The ask</a>
+      <a href="#colin">About me</a>
+    </div>
+  </div>
+</nav>
+
+<header class="hero">
+  <div class="rings" aria-hidden="true"><span></span><span></span><span></span></div>
+  <div class="wrap">
+    <div class="pair"><img src="/logo.png" alt="iYiYi logo"> <span>iYiYi × VaynerMedia<br>Prepared for AJ Vaynerchuk, co-founder of VaynerMedia and VaynerSports</span></div>
+    <h1>Everyone in the room, <span class="grad">one tap away.</span></h1>
+    <p class="lede">iYiYi shows your social media to everyone within 150 feet. People add links to all their socials and websites, so they can actually connect with the creators, brands and people around them, and reach back out after they leave.</p>
+    <div class="chips">
+      <a class="chip" href="https://apps.apple.com/app/id6445996160" target="_blank" rel="noopener"><span class="dot"></span>Live on iOS</a>
+      <a class="chip" href="https://play.google.com/store/apps/details?id=com.iyiyi.app" target="_blank" rel="noopener"><span class="dot"></span>Live on Android</a>
+      <a class="chip" href="https://app.iyiyi.xyz" target="_blank" rel="noopener"><span class="dot"></span>Live on the web</a>
+    </div>
+  </div>
+</header>
+
+<section id="problem">
+  <div class="wrap">
+    <span class="eyebrow">The problem</span>
+    <div class="two">
+      <div>
+        <h2>You meet 50 people. The other 950 walk out the door.</h2>
+        <p class="lede">At an event with 1,000 people, you'll probably only speak to about 50 of them. Not because you don't want to, because there isn't time. The founders, creators, investors and customers in the rest of the room were a few feet away, and you never knew they were there.</p>
+      </div>
+      <div>
+        <div class="dots" id="dots" role="img" aria-label="1,000 dots, 50 highlighted: the people you actually meet at a 1,000-person event"></div>
+        <div class="legend"><span><b>1,000</b> people at the event</span><span><b style="color:var(--pink)">50</b> you actually talk to</span></div>
+      </div>
+    </div>
+    <div class="cases">
+      <div class="case"><h3>Events and conferences</h3><p>See 1,000 potential investors at a business event, keep track of everyone who was there, and get a chance to reach back out.</p></div>
+      <div class="case"><h3>Local businesses</h3><p>A customer walks in, pays cash and leaves. Today the business has no way to reach them again. iYiYi gives it one.</p></div>
+      <div class="case"><h3>Brand activations</h3><p>People walk past the booth and never connect with the brand. With iYiYi they follow it on every platform before they leave.</p></div>
+    </div>
+  </div>
+</section>
+
+<section id="how">
+  <div class="wrap">
+    <span class="eyebrow">How it works</span>
+    <h2>Open the app. See who's around you.</h2>
+    <div class="steps">
+      <div class="step"><span class="n">Step 1</span><h3>Set up your Social ID</h3><p>Add Instagram, TikTok, YouTube, Snapchat, LinkedIn, Spotify, your website and more to one profile.</p></div>
+      <div class="step"><span class="n">Step 2</span><h3>See everyone within 150 ft</h3><p>Everyone on iYiYi nearby shows up with their photo, distance and socials. A live map shows people, spots and events.</p></div>
+      <div class="step"><span class="n">Step 3</span><h3>Follow everywhere in one tap</h3><p>Follow someone on every platform at once, see their posts in the nearby feed, and reach back out any time.</p></div>
+    </div>
+    <div class="strip" tabindex="0" aria-label="App screenshots, scroll sideways">
+      <img src="/vayner/screens.jpg" alt="Six iYiYi app screens: nearby people, follow everywhere, a profile, the live map, the nearby feed and the arcade">
+    </div>
+    <p class="cap">Real app screens. Scroll sideways to see all six. Also included: an arcade with real-life Laser Tag and party games that get strangers playing together.</p>
+  </div>
+</section>
+
+<section id="clients">
+  <div class="wrap">
+    <span class="eyebrow">For VaynerMedia clients</span>
+    <h2>Every activation becomes a room where people connect.</h2>
+    <div class="feat">
+      <div class="card"><span class="badge live">Live today</span><h3>Brands get followed everywhere</h3><p>Everyone at the event or in the store finds the brand on iYiYi and follows it on every platform in one tap, so the brand keeps the audience after the event ends.</p></div>
+      <div class="card"><span class="badge live">Live today</span><h3>Attendees meet each other</h3><p>People at the event see who's there and connect, which makes the activation the place where it happened. Arcade games give them a reason to start talking.</p></div>
+      <div class="card hl" style="grid-column: 1 / -1"><span class="badge">In development</span><h3>Analytics dashboard for brands and agencies</h3><p>We're building analytics on top of the social and location data iYiYi already collects. Brands and VaynerMedia's teams would see who came, which platforms those people are on and where customers come from, then use it to plan the next campaign and reach those people again.</p>
+        <div class="metrics"><span>Visitors per event or store</span><span>Platforms your audience uses</span><span>New follows per platform</span><span>Where customers come from</span><span>Repeat visitors</span></div>
+        <p class="note">Users opt in to sharing. Brands see location as totals, such as the areas most visitors came from, never one person's live location.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="advantage">
+  <div class="wrap">
+    <span class="eyebrow">Your unfair advantage</span>
+    <h2>What you already have is what iYiYi needs.</h2>
+    <p class="lede">AJ co-founded VaynerMedia with Gary Vaynerchuk in 2009. It's a global creative and media agency with 15 offices, from New York and Los Angeles to London, Tokyo and Sydney, and part of the VaynerX family alongside Vayner Speakers. He also co-founded VaynerSports, which represents professional athletes.</p>
+    <p class="quote">You've said you like working with companies where you have an <span class="grad">unfair advantage</span>. Here's yours with iYiYi.</p>
+    <div class="adv">
+      <div class="row head"><span>What Vayner already has</span><span></span><span>What it does for iYiYi</span></div>
+      <div class="row"><h3>Relationships with big brands</h3><span class="arrow">→</span><p>The first brand partners and activations, the customers for the analytics dashboard.</p></div>
+      <div class="row"><h3>Local businesses and creators</h3><span class="arrow">→</span><p>The two groups iYiYi is built for: businesses that want to keep their customers and creators who want to grow.</p></div>
+      <div class="row"><h3>VaynerMedia, a marketing company</h3><span class="arrow">→</span><p>The strategy and distribution to put iYiYi in front of the right audiences.</p></div>
+      <div class="row"><h3>An events and speaking company</h3><span class="arrow">→</span><p>Vayner Speakers events as the first live test: a room full of people who came to meet each other.</p></div>
+      <div class="row"><h3>VaynerSports and its athletes</h3><span class="arrow">→</span><p>Athletes are creators with huge followings. Game days, meet-and-greets and athlete events put thousands of fans in one place.</p></div>
+      <div class="row"><h3>Celebrity connections</h3><span class="arrow">→</span><p>A few well-known people on iYiYi at an event gives everyone else a reason to open the app.</p></div>
+      <div class="row"><h3>A media company that makes professional ads</h3><span class="arrow">→</span><p>Turning the iYiYi campaign concepts below into polished ads that run at scale.</p></div>
+    </div>
+  </div>
+</section>
+
+<section id="ads">
+  <div class="wrap">
+    <span class="eyebrow">The ad campaign</span>
+    <h2>Ten concepts, written and ready to produce.</h2>
+    <p class="lede">Each one targets a different audience. The influencer skit is finished; the rest are scripted.</p>
+    <div class="ads">
+      <div class="ad flag"><span class="who">Flagship</span><h3>Grow Beyond the Room</h3><p>The main campaign: every room you walk into becomes followers.</p></div>
+      <div class="ad flag"><span class="who">Finished · creators</span><h3>"400 Posts a Day"</h3><p>Two-friend influencer skit. "Post 10 shorts a day" versus just opening iYiYi.</p></div>
+      <div class="ad"><span class="who">Creators &amp; athletes</span><h3>Basketball Player</h3><p>A player grows his following off the people in the gym. A natural fit for VaynerSports athletes.</p></div>
+      <div class="ad"><span class="who">Nightlife</span><h3>Nightclub Girl</h3><p>Meeting people nearby without shouting over the music.</p></div>
+      <div class="ad"><span class="who">Shy users</span><h3>Introvert Series</h3><p>Connect with the room without having to start the conversation.</p></div>
+      <div class="ad"><span class="who">Serendipity</span><h3>Eye-Contact Chase</h3><p>The "who was that?" moment, solved in one tap.</p></div>
+      <div class="ad"><span class="who">Animated</span><h3>Ugly Guy</h3><p>A Pixar-style story about getting noticed for who you are.</p></div>
+      <div class="ad"><span class="who">Broad explainer</span><h3>Digital-ID Recruiting</h3><p>What a Social ID is and why everyone needs one.</p></div>
+      <div class="ad"><span class="who">Growth</span><h3>Follower Count Montage</h3><p>Followers climbing across seven different settings.</p></div>
+      <div class="ad"><span class="who">Use cases</span><h3>Zoom-In Montage</h3><p>From a café to a conference: every place iYiYi works.</p></div>
+    </div>
+  </div>
+</section>
+
+<section id="model">
+  <div class="wrap">
+    <span class="eyebrow">Business model</span>
+    <h2>Four ways iYiYi earns.</h2>
+    <div class="model">
+      <div class="card"><h3>Creator Pro</h3><div class="price">$9.99 <small>/ month</small></div><p>Get seen first nearby, a Pro badge and more.</p></div>
+      <div class="card"><h3>Business Pro</h3><div class="price">$29 <small>/ month</small></div><p>Analytics, QR poster, promotions and team seats.</p></div>
+      <div class="card"><h3>Promoted placement</h3><p>Businesses pay to sit at the top of Nearby within a chosen radius.</p></div>
+      <div class="card"><h3>Arcade shop</h3><p>Weapons, upgrades and items for the arcade games.</p></div>
+    </div>
+  </div>
+</section>
+
+<section id="ask">
+  <div class="wrap">
+    <span class="eyebrow">The ask</span>
+    <h2>Start with one event.</h2>
+    <p class="lede">iYiYi is live on every platform and early. The fastest way to prove it is one room full of people.</p>
+    <ol class="ladder">
+      <li><div><h3>Test it at one event</h3><p>One Vayner Speakers event or one client activation. We measure connections made and follows the brand earned.</p></div></li>
+      <li><div><h3>Introductions to clients</h3><p>If the test works, an intro to a few VaynerMedia clients who run events or have local locations.</p></div></li>
+      <li><div><h3>Make it part of future events</h3><p>iYiYi becomes a standard part of activations and speaking events.</p></div></li>
+      <li><div><h3>Your advice, as an advisor</h3><p>Guidance from someone who has built brands at scale, if you're open to it.</p></div></li>
+    </ol>
+  </div>
+</section>
+
+<section id="colin">
+  <div class="wrap two">
+    <div>
+      <span class="eyebrow">About me</span>
+      <h2>Colin Phillips, founder.</h2>
+      <p class="lede">I built iYiYi end to end: the iOS, Android and web apps, the arcade and the brand. I'm also a content creator.</p>
+      <ul class="skills">
+        <li>Social media management</li>
+        <li>Content creation and editing across several YouTube channels</li>
+        <li>Ad concepts and scripts, including the full iYiYi campaign</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>Roles I'm interested in at VaynerMedia</h3>
+      <p>Both roles are about what I'm building with iYiYi: connecting creators, brands and audiences and growing them on every platform. I'd love your advice on whether I'd be a better fit working inside VaynerMedia and bringing iYiYi with me.</p>
+      <div class="roles"><span>Senior Content Creator</span><span>Director of Influencer Partnership (CAIT)</span></div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <h2>Try iYiYi.</h2>
+    <div class="links">
+      <a href="https://apps.apple.com/app/id6445996160" target="_blank" rel="noopener"><b>App Store</b><span>apps.apple.com/app/id6445996160</span></a>
+      <a href="https://play.google.com/store/apps/details?id=com.iyiyi.app" target="_blank" rel="noopener"><b>Google Play</b><span>com.iyiyi.app</span></a>
+      <a href="https://app.iyiyi.xyz" target="_blank" rel="noopener"><b>Web app</b><span>app.iyiyi.xyz</span></a>
+      <a href="https://www.youtube.com/@iYiYiapp" target="_blank" rel="noopener"><b>YouTube</b><span>@iYiYiapp</span></a>
+    </div>
+  </div>
+</footer>
+
+<script>
+(function () {
+  var box = document.getElementById('dots');
+  var lit = new Set();
+  var seed = 7;
+  function rnd() { seed = (seed * 9301 + 49297) % 233280; return seed / 233280; }
+  while (lit.size < 50) lit.add(Math.floor(rnd() * 1000));
+  var frag = document.createDocumentFragment();
+  for (var i = 0; i < 1000; i++) { var d = document.createElement('i'); if (lit.has(i)) d.className = 'on'; frag.appendChild(d); }
+  box.appendChild(frag);
+})();
+</script>
+
+</body>
+</html>
