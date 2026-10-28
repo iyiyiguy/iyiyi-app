@@ -2,6 +2,8 @@
 import * as THREE from '../xr/three.module.min.js';
 import { GLTFLoader } from './lib/loaders/GLTFLoader.js';
 import * as SkeletonUtils from './lib/utils/SkeletonUtils.js';
+// resolve assets next to this module, so other pages (e.g. /portfolio) can embed the scenes
+const BASE = new URL('./', import.meta.url).href;
 
 // ---------- realistic humans (Mixamo-rigged model + shared animation clips) ----------
 let HUMAN = null;
@@ -11,7 +13,7 @@ const BONE = { Hips: 'Hips', Spine: 'Spine', Spine01: 'Spine1', Spine02: 'Spine2
 ['Left', 'Right'].forEach(s => { ['Shoulder', 'Arm', 'ForeArm', 'Hand', 'UpLeg', 'Leg', 'Foot', 'ToeBase'].forEach(b => { BONE[s + b] = s + b; }); });
 export async function loadHumans() {
   const L = new GLTFLoader(); const Q = THREE.Quaternion;
-  const [a, ...cs] = await Promise.all([L.loadAsync('models/anims.glb'), ...CHARS.map(([f]) => L.loadAsync(`models/${f}.glb`))]);
+  const [a, ...cs] = await Promise.all([L.loadAsync(BASE + 'models/anims.glb'), ...CHARS.map(([f]) => L.loadAsync(`${BASE}models/${f}.glb`))]);
   a.scene.updateMatrixWorld(true);
   const srcBy = new Map(); a.scene.traverse(o => { if (/^mixamorig/.test(o.name)) srcBy.set(o.name, o); });
   const firstChild = (o, re) => o.children.find(c => re.test(c.name));
@@ -959,7 +961,7 @@ export class SceneView {
       sph.rotation.y = (this.fpMode ? this.yaw0 : 0) - Math.PI / 2 + 2 * Math.PI * pano[1];
       if (this.eye) sph.position.set(this.eye.x, 0, this.eye.z);
       sc.add(sph);
-      new THREE.TextureLoader().load(`img/pano-${pano[0]}-${hi ? 'hi' : 'lo'}.jpg`, t => {
+      new THREE.TextureLoader().load(`${BASE}img/pano-${pano[0]}-${hi ? 'hi' : 'lo'}.jpg`, t => {
         t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; mat.map = t; mat.color.set(0xffffff); mat.needsUpdate = true;
         const e = t.clone(); e.mapping = THREE.EquirectangularReflectionMapping; e.needsUpdate = true; sc.environment = e;
       });
