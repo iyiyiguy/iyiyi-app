@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Colin Phillips · Portfolio</title>
+<meta name="description" content="Colin Phillips: video producer, editor and social media manager. Cooking shows, podcasts, vlogs and stand-up with Preacher Lawson, plus the iYiYi app.">
+<meta property="og:title" content="Colin Phillips · Portfolio">
+<meta property="og:description" content="Video production, editing and social media management. Founder of iYiYi.">
+<meta property="og:image" content="https://i.ytimg.com/vi/b82NnNZ_fKA/hqdefault.jpg">
+<meta property="og:url" content="https://iyiyi.xyz/portfolio">
+<link rel="icon" href="/favicon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap">
+<style>
+/* Layout: a reel. Hero with name, then a "featured" player, then categorised video grids; dark, single look (matches iyiyi.xyz). */
+:root {
+  --ink: #0b0a1a; --panel: #15132b; --line: #2a2650; --fg: #f3f0ff; --muted: #a9a3c9;
+  --cyan: #46dcff; --pink: #ff4fb8; --violet: #8f7bff; --rec: #ff3b4e;
+  --display: "Bricolage Grotesque", "Avenir Next", "Segoe UI", sans-serif;
+  --body: "Plus Jakarta Sans", "Segoe UI", system-ui, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html { padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); background: var(--ink); scroll-behavior: smooth; }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } * { animation: none !important; } }
+body { margin: 0; background: var(--ink); color: var(--fg); font-family: var(--body); font-size: 17px; line-height: 1.6; overflow-x: hidden; }
+img { max-width: 100%; display: block; }
+a { color: var(--cyan); }
+a:focus-visible, button:focus-visible { outline: 2px solid var(--cyan); outline-offset: 3px; border-radius: 6px; }
+.wrap { max-width: 1120px; margin: 0 auto; padding-left: max(20px, env(safe-area-inset-left, 0px)); padding-right: max(20px, env(safe-area-inset-right, 0px)); }
+h1, h2, h3 { font-family: var(--display); margin: 0; line-height: 1.05; text-wrap: balance; }
+p { margin: 0; }
+.eyebrow { font-family: var(--mono); font-size: 13px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--pink); display: block; margin-bottom: 14px; }
+
+nav.top { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20; background: color-mix(in srgb, var(--ink) 86%, transparent); backdrop-filter: blur(12px); border-bottom: 1px solid var(--line); }
+nav.top .wrap { display: flex; align-items: center; gap: 18px; padding-block: 12px; }
+nav.top .home { display: flex; align-items: center; gap: 10px; color: var(--fg); text-decoration: none; font-weight: 700; white-space: nowrap; }
+nav.top .home img { width: 30px; }
+nav.top .links { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; min-width: 0; margin-left: auto; }
+nav.top .links a { color: var(--muted); text-decoration: none; font-size: 14px; font-weight: 600; padding: 6px 12px; border-radius: 999px; white-space: nowrap; }
+nav.top .links a:hover { color: var(--fg); background: var(--panel); }
+
+header.hero { padding-block: 80px 56px; }
+.rec { display: inline-flex; align-items: center; gap: 10px; font-family: var(--mono); font-size: 13px; letter-spacing: 0.12em; color: var(--muted); margin-bottom: 22px; }
+.rec i { width: 10px; height: 10px; border-radius: 50%; background: var(--rec); box-shadow: 0 0 10px var(--rec); animation: blink 1.6s steps(2, start) infinite; }
+@keyframes blink { to { visibility: hidden; } }
+.hero h1 { font-size: clamp(52px, 9vw, 112px); font-weight: 800; letter-spacing: -0.03em; }
+.hero h1 span { background: linear-gradient(90deg, var(--cyan), var(--violet) 50%, var(--pink)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.hero .lede { color: var(--muted); font-size: 20px; max-width: 60ch; margin-top: 22px; }
+.tags { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 28px; }
+.tags span { border: 1px solid var(--line); background: var(--panel); border-radius: 999px; padding: 8px 15px; font-weight: 600; font-size: 15px; }
+
+section { padding-block: 64px; border-top: 1px solid var(--line); }
+section h2 { font-size: clamp(30px, 4.4vw, 46px); font-weight: 800; letter-spacing: -0.02em; }
+section .sub { color: var(--muted); margin-top: 10px; max-width: 62ch; }
+
+.feature { margin-top: 32px; display: grid; grid-template-columns: 1.6fr 1fr; gap: 28px; align-items: center; }
+.feature > * { min-width: 0; }
+.feature h3 { font-size: 28px; }
+.feature p { color: var(--muted); margin-top: 10px; }
+
+.grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-top: 32px; }
+.grid.two { grid-template-columns: repeat(2, 1fr); }
+.vid { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.vid h3 { font-size: 19px; line-height: 1.25; }
+.vid .meta { font-family: var(--mono); font-size: 12px; color: var(--muted); letter-spacing: 0.06em; text-transform: uppercase; }
+.player { position: relative; aspect-ratio: 16 / 9; max-width: 100%; border-radius: 16px; overflow: hidden; background: var(--panel); border: 1px solid var(--line); }
+.player button { all: unset; cursor: pointer; position: absolute; inset: 0; display: block; }
+.player img { width: 100%; height: 100%; object-fit: cover; transition: transform .4s ease, filter .4s ease; filter: saturate(1.05); }
+.player button:hover img { transform: scale(1.04); }
+.player .play { position: absolute; left: 50%; top: 50%; width: 64px; height: 64px; margin: -32px 0 0 -32px; border-radius: 50%; background: rgba(11, 10, 26, .72); border: 2px solid rgba(255,255,255,.85); display: grid; place-items: center; }
+.player .play::after { content: ""; border-left: 18px solid #fff; border-top: 11px solid transparent; border-bottom: 11px solid transparent; margin-left: 5px; }
+.player iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+.vid a.yt { font-size: 14px; font-weight: 600; text-decoration: none; }
+
+.app { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; margin-top: 32px; align-items: center; }
+.app > * { min-width: 0; }
+.app img { border-radius: 16px; border: 1px solid var(--line); }
+.app ul { list-style: none; padding: 0; margin: 16px 0 0; display: grid; gap: 8px; color: var(--muted); }
+.app li::before { content: "→ "; color: var(--pink); }
+.btns { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 20px; }
+.btn { display: inline-block; padding: 10px 18px; border-radius: 999px; background: var(--panel); border: 1px solid var(--line); color: var(--fg); text-decoration: none; font-weight: 600; font-size: 15px; }
+.btn:hover { border-color: var(--violet); }
+
+.skills { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-top: 32px; }
+.skill { background: var(--panel); border: 1px solid var(--line); border-radius: 18px; padding: 22px; }
+.skill h3 { font-size: 19px; margin-bottom: 6px; }
+.skill p { color: var(--muted); font-size: 15px; }
+
+footer { border-top: 1px solid var(--line); padding-block: 56px 72px; }
+footer h2 { font-size: clamp(30px, 4.4vw, 46px); font-weight: 800; }
+.contact { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 22px; align-items: center; }
+.contact code { font-family: var(--mono); font-size: 16px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 9px 14px; user-select: all; }
+
+@media (max-width: 860px) {
+  .feature, .app { grid-template-columns: 1fr; }
+  .grid, .skills { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 560px) {
+  body { font-size: 16px; }
+  .grid, .grid.two, .skills { grid-template-columns: 1fr; }
+  header.hero { padding-block: 56px 40px; }
+}
+</style>
+</head>
+<body>
+
+<nav class="top" aria-label="Sections">
+  <div class="wrap">
+    <a class="home" href="/"><img src="/logo.png" alt="">Colin Phillips</a>
+    <div class="links">
+      <a href="#shows">Cooking shows</a>
+      <a href="#preacher">Preacher Lawson</a>
+      <a href="#podcast">Podcast</a>
+      <a href="#iyiyi">iYiYi</a>
+      <a href="#skills">Skills</a>
+      <a href="#contact">Contact</a>
+    </div>
+  </div>
+</nav>
+
+<header class="hero">
+  <div class="wrap">
+    <div class="rec"><i></i> REC · PORTFOLIO</div>
+    <h1>Colin <span>Phillips</span></h1>
+    <p class="lede">I shoot, edit and run social media for creators. Cooking shows, podcasts, vlogs, interviews and stand-up clips with comedian Preacher Lawson. I'm also the founder of the iYiYi app.</p>
+    <div class="tags"><span>Videography</span><span>Editing</span><span>Social media management</span><span>Podcast production</span><span>3D with Blender</span><span>Illustration</span><span>Photography</span><span>Design</span></div>
+  </div>
+</header>
+
+<main>
+<section id="shows">
+  <div class="wrap">
+    <span class="eyebrow">Food</span>
+    <h2>Cooking shows</h2>
+    <div class="feature">
+      <div class="vid"><div class="player" data-id="b82NnNZ_fKA" data-title="Cooking show with Darcy Lynn"></div></div>
+      <div>
+        <span class="meta" style="font-family:var(--mono);font-size:12px;color:var(--muted);letter-spacing:.06em;text-transform:uppercase">Featured</span>
+        <h3>Cooking with Darcy Lynn</h3>
+        <p>A full cooking episode, shot and edited for YouTube.</p>
+        <div class="btns"><a class="btn" href="https://youtube.com/watch?v=b82NnNZ_fKA" target="_blank" rel="noopener">Watch on YouTube</a></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="preacher">
+  <div class="wrap">
+    <span class="eyebrow">Comedy &amp; personality</span>
+    <h2>Preacher Lawson</h2>
+    <p class="sub">Interviews, vlogs, stand-up and podcast clips cut for YouTube and short-form.</p>
+    <div class="grid two">
+      <div class="vid"><div class="player" data-id="QEr3eLSr5PU" data-title="Preacher Lawson public interview"></div><span class="meta">Interview</span><h3>Public interview</h3></div>
+      <div class="vid"><div class="player" data-id="i614m9SBRc0" data-title="Preacher Lawson vlog"></div><span class="meta">Vlog</span><h3>Vlog</h3></div>
+      <div class="vid"><div class="player" data-id="IRAkkOf0KzU" data-title="Preacher Lawson stand-up clip"></div><span class="meta">Stand-up</span><h3>Stand-up clip</h3></div>
+      <div class="vid"><div class="player" data-id="lhs6qko86o4" data-title="Preacher Lawson podcast clip"></div><span class="meta">Podcast clip</span><h3>Podcast clip</h3></div>
+    </div>
+  </div>
+</section>
+
+<section id="podcast">
+  <div class="wrap">
+    <span class="eyebrow">Podcast production</span>
+    <h2>Lawson Bruhs Podcast</h2>
+    <p class="sub">Full episodes, shot and edited.</p>
+    <div class="grid">
+      <div class="vid"><div class="player" data-id="OUWdgrY_FYg" data-title="Lawson Bruhs Podcast episode 7"></div><span class="meta">Episode 7</span><h3>Lawson Bruhs Podcast 7</h3></div>
+      <div class="vid"><div class="player" data-id="RJh-8FUGDyo" data-title="Lawson Bruhs Podcast episode 8"></div><span class="meta">Episode 8</span><h3>Lawson Bruhs Podcast 8</h3></div>
+      <div class="vid"><div class="player" data-id="KDMNLZY2ALY" data-title="Lawson Bruhs Podcast episode 9"></div><span class="meta">Episode 9</span><h3>Lawson Bruhs Podcast 9</h3></div>
+    </div>
+  </div>
+</section>
+
+<section id="iyiyi">
+  <div class="wrap">
+    <span class="eyebrow">Founder</span>
+    <h2>iYiYi</h2>
+    <div class="app">
+      <img src="/vayner/screens.jpg" alt="iYiYi app screens: nearby people, follow everywhere, profiles, the live map, the feed and the arcade" loading="lazy">
+      <div>
+        <p class="sub" style="margin-top:0">An app that shows your social media to everyone within 150 feet. I built it end to end and made its brand, store art and ad campaign.</p>
+        <ul>
+          <li>iOS, Android and web apps</li>
+          <li>App Store and Google Play art and listings</li>
+          <li>A ten-concept ad campaign and influencer skit</li>
+        </ul>
+        <div class="btns">
+          <a class="btn" href="https://apps.apple.com/app/id6445996160" target="_blank" rel="noopener">App Store</a>
+          <a class="btn" href="https://play.google.com/store/apps/details?id=com.iyiyi.app" target="_blank" rel="noopener">Google Play</a>
+          <a class="btn" href="https://app.iyiyi.xyz" target="_blank" rel="noopener">Web app</a>
+          <a class="btn" href="https://www.youtube.com/@iYiYiapp" target="_blank" rel="noopener">YouTube</a>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="skills">
+  <div class="wrap">
+    <span class="eyebrow">What I do</span>
+    <h2>Skills</h2>
+    <div class="skills">
+      <div class="skill"><h3>Video production</h3><p>Shooting cooking shows, interviews, vlogs, podcasts and stand-up.</p></div>
+      <div class="skill"><h3>Editing</h3><p>Long-form episodes and short-form clips for YouTube, TikTok and Instagram.</p></div>
+      <div class="skill"><h3>Social media management</h3><p>Running channels for creators, posting and growing them across platforms.</p></div>
+      <div class="skill"><h3>3D with Blender</h3><p>3D models, logos and scenes.</p></div>
+      <div class="skill"><h3>Illustration &amp; design</h3><p>Brand art, posters and designs, including work for Las Vegas Athletic Club.</p></div>
+      <div class="skill"><h3>Photography</h3><p>Photo shoots for creators and brands.</p></div>
+    </div>
+  </div>
+</section>
+</main>
+
+<footer id="contact">
+  <div class="wrap">
+    <h2>Let's work together.</h2>
+    <div class="contact"><code>iyiyi@iyiyi.xyz</code><a class="btn" href="mailto:iyiyi@iyiyi.xyz">Email me</a></div>
+  </div>
+</footer>
+
+<script>
+document.querySelectorAll('.player').forEach(function (el) {
+  var id = el.dataset.id, title = el.dataset.title || 'Video';
+  var b = document.createElement('button');
+  b.setAttribute('aria-label', 'Play: ' + title);
+  b.innerHTML = '<img loading="lazy" alt="" src="https://i.ytimg.com/vi/' + id + '/hqdefault.jpg"><span class="play" aria-hidden="true"></span>';
+  b.addEventListener('click', function () {
+    el.innerHTML = '<iframe src="https://www.youtube-nocookie.com/embed/' + id + '?autoplay=1&rel=0" title="' + title.replace(/"/g, '') + '" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen></iframe>';
+  });
+  el.appendChild(b);
+});
+</script>
+</body>
+</html>
