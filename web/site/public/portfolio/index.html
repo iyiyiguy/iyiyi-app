@@ -116,17 +116,30 @@ dialog.lb button { position: fixed; top: max(16px, env(safe-area-inset-top, 0px)
 .campaign > * { min-width: 0; }
 .campaign h3 { font-size: 22px; margin-bottom: 8px; }
 .campaign p { color: var(--muted); }
+.cap-note { color: var(--muted); font-size: 14px; margin-top: 12px; }
 .chiplist { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
 .chiplist li { border: 1px solid var(--line); border-radius: 999px; padding: 6px 13px; font-size: 14px; font-weight: 600; background: var(--ink); }
 
+.ar-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; margin-top: 32px; }
+.arcard { border-radius: 18px; overflow: hidden; border: 1px solid var(--line); background: var(--panel); min-width: 0; }
+.arcard .view { position: relative; aspect-ratio: 4 / 3; max-width: 100%; background: #070a13; }
+.arcard canvas { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: pan-y; cursor: grab; }
+.arcard canvas.grab { cursor: grabbing; }
+.arcard .cover { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; transition: opacity .6s; }
+.arcard.live .cover { opacity: 0; pointer-events: none; }
+.arcard .hint { position: absolute; left: 12px; bottom: 12px; font-family: var(--mono); font-size: 11px; letter-spacing: .08em; text-transform: uppercase; background: rgba(7, 10, 19, .7); border: 1px solid rgba(255,255,255,.18); padding: 5px 9px; border-radius: 999px; pointer-events: none; }
+.arcard .info { padding: 14px 16px 16px; }
+.arcard h3 { font-size: 19px; }
+.arcard p { color: var(--muted); font-size: 15px; margin-top: 4px; }
+
 @media (max-width: 860px) {
   .feature, .app { grid-template-columns: 1fr; }
-  .grid, .skills, .creators { grid-template-columns: repeat(2, 1fr); }
+  .grid, .skills, .creators, .ar-grid { grid-template-columns: repeat(2, 1fr); }
   .campaign { grid-template-columns: 1fr; }
 }
 @media (max-width: 560px) {
   body { font-size: 16px; }
-  .grid, .grid.two, .skills, .creators { grid-template-columns: 1fr; }
+  .grid, .grid.two, .skills, .creators, .ar-grid { grid-template-columns: 1fr; }
   header.hero { padding-block: 56px 40px; }
 }
 </style>
@@ -140,10 +153,7 @@ dialog.lb button { position: fixed; top: max(16px, env(safe-area-inset-top, 0px)
       <a href="#shows">Cooking shows</a>
       <a href="#preacher">Preacher Lawson</a>
       <a href="#podcast">Podcast</a>
-      <a href="#influencer">Influencer marketing</a>
       <a href="#ar">AR games</a>
-      <a href="#appdesign">App design</a>
-      <a href="#thumbnails">Thumbnails</a>
       <a href="#lvac">LVAC</a>
       <a href="#merch">Merch</a>
       <a href="#threed">3D</a>
@@ -162,7 +172,7 @@ dialog.lb button { position: fixed; top: max(16px, env(safe-area-inset-top, 0px)
     <div class="rec"><i></i> REC · PORTFOLIO</div>
     <h1>Colin <span>Phillips</span></h1>
     <p class="lede">A design and content portfolio. I shoot, edit and run social media for creators, and I design apps, AR games, merch and brands. Cooking shows, podcasts, vlogs, interviews and stand-up clips with comedian Preacher Lawson. I'm also the founder of the iYiYi app.</p>
-    <div class="tags"><span>Influencer marketing</span><span>AR game design</span><span>App &amp; brand design</span><span>Videography</span><span>Editing</span><span>Social media management</span><span>Podcast production</span><span>3D with Blender</span><span>Illustration</span><span>Photography</span><span>Design</span></div>
+    <div class="tags"><span>AR game design</span><span>App &amp; brand design</span><span>Videography</span><span>Editing</span><span>Social media management</span><span>Podcast production</span><span>3D with Blender</span><span>Illustration</span><span>Photography</span><span>Design</span></div>
   </div>
 </header>
 
@@ -214,49 +224,15 @@ dialog.lb button { position: fixed; top: max(16px, env(safe-area-inset-top, 0px)
   <div class="wrap">
     <span class="eyebrow">AR game design</span>
     <h2>iYiYi games for Snap Specs</h2>
-    <p class="sub">Fourteen AR games designed for Snap Specs glasses, where holograms, scoreboards and name tags float in the real world. Each scene below is from the interactive 3D demo. <a href="/specs/">Try the demo</a></p>
-    <div class="gallery"><button class="shot" data-full="/portfolio/img/ar-football.jpg" aria-label="View larger: Football"><img loading="lazy" width="1110" height="730" src="/portfolio/img/ar-football.jpg" alt="Holographic football players lined up on a real backyard field with a floating scoreboard"><span class="cap">Football</span></button><button class="shot" data-full="/portfolio/img/ar-laser-tag.jpg" aria-label="View larger: Laser Tag"><img loading="lazy" width="1110" height="730" src="/portfolio/img/ar-laser-tag.jpg" alt="Laser beams and player name tags in a glass office atrium"><span class="cap">Laser Tag</span></button><button class="shot" data-full="/portfolio/img/ar-chess.jpg" aria-label="View larger: Chess"><img loading="lazy" width="1110" height="730" src="/portfolio/img/ar-chess.jpg" alt="A life-size holographic chessboard in a park"><span class="cap">Chess</span></button><button class="shot" data-full="/portfolio/img/ar-tennis.jpg" aria-label="View larger: Tennis"><img loading="lazy" width="1110" height="730" src="/portfolio/img/ar-tennis.jpg" alt="A holographic tennis court drawn on real grass"><span class="cap">Tennis</span></button><button class="shot" data-full="/portfolio/img/ar-volleyball.jpg" aria-label="View larger: Volleyball"><img loading="lazy" width="1110" height="730" src="/portfolio/img/ar-volleyball.jpg" alt="A holographic volleyball net and scoreboard on a real beach"><span class="cap">Volleyball</span></button><button class="shot" data-full="/portfolio/img/ar-basketball.jpg" aria-label="View larger: Basketball"><img loading="lazy" width="1110" height="730" src="/portfolio/img/ar-basketball.jpg" alt="A holographic hoop, court lines and scoreboard on a brick plaza"><span class="cap">Basketball</span></button><button class="shot" data-full="/portfolio/img/ar-mafia.jpg" aria-label="View larger: Mafia"><img loading="lazy" width="1110" height="730" src="/portfolio/img/ar-mafia.jpg" alt="Players with floating name tags and role cards in a driveway"><span class="cap">Mafia</span></button><button class="shot" data-full="/portfolio/img/ar-we-outside.jpg" aria-label="View larger: We Outside"><img loading="lazy" width="1110" height="730" src="/portfolio/img/ar-we-outside.jpg" alt="A holographic bank vault on a real city street for a cops and robbers heist"><span class="cap">We Outside</span></button><button class="shot" data-full="/portfolio/img/ar-world.jpg" aria-label="View larger: iYiYi World"><img loading="lazy" width="1110" height="730" src="/portfolio/img/ar-world.jpg" alt="A Fall Guys-style obstacle course of candy bars and platforms in a field"><span class="cap">iYiYi World</span></button></div>
-  </div>
-</section>
-
-<section id="appdesign">
-  <div class="wrap">
-    <span class="eyebrow">App &amp; brand design</span>
-    <h2>Store art and pitch design</h2>
-    <p class="sub">App Store and Google Play screenshots built as one continuous panorama, with 3D characters projecting holograms from their phones. Scroll sideways to see all six.</p>
-    <div class="strip" tabindex="0" aria-label="iYiYi store screenshots, scroll sideways"><img loading="lazy" width="2700" height="975" src="/vayner/screens.jpg" alt="Six iYiYi App Store screenshots on one continuous purple background with 3D characters holding phones"></div>
-    <div class="btns"><a class="btn" href="/vayner">See a pitch page I designed</a><a class="btn" href="/specs/">See the Specs pitch site</a></div>
-  </div>
-</section>
-
-<section id="influencer">
-  <div class="wrap">
-    <span class="eyebrow">Influencer marketing</span>
-    <h2>Creators, channels and campaigns</h2>
-    <p class="sub">I run channels and make content with creators, and I write influencer campaigns built around what each audience cares about.</p>
-    <div class="creators">
-      <div class="skill"><h3>Preacher Lawson</h3><p>Comedian. Cooking shows, interviews, vlogs, stand-up clips, the Lawson Bruhs Podcast, thumbnails and cover art.</p><div class="btns"><a class="btn" href="https://www.youtube.com/c/PreacherLawson/" target="_blank" rel="noopener">YouTube</a></div></div>
-      <div class="skill"><h3>Ricardo Laguna</h3><p>YouTube and Instagram content, including AI-assisted video.</p><div class="btns"><a class="btn" href="https://www.instagram.com/ricardo_laguna/" target="_blank" rel="noopener">Instagram</a></div></div>
-      <div class="skill"><h3>Bishop Raymond McIntosh</h3><p>YouTube channel management and video uploads.</p><div class="btns"><a class="btn" href="https://www.youtube.com/@bishopraymondmcintosh9520/" target="_blank" rel="noopener">YouTube</a></div></div>
+    <p class="sub">Fourteen AR games designed for Snap Specs glasses, where holograms, scoreboards and name tags float in the real world. These are live 3D scenes: drag any of them to look around. <a href="/specs/#games">See all 14 games</a></p>
+    <div class="ar-grid">
+      <article class="arcard" data-id="football"><div class="view"><img class="cover" src="/portfolio/img/ar-football.jpg" alt="Football scene" loading="lazy" width="1110" height="730"><canvas aria-label="Interactive 3D view of Football. Drag to look around."></canvas><span class="hint">Drag to look around</span></div><div class="info"><h3>Football</h3><p>Your backyard becomes a stadium.</p></div></article>
+      <article class="arcard" data-id="laser-tag"><div class="view"><img class="cover" src="/portfolio/img/ar-laser-tag.jpg" alt="Laser Tag scene" loading="lazy" width="1110" height="730"><canvas aria-label="Interactive 3D view of Laser Tag. Drag to look around."></canvas><span class="hint">Drag to look around</span></div><div class="info"><h3>Laser Tag</h3><p>The whole city is the arena.</p></div></article>
+      <article class="arcard" data-id="chess"><div class="view"><img class="cover" src="/portfolio/img/ar-chess.jpg" alt="Chess scene" loading="lazy" width="1110" height="730"><canvas aria-label="Interactive 3D view of Chess. Drag to look around."></canvas><span class="hint">Drag to look around</span></div><div class="info"><h3>Chess</h3><p>Life-size, in the park.</p></div></article>
+      <article class="arcard" data-id="volleyball"><div class="view"><img class="cover" src="/portfolio/img/ar-volleyball.jpg" alt="Volleyball scene" loading="lazy" width="1110" height="730"><canvas aria-label="Interactive 3D view of Volleyball. Drag to look around."></canvas><span class="hint">Drag to look around</span></div><div class="info"><h3>Volleyball</h3><p>Beach rules, holographic chaos.</p></div></article>
+      <article class="arcard" data-id="mafia"><div class="view"><img class="cover" src="/portfolio/img/ar-mafia.jpg" alt="Mafia scene" loading="lazy" width="1110" height="730"><canvas aria-label="Interactive 3D view of Mafia. Drag to look around."></canvas><span class="hint">Drag to look around</span></div><div class="info"><h3>Mafia</h3><p>Secret roles only you can see.</p></div></article>
+      <article class="arcard" data-id="world"><div class="view"><img class="cover" src="/portfolio/img/ar-world.jpg" alt="iYiYi World scene" loading="lazy" width="1110" height="730"><canvas aria-label="Interactive 3D view of iYiYi World. Drag to look around."></canvas><span class="hint">Drag to look around</span></div><div class="info"><h3>iYiYi World</h3><p>A Fall Guys-style course in your backyard.</p></div></article>
     </div>
-    <div class="campaign">
-      <div>
-        <h3>iYiYi influencer campaign</h3>
-        <p>Ten ad concepts, each aimed at a different audience, plus a finished two-person influencer skit, "400 Posts a Day," where one friend's grind advice loses to just opening the app.</p>
-      </div>
-      <ul class="chiplist">
-        <li>Grow Beyond the Room</li><li>400 Posts a Day</li><li>Basketball Player</li><li>Nightclub Girl</li><li>Introvert Series</li><li>Eye-Contact Chase</li><li>Ugly Guy (animated)</li><li>Digital-ID Recruiting</li><li>Follower Count Montage</li><li>Zoom-In Montage</li>
-      </ul>
-    </div>
-  </div>
-</section>
-
-<section id="thumbnails">
-  <div class="wrap">
-    <span class="eyebrow">Thumbnails &amp; cover art</span>
-    <h2>Made to get the click</h2>
-    <p class="sub">YouTube thumbnails and cover art for Preacher Lawson.</p>
-    <div class="gallery two"><button class="shot" data-full="/portfolio/img/thumb-street.jpg" aria-label="View larger: Preacher on the Street thumbnail featuring Dustin Tavella"><img loading="lazy" width="1280" height="720" src="/portfolio/img/thumb-street.jpg" alt="Preacher on the Street thumbnail featuring Dustin Tavella"></button><button class="shot" data-full="/portfolio/img/thumb-preacher.jpg" aria-label="View larger: Preacher Lawson cover art with confetti and balloon"><img loading="lazy" width="1600" height="1600" src="/portfolio/img/thumb-preacher.jpg" alt="Preacher Lawson cover art with confetti and balloon"></button></div>
   </div>
 </section>
 
@@ -314,24 +290,18 @@ dialog.lb button { position: fixed; top: max(16px, env(safe-area-inset-top, 0px)
 
 <section id="iyiyi">
   <div class="wrap">
-    <span class="eyebrow">Founder</span>
+    <span class="eyebrow">Founder · app &amp; brand design</span>
     <h2>iYiYi</h2>
-    <div class="app">
-      <img src="/vayner/screens.jpg" alt="iYiYi app screens: nearby people, follow everywhere, profiles, the live map, the feed and the arcade" loading="lazy">
-      <div>
-        <p class="sub" style="margin-top:0">An app that shows your social media to everyone within 150 feet. I built it end to end and made its brand, store art and ad campaign.</p>
-        <ul>
-          <li>iOS, Android and web apps</li>
-          <li>App Store and Google Play art and listings</li>
-          <li>A ten-concept ad campaign and influencer skit</li>
-        </ul>
-        <div class="btns">
-          <a class="btn" href="https://apps.apple.com/app/id6445996160" target="_blank" rel="noopener">App Store</a>
-          <a class="btn" href="https://play.google.com/store/apps/details?id=com.iyiyi.app" target="_blank" rel="noopener">Google Play</a>
-          <a class="btn" href="https://app.iyiyi.xyz" target="_blank" rel="noopener">Web app</a>
-          <a class="btn" href="https://www.youtube.com/@iYiYiapp" target="_blank" rel="noopener">YouTube</a>
-        </div>
-      </div>
+    <p class="sub">An app that shows your social media to everyone within 150 feet. I built the iOS, Android and web apps end to end, and designed the brand, the store art, the pitch pages and the ad campaign.</p>
+    <div class="strip" tabindex="0" aria-label="iYiYi store screenshots, scroll sideways"><img loading="lazy" width="2700" height="975" src="/vayner/screens.jpg" alt="Six iYiYi App Store screenshots on one continuous purple background with 3D characters holding phones"></div>
+    <p class="cap-note">App Store and Google Play screenshots built as one continuous panorama, with 3D characters projecting holograms from their phones. Scroll sideways to see all six.</p>
+    <div class="btns">
+      <a class="btn" href="https://apps.apple.com/app/id6445996160" target="_blank" rel="noopener">App Store</a>
+      <a class="btn" href="https://play.google.com/store/apps/details?id=com.iyiyi.app" target="_blank" rel="noopener">Google Play</a>
+      <a class="btn" href="https://app.iyiyi.xyz" target="_blank" rel="noopener">Web app</a>
+      <a class="btn" href="/vayner">Pitch page I designed</a>
+      <a class="btn" href="/specs/">Specs pitch site</a>
+      <a class="btn" href="https://www.youtube.com/@iYiYiapp" target="_blank" rel="noopener">YouTube</a>
     </div>
   </div>
 </section>
@@ -377,6 +347,28 @@ document.querySelectorAll('.shot').forEach(function (b) {
   b.addEventListener('click', function () { lbi.src = b.dataset.full; lbi.alt = b.querySelector('img').alt; lb.showModal(); });
 });
 lb.addEventListener('click', function () { lb.close(); });
+</script>
+<script type="module">
+import { SceneView, attachDrag, loadHumans } from '/specs/specs.js?v=8';
+const cards = [...document.querySelectorAll('.arcard')];
+const views = cards.map(() => null), visible = new Set();
+const io = new IntersectionObserver(es => es.forEach(e => { const i = cards.indexOf(e.target); e.isIntersecting ? visible.add(i) : visible.delete(i); }), { rootMargin: '150px' });
+cards.forEach((c, i) => { io.observe(c); attachDrag(c.querySelector('canvas'), () => views[i]); });
+let ok = true; try { const t = document.createElement('canvas'); ok = !!(t.getContext('webgl2') || t.getContext('webgl')); } catch { ok = false; }
+const DPR = Math.min(devicePixelRatio || 1, 1.75), t0 = performance.now();
+let ready = false;
+Promise.race([loadHumans().catch(e => console.warn('humans', e)), new Promise(r => setTimeout(r, 12000))]).then(() => { ready = true; });
+function loop() {
+  requestAnimationFrame(loop); if (!ok || !ready || document.hidden) return;
+  const t = (performance.now() - t0) / 1000;
+  try {
+    for (const i of visible) {
+      if (!views[i]) { views[i] = new SceneView(cards[i].dataset.id, { fp: true }); cards[i].classList.add('live'); }
+      views[i].draw(t, cards[i].querySelector('canvas'), DPR);
+    }
+  } catch (err) { console.error(err); ok = false; cards.forEach(c => c.classList.remove('live')); }
+}
+loop();
 </script>
 </body>
 </html>
