@@ -94,6 +94,18 @@ footer h2 { font-size: clamp(30px, 4.4vw, 46px); font-weight: 800; }
 .contact { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 22px; align-items: center; }
 .contact code { font-family: var(--mono); font-size: 16px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 9px 14px; user-select: all; }
 
+.gallery { columns: 3 260px; column-gap: 16px; margin-top: 32px; }
+.gallery.two { columns: 2 300px; }
+.gallery.four { columns: 4 200px; }
+.shot { all: unset; cursor: zoom-in; display: block; break-inside: avoid; margin-bottom: 16px; border-radius: 14px; overflow: hidden; border: 1px solid var(--line); background: var(--panel); }
+.shot img { width: 100%; height: auto; transition: transform .4s ease; }
+.shot:hover img { transform: scale(1.03); }
+.shot:focus-visible { outline: 2px solid var(--cyan); outline-offset: 3px; }
+dialog.lb { border: 0; padding: 0; background: transparent; max-width: 94vw; max-height: 92vh; }
+dialog.lb::backdrop { background: rgba(6, 5, 16, .88); }
+dialog.lb img { max-width: 94vw; max-height: 88vh; width: auto; border-radius: 12px; }
+dialog.lb button { position: fixed; top: max(16px, env(safe-area-inset-top, 0px)); right: max(16px, env(safe-area-inset-right, 0px)); width: 44px; height: 44px; border-radius: 50%; border: 1px solid var(--line); background: var(--panel); color: var(--fg); font-size: 22px; cursor: pointer; }
+
 @media (max-width: 860px) {
   .feature, .app { grid-template-columns: 1fr; }
   .grid, .skills { grid-template-columns: repeat(2, 1fr); }
@@ -114,6 +126,12 @@ footer h2 { font-size: clamp(30px, 4.4vw, 46px); font-weight: 800; }
       <a href="#shows">Cooking shows</a>
       <a href="#preacher">Preacher Lawson</a>
       <a href="#podcast">Podcast</a>
+      <a href="#thumbnails">Thumbnails</a>
+      <a href="#lvac">LVAC</a>
+      <a href="#threed">3D</a>
+      <a href="#illustration">Illustration</a>
+      <a href="#photography">Photography</a>
+      <a href="#gear">Gear</a>
       <a href="#iyiyi">iYiYi</a>
       <a href="#skills">Skills</a>
       <a href="#contact">Contact</a>
@@ -174,6 +192,58 @@ footer h2 { font-size: clamp(30px, 4.4vw, 46px); font-weight: 800; }
   </div>
 </section>
 
+<section id="thumbnails">
+  <div class="wrap">
+    <span class="eyebrow">Thumbnails &amp; cover art</span>
+    <h2>Made to get the click</h2>
+    <p class="sub">YouTube thumbnails and cover art for Preacher Lawson.</p>
+    <div class="gallery two"><button class="shot" data-full="/portfolio/img/thumb-street.jpg" aria-label="View larger: Preacher on the Street thumbnail featuring Dustin Tavella"><img loading="lazy" width="1280" height="720" src="/portfolio/img/thumb-street.jpg" alt="Preacher on the Street thumbnail featuring Dustin Tavella"></button><button class="shot" data-full="/portfolio/img/thumb-preacher.jpg" aria-label="View larger: Preacher Lawson cover art with confetti and balloon"><img loading="lazy" width="1600" height="1600" src="/portfolio/img/thumb-preacher.jpg" alt="Preacher Lawson cover art with confetti and balloon"></button></div>
+  </div>
+</section>
+
+<section id="lvac">
+  <div class="wrap">
+    <span class="eyebrow">Brand design</span>
+    <h2>Designs for Las Vegas Athletic Club</h2>
+    <p class="sub">Apparel, posters and event graphics for LVAC.</p>
+    <div class="gallery"><button class="shot" data-full="/portfolio/img/lvac-fire.jpg" aria-label="View larger: LVAC Fitness Club 22 poster with flames"><img loading="lazy" width="1600" height="1200" src="/portfolio/img/lvac-fire.jpg" alt="LVAC Fitness Club 22 poster with flames"></button><button class="shot" data-full="/portfolio/img/lvac-tee.jpg" aria-label="View larger: Black LVAC t-shirt with gold lettering"><img loading="lazy" width="1600" height="1200" src="/portfolio/img/lvac-tee.jpg" alt="Black LVAC t-shirt with gold lettering"></button><button class="shot" data-full="/portfolio/img/lvac-welv.jpg" aria-label="View larger: White crop tee reading We Love LV"><img loading="lazy" width="1600" height="1529" src="/portfolio/img/lvac-welv.jpg" alt="White crop tee reading We Love LV"></button><button class="shot" data-full="/portfolio/img/lvac-black-crop.jpg" aria-label="View larger: Black crop tee with gold LVAC logo"><img loading="lazy" width="1600" height="1529" src="/portfolio/img/lvac-black-crop.jpg" alt="Black crop tee with gold LVAC logo"></button><button class="shot" data-full="/portfolio/img/lvac-welcome.jpg" aria-label="View larger: White crop tee with a Welcome to Las Vegas Athletic Club sign"><img loading="lazy" width="1600" height="1529" src="/portfolio/img/lvac-welcome.jpg" alt="White crop tee with a Welcome to Las Vegas Athletic Club sign"></button><button class="shot" data-full="/portfolio/img/lvac-tracksuit.jpg" aria-label="View larger: LVAC tracksuit design in cream and black"><img loading="lazy" width="1126" height="1280" src="/portfolio/img/lvac-tracksuit.jpg" alt="LVAC tracksuit design in cream and black"></button><button class="shot" data-full="/portfolio/img/lvac-soldier.jpg" aria-label="View larger: LVAC graphic with a soldier, tanks and fire"><img loading="lazy" width="564" height="358" src="/portfolio/img/lvac-soldier.jpg" alt="LVAC graphic with a soldier, tanks and fire"></button></div>
+  </div>
+</section>
+
+<section id="threed">
+  <div class="wrap">
+    <span class="eyebrow">3D with Blender</span>
+    <h2>Low-poly worlds</h2>
+    <p class="sub">Characters, armor and scenes modeled and rendered in Blender.</p>
+    <div class="gallery two"><button class="shot" data-full="/portfolio/img/3d-1.jpg" aria-label="View larger: Blender render: armored characters in a snowy field"><img loading="lazy" width="1600" height="900" src="/portfolio/img/3d-1.jpg" alt="Blender render: armored characters in a snowy field"></button><button class="shot" data-full="/portfolio/img/3d-2.jpg" aria-label="View larger: Blender render: knights in a castle courtyard"><img loading="lazy" width="1600" height="900" src="/portfolio/img/3d-2.jpg" alt="Blender render: knights in a castle courtyard"></button><button class="shot" data-full="/portfolio/img/3d-3.jpg" aria-label="View larger: Blender render: a knight beside a low-poly bull"><img loading="lazy" width="1600" height="900" src="/portfolio/img/3d-3.jpg" alt="Blender render: a knight beside a low-poly bull"></button><button class="shot" data-full="/portfolio/img/3d-4.jpg" aria-label="View larger: Blender render: characters and a llama in a green-lit courtyard"><img loading="lazy" width="1600" height="900" src="/portfolio/img/3d-4.jpg" alt="Blender render: characters and a llama in a green-lit courtyard"></button></div>
+  </div>
+</section>
+
+<section id="illustration">
+  <div class="wrap">
+    <span class="eyebrow">Illustration &amp; design</span>
+    <h2>Drawings, characters and UI</h2>
+    <div class="gallery"><button class="shot" data-full="/portfolio/img/illo-cliff.jpg" aria-label="View larger: Illustration: a man pulling a woman back from a cliff edge"><img loading="lazy" width="1280" height="1066" src="/portfolio/img/illo-cliff.jpg" alt="Illustration: a man pulling a woman back from a cliff edge"></button><button class="shot" data-full="/portfolio/img/illo-pink.jpg" aria-label="View larger: Illustration: a streamer in a pastel candy world"><img loading="lazy" width="1600" height="1066" src="/portfolio/img/illo-pink.jpg" alt="Illustration: a streamer in a pastel candy world"></button><button class="shot" data-full="/portfolio/img/illo-frog.jpg" aria-label="View larger: Illustration: a cartoon frog face on black"><img loading="lazy" width="1600" height="1280" src="/portfolio/img/illo-frog.jpg" alt="Illustration: a cartoon frog face on black"></button><button class="shot" data-full="/portfolio/img/design-teamwork.jpg" aria-label="View larger: Website design: a Team Work landing page"><img loading="lazy" width="1024" height="645" src="/portfolio/img/design-teamwork.jpg" alt="Website design: a Team Work landing page"></button><button class="shot" data-full="/portfolio/img/design-phones.jpg" aria-label="View larger: App design: seven phone screens on a gradient"><img loading="lazy" width="1024" height="641" src="/portfolio/img/design-phones.jpg" alt="App design: seven phone screens on a gradient"></button></div>
+  </div>
+</section>
+
+<section id="photography">
+  <div class="wrap">
+    <span class="eyebrow">Photography</span>
+    <h2>Live shows to the countryside</h2>
+    <div class="gallery"><button class="shot" data-full="/portfolio/img/photo-stage.jpg" aria-label="View larger: A performer in a tuxedo addressing a packed theater"><img loading="lazy" width="1600" height="1069" src="/portfolio/img/photo-stage.jpg" alt="A performer in a tuxedo addressing a packed theater"></button><button class="shot" data-full="/portfolio/img/photo-aerial.jpg" aria-label="View larger: Two aerial performers under blue stage light"><img loading="lazy" width="1600" height="1069" src="/portfolio/img/photo-aerial.jpg" alt="Two aerial performers under blue stage light"></button><button class="shot" data-full="/portfolio/img/photo-cow.jpg" aria-label="View larger: Close-up of a black cow in a field"><img loading="lazy" width="1600" height="900" src="/portfolio/img/photo-cow.jpg" alt="Close-up of a black cow in a field"></button></div>
+  </div>
+</section>
+
+<section id="gear">
+  <div class="wrap">
+    <span class="eyebrow">Equipment</span>
+    <h2>My kit</h2>
+    <p class="sub">Cameras, lenses, lighting and podcast audio I shoot with.</p>
+    <div class="gallery four"><button class="shot" data-full="/portfolio/img/gear-lenses.jpg" aria-label="View larger: Camera with a Rode shotgun mic and a telephoto lens"><img loading="lazy" width="1600" height="1200" src="/portfolio/img/gear-lenses.jpg" alt="Camera with a Rode shotgun mic and a telephoto lens"></button><button class="shot" data-full="/portfolio/img/gear-mixer.jpg" aria-label="View larger: Podcast audio mixer"><img loading="lazy" width="1200" height="1600" src="/portfolio/img/gear-mixer.jpg" alt="Podcast audio mixer"></button><button class="shot" data-full="/portfolio/img/gear-studio.jpg" aria-label="View larger: Studio setup with a softbox light and microphone"><img loading="lazy" width="1200" height="1600" src="/portfolio/img/gear-studio.jpg" alt="Studio setup with a softbox light and microphone"></button><button class="shot" data-full="/portfolio/img/gear-cables.jpg" aria-label="View larger: Wireless lav mic and charger"><img loading="lazy" width="1200" height="1600" src="/portfolio/img/gear-cables.jpg" alt="Wireless lav mic and charger"></button></div>
+  </div>
+</section>
+
 <section id="iyiyi">
   <div class="wrap">
     <span class="eyebrow">Founder</span>
@@ -207,7 +277,7 @@ footer h2 { font-size: clamp(30px, 4.4vw, 46px); font-weight: 800; }
       <div class="skill"><h3>Editing</h3><p>Long-form episodes and short-form clips for YouTube, TikTok and Instagram.</p></div>
       <div class="skill"><h3>Social media management</h3><p>Running channels for creators, posting and growing them across platforms.</p></div>
       <div class="skill"><h3>3D with Blender</h3><p>3D models, logos and scenes.</p></div>
-      <div class="skill"><h3>Illustration &amp; design</h3><p>Brand art, posters and designs, including work for Las Vegas Athletic Club.</p></div>
+      <div class="skill"><h3>Illustration &amp; design</h3><p>Brand art, apparel, posters, thumbnails and app and web designs.</p></div>
       <div class="skill"><h3>Photography</h3><p>Photo shoots for creators and brands.</p></div>
     </div>
   </div>
@@ -221,6 +291,8 @@ footer h2 { font-size: clamp(30px, 4.4vw, 46px); font-weight: 800; }
   </div>
 </footer>
 
+<dialog class="lb" id="lb" aria-label="Image viewer"><button type="button" aria-label="Close">×</button><img alt=""></dialog>
+
 <script>
 document.querySelectorAll('.player').forEach(function (el) {
   var id = el.dataset.id, title = el.dataset.title || 'Video';
@@ -232,6 +304,11 @@ document.querySelectorAll('.player').forEach(function (el) {
   });
   el.appendChild(b);
 });
+var lb = document.getElementById('lb'), lbi = lb.querySelector('img');
+document.querySelectorAll('.shot').forEach(function (b) {
+  b.addEventListener('click', function () { lbi.src = b.dataset.full; lbi.alt = b.querySelector('img').alt; lb.showModal(); });
+});
+lb.addEventListener('click', function () { lb.close(); });
 </script>
 </body>
 </html>
