@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Colin Phillips · Portfolio</title>
+<title>Colin Phillips · Design Portfolio</title>
 <meta name="description" content="Colin Phillips: video producer, editor and social media manager. Cooking shows, podcasts, vlogs and stand-up with Preacher Lawson, plus the iYiYi app.">
 <meta property="og:title" content="Colin Phillips · Portfolio">
 <meta property="og:description" content="Video production, editing and social media management. Founder of iYiYi.">
@@ -36,7 +36,7 @@ p { margin: 0; }
 
 nav.top { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20; background: color-mix(in srgb, var(--ink) 86%, transparent); backdrop-filter: blur(12px); border-bottom: 1px solid var(--line); }
 nav.top .wrap { display: flex; align-items: center; gap: 18px; padding-block: 12px; }
-nav.top .home { display: flex; align-items: center; gap: 10px; color: var(--fg); text-decoration: none; font-weight: 700; white-space: nowrap; }
+nav.top .home { flex-shrink: 0; display: flex; align-items: center; gap: 10px; color: var(--fg); text-decoration: none; font-weight: 700; white-space: nowrap; }
 nav.top .home img { width: 30px; }
 nav.top .links { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; min-width: 0; margin-left: auto; }
 nav.top .links a { color: var(--muted); text-decoration: none; font-size: 14px; font-weight: 600; padding: 6px 12px; border-radius: 999px; white-space: nowrap; }
@@ -107,13 +107,26 @@ dialog.lb::backdrop { background: rgba(6, 5, 16, .88); }
 dialog.lb img { max-width: 94vw; max-height: 88vh; width: auto; border-radius: 12px; }
 dialog.lb button { position: fixed; top: max(16px, env(safe-area-inset-top, 0px)); right: max(16px, env(safe-area-inset-right, 0px)); width: 44px; height: 44px; border-radius: 50%; border: 1px solid var(--line); background: var(--panel); color: var(--fg); font-size: 22px; cursor: pointer; }
 
+.strip { margin-top: 32px; overflow-x: auto; border-radius: 16px; border: 1px solid var(--line); }
+.strip img { display: block; max-width: none; height: min(520px, 66vh); width: auto; }
+.creators { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-top: 32px; }
+.creators .skill { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.creators .btns { margin-top: auto; padding-top: 10px; }
+.campaign { margin-top: 20px; display: grid; grid-template-columns: 1fr 1.2fr; gap: 28px; align-items: start; background: var(--panel); border: 1px solid var(--line); border-radius: 18px; padding: 26px; }
+.campaign > * { min-width: 0; }
+.campaign h3 { font-size: 22px; margin-bottom: 8px; }
+.campaign p { color: var(--muted); }
+.chiplist { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+.chiplist li { border: 1px solid var(--line); border-radius: 999px; padding: 6px 13px; font-size: 14px; font-weight: 600; background: var(--ink); }
+
 @media (max-width: 860px) {
   .feature, .app { grid-template-columns: 1fr; }
-  .grid, .skills { grid-template-columns: repeat(2, 1fr); }
+  .grid, .skills, .creators { grid-template-columns: repeat(2, 1fr); }
+  .campaign { grid-template-columns: 1fr; }
 }
 @media (max-width: 560px) {
   body { font-size: 16px; }
-  .grid, .grid.two, .skills { grid-template-columns: 1fr; }
+  .grid, .grid.two, .skills, .creators { grid-template-columns: 1fr; }
   header.hero { padding-block: 56px 40px; }
 }
 </style>
@@ -127,6 +140,9 @@ dialog.lb button { position: fixed; top: max(16px, env(safe-area-inset-top, 0px)
       <a href="#shows">Cooking shows</a>
       <a href="#preacher">Preacher Lawson</a>
       <a href="#podcast">Podcast</a>
+      <a href="#influencer">Influencer marketing</a>
+      <a href="#ar">AR games</a>
+      <a href="#appdesign">App design</a>
       <a href="#thumbnails">Thumbnails</a>
       <a href="#lvac">LVAC</a>
       <a href="#merch">Merch</a>
@@ -145,8 +161,8 @@ dialog.lb button { position: fixed; top: max(16px, env(safe-area-inset-top, 0px)
   <div class="wrap">
     <div class="rec"><i></i> REC · PORTFOLIO</div>
     <h1>Colin <span>Phillips</span></h1>
-    <p class="lede">I shoot, edit and run social media for creators. Cooking shows, podcasts, vlogs, interviews and stand-up clips with comedian Preacher Lawson. I'm also the founder of the iYiYi app.</p>
-    <div class="tags"><span>Videography</span><span>Editing</span><span>Social media management</span><span>Podcast production</span><span>3D with Blender</span><span>Illustration</span><span>Photography</span><span>Design</span></div>
+    <p class="lede">A design and content portfolio. I shoot, edit and run social media for creators, and I design apps, AR games, merch and brands. Cooking shows, podcasts, vlogs, interviews and stand-up clips with comedian Preacher Lawson. I'm also the founder of the iYiYi app.</p>
+    <div class="tags"><span>Influencer marketing</span><span>AR game design</span><span>App &amp; brand design</span><span>Videography</span><span>Editing</span><span>Social media management</span><span>Podcast production</span><span>3D with Blender</span><span>Illustration</span><span>Photography</span><span>Design</span></div>
   </div>
 </header>
 
@@ -190,6 +206,47 @@ dialog.lb button { position: fixed; top: max(16px, env(safe-area-inset-top, 0px)
       <div class="vid"><div class="player" data-id="OUWdgrY_FYg" data-title="Lawson Bruhs Podcast episode 7"></div><span class="meta">Episode 7</span><h3>Lawson Bruhs Podcast 7</h3></div>
       <div class="vid"><div class="player" data-id="RJh-8FUGDyo" data-title="Lawson Bruhs Podcast episode 8"></div><span class="meta">Episode 8</span><h3>Lawson Bruhs Podcast 8</h3></div>
       <div class="vid"><div class="player" data-id="KDMNLZY2ALY" data-title="Lawson Bruhs Podcast episode 9"></div><span class="meta">Episode 9</span><h3>Lawson Bruhs Podcast 9</h3></div>
+    </div>
+  </div>
+</section>
+
+<section id="ar">
+  <div class="wrap">
+    <span class="eyebrow">AR game design</span>
+    <h2>iYiYi games for Snap Specs</h2>
+    <p class="sub">Fourteen AR games designed for Snap Specs glasses, where holograms, scoreboards and name tags float in the real world. Each scene below is from the interactive 3D demo. <a href="/specs/">Try the demo</a></p>
+    <div class="gallery"><button class="shot" data-full="/portfolio/img/ar-football.jpg" aria-label="View larger: Football"><img loading="lazy" width="1110" height="730" src="/portfolio/img/ar-football.jpg" alt="Holographic football players lined up on a real backyard field with a floating scoreboard"><span class="cap">Football</span></button><button class="shot" data-full="/portfolio/img/ar-laser-tag.jpg" aria-label="View larger: Laser Tag"><img loading="lazy" width="1110" height="730" src="/portfolio/img/ar-laser-tag.jpg" alt="Laser beams and player name tags in a glass office atrium"><span class="cap">Laser Tag</span></button><button class="shot" data-full="/portfolio/img/ar-chess.jpg" aria-label="View larger: Chess"><img loading="lazy" width="1110" height="730" src="/portfolio/img/ar-chess.jpg" alt="A life-size holographic chessboard in a park"><span class="cap">Chess</span></button><button class="shot" data-full="/portfolio/img/ar-tennis.jpg" aria-label="View larger: Tennis"><img loading="lazy" width="1110" height="730" src="/portfolio/img/ar-tennis.jpg" alt="A holographic tennis court drawn on real grass"><span class="cap">Tennis</span></button><button class="shot" data-full="/portfolio/img/ar-volleyball.jpg" aria-label="View larger: Volleyball"><img loading="lazy" width="1110" height="730" src="/portfolio/img/ar-volleyball.jpg" alt="A holographic volleyball net and scoreboard on a real beach"><span class="cap">Volleyball</span></button><button class="shot" data-full="/portfolio/img/ar-basketball.jpg" aria-label="View larger: Basketball"><img loading="lazy" width="1110" height="730" src="/portfolio/img/ar-basketball.jpg" alt="A holographic hoop, court lines and scoreboard on a brick plaza"><span class="cap">Basketball</span></button><button class="shot" data-full="/portfolio/img/ar-mafia.jpg" aria-label="View larger: Mafia"><img loading="lazy" width="1110" height="730" src="/portfolio/img/ar-mafia.jpg" alt="Players with floating name tags and role cards in a driveway"><span class="cap">Mafia</span></button><button class="shot" data-full="/portfolio/img/ar-we-outside.jpg" aria-label="View larger: We Outside"><img loading="lazy" width="1110" height="730" src="/portfolio/img/ar-we-outside.jpg" alt="A holographic bank vault on a real city street for a cops and robbers heist"><span class="cap">We Outside</span></button><button class="shot" data-full="/portfolio/img/ar-world.jpg" aria-label="View larger: iYiYi World"><img loading="lazy" width="1110" height="730" src="/portfolio/img/ar-world.jpg" alt="A Fall Guys-style obstacle course of candy bars and platforms in a field"><span class="cap">iYiYi World</span></button></div>
+  </div>
+</section>
+
+<section id="appdesign">
+  <div class="wrap">
+    <span class="eyebrow">App &amp; brand design</span>
+    <h2>Store art and pitch design</h2>
+    <p class="sub">App Store and Google Play screenshots built as one continuous panorama, with 3D characters projecting holograms from their phones. Scroll sideways to see all six.</p>
+    <div class="strip" tabindex="0" aria-label="iYiYi store screenshots, scroll sideways"><img loading="lazy" width="2700" height="975" src="/vayner/screens.jpg" alt="Six iYiYi App Store screenshots on one continuous purple background with 3D characters holding phones"></div>
+    <div class="btns"><a class="btn" href="/vayner">See a pitch page I designed</a><a class="btn" href="/specs/">See the Specs pitch site</a></div>
+  </div>
+</section>
+
+<section id="influencer">
+  <div class="wrap">
+    <span class="eyebrow">Influencer marketing</span>
+    <h2>Creators, channels and campaigns</h2>
+    <p class="sub">I run channels and make content with creators, and I write influencer campaigns built around what each audience cares about.</p>
+    <div class="creators">
+      <div class="skill"><h3>Preacher Lawson</h3><p>Comedian. Cooking shows, interviews, vlogs, stand-up clips, the Lawson Bruhs Podcast, thumbnails and cover art.</p><div class="btns"><a class="btn" href="https://www.youtube.com/c/PreacherLawson/" target="_blank" rel="noopener">YouTube</a></div></div>
+      <div class="skill"><h3>Ricardo Laguna</h3><p>YouTube and Instagram content, including AI-assisted video.</p><div class="btns"><a class="btn" href="https://www.instagram.com/ricardo_laguna/" target="_blank" rel="noopener">Instagram</a></div></div>
+      <div class="skill"><h3>Bishop Raymond McIntosh</h3><p>YouTube channel management and video uploads.</p><div class="btns"><a class="btn" href="https://www.youtube.com/@bishopraymondmcintosh9520/" target="_blank" rel="noopener">YouTube</a></div></div>
+    </div>
+    <div class="campaign">
+      <div>
+        <h3>iYiYi influencer campaign</h3>
+        <p>Ten ad concepts, each aimed at a different audience, plus a finished two-person influencer skit, "400 Posts a Day," where one friend's grind advice loses to just opening the app.</p>
+      </div>
+      <ul class="chiplist">
+        <li>Grow Beyond the Room</li><li>400 Posts a Day</li><li>Basketball Player</li><li>Nightclub Girl</li><li>Introvert Series</li><li>Eye-Contact Chase</li><li>Ugly Guy (animated)</li><li>Digital-ID Recruiting</li><li>Follower Count Montage</li><li>Zoom-In Montage</li>
+      </ul>
     </div>
   </div>
 </section>
