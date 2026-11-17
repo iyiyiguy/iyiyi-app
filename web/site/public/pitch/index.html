@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>iYiYi Pitch Deck</title>
+  <meta name="description" content="iYiYi pitch deck: the app that shows the socials of everyone within 150 feet." />
+  <link rel="icon" href="/favicon.png" />
+  <style>
+    :root { color-scheme: light dark; }
+    body { margin: 0; font-family: -apple-system, system-ui, sans-serif; background: #0b0b10; color: #f5f5f7; }
+    header { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 16px; max-width: 1100px; margin: 0 auto; }
+    header a.brand { color: inherit; text-decoration: none; font-weight: 700; }
+    h1 { font-size: 22px; margin: 0; }
+    .btn { background: #fff; color: #0b0b10; padding: 10px 16px; border-radius: 999px; text-decoration: none; font-weight: 600; }
+    .deck { max-width: 1100px; margin: 0 auto 32px; padding: 0 16px; }
+    iframe { width: 100%; height: 80vh; min-height: 480px; border: 0; border-radius: 12px; background: #fff; }
+    p.fallback { font-size: 14px; opacity: .8; }
+  </style>
+</head>
+<body>
+  <header>
+    <a class="brand" href="/">iYiYi</a>
+    <h1>Pitch Deck</h1>
+    <a class="btn" href="/pitch/deck.pdf" download>Download PDF</a>
+  </header>
+  <main class="deck">
+    <iframe src="/pitch/deck.pdf#view=FitH" title="iYiYi pitch deck"></iframe>
+    <p class="fallback">Can't see the deck? <a href="/pitch/deck.pdf">Open the PDF</a>.</p>
+  </main>
+</body>
+</html>
