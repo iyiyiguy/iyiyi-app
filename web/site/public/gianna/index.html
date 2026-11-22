@@ -209,6 +209,14 @@ section .eps, section .grid, section .card { text-align: left; }
 section .player, section .eps-player { max-width: 860px; margin-inline: auto; }
 section .eps { max-width: 860px; margin-inline: auto; }
 section .wrap > .eyebrow, section .wrap > h2, section .wrap > .lede { text-shadow: none; }
+
+section.bgsec { position: relative; background:
+  linear-gradient(180deg, var(--ink) 0%, rgba(7,5,10,.55) 18%, rgba(7,5,10,.55) 82%, var(--ink) 100%),
+  linear-gradient(90deg, rgba(7,5,10,.75) 0%, rgba(7,5,10,.35) 55%, rgba(7,5,10,.1) 100%),
+  var(--img) 65% 30% / cover no-repeat; }
+section.bgsec .card { background: rgba(14,10,18,.72); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
+section.cta.bgsec { padding-block: 160px; }
+section.bgsec h2, section.bgsec .lede, section.bgsec .eyebrow { text-shadow: 0 2px 24px rgba(0,0,0,.85); }
 </style>
 </head>
 <body>
@@ -238,7 +246,6 @@ section .wrap > .eyebrow, section .wrap > h2, section .wrap > .lede { text-shado
   </header>
 </div></div>
 
-<figure class="band" aria-hidden="true" style="--img:url(https://media.iyiyi.xyz/gianna/scenes/behind_wide.jpg?v=5)"></figure>
 <section id="reel">
   <div class="wrap panelize">
     <span class="eyebrow">The work</span>
@@ -250,7 +257,7 @@ section .wrap > .eyebrow, section .wrap > h2, section .wrap > .lede { text-shado
 </section>
 
 
-<figure class="band" aria-hidden="true" style="--img:url(https://media.iyiyi.xyz/gianna/scenes/back_front.jpg?v=5)"></figure>
+<figure class="band" aria-hidden="true" style="--img:url(https://media.iyiyi.xyz/gianna/scenes/behind_wide.jpg?v=5)"></figure>
 <section id="podcast">
   <div class="wrap panelize">
     <span class="eyebrow">Long-form</span>
@@ -263,7 +270,7 @@ section .wrap > .eyebrow, section .wrap > h2, section .wrap > .lede { text-shado
 </section>
 
 
-<figure class="band" aria-hidden="true" style="--img:url(https://media.iyiyi.xyz/gianna/scenes/medium.jpg?v=3)"></figure>
+<figure class="band" aria-hidden="true" style="--img:url(https://media.iyiyi.xyz/gianna/scenes/back_front.jpg?v=5)"></figure>
 <section id="more">
   <div class="wrap panelize">
     <span class="eyebrow">Full videos</span>
@@ -275,8 +282,8 @@ section .wrap > .eyebrow, section .wrap > h2, section .wrap > .lede { text-shado
   </div>
 </section>
 
-<figure class="band" aria-hidden="true" style="--img:url(https://media.iyiyi.xyz/gianna/scenes/wide.jpg?v=3)"></figure>
-<section id="offer">
+<figure class="band" aria-hidden="true" style="--img:url(https://media.iyiyi.xyz/gianna/scenes/medium.jpg?v=3)"></figure>
+<section id="offer" class="bgsec" style="--img:url(https://media.iyiyi.xyz/gianna/scenes/wide.jpg?v=3)">
   <div class="wrap panelize">
     <span class="eyebrow">What you get</span>
     <h2>Everything a planner needs to say yes.</h2>
@@ -288,7 +295,7 @@ section .wrap > .eyebrow, section .wrap > h2, section .wrap > .lede { text-shado
   </div>
 </section>
 
-<section class="cta" id="talk">
+<section class="cta bgsec" id="talk" style="--img:url(https://media.iyiyi.xyz/gianna/scenes/side.jpg?v=3)">
   <div class="wrap">
     <span class="eyebrow">Let's work together</span>
     <h2>Let's put your next stage on camera.</h2>
