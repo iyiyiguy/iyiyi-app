@@ -145,6 +145,7 @@ footer .wrap { display: flex; justify-content: space-between; flex-wrap: wrap; g
   <div class="links">
     <a href="#reel">The reel</a>
     <a href="#podcast">Podcast</a>
+    <a href="#more">Full videos</a>
     <a href="#offer">What you get</a>
     <a class="btn primary" href="mailto:iyiyi@iyiyi.xyz?subject=Keynote%20video%20for%20Gianna">Let's talk</a>
   </div>
@@ -197,6 +198,18 @@ footer .wrap { display: flex; justify-content: space-between; flex-wrap: wrap; g
   </div>
 </section>
 
+
+<section id="more">
+  <div class="wrap">
+    <span class="eyebrow">Full videos</span>
+    <h2>More of the work, start to finish.</h2>
+    <p class="lede">Complete videos I shot and edited: comedy, a cooking show, street magic and a cinematic testimony film.</p>
+    <div class="eps-player"><video id="mv" controls playsinline preload="none"></video></div>
+    <p class="now" id="mnow"></p>
+    <div class="eps" id="mlist" style="grid-template-columns:repeat(auto-fill,minmax(200px,1fr))"></div>
+  </div>
+</section>
+
 <section id="offer">
   <div class="wrap">
     <span class="eyebrow">What you get</span>
@@ -235,33 +248,38 @@ footer .wrap { display: flex; justify-content: space-between; flex-wrap: wrap; g
 </script>
 
 <script>
-(function () {
-  var M = 'https://media.iyiyi.xyz/lawson-bruhs/';
-  var EPS = [
-    ['5HV9uLFiRs4', 'Episode 1', '51:05'], ['KYbqT28k3W8', 'Open Mic Stories (from Ep. 1)', '5:09'],
-    ['fH8o38XZ7JA', 'Episode 2', '49:20'], ['zikYckj_IZA', 'Episode 3', '43:05'], ['YFdmvG29FUc', 'Episode 4', '48:14'],
-    ['842SUU7VHgo', 'Episode 5', '57:43'], ['ktZ9HekKp1I', 'Episode 6', '53:24'], ['OUWdgrY_FYg', 'Episode 7', '51:06'],
-    ['RJh-8FUGDyo', 'Episode 8', '59:08'], ['KDMNLZY2ALY', 'Episode 9', '1:15:14']
-  ];
-  var v = document.getElementById('ep'), now = document.getElementById('now'), list = document.getElementById('eps'), hls = null;
+function makePlayer(M, items, vid, nowId, listId, prefix) {
+  var v = document.getElementById(vid), now = document.getElementById(nowId), list = document.getElementById(listId), hls = null;
   function load(e, play) {
     var src = M + e[0] + '/index.m3u8';
     v.poster = M + e[0] + '/poster.jpg';
     if (hls) { hls.destroy(); hls = null; }
     if (v.canPlayType('application/vnd.apple.mpegurl')) v.src = src;
     else if (window.Hls && Hls.isSupported()) { hls = new Hls({ capLevelToPlayerSize: true }); hls.loadSource(src); hls.attachMedia(v); }
-    now.textContent = 'Lawson Bruhs Podcast · ' + e[1];
+    now.textContent = prefix + e[1];
     [].forEach.call(list.children, function (b) { b.setAttribute('aria-current', b.dataset.id === e[0] ? 'true' : 'false'); });
     if (play) v.play().catch(function () {});
   }
-  EPS.forEach(function (e) {
+  items.forEach(function (e) {
     var b = document.createElement('button'); b.className = 'ep'; b.dataset.id = e[0];
     b.innerHTML = '<div class="th" style="background-image:url(' + M + e[0] + '/poster.jpg)"><span>' + e[2] + '</span></div><b>' + e[1] + '</b>';
     b.addEventListener('click', function () { load(e, true); v.scrollIntoView({ behavior: 'smooth', block: 'center' }); });
     list.appendChild(b);
   });
-  load(EPS[0], false);
-})();
+  load(items[0], false);
+}
+makePlayer('https://media.iyiyi.xyz/lawson-bruhs/', [
+  ['5HV9uLFiRs4', 'Episode 1', '51:05'], ['KYbqT28k3W8', 'Open Mic Stories (from Ep. 1)', '5:09'],
+  ['fH8o38XZ7JA', 'Episode 2', '49:20'], ['zikYckj_IZA', 'Episode 3', '43:05'], ['YFdmvG29FUc', 'Episode 4', '48:14'],
+  ['842SUU7VHgo', 'Episode 5', '57:43'], ['ktZ9HekKp1I', 'Episode 6', '53:24'], ['OUWdgrY_FYg', 'Episode 7', '51:06'],
+  ['RJh-8FUGDyo', 'Episode 8', '59:08'], ['KDMNLZY2ALY', 'Episode 9', '1:15:14']
+], 'ep', 'now', 'eps', 'Lawson Bruhs Podcast · ');
+makePlayer('https://media.iyiyi.xyz/videos/', [
+  ['preacher-on-the-street', 'Preacher On The Street feat. Dustin Tavella', '13:14'],
+  ['burrito-bowl', 'How To Make A Burrito Bowl w/ Darci Lynne', '8:08'],
+  ['track-and-field', 'I Was In Track And Field · Lessons With Preacher', '2:57'],
+  ['buried-but-not-broken', 'Buried But Not Broken · Bishop Raymond McIntosh', '4:24']
+], 'mv', 'mnow', 'mlist', '');
 </script>
 </body>
 </html>
