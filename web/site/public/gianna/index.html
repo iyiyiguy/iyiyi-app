@@ -100,14 +100,21 @@ html, html body { background: transparent; }
 html { background: #07050a; }
 body { background: transparent !important; }
 .scenes { position: fixed; inset: 0; z-index: -1; overflow: hidden; background: #07050a; }
-.scene { position: absolute; inset: 0; opacity: 0; transition: opacity 1.1s ease; will-change: opacity, transform; }
+.scene { position: absolute; inset: 0; opacity: 0; transition: opacity .35s ease; will-change: opacity, transform; }
 .scene.on { opacity: 1; }
-.scene video { width: 100%; height: 100%; object-fit: cover; object-position: 50% 30%; display: block; transform: scale(var(--z, 1.12)); transition: transform .2s linear; }
-.scenes .shade { position: absolute; inset: 0; background:
+.scene video { width: 100%; height: 100%; object-fit: cover; object-position: 70% 30%; display: block;  }
+.scenes video.move { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: 70% 30%; opacity: 0; z-index: 1; }
+.scenes video.move.on { opacity: 1; }
+.scenes .shade { z-index: 2;  position: absolute; inset: 0; background:
   linear-gradient(180deg, rgba(7,5,10,.45) 0%, rgba(7,5,10,.2) 35%, rgba(7,5,10,.6) 100%),
   radial-gradient(120% 90% at 50% 40%, transparent 30%, rgba(7,5,10,.65) 100%); }
 section { border-top: 0; }
 section .wrap > .eyebrow, section .wrap > h2, section .wrap > .lede { text-shadow: 0 2px 24px rgba(0,0,0,.7); }
+@media (min-width: 1000px) {
+  section .wrap.panelize { max-width: 720px; margin-left: max(24px, 5vw); margin-right: auto; }
+  section .wrap.panelize .eps { grid-template-columns: repeat(3, 1fr) !important; }
+  .scenes .shade:not(.hero-on) { background: linear-gradient(90deg, rgba(7,5,10,.7) 0%, rgba(7,5,10,.45) 45%, rgba(7,5,10,.05) 70%, rgba(7,5,10,0) 100%), linear-gradient(180deg, rgba(7,5,10,.3), transparent 30%, transparent 75%, rgba(7,5,10,.6)); }
+}
 .panelize { background: rgba(12,8,16,.46); backdrop-filter: blur(14px) saturate(1.2); -webkit-backdrop-filter: blur(14px) saturate(1.2); border: 1px solid rgba(255,255,255,.08); border-radius: 26px; padding: clamp(22px, 4vw, 44px); }
 .card { background: rgba(23,18,28,.72); backdrop-filter: blur(10px); }
 nav.top { background: rgba(7,5,10,.55); }
@@ -318,26 +325,53 @@ makePlayer('https://media.iyiyi.xyz/videos/', [
 <script>
 (function () {
   var M = 'https://media.iyiyi.xyz/gianna/scenes/';
-  var scenes = [].slice.call(document.querySelectorAll('.scene'));
-  var map = { hero: document.querySelector('.hero'), reel: document.getElementById('reel'), podcast: document.getElementById('podcast'), more: document.getElementById('more'), offer: document.getElementById('offer') };
-  var READY = {}; // animated loops published so far
-  var vids = { hero: 'hero.mp4', reel: 'behind.mp4', podcast: 'side.mp4', more: 'medium.mp4', offer: 'wide.mp4' };
-  function ensure(sc) { var v = sc.querySelector('video'), f = vids[sc.dataset.s]; if (!v.dataset.ok && READY[f.replace('.mp4','')]) { v.dataset.ok = 1; v.src = M + f; v.load(); } return v; }
-  var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  var cur = null;
-  function tick() {
-    var mid = window.innerHeight * 0.5, best = scenes[0], bestP = 0;
-    scenes.forEach(function (sc) {
-      var el = map[sc.dataset.s]; if (!el) return; var r = el.getBoundingClientRect();
-      if (r.top <= mid) { best = sc; bestP = Math.min(1, Math.max(0, (mid - r.top) / Math.max(r.height, 1))); }
-    });
-    if (best !== cur) {
-      scenes.forEach(function (sc) { var on = sc === best; sc.classList.toggle('on', on); var v = sc.querySelector('video'); if (on) { var ev = ensure(sc); if (ev.dataset.ok) ev.play().catch(function(){}); } else if (v.dataset.ok) { v.pause(); } });
-      cur = best;
-      document.querySelector('.scenes .shade').classList.toggle('hero-on', best.dataset.s === 'hero');
-    }
-    if (!reduce) best.querySelector('video').style.setProperty('--z', (best.dataset.s === 'hero' ? 1.0 + 0.06 * bestP : 1.16 - 0.14 * bestP).toFixed(4));
+  var ORDER = ['hero', 'reel', 'podcast', 'more', 'offer'];
+  var IMG = { hero: 'hero2.jpg', reel: 'behind.jpg', podcast: 'side.jpg', more: 'medium.jpg', offer: 'wide.jpg' };
+  var LOOP = { hero: 'hero.mp4', reel: 'behind.mp4', podcast: 'side.mp4', more: 'medium.mp4', offer: 'wide.mp4' };
+  var MOVE = ['move1.mp4', 'move2.mp4', 'move3.mp4', 'move4.mp4']; // camera moves between consecutive angles
+  var READY = {}; // which loops/moves are published, e.g. { 'hero.mp4': 1, 'move1.mp4': 1 }
+  var scenes = {}; [].forEach.call(document.querySelectorAll('.scene'), function (sc) { scenes[sc.dataset.s] = sc; });
+  var anchors = ORDER.map(function (k) { return k === 'hero' ? document.querySelector('.hero') : document.getElementById(k); });
+  var shade = document.querySelector('.scenes .shade');
+  var mv = document.createElement('video'); mv.className = 'move'; mv.muted = true; mv.playsInline = true; mv.preload = 'auto';
+  document.querySelector('.scenes').insertBefore(mv, shade);
+  var movesLoaded = {};
+  function loopFor(k) {
+    var v = scenes[k].querySelector('video');
+    if (!v.dataset.ok && READY[LOOP[k]]) { v.dataset.ok = 1; v.src = M + LOOP[k]; }
+    return v;
   }
+  var cur = null, curMove = -1;
+  function tick() {
+    // continuous position: i + f means f of the way from section i to section i+1
+    var y = window.innerHeight * 0.55, pos = 0;
+    for (var i = 0; i < anchors.length; i++) {
+      var r = anchors[i].getBoundingClientRect();
+      if (r.top <= y) pos = i + Math.min(1, Math.max(0, (y - r.top) / Math.max(r.height, 1)));
+    }
+    var i0 = Math.min(ORDER.length - 1, Math.floor(pos)), f = pos - i0;
+    // the camera move happens over the last 45% of each section, as the next one comes in
+    var t = Math.min(1, Math.max(0, (f - 0.55) / 0.45));
+    var moving = i0 < ORDER.length - 1 && t > 0 && t < 1 && READY[MOVE[i0]];
+    var showK = (t >= 1 && i0 < ORDER.length - 1) ? ORDER[i0 + 1] : ORDER[i0];
+    if (moving) {
+      if (curMove !== i0) { mv.src = M + MOVE[i0]; curMove = i0; }
+      if (mv.readyState >= 1 && mv.duration) { var tt = t * (mv.duration - 0.05); if (Math.abs(mv.currentTime - tt) > 0.02) mv.currentTime = tt; }
+      mv.classList.add('on');
+    } else {
+      mv.classList.remove('on');
+    }
+    if (showK !== cur) {
+      ORDER.forEach(function (k) {
+        var on = k === showK, sc = scenes[k], v = sc.querySelector('video');
+        sc.classList.toggle('on', on);
+        if (on) { var lv = loopFor(k); if (lv.dataset.ok) lv.play().catch(function () {}); } else if (v.dataset.ok) v.pause();
+      });
+      cur = showK;
+      shade.classList.toggle('hero-on', showK === 'hero');
+    }
+  }
+  // preload the next camera move so scrubbing is instant
   window.addEventListener('scroll', function () { window.requestAnimationFrame(tick); }, { passive: true });
   window.addEventListener('resize', tick); tick();
 })();
