@@ -184,7 +184,7 @@ footer .wrap { display: flex; justify-content: space-between; flex-wrap: wrap; g
 <body>
 <div class="scenes" aria-hidden="true">
   <div class="scene" data-s="hero"><video muted loop playsinline preload="auto" poster="https://media.iyiyi.xyz/gianna/scenes/hero2.jpg"></video></div>
-  <div class="scene" data-s="reel"><video muted loop playsinline preload="none" poster="https://media.iyiyi.xyz/gianna/scenes/behind_v.jpg?v=4"></video></div>
+  <div class="scene" data-s="reel"><video muted loop playsinline preload="none" poster="https://media.iyiyi.xyz/gianna/scenes/behind_wide.jpg?v=5"></video></div>
   <div class="scene" data-s="podcast"><video muted loop playsinline preload="none" poster="https://media.iyiyi.xyz/gianna/scenes/back.jpg?v=4"></video></div>
   <div class="scene" data-s="more"><video muted loop playsinline preload="none" poster="https://media.iyiyi.xyz/gianna/scenes/medium.jpg?v=3"></video></div>
   <div class="scene" data-s="offer"><video muted loop playsinline preload="none" poster="https://media.iyiyi.xyz/gianna/scenes/wide.jpg?v=3"></video></div>
@@ -329,7 +329,7 @@ makePlayer('https://media.iyiyi.xyz/videos/', [
   var IMG = { hero: 'hero2.jpg', reel: 'behind.jpg', podcast: 'side.jpg', more: 'medium.jpg', offer: 'wide.jpg' };
   var LOOP = { hero: 'hero.mp4', reel: 'behind.mp4', podcast: 'side.mp4', more: 'medium.mp4', offer: 'wide.mp4' };
   var MOVE = ['move1.mp4', 'move2.mp4', 'move3.mp4', 'move4.mp4']; // camera moves between consecutive angles
-  var READY = { 'behind.mp4': 1 }; // which loops/moves are published, e.g. { 'hero.mp4': 1, 'move1.mp4': 1 }
+  var READY = {}; // which loops/moves are published, e.g. { 'hero.mp4': 1, 'move1.mp4': 1 }
   var scenes = {}; [].forEach.call(document.querySelectorAll('.scene'), function (sc) { scenes[sc.dataset.s] = sc; });
   var anchors = ORDER.map(function (k) { return k === 'hero' ? document.querySelector('.hero') : document.getElementById(k); });
   var shade = document.querySelector('.scenes .shade');
