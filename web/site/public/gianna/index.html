@@ -317,7 +317,7 @@ makePlayer('https://media.iyiyi.xyz/videos/', [
   var M = 'https://media.iyiyi.xyz/gianna/scenes/';
   var scenes = [].slice.call(document.querySelectorAll('.scene'));
   var map = { hero: document.querySelector('.hero'), reel: document.getElementById('reel'), podcast: document.getElementById('podcast'), more: document.getElementById('more'), offer: document.getElementById('offer') };
-  var READY = {}; // filled in as each animated loop is published
+  var READY = { wave: 1 }; // animated loops published so far
   var hv = document.getElementById('heroVid'); if (READY.wave) { hv.src = M + 'wave.mp4'; hv.play().catch(function(){}); }
   var vids = { hero: 'wide.mp4', reel: 'behind.mp4', podcast: 'side.mp4', more: 'medium.mp4', offer: 'wide.mp4' };
   function ensure(sc) { var v = sc.querySelector('video'), f = vids[sc.dataset.s]; if (!v.dataset.ok && READY[f.replace('.mp4','')]) { v.dataset.ok = 1; v.src = M + f; v.load(); } return v; }
