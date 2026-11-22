@@ -129,11 +129,11 @@ nav.top { background: rgba(7,5,10,.55); }
 .hero { min-height: calc(100vh - 62px); grid-template-columns: minmax(0, 620px) 1fr; }
 .hero > div:first-child { position: relative; z-index: 1; }
 .hero h1, .hero .lede, .hero .eyebrow { text-shadow: 0 2px 30px rgba(0,0,0,.85); }
-.scene[data-s=hero] video { object-position: 70% 100%; transform-origin: 70% 60%; }
+.scene[data-s=hero] video { object-position: 70% 0%; transform-origin: 70% 60%; }
 .scenes .shade.hero-on { background:
   linear-gradient(90deg, rgba(7,5,10,.88) 0%, rgba(7,5,10,.6) 32%, rgba(7,5,10,.05) 62%, rgba(7,5,10,0) 100%),
   linear-gradient(180deg, rgba(7,5,10,.35) 0%, transparent 25%, transparent 75%, rgba(7,5,10,.8) 100%); }
-@media (max-width: 900px) { .scene[data-s=hero] video { object-position: 70% 100%; transform-origin: 70% 60%; }
+@media (max-width: 900px) { .scene[data-s=hero] video { object-position: 70% 0%; transform-origin: 70% 60%; }
 .scenes .shade.hero-on { background: linear-gradient(180deg, rgba(7,5,10,.3), rgba(7,5,10,.85) 70%); } }
 
 /* episodes */
@@ -183,7 +183,7 @@ footer .wrap { display: flex; justify-content: space-between; flex-wrap: wrap; g
 </head>
 <body>
 <div class="scenes" aria-hidden="true">
-  <div class="scene" data-s="hero"><video muted loop playsinline preload="auto" poster="https://media.iyiyi.xyz/gianna/scenes/hero2.jpg"></video></div>
+  <div class="scene" data-s="hero"><video muted loop playsinline preload="auto" poster="https://media.iyiyi.xyz/gianna/scenes/hero3.jpg"></video></div>
   <div class="scene" data-s="reel"><video muted loop playsinline preload="none" poster="https://media.iyiyi.xyz/gianna/scenes/behind_wide.jpg?v=5"></video></div>
   <div class="scene" data-s="podcast"><video muted loop playsinline preload="none" poster="https://media.iyiyi.xyz/gianna/scenes/back_front.jpg?v=5"></video></div>
   <div class="scene" data-s="more"><video muted loop playsinline preload="none" poster="https://media.iyiyi.xyz/gianna/scenes/medium.jpg?v=3"></video></div>
