@@ -1,0 +1,406 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<meta name="description" content="Five projects from Colin Phillips: iYiYi, a creator payment network, Good Gas, video production and a dating show.">
+<meta property="og:title" content="For Fousey · Five projects from Colin Phillips">
+<meta property="og:description" content="iYiYi, a creator payment network, Good Gas, video production and a dating show.">
+<meta property="og:image" content="https://iyiyi.xyz/fousey/slide-2.jpg">
+<meta property="og:url" content="https://iyiyi.xyz/fousey">
+<link rel="icon" href="/favicon.png">
+<title>For Fousey · Colin Phillips</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Josefin+Sans:wght@400;600;700&family=Jost:wght@400;500;600&display=swap">
+<style>
+:root {
+  --ink: #0b0a0f; --panel: #15131b; --panel2: #1c1924; --line: #2a2533; --fg: #f8f5f1; --muted: #aaa3b2;
+  --gold: #f2b84b; --violet: #8b6cff; --green: #3ccf8e; --rose: #ff6f91; --sky: #5cc8ff;
+  --display: "Josefin Sans", "Futura", "Avenir Next", sans-serif;
+  --body: "Jost", "Futura", "Segoe UI", system-ui, sans-serif;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; background: var(--ink); }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } *, *::before, *::after { animation: none !important; } }
+body { margin: 0; background: var(--ink); color: var(--fg); font-family: var(--body); font-size: 17px; line-height: 1.6; overflow-x: hidden; }
+a { color: var(--gold); }
+a:focus-visible, button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; border-radius: 6px; }
+.wrap { max-width: 1140px; margin: 0 auto; padding-inline: max(20px, env(safe-area-inset-left, 0px)); }
+h1, h2, h3 { font-family: var(--display); margin: 0; line-height: 1.06; text-wrap: balance; }
+h2 { font-size: clamp(34px, 5vw, 54px); font-weight: 700; letter-spacing: -0.02em; }
+h3 { font-size: 20px; font-weight: 700; line-height: 1.25; }
+p { margin: 0; }
+.eyebrow { font-family: var(--display); font-size: 13px; letter-spacing: .16em; text-transform: uppercase; color: var(--rose); display: block; margin-bottom: 14px; }
+.lede { color: var(--muted); font-size: 19px; max-width: 62ch; margin-top: 18px; }
+section { padding-block: 88px; border-top: 1px solid var(--line); }
+nav.top { position: sticky; top: 0; z-index: 20; background: color-mix(in srgb, var(--ink) 84%, transparent); backdrop-filter: blur(12px); border-bottom: 1px solid var(--line); }
+nav.top .wrap { display: flex; align-items: center; justify-content: space-between; height: 60px; gap: 16px; }
+nav.top .me { font-family: var(--display); font-weight: 700; font-size: 19px; color: var(--fg); text-decoration: none; }
+nav.top .links { display: flex; gap: 20px; }
+nav.top .links a { color: var(--muted); text-decoration: none; font-size: 15px; font-weight: 600; }
+nav.top .links a:hover { color: var(--fg); }
+@media (max-width: 760px) { nav.top .links { display: none; } }
+.btn { display: inline-flex; align-items: center; gap: 10px; padding: 13px 22px; border-radius: 999px; font-weight: 700; font-size: 16px; text-decoration: none; transition: transform .15s ease; }
+.btn:hover { transform: translateY(-1px); }
+.btn.primary { background: var(--violet); color: #fff; }
+.btn.ghost { border: 1px solid var(--line); color: var(--fg); background: rgba(255,255,255,.03); }
+
+.hero { padding-block: 80px 72px; border-top: 0; }
+.hero h1 { font-size: clamp(44px, 7vw, 88px); font-weight: 700; letter-spacing: -0.03em; }
+.hero h1 em { font-style: normal; color: var(--gold); }
+.index { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; margin-top: 44px; }
+.index a { display: block; padding: 16px; border: 1px solid var(--line); border-radius: 16px; background: var(--panel); color: var(--fg); text-decoration: none; transition: border-color .15s; }
+.index a:hover { border-color: var(--violet); }
+.index b { display: block; font-family: var(--display); color: var(--gold); font-size: 14px; letter-spacing: .1em; }
+.index span { font-weight: 600; }
+@media (max-width: 860px) { .index { grid-template-columns: 1fr 1fr; } }
+
+.num { font-family: var(--display); color: var(--violet); font-weight: 700; font-size: 15px; letter-spacing: .14em; }
+.split { display: grid; grid-template-columns: 1fr 1fr; gap: 48px; align-items: center; margin-top: 40px; }
+@media (max-width: 900px) { .split { grid-template-columns: 1fr; } }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 20px; padding: 26px; }
+.steps { list-style: none; padding: 0; margin: 14px 0 0; counter-reset: s; display: grid; gap: 12px; }
+.steps li { counter-increment: s; position: relative; padding-left: 44px; color: #ddd7e2; }
+.steps li::before { content: counter(s); position: absolute; left: 0; top: 1px; width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; background: var(--panel2); border: 1px solid var(--line); font-weight: 700; font-size: 14px; color: var(--gold); }
+.steps b { color: var(--fg); }
+.two { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-top: 28px; }
+@media (max-width: 800px) { .two { grid-template-columns: 1fr; } }
+.key { margin-top: 22px; padding: 18px 22px; border-left: 3px solid var(--gold); background: rgba(242,184,75,.06); border-radius: 0 14px 14px 0; color: #eee6d6; }
+.diagram { width: 100%; height: auto; display: block; }
+.figure { background: radial-gradient(120% 100% at 50% 0%, #1d1830, #110f17 70%); border: 1px solid var(--line); border-radius: 22px; padding: 18px; }
+.cap { color: var(--muted); font-size: 14px; margin-top: 10px; text-align: center; }
+
+.slides { display: grid; grid-auto-flow: column; grid-auto-columns: min(78%, 640px); gap: 16px; overflow-x: auto; scroll-snap-type: x mandatory; padding-bottom: 14px; margin-top: 32px; }
+.slides img { width: 100%; border-radius: 14px; border: 1px solid var(--line); scroll-snap-align: start; display: block; }
+.scene { width: 100%; border-radius: 22px; border: 1px solid var(--line); display: block; }
+.tag { display: inline-block; font-size: 13px; padding: 4px 10px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); margin: 4px 6px 0 0; }
+footer { border-top: 1px solid var(--line); padding-block: 56px 70px; color: var(--muted); }
+footer h2 { color: var(--fg); margin-bottom: 14px; }
+
+@keyframes dash { to { stroke-dashoffset: -24; } }
+.flow { stroke-dasharray: 6 6; animation: dash 1.2s linear infinite; }
+@keyframes pulse { 0%,100% { opacity: .35 } 50% { opacity: 1 } }
+.pulse { animation: pulse 2.2s ease-in-out infinite; }
+@keyframes tick { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+
+<nav class="top"><div class="wrap">
+  <a class="me" href="#top">Colin Phillips</a>
+  <div class="links">
+    <a href="#iyiyi">iYiYi</a><a href="#payments">Payments</a><a href="#goodgas">Good Gas</a><a href="#video">Video</a><a href="#show">Dating show</a>
+  </div>
+</div></nav>
+
+<main id="top">
+<header class="wrap hero">
+  <span class="eyebrow">For Fousey</span>
+  <h1>Five projects.<br><em>One conversation.</em></h1>
+  <p class="lede">I'm Colin Phillips, a builder and video producer from Las Vegas. Here's what I'm working on and where I think we could team up.</p>
+  <nav class="index" aria-label="Projects">
+    <a href="#iyiyi"><b>01</b><span>iYiYi</span></a>
+    <a href="#payments"><b>02</b><span>Creator payment network</span></a>
+    <a href="#goodgas"><b>03</b><span>Good Gas</span></a>
+    <a href="#video"><b>04</b><span>Video production</span></a>
+    <a href="#show"><b>05</b><span>Dating show</span></a>
+  </nav>
+</header>
+
+<!-- 1. iYiYi -->
+<section id="iyiyi"><div class="wrap">
+  <span class="num">01</span>
+  <h2>iYiYi: a digital ID for real life</h2>
+  <p class="lede">An app that shows everyone's social media within 150 feet. Open it at an event, a meetup or anywhere, and see who's around you with their Instagram, TikTok and YouTube one tap away. Local businesses use it so people nearby can find and follow them. Live on iPhone and Android.</p>
+  <div class="split">
+    <div class="figure">
+      <svg class="diagram" viewBox="0 0 560 420" role="img" aria-label="How iYiYi works: you open the app, see people within 150 feet, tap their socials and follow; businesses nearby get found.">
+        <defs>
+          <radialGradient id="rg" cx="50%" cy="50%" r="50%"><stop offset="0" stop-color="#8b6cff" stop-opacity=".35"/><stop offset="1" stop-color="#8b6cff" stop-opacity="0"/></radialGradient>
+        </defs>
+        <circle cx="280" cy="200" r="175" fill="url(#rg)"/>
+        <circle cx="280" cy="200" r="170" fill="none" stroke="#8b6cff" stroke-opacity=".45" stroke-dasharray="4 8"/>
+        <circle cx="280" cy="200" r="110" fill="none" stroke="#8b6cff" stroke-opacity=".3" stroke-dasharray="4 8"/>
+        <text x="280" y="44" fill="#aaa3b2" font-size="13" text-anchor="middle" font-family="Jost">150 ft</text>
+        <!-- you -->
+        <rect x="248" y="160" width="64" height="104" rx="12" fill="#1c1924" stroke="#f2b84b" stroke-width="2"/>
+        <circle cx="280" cy="198" r="14" fill="#f2b84b"/>
+        <text x="280" y="244" fill="#f8f5f1" font-size="13" text-anchor="middle" font-family="Josefin Sans" font-weight="700">YOU</text>
+        <!-- people -->
+        <g font-family="Jost" font-size="12" text-anchor="middle">
+          <g><circle cx="150" cy="110" r="22" fill="#2a2533"/><circle cx="150" cy="104" r="8" fill="#ff6f91"/><path d="M137 124 q13 -14 26 0" fill="#ff6f91"/>
+            <rect x="96" y="138" width="108" height="24" rx="12" fill="#15131b" stroke="#2a2533"/><text x="150" y="155" fill="#f8f5f1">IG · TikTok</text></g>
+          <g><circle cx="420" cy="100" r="22" fill="#2a2533"/><circle cx="420" cy="94" r="8" fill="#5cc8ff"/><path d="M407 114 q13 -14 26 0" fill="#5cc8ff"/>
+            <rect x="366" y="128" width="108" height="24" rx="12" fill="#15131b" stroke="#2a2533"/><text x="420" y="145" fill="#f8f5f1">YouTube · X</text></g>
+          <g><circle cx="130" cy="300" r="22" fill="#2a2533"/><circle cx="130" cy="294" r="8" fill="#3ccf8e"/><path d="M117 314 q13 -14 26 0" fill="#3ccf8e"/>
+            <rect x="76" y="328" width="108" height="24" rx="12" fill="#15131b" stroke="#2a2533"/><text x="130" y="345" fill="#f8f5f1">Instagram</text></g>
+          <g><rect x="398" y="276" width="56" height="44" rx="8" fill="#2a2533"/><path d="M398 290 h56 l-6 -16 h-44z" fill="#f2b84b"/>
+            <rect x="370" y="328" width="112" height="24" rx="12" fill="#15131b" stroke="#f2b84b"/><text x="426" y="345" fill="#f2b84b">Local business</text></g>
+        </g>
+        <g stroke="#8b6cff" stroke-width="2" fill="none">
+          <path class="flow" d="M248 190 C210 170 190 140 172 122"/>
+          <path class="flow" d="M312 190 C350 160 380 125 398 110"/>
+          <path class="flow" d="M248 240 C210 270 180 290 152 300"/>
+          <path class="flow" d="M312 240 C350 270 380 285 398 296"/>
+        </g>
+        <g font-family="Jost" font-size="13" fill="#aaa3b2" text-anchor="middle">
+          <text x="280" y="400">Open · see who's near · tap their socials · follow</text>
+        </g>
+      </svg>
+    </div>
+    <div class="card">
+      <h3>How it works</h3>
+      <ol class="steps">
+        <li><b>Open the app</b> at an event, a meetup or anywhere.</li>
+        <li><b>See who's around you</b>, from 150 feet out to citywide and nationwide.</li>
+        <li><b>Tap anyone</b> to jump to their Instagram, TikTok, YouTube and more.</li>
+        <li><b>Businesses get found:</b> people nearby can discover and follow local shops and brands.</li>
+      </ol>
+      <p style="margin-top:20px"><a class="btn ghost" href="https://iyiyi.xyz">See iYiYi</a></p>
+    </div>
+  </div>
+</div></section>
+
+<!-- 2. Payments -->
+<section id="payments"><div class="wrap">
+  <span class="num">02</span>
+  <h2>A creator payment network</h2>
+  <p class="lede">Tip any creator, on any platform, with crypto: YouTube, TikTok, Twitch, Kick, X and Instagram. One wallet collects a creator's tips from every platform, and no platform takes a cut. Tips are paid in USDC, a digital dollar, over fast, low-fee networks like Base, Solana, Arbitrum and Polygon.</p>
+
+  <div class="figure" style="margin-top:36px">
+    <svg class="diagram" viewBox="0 0 1080 360" role="img" aria-label="Payment flow: a fan watches a video and tips by phone or desktop extension; the video link identifies the creator; the tip is held under the creator's name until they sign in with that account; then it goes to the creator's wallet.">
+      <g font-family="Jost" text-anchor="middle">
+        <!-- fan -->
+        <rect x="20" y="90" width="190" height="180" rx="18" fill="#15131b" stroke="#2a2533"/>
+        <circle cx="115" cy="140" r="24" fill="#5cc8ff"/><path d="M85 186 q30 -34 60 0" fill="#5cc8ff"/>
+        <text x="115" y="218" fill="#f8f5f1" font-size="17" font-family="Josefin Sans" font-weight="700">Fan</text>
+        <text x="115" y="242" fill="#aaa3b2" font-size="13">Share button on phone</text>
+        <text x="115" y="260" fill="#aaa3b2" font-size="13">or desktop extension</text>
+        <!-- link -->
+        <rect x="290" y="110" width="210" height="140" rx="18" fill="#15131b" stroke="#2a2533"/>
+        <rect x="312" y="136" width="166" height="30" rx="8" fill="#1c1924" stroke="#8b6cff"/>
+        <text x="395" y="156" fill="#c9bcff" font-size="12">youtube.com/@creator…</text>
+        <text x="395" y="198" fill="#f8f5f1" font-size="17" font-family="Josefin Sans" font-weight="700">The link</text>
+        <text x="395" y="222" fill="#aaa3b2" font-size="13">tells us whose content it is</text>
+        <!-- escrow -->
+        <rect x="580" y="90" width="210" height="180" rx="18" fill="#15131b" stroke="#f2b84b"/>
+        <rect x="652" y="122" width="66" height="54" rx="10" fill="#f2b84b"/><path d="M664 122 v-14 a21 21 0 0 1 42 0 v14" fill="none" stroke="#f2b84b" stroke-width="7"/>
+        <text x="685" y="157" fill="#0b0a0f" font-size="20" font-family="Josefin Sans" font-weight="700">$</text>
+        <text x="685" y="212" fill="#f8f5f1" font-size="17" font-family="Josefin Sans" font-weight="700">Held for @creator</text>
+        <text x="685" y="236" fill="#aaa3b2" font-size="13">locked under their name</text>
+        <text x="685" y="254" fill="#aaa3b2" font-size="13">until they claim it</text>
+        <!-- creator -->
+        <rect x="870" y="90" width="190" height="180" rx="18" fill="#15131b" stroke="#3ccf8e"/>
+        <circle cx="965" cy="140" r="24" fill="#3ccf8e"/><path d="M935 186 q30 -34 60 0" fill="#3ccf8e"/>
+        <text x="965" y="218" fill="#f8f5f1" font-size="17" font-family="Josefin Sans" font-weight="700">Creator's wallet</text>
+        <text x="965" y="242" fill="#aaa3b2" font-size="13">signs in with that account</text>
+        <text x="965" y="260" fill="#aaa3b2" font-size="13">to prove it's them</text>
+      </g>
+      <g stroke-width="3" fill="none">
+        <path class="flow" d="M212 180 H286" stroke="#5cc8ff"/>
+        <path class="flow" d="M502 180 H576" stroke="#8b6cff"/>
+        <path class="flow" d="M792 180 H866" stroke="#3ccf8e"/>
+      </g>
+      <g font-family="Jost" font-size="13" fill="#aaa3b2" text-anchor="middle">
+        <text x="249" y="166">tip</text><text x="539" y="166">USDC</text><text x="829" y="166">claimed</text>
+      </g>
+      <g font-family="Jost" font-size="14" fill="#aaa3b2" text-anchor="middle">
+        <text x="540" y="320">Already claimed? Tips skip the hold and arrive in the creator's wallet instantly.</text>
+      </g>
+    </svg>
+  </div>
+
+  <div class="two">
+    <div class="card">
+      <h3>For fans</h3>
+      <ol class="steps">
+        <li>Sign up and add money to your account. That balance is what you use to pay creators.</li>
+        <li>Watch any creator on YouTube, TikTok, Twitch, Kick, X or Instagram.</li>
+        <li><b>On your phone:</b> tap Share on any video or post, pick our app, and choose an amount.</li>
+        <li><b>On desktop:</b> install the browser extension, and it pays creators a few cents per minute while you watch, up to a monthly limit you set. The automatic streaming payouts work on desktop only.</li>
+      </ol>
+    </div>
+    <div class="card">
+      <h3>For creators</h3>
+      <ol class="steps">
+        <li>Fans can tip you before you've ever signed up. The money is locked safely under your account name.</li>
+        <li>You sign in with your YouTube, TikTok, Twitch or X account to prove it's you.</li>
+        <li>Everything that was waiting is sent to your wallet, and new tips arrive instantly from then on.</li>
+      </ol>
+    </div>
+  </div>
+  <p class="key">The key idea is the link: the video URL tells us whose content it is, and signing in with that account proves the creator owns it.</p>
+</div></section>
+
+<!-- 3. Good Gas -->
+<section id="goodgas"><div class="wrap">
+  <span class="num">03</span>
+  <h2>Good Gas: turning trash into energy</h2>
+  <p class="lede">A gasification machine turns landfill waste (tires, paper, wood, crop waste, food scraps) into syngas, which can be made into electricity, heat, fertilizer or hydrogen fuel. One machine can process 50 to 100 tons of waste a day, cutting landfill pollution and methane while producing energy to sell. Each machine costs about $1M.</p>
+
+  <div class="figure" style="margin-top:36px">
+    <svg class="diagram" viewBox="0 0 1080 300" role="img" aria-label="Good Gas flow: landfill waste goes into the gasification machine, which makes syngas, which becomes electricity, heat, hydrogen fuel or fertilizer.">
+      <g font-family="Jost" text-anchor="middle">
+        <rect x="20" y="80" width="200" height="140" rx="18" fill="#15131b" stroke="#2a2533"/>
+        <path d="M60 180 l30 -48 l22 30 l18 -22 l30 40z" fill="#6b5d4a"/>
+        <text x="120" y="205" fill="#f8f5f1" font-size="16" font-family="Josefin Sans" font-weight="700">Landfill waste</text>
+        <rect x="320" y="60" width="240" height="180" rx="18" fill="#15131b" stroke="#3ccf8e"/>
+        <rect x="360" y="100" width="160" height="70" rx="35" fill="#2a2533" stroke="#c98b5a" stroke-width="3"/>
+        <rect x="418" y="70" width="18" height="32" fill="#c98b5a"/><rect x="452" y="78" width="14" height="24" fill="#c98b5a"/>
+        <circle class="pulse" cx="440" cy="135" r="16" fill="#ff8a3c"/>
+        <text x="440" y="200" fill="#f8f5f1" font-size="16" font-family="Josefin Sans" font-weight="700">Gasification machine</text>
+        <text x="440" y="222" fill="#aaa3b2" font-size="13">50–100 tons a day</text>
+        <rect x="660" y="110" width="120" height="80" rx="40" fill="#15131b" stroke="#5cc8ff"/>
+        <text x="720" y="157" fill="#5cc8ff" font-size="17" font-family="Josefin Sans" font-weight="700">Syngas</text>
+        <g font-size="14">
+          <rect x="860" y="20" width="200" height="50" rx="12" fill="#15131b" stroke="#f2b84b"/><text x="960" y="51" fill="#f8f5f1">⚡ Electricity</text>
+          <rect x="860" y="88" width="200" height="50" rx="12" fill="#15131b" stroke="#ff8a3c"/><text x="960" y="119" fill="#f8f5f1">🔥 Heat</text>
+          <rect x="860" y="156" width="200" height="50" rx="12" fill="#15131b" stroke="#5cc8ff"/><text x="960" y="187" fill="#f8f5f1">💧 Hydrogen fuel</text>
+          <rect x="860" y="224" width="200" height="50" rx="12" fill="#15131b" stroke="#3ccf8e"/><text x="960" y="255" fill="#f8f5f1">🌱 Fertilizer</text>
+        </g>
+      </g>
+      <g stroke-width="3" fill="none">
+        <path class="flow" d="M222 150 H316" stroke="#c98b5a"/>
+        <path class="flow" d="M562 150 H656" stroke="#3ccf8e"/>
+        <path class="flow" d="M782 150 C820 150 820 45 856 45" stroke="#f2b84b"/>
+        <path class="flow" d="M782 150 C820 150 820 113 856 113" stroke="#ff8a3c"/>
+        <path class="flow" d="M782 150 C820 150 820 181 856 181" stroke="#5cc8ff"/>
+        <path class="flow" d="M782 150 C820 150 820 249 856 249" stroke="#3ccf8e"/>
+      </g>
+    </svg>
+  </div>
+
+  <h3 style="margin-top:44px">The pitch deck</h3>
+  <div class="slides" aria-label="Good Gas pitch deck slides">
+    <img src="slide-2.jpg" alt="What does a gasification machine do?" loading="lazy">
+    <img src="slide-3.jpg" alt="The problem: trash mountains" loading="lazy">
+    <img src="slide-4.jpg" alt="Landfill in Chile" loading="lazy">
+    <img src="slide-5.jpg" alt="Solution: gasification machine" loading="lazy">
+    <img src="slide-6.jpg" alt="Our team: Colin Phillips, project manager" loading="lazy">
+    <img src="slide-7.jpg" alt="Impact: going green" loading="lazy">
+    <img src="slide-8.jpg" alt="The market: multiple products" loading="lazy">
+    <img src="slide-9.jpg" alt="Conclusion: Good Gas is cleaning up Earth" loading="lazy">
+  </div>
+  <p style="margin-top:18px"><a class="btn ghost" href="good-gas-deck.pdf" download>Download the deck (PDF)</a></p>
+</div></section>
+
+<!-- 4. Video -->
+<section id="video"><div class="wrap">
+  <span class="num">04</span>
+  <div class="split" style="margin-top:12px">
+    <div>
+      <h2>Video production</h2>
+      <p class="lede">I shoot and edit videos, starting with fitness content: workouts, training days and challenges, filmed and cut for YouTube and short-form.</p>
+      <p style="margin-top:16px"><span class="tag">Fitness</span><span class="tag">Vlogs</span><span class="tag">Shorts &amp; Reels</span><span class="tag">Editing</span></p>
+    </div>
+    <svg class="scene" viewBox="0 0 640 420" role="img" aria-label="Illustration: a camera operator filming a workout in a gym.">
+      <defs>
+        <linearGradient id="gym" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#1f1a2e"/><stop offset="1" stop-color="#0e0c14"/></linearGradient>
+        <linearGradient id="beam" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff2c8" stop-opacity=".25"/><stop offset="1" stop-color="#fff2c8" stop-opacity="0"/></linearGradient>
+      </defs>
+      <rect width="640" height="420" fill="url(#gym)"/>
+      <rect y="300" width="640" height="120" fill="#16131d"/>
+      <polygon points="380,0 440,0 560,300 300,300" fill="url(#beam)"/>
+      <!-- rack -->
+      <rect x="470" y="150" width="10" height="150" fill="#3a3346"/><rect x="580" y="150" width="10" height="150" fill="#3a3346"/>
+      <rect x="455" y="200" width="150" height="6" fill="#8b8798"/>
+      <!-- athlete squatting with barbell -->
+      <g transform="translate(420 160)">
+        <rect x="-70" y="22" width="140" height="7" rx="3" fill="#cfcbd8"/>
+        <circle cx="-74" cy="25" r="18" fill="#2a2533" stroke="#8b8798" stroke-width="3"/><circle cx="74" cy="25" r="18" fill="#2a2533" stroke="#8b8798" stroke-width="3"/>
+        <circle cx="0" cy="0" r="16" fill="#8a5a3c"/>
+        <path d="M-22 30 q22 -14 44 0 l-6 56 h-32z" fill="#e0302f"/>
+        <path d="M-16 86 l-20 40 l16 14" stroke="#2a2533" stroke-width="16" fill="none" stroke-linecap="round"/>
+        <path d="M16 86 l20 40 l-16 14" stroke="#2a2533" stroke-width="16" fill="none" stroke-linecap="round"/>
+      </g>
+      <!-- camera operator -->
+      <g transform="translate(150 190)">
+        <circle cx="0" cy="0" r="17" fill="#5b3a28"/>
+        <path d="M-24 22 q24 -14 48 0 l-4 70 h-40z" fill="#1c1924" stroke="#2a2533"/>
+        <rect x="18" y="8" width="70" height="40" rx="8" fill="#0b0a0f" stroke="#8b6cff" stroke-width="2"/>
+        <circle cx="96" cy="28" r="14" fill="#0b0a0f" stroke="#8b6cff" stroke-width="3"/>
+        <circle class="pulse" cx="30" cy="18" r="4" fill="#e0302f"/>
+        <path d="M-12 92 l-8 48 M12 92 l8 48" stroke="#1c1924" stroke-width="14" stroke-linecap="round"/>
+      </g>
+      <text x="40" y="60" fill="#e0302f" font-family="Josefin Sans" font-size="16" font-weight="700" class="pulse">● REC</text>
+    </svg>
+  </div>
+</div></section>
+
+<!-- 5. Dating show -->
+<section id="show"><div class="wrap">
+  <span class="num">05</span>
+  <h2>A dating show with J Shock &amp; Cuff'em</h2>
+  <p class="lede">A higher-production series. J Shock dates women on camera, and Cuff'em hosts, giving him hard, honest advice and keeping it real between every date.</p>
+  <svg class="scene" style="margin-top:32px" viewBox="0 0 1200 560" role="img" aria-label="Concept illustration: two men in suits checking their watches in front of a mansion, with women waiting behind them and supercars in the driveway.">
+    <defs>
+      <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2b1b3f"/><stop offset=".55" stop-color="#c0565a"/><stop offset="1" stop-color="#f4a95c"/></linearGradient>
+      <linearGradient id="house" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#efe4d6"/><stop offset="1" stop-color="#c9b9a6"/></linearGradient>
+      <linearGradient id="ground" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3b2d35"/><stop offset="1" stop-color="#17121a"/></linearGradient>
+      <radialGradient id="sun" cx="50%" cy="50%" r="50%"><stop offset="0" stop-color="#ffe2a8"/><stop offset="1" stop-color="#ffe2a8" stop-opacity="0"/></radialGradient>
+    </defs>
+    <rect width="1200" height="560" fill="url(#sky)"/>
+    <circle cx="960" cy="250" r="140" fill="url(#sun)"/>
+    <!-- palms -->
+    <g fill="#1a1220"><rect x="80" y="120" width="12" height="230"/><path d="M86 120 q-60 -10 -90 30 q50 -20 90 -22 q-30 -40 -80 -40 q60 -10 80 28 q10 -50 60 -60 q-30 30 -40 62 q50 -20 90 10 q-50 -10 -90 -8z"/>
+      <rect x="1110" y="140" width="12" height="210"/><path d="M1116 140 q-60 -10 -90 30 q50 -20 90 -22 q-30 -40 -80 -40 q60 -10 80 28 q10 -50 60 -60 q-30 30 -40 62 q50 -20 90 10 q-50 -10 -90 -8z"/></g>
+    <!-- mansion -->
+    <rect x="230" y="150" width="740" height="210" fill="url(#house)"/>
+    <polygon points="210,152 600,70 990,152" fill="#3a2a30"/>
+    <rect x="520" y="110" width="160" height="250" fill="#f6ede2"/>
+    <polygon points="505,112 600,60 695,112" fill="#4a3640"/>
+    <g fill="#ffd98a" opacity=".85">
+      <rect x="270" y="190" width="60" height="70" rx="4"/><rect x="360" y="190" width="60" height="70" rx="4"/><rect x="450" y="190" width="50" height="70" rx="4"/>
+      <rect x="700" y="190" width="50" height="70" rx="4"/><rect x="780" y="190" width="60" height="70" rx="4"/><rect x="870" y="190" width="60" height="70" rx="4"/>
+      <rect x="560" y="140" width="80" height="60" rx="30"/><rect x="565" y="250" width="70" height="110" rx="4" fill="#3a2a30"/>
+    </g>
+    <g fill="#f6ede2"><rect x="525" y="200" width="12" height="160"/><rect x="663" y="200" width="12" height="160"/></g>
+    <rect x="0" y="360" width="1200" height="200" fill="url(#ground)"/>
+    <!-- steps -->
+    <rect x="470" y="360" width="260" height="14" fill="#5a4850"/><rect x="450" y="374" width="300" height="14" fill="#4a3a42"/>
+    <!-- supercars -->
+    <g>
+      <g transform="translate(60 395)"><path d="M0 50 q10 -30 60 -36 l50 -16 q40 -6 80 10 l40 20 q24 4 26 22 v12 h-256z" fill="#e0302f"/><path d="M80 8 l34 -10 q30 -4 56 8 l-6 10 h-84z" fill="#1a1220" opacity=".8"/><circle cx="55" cy="64" r="17" fill="#111"/><circle cx="205" cy="64" r="17" fill="#111"/><circle cx="55" cy="64" r="7" fill="#9a96a3"/><circle cx="205" cy="64" r="7" fill="#9a96a3"/></g>
+      <g transform="translate(880 400)"><path d="M0 50 q10 -30 60 -36 l50 -16 q40 -6 80 10 l40 20 q24 4 26 22 v12 h-256z" fill="#f2b84b"/><path d="M80 8 l34 -10 q30 -4 56 8 l-6 10 h-84z" fill="#1a1220" opacity=".8"/><circle cx="55" cy="64" r="17" fill="#111"/><circle cx="205" cy="64" r="17" fill="#111"/><circle cx="55" cy="64" r="7" fill="#9a96a3"/><circle cx="205" cy="64" r="7" fill="#9a96a3"/></g>
+      <g transform="translate(300 418) scale(.8)"><path d="M0 50 q10 -30 60 -36 l50 -16 q40 -6 80 10 l40 20 q24 4 26 22 v12 h-256z" fill="#1d1d24"/><path d="M80 8 l34 -10 q30 -4 56 8 l-6 10 h-84z" fill="#5cc8ff" opacity=".5"/><circle cx="55" cy="64" r="17" fill="#111"/><circle cx="205" cy="64" r="17" fill="#111"/><circle cx="55" cy="64" r="7" fill="#9a96a3"/><circle cx="205" cy="64" r="7" fill="#9a96a3"/></g>
+    </g>
+    <!-- women behind, on the steps -->
+    <g>
+      <g transform="translate(440 300)"><circle r="13" fill="#8a5a3c"/><path d="M-14 -4 q14 -22 28 0 v18 h-28z" fill="#1a1220"/><path d="M-12 14 h24 l12 70 h-48z" fill="#ff6f91"/></g>
+      <g transform="translate(500 296)"><circle r="13" fill="#e2b48c"/><path d="M-14 -4 q14 -24 28 0 v26 h-28z" fill="#d9a441"/><path d="M-12 14 h24 l12 74 h-48z" fill="#8b6cff"/></g>
+      <g transform="translate(700 296)"><circle r="13" fill="#6b4430"/><path d="M-15 -4 q15 -24 30 0 v12 h-30z" fill="#1a1220"/><path d="M-12 14 h24 l12 74 h-48z" fill="#3ccf8e"/></g>
+      <g transform="translate(760 300)"><circle r="13" fill="#c98b5a"/><path d="M-14 -4 q14 -22 28 0 v22 h-28z" fill="#5a2a1e"/><path d="M-12 14 h24 l12 70 h-48z" fill="#f2b84b"/></g>
+      <g transform="translate(820 304)"><circle r="12" fill="#f0c8a0"/><path d="M-13 -4 q13 -20 26 0 v24 h-26z" fill="#2a1a12"/><path d="M-11 13 h22 l11 66 h-44z" fill="#e0302f"/></g>
+      <g transform="translate(380 304)"><circle r="12" fill="#a06c4a"/><path d="M-13 -4 q13 -20 26 0 v10 h-26z" fill="#1a1220"/><path d="M-11 13 h22 l11 66 h-44z" fill="#5cc8ff"/></g>
+    </g>
+    <!-- two hosts in suits, checking watches -->
+    <g>
+      <g transform="translate(530 330)">
+        <circle cx="0" cy="0" r="30" fill="#6b4430"/><path d="M-28 -8 q28 -30 56 0" fill="#141018"/>
+        <path d="M-46 40 q46 -26 92 0 l-6 150 h-80z" fill="#16141c"/><path d="M-8 30 l8 40 l8 -40z" fill="#f8f5f1"/><path d="M-3 36 l3 30 l3 -30z" fill="#e0302f"/>
+        <path d="M40 60 q30 20 6 46 l-30 -6" stroke="#16141c" stroke-width="20" fill="none" stroke-linecap="round"/>
+        <rect x="12" y="92" width="16" height="12" rx="3" fill="#f2b84b"/>
+        <path d="M-20 190 l-6 50 M20 190 l6 50" stroke="#16141c" stroke-width="22" stroke-linecap="round"/>
+      </g>
+      <g transform="translate(670 326)">
+        <circle cx="0" cy="0" r="30" fill="#4e3222"/><path d="M-30 -6 q30 -34 60 0 q-10 -8 -30 -8 q-20 0 -30 8z" fill="#141018"/>
+        <path d="M-46 40 q46 -26 92 0 l-6 154 h-80z" fill="#2b2140"/><path d="M-8 30 l8 40 l8 -40z" fill="#f8f5f1"/><path d="M-6 36 h12 v6 h-12z" fill="#1a1220"/>
+        <path d="M-40 60 q-30 20 -6 46 l30 -6" stroke="#2b2140" stroke-width="20" fill="none" stroke-linecap="round"/>
+        <rect x="-28" y="92" width="16" height="12" rx="3" fill="#cfcbd8"/>
+        <path d="M-20 194 l-6 50 M20 194 l6 50" stroke="#2b2140" stroke-width="22" stroke-linecap="round"/>
+      </g>
+    </g>
+    <text x="600" y="540" fill="#f8f5f1" font-family="Josefin Sans" font-size="20" font-weight="700" text-anchor="middle" opacity=".9">Concept art</text>
+  </svg>
+  <p class="cap">Concept illustration. Final key art to come.</p>
+</div></section>
+</main>
+
+<footer><div class="wrap">
+  <h2>Let's talk.</h2>
+  <p>Colin Phillips · Las Vegas · <a href="mailto:iyiyi@iyiyi.xyz?subject=For%20Fousey">iyiyi@iyiyi.xyz</a></p>
+</div></footer>
+</body>
+</html>
