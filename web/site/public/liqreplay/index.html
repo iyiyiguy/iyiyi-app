@@ -82,6 +82,16 @@
   .play { width: 38px; height: 38px; font-size: 15px; }
   .step { width: 32px; height: 32px; }
   @media (max-width: 700px) { .hud { max-width: calc(100% - 16px); } .hud div { padding: 3px 7px; } .hud b { font-size: 12px; } .help { margin-left: 0; } }
+  #search { background: rgba(0,0,0,.35); color: var(--text); border: 1px solid var(--edge); border-radius: 10px; padding: 6px 10px; font: inherit; font-size: 13px; width: 210px; }
+  .datebox { display: inline-flex; gap: 4px; }
+  input[type=datetime-local] { background: rgba(0,0,0,.35); color: var(--text); border: 1px solid var(--edge); border-radius: 10px; padding: 5px 8px; font: inherit; font-size: 13px; color-scheme: dark; }
+  .live { font-size: 11px; font-weight: 800; letter-spacing: .08em; padding: 4px 8px; border-radius: 999px; border: 1px solid var(--edge); color: var(--faint); }
+  .live.on { color: #07080f; background: var(--lime); border-color: var(--lime); animation: pulse 1.6s infinite; }
+  @keyframes pulse { 50% { box-shadow: 0 0 0 6px rgba(166,255,79,0); } 0% { box-shadow: 0 0 0 0 rgba(166,255,79,.55); } }
+  .msg { display: none; position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%); background: rgba(14,15,26,.95); border: 1px solid var(--edge); border-radius: 12px; padding: 8px 14px; font-size: 13px; color: var(--text); max-width: 80%; text-align: center; z-index: 5; }
+  .coinname { position: absolute; right: 80px; bottom: 6px; font-size: 42px; font-weight: 800; color: rgba(255,255,255,.05); pointer-events: none; letter-spacing: -.02em; }
+  .loading { text-align: center; padding: 0 20px; }
+  #older:disabled { opacity: .4; cursor: default; }
 </style>
 </head>
 <body>
@@ -89,7 +99,11 @@
   <div class="panel bar top">
     <div class="brand"><h1><span>LiqReplay</span></h1><a class="back" href="/">by iYiYi</a></div>
     <span class="seg" id="coins"></span>
+    <input id="search" list="coinlist" placeholder="Coin or contract address" autocomplete="off" />
+    <datalist id="coinlist"></datalist>
     <span class="seg" id="tfs"></span>
+    <span class="datebox"><input type="datetime-local" id="date" title="Show the frames ending at this date" /><button class="popbtn" id="now" title="Back to now">Now</button></span>
+    <span class="live" id="liveDot">LIVE</span>
     <select id="win" title="How many frames to show"><option value="96">96 frames</option><option value="200" selected>200 frames</option><option value="500">500 frames</option><option value="0">Everything</option></select>
     <select id="sub" title="Bottom panel"><option value="oi">Bottom: Open interest</option><option value="ls">Bottom: Long/short ratio</option><option value="tk">Bottom: Taker buy − sell</option><option value="liq">Bottom: Liquidations</option><option value="off">Bottom: Off</option></select>
     <div class="pop">
@@ -110,6 +124,8 @@
         <div><span>Long/short</span><b id="sLs">–</b></div>
       </div>
       <div class="loading" id="loading">Loading…</div>
+      <div class="msg" id="msg"></div>
+      <div class="coinname" id="coinName">BTC</div>
     </div>
     <div class="player">
       <button class="play" id="play" title="Play / pause (space)">▶</button>
@@ -119,17 +135,18 @@
       <select id="speed" title="Playback speed">
         <option value="2">2 fps</option><option value="5">5 fps</option><option value="10" selected>10 fps</option><option value="20">20 fps</option><option value="40">40 fps</option>
       </select>
+      <button class="popbtn" id="older" title="Load 500 earlier frames">⟲ Load older</button>
       <div class="clock" id="clock"></div>
     </div>
   </div>
 
   <div class="panel notes" id="notes">
     <h2>How to use it</h2>
-    <p>Press play to watch liquidation levels build up and get swept as price moves. Scroll your mouse wheel over the chart, drag across it, use the slider, or press <kbd>←</kbd> <kbd>→</kbd> to scrub (hold <kbd>Shift</kbd> to jump 10 frames). <kbd>Space</kbd> plays and pauses. Each frame is one 5-minute, 15-minute or 1-hour bar. Turn layers on and off from the <b>Layers</b> menu.</p>
+    <p>Press play to watch liquidation levels build up and get swept as price moves. Scroll your mouse wheel over the chart, drag across it, use the slider, or press <kbd>←</kbd> <kbd>→</kbd> to scrub (hold <kbd>Shift</kbd> to jump 10 frames). <kbd>Space</kbd> plays and pauses. Each frame is one bar of the frame size you pick, from 1 minute to 1 month. Type any coin's ticker or paste a token contract address in the search box. Pick a date to replay that period, or press <b>Now</b> to go live; in live mode the chart updates by itself every few seconds. <b>Load older</b> adds 500 earlier frames. Turn layers on and off from the <b>Layers</b> menu.</p>
     <p><b style="color:var(--cyan)">Cyan</b> bands are prices where longs would be liquidated (they sit below price). <b style="color:var(--pink)">Pink</b> bands are where shorts would be liquidated (above price). The brighter the band, the more money is estimated there. The bars on the right show the levels at the current frame.</p>
     <h2>What this is (and isn't)</h2>
     <p>Like every liquidation heatmap, this is an <b>estimate</b>. No exchange publishes where its traders' liquidation prices or stop losses are, so nobody has that data. LiqReplay estimates it the standard way: when open interest rises, new positions are assumed to open near that bar's price, split between longs and shorts using the long/short account ratio and taker buy/sell volume, spread across 5×–100× leverage. Levels are removed when price trades through them (liquidated) or when open interest falls (positions closed). The first part of each replay starts empty and fills in as positions are added.</p>
-    <p>Data: OKX USDT perpetuals (price, open interest, long/short account ratio, taker volume). Snapshot updated <span id="updated">–</span>. Not financial advice.</p>
+    <p>Data: OKX USDT perpetuals, loaded live from OKX (price, open interest, long/short account ratio, taker volume); contract addresses are matched to coins through DexScreener. Only coins with a perpetual futures market have open interest, so tokens without one can't be mapped. OKX keeps 1,440 periods of open-interest history for each frame size: about 5 days of 1- and 5-minute frames, 15 days of 15-minute, 60 days of 1-hour, 240 days of 4-hour, about 4 years of daily, and all weekly and monthly. 1-minute frames use 5-minute open interest. Not financial advice.</p>
   </div>
 </div>
 
@@ -137,7 +154,19 @@
 <script>
 (function () {
   const COINS = ['BTC', 'ETH', 'SOL', 'HYPE', 'SHIB'];
-  const TFS = [['5m', '5 min'], ['15m', '15 min'], ['1h', '1 hour']];
+  // frame -> OKX candle bar, OKX stats period (open interest / ratios), bar length
+  const TF = {
+    '1m': { bar: '1m', per: '5m', ms: 60e3, label: '1m', bars: 720 },
+    '5m': { bar: '5m', per: '5m', ms: 300e3, label: '5m', bars: 600 },
+    '15m': { bar: '15m', per: '15m', ms: 900e3, label: '15m', bars: 600 },
+    '1h': { bar: '1H', per: '1H', ms: 3600e3, label: '1H', bars: 600 },
+    '4h': { bar: '4H', per: '4H', ms: 14400e3, label: '4H', bars: 600 },
+    '1d': { bar: '1D', per: '1D', ms: 86400e3, label: '1D', bars: 600 },
+    '1w': { bar: '1W', per: '1W', ms: 604800e3, label: '1W', bars: 300 },
+    '1M': { bar: '1M', per: '1M', ms: 2592000e3, label: '1M', bars: 100 },
+  };
+  // OKX keeps 1,440 periods of open-interest history per frame size
+  const PER_MS = { '5m': 300e3, '15m': 900e3, '1H': 3600e3, '4H': 14400e3, '1D': 86400e3, '1W': 604800e3, '1M': 2592000e3 };
   const LAYERS = [
     ['long', 'Long liquidation levels', '#3fd6ff', true],
     ['short', 'Short liquidation levels', '#ff4fa3', true],
@@ -145,7 +174,7 @@
     ['events', 'Liquidation bursts', '#a6ff4f', true],
     ['profile', 'Current-level profile', '#8f5bff', true],
   ];
-  const st = { flash: null, flashTimer: 0, coin: 'BTC', tf: '15m', ph: 0, playing: false, fps: 10, win: 200, sub: 'oi', layers: {}, cache: {} };
+  const st = { flash: null, flashTimer: 0, coin: 'BTC', tf: '15m', end: null, live: true, ph: 0, playing: false, fps: 10, win: 200, sub: 'oi', layers: {}, cache: {}, inst: {} };
   LAYERS.forEach(l => st.layers[l[0]] = l[3]);
   const $ = id => document.getElementById(id);
   const cv = $('cv'), ctx = cv.getContext('2d');
@@ -161,8 +190,9 @@
       el.appendChild(b);
     });
   }
-  seg($('coins'), COINS.map(c => [c, c]), 'coin', v => { st.coin = v; load(true); });
-  seg($('tfs'), TFS, 'tf', v => { st.tf = v; load(false); });
+  function markCoin() { [...$('coins').children].forEach(c => c.className = c.dataset.v === st.coin ? 'on' : ''); $('coinName').textContent = st.coin; }
+  seg($('coins'), COINS.map(c => [c, c]), 'coin', v => { st.coin = v; markCoin(); load('latest'); });
+  seg($('tfs'), Object.keys(TF).map(k => [k, TF[k].label]), 'tf', v => { st.tf = v; load('keep'); });
   const lay = $('layers');
   LAYERS.forEach(([k, label, col]) => {
     const t = document.createElement('span'); t.className = 'tg' + (st.layers[k] ? ' on' : '');
@@ -179,6 +209,13 @@
   $('play').onclick = togglePlay;
   $('prev').onclick = () => setPh(st.ph - 1);
   $('next').onclick = () => setPh(st.ph + 1);
+  $('older').onclick = loadOlder;
+  // pick a date: load the frames that end at that moment
+  $('date').onchange = e => { const t = Date.parse(e.target.value); if (!isNaN(t)) { st.end = Math.min(t, Date.now()); st.live = false; load('latest'); } };
+  $('now').onclick = () => { st.end = null; st.live = true; $('date').value = ''; load('latest'); };
+  // any coin: a ticker (PEPE) or a token contract address (0x… / Solana)
+  $('search').addEventListener('keydown', e => { if (e.key === 'Enter') pickCoin(e.target.value); });
+  $('search').addEventListener('change', e => pickCoin(e.target.value));
   document.addEventListener('keydown', e => {
     if (e.target.tagName === 'SELECT' || e.target.tagName === 'INPUT') return;
     if (e.code === 'Space') { e.preventDefault(); togglePlay(); }
@@ -233,26 +270,211 @@
     $('slider').value = st.ph;
     draw();
   }
+  const msg = (t, keep) => { const m = $('msg'); m.textContent = t || ''; m.style.display = t ? 'block' : 'none'; clearTimeout(msg.t); if (t && !keep) msg.t = setTimeout(() => m.style.display = 'none', 6000); };
 
-  // ---------- data ----------
-  async function load(keepTimeOnly) {
-    const key = st.coin + '_' + st.tf;
-    const prevT = D ? D.s.t[st.ph] : null;
-    $('loading').style.display = 'grid';
-    if (!st.cache[key]) {
-      const raw = await (await fetch(`data/${key}.json`)).json();
-      const s = { t: raw.t.map(x => raw.t0 + x * raw.step), o: raw.o, h: raw.h, l: raw.l, c: raw.c, oi: raw.oi, ls: raw.ls, buy: raw.buy, sell: raw.sell };
-      const R = LiqModel.run(s);
-      st.cache[key] = { s, R, ...images(R) };
+  // ---------- OKX data (fetched straight from the browser) ----------
+  const API = '/api/okx/';   // passthrough on this site's Worker (see web/site/src/worker.js)
+  // OKX allows 5 stats requests per 2 seconds per endpoint; give each endpoint its own queue
+  const queues = {};
+  const statsGet = path => {
+    const ep = path.split('?')[0], q = queues[ep] || Promise.resolve();
+    const p = q.then(() => get(path));
+    queues[ep] = p.catch(() => {}).then(() => new Promise(r => setTimeout(r, 420)));
+    return p;
+  };
+  async function get(path) {
+    for (let k = 0; k < 4; k++) {
+      try {
+        const ac = new AbortController(), to = setTimeout(() => ac.abort(), 15000);
+        const r = await fetch(API + path, { signal: ac.signal }); clearTimeout(to);
+        const j = await r.json();
+        if (j.code === '0') return j.data;
+        if (j.code === '50011') { await new Promise(r => setTimeout(r, 1200)); continue; } // rate limited
+        throw new Error(j.msg || 'OKX error');
+      } catch (e) { if (k === 3) throw e; await new Promise(r => setTimeout(r, 800)); }
     }
-    D = st.cache[key];
-    D.lmin = Math.log(D.R.pmin); D.lspan = Math.log(D.R.pmax) - D.lmin;
+  }
+  async function instruments() {
+    if (st.instLoaded) return;
+    const d = await get('public/instruments?instType=SWAP');
+    d.filter(x => x.settleCcy === 'USDT' && x.state === 'live').forEach(x => st.inst[x.ctValCcy.toUpperCase()] = x.instId);
+    // OKX lists some coins by a different base name than the ticker (instId base)
+    d.filter(x => x.settleCcy === 'USDT' && x.state === 'live').forEach(x => st.inst[x.instId.split('-')[0]] = x.instId);
+    $('coinlist').innerHTML = Object.keys(st.inst).sort().map(k => `<option value="${k}">`).join('');
+    st.instLoaded = true;
+  }
+  async function pickCoin(text) {
+    text = String(text || '').trim(); if (!text) return;
+    try { await instruments(); } catch (e) { msg('Could not reach OKX to look up coins.'); return; }
+    let sym = text.toUpperCase().replace(/[-\/ ]?(USDT|USD|PERP|SWAP).*$/, '');
+    const isAddr = /^0x[0-9a-f]{40}$/i.test(text) || /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(text);
+    if (isAddr) {
+      msg('Looking up that contract address…', true);
+      try {
+        const r = await (await fetch('https://api.dexscreener.com/latest/dex/tokens/' + text)).json();
+        const pairs = (r.pairs || []).filter(p => p.baseToken && p.baseToken.address.toLowerCase() === text.toLowerCase());
+        pairs.sort((a, b) => ((b.liquidity || {}).usd || 0) - ((a.liquidity || {}).usd || 0));
+        if (!pairs.length) { msg('No token found at that address.'); return; }
+        sym = pairs[0].baseToken.symbol.toUpperCase();
+      } catch (e) { msg('Could not look up that address.'); return; }
+    }
+    if (!st.inst[sym]) { msg(`${sym} has no perpetual futures market on OKX, so there's no open interest or liquidations to map.`); return; }
+    msg('');
+    st.coin = sym; $('search').value = ''; markCoin(); load('latest');
+  }
+  async function pages(path, end, need, key) {
+    // walk back through history 100 rows at a time until `need` rows or no more data
+    const out = new Map(); let cur = end;
+    while (out.size < need) {
+      const d = key === 'stats' ? await statsGet(`${path}&limit=100${cur ? `&end=${cur}` : ''}`) : await get(`${path}&limit=100${cur ? `&after=${cur}` : ''}`);
+      if (!d || !d.length) break;
+      d.forEach(r => out.set(+r[0], r));
+      const oldest = +d[d.length - 1][0];
+      if (cur && oldest >= cur) break;
+      cur = oldest;
+      progress();
+    }
+    return [...out.values()].sort((a, b) => a[0] - b[0]);
+  }
+  let prog = 0; const progress = () => { prog++; $('loading').textContent = `Loading ${st.coin} ${TF[st.tf].label}… ${prog}`; };
+  async function fetchSet(coin, tf, end, nBars) {
+    const T = TF[tf], inst = st.inst[coin] || `${coin}-USDT-SWAP`, per = T.per;
+    const statRows = Math.ceil(nBars * T.ms / PER_MS[per]) + 2;
+    const endQ = end ? end + 1 : null;
+    const [c, oi, ls, tk] = await Promise.all([
+      pages(`market/history-candles?instId=${inst}&bar=${T.bar}`, endQ, nBars, 'c'),
+      pages(`rubik/stat/contracts/open-interest-history?instId=${inst}&period=${per}`, endQ, statRows, 'stats'),
+      pages(`rubik/stat/contracts/long-short-account-ratio-contract?instId=${inst}&period=${per}`, endQ, statRows, 'stats'),
+      pages(`rubik/stat/taker-volume-contract?instId=${inst}&period=${per}&unit=2`, endQ, statRows, 'stats'),
+    ]);
+    return { c, oi, ls, tk, per: PER_MS[per], ms: T.ms };
+  }
+  // join candles with the latest stats row at or before each candle ("as of")
+  function build(raw) {
+    const asof = (rows, t) => { let lo = 0, hi = rows.length - 1, k = -1; while (lo <= hi) { const m = (lo + hi) >> 1; if (+rows[m][0] <= t) { k = m; lo = m + 1; } else hi = m - 1; } return k; };
+    const split = raw.per / raw.ms > 1 ? raw.per / raw.ms : 1;   // 1-min frames share each 5-min taker figure
+    const s = { t: [], o: [], h: [], l: [], c: [], oi: [], ls: [], buy: [], sell: [] };
+    for (const r of raw.c) {
+      const t = +r[0], k = asof(raw.oi, t);
+      if (k < 0) continue;                                // no open-interest history this far back
+      const kl = asof(raw.ls, t), kt = asof(raw.tk, t);
+      s.t.push(t); s.o.push(+r[1]); s.h.push(+r[2]); s.l.push(+r[3]); s.c.push(+r[4]);
+      s.oi.push(+raw.oi[k][3]); s.ls.push(kl >= 0 ? +raw.ls[kl][1] : 1);
+      const fresh = kt >= 0 && t - +raw.tk[kt][0] < raw.per;
+      s.sell.push(fresh ? +raw.tk[kt][1] / split : 0); s.buy.push(fresh ? +raw.tk[kt][2] / split : 0);
+    }
+    return s;
+  }
+  function prepare(s) {
+    const R = LiqModel.run(s);
+    const d = { s, R, ...images(R) };
+    d.lmin = Math.log(R.pmin); d.lspan = Math.log(R.pmax) - d.lmin;
+    return d;
+  }
+  async function staticFallback(coin, tf) {
+    const raw = await (await fetch(`data/${coin}_${tf}.json`)).json();
+    return { t: raw.t.map(x => raw.t0 + x * raw.step), o: raw.o, h: raw.h, l: raw.l, c: raw.c, oi: raw.oi, ls: raw.ls, buy: raw.buy, sell: raw.sell };
+  }
+
+  let loadId = 0;
+  async function load(mode) {
+    const id = ++loadId, coin = st.coin, tf = st.tf, T = TF[tf];
+    const prevT = D ? D.s.t[st.ph] : null;
+    const key = `${coin}_${tf}_${st.end || 'now'}`;
+    prog = 0; $('loading').textContent = `Loading ${coin} ${T.label}…`; $('loading').style.display = 'grid';
+    $('older').disabled = true;
+    let d = st.cache[key];
+    if (!d) {
+      let s;
+      try {
+        await instruments().catch(() => {});
+        const raw = await fetchSet(coin, tf, st.end, T.bars);
+        s = build(raw);
+        if (s.c.length < 20) throw new Error('not enough history');
+        st.cache[key] = { raw };
+      } catch (e) {
+        try { s = await staticFallback(coin, tf); msg('Live data unavailable here, showing the saved snapshot.'); }
+        catch (e2) {
+          if (id !== loadId) return;
+          $('loading').textContent = st.end ? `No open-interest history for ${coin} ${T.label} at that date. OKX keeps 1,440 ${T.per} periods; pick a larger frame for older dates.` : `Couldn't load ${coin} ${T.label}.`;
+          return;
+        }
+      }
+      if (id !== loadId) return;
+      d = prepare(s);
+      if (st.cache[key]) Object.assign(st.cache[key], d); else st.cache[key] = d;
+      d = st.cache[key];
+    }
+    if (id !== loadId) return;
+    D = d;
     $('slider').max = D.s.c.length - 1;
-    // keep the same moment in time when switching frame size; otherwise jump to the latest frame
     let ph = D.s.c.length - 1;
-    if (prevT && !keepTimeOnly) { ph = 0; while (ph < D.s.t.length - 1 && D.s.t[ph + 1] <= prevT) ph++; }
+    if (mode === 'keep' && prevT && !(st.live && !st.end)) { ph = 0; while (ph < D.s.t.length - 1 && D.s.t[ph + 1] <= prevT) ph++; }
     $('loading').style.display = 'none';
-    setPh(ph);
+    $('older').disabled = !D.raw && !st.cache[key].raw;
+    st.ph = ph; setPh(ph);
+    liveState();
+  }
+
+  // load the 500 frames before the first one shown and prepend them
+  async function loadOlder() {
+    const key = `${st.coin}_${st.tf}_${st.end || 'now'}`, entry = st.cache[key];
+    if (!entry || !entry.raw) return;
+    const T = TF[st.tf], first = entry.s.t[0], at = entry.s.t[st.ph];
+    $('older').disabled = true; prog = 0; $('loading').style.display = 'grid'; $('loading').textContent = 'Loading older frames…';
+    try {
+      const more = await fetchSet(st.coin, st.tf, first - 1, 500);
+      const merge = (a, b) => { const m = new Map(); a.concat(b).forEach(r => m.set(+r[0], r)); return [...m.values()].sort((x, y) => x[0] - y[0]); };
+      for (const k of ['c', 'oi', 'ls', 'tk']) entry.raw[k] = merge(more[k], entry.raw[k]);
+      const s = build(entry.raw);
+      if (s.t[0] >= first) msg(`That's as far back as OKX keeps ${T.per} open interest. Pick a larger frame to go further back.`);
+      Object.assign(entry, prepare(s));
+      D = entry;
+      $('slider').max = D.s.c.length - 1;
+      let ph = 0; while (ph < D.s.t.length - 1 && D.s.t[ph + 1] <= at) ph++;
+      st.ph = ph; setPh(ph);
+    } catch (e) { msg('Could not load older frames.'); }
+    $('loading').style.display = 'none'; $('older').disabled = false;
+  }
+
+  // ---------- live updates ----------
+  let liveTimer = 0, tailBusy = false;
+  function liveState() {
+    $('liveDot').className = 'live' + (st.live && !st.end ? ' on' : '');
+    $('liveDot').textContent = st.live && !st.end ? 'LIVE' : 'HISTORY';
+    clearInterval(liveTimer);
+    if (st.live && !st.end) liveTimer = setInterval(liveTick, 3000);
+  }
+  async function liveTick() {
+    if (!D || document.hidden || !st.live || st.end) return;
+    const key = `${st.coin}_${st.tf}_now`, entry = st.cache[key];
+    if (!entry || !entry.raw || D !== entry) return;
+    try {
+      const tk = (await get(`market/ticker?instId=${st.inst[st.coin] || st.coin + '-USDT-SWAP'}`))[0];
+      const px = +tk.last, s = entry.s, n = s.c.length - 1, atEnd = st.ph === n;
+      const T = TF[st.tf];
+      if (Date.now() >= s.t[n] + T.ms && !tailBusy) { refreshTail(entry, atEnd); return; }
+      s.c[n] = px; s.h[n] = Math.max(s.h[n], px); s.l[n] = Math.min(s.l[n], px);
+      if (atEnd) draw();
+    } catch (e) {}
+  }
+  // a new bar started: pull the latest few candles and stats rows, then rebuild
+  async function refreshTail(entry, atEnd) {
+    tailBusy = true;
+    try {
+      const T = TF[st.tf], inst = st.inst[st.coin] || st.coin + '-USDT-SWAP';
+      const [c, oi, ls, tk] = await Promise.all([
+        get(`market/candles?instId=${inst}&bar=${T.bar}&limit=5`),
+        statsGet(`rubik/stat/contracts/open-interest-history?instId=${inst}&period=${T.per}&limit=5`),
+        statsGet(`rubik/stat/contracts/long-short-account-ratio-contract?instId=${inst}&period=${T.per}&limit=5`),
+        statsGet(`rubik/stat/taker-volume-contract?instId=${inst}&period=${T.per}&limit=5&unit=2`),
+      ]);
+      const merge = (a, b) => { const m = new Map(); a.concat(b).forEach(r => m.set(+r[0], r)); return [...m.values()].sort((x, y) => x[0] - y[0]); };
+      entry.raw.c = merge(entry.raw.c, c); entry.raw.oi = merge(entry.raw.oi, oi); entry.raw.ls = merge(entry.raw.ls, ls); entry.raw.tk = merge(entry.raw.tk, tk);
+      Object.assign(entry, prepare(build(entry.raw)));
+      if (D === entry) { $('slider').max = D.s.c.length - 1; setPh(atEnd ? D.s.c.length - 1 : st.ph); }
+    } catch (e) {}
+    tailBusy = false;
   }
   function images(R) {
     // one pixel per (frame, price bin); brightness = sqrt(amount / 99.5th percentile)
@@ -430,7 +652,8 @@
       const i = Math.round(a + (span - 1) * k / ticks);
       if (i > ph) continue;
       const d = new Date(s.t[i]);
-      const lab = st.tf === '1h' ? d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) + ' ' + d.getHours() + 'h' : d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+      const ms = TF[st.tf].ms;
+      const lab = ms >= 2592000e3 ? d.toLocaleDateString(undefined, { month: 'short', year: 'numeric' }) : ms >= 86400e3 ? d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: '2-digit' }) : ms >= 3600e3 ? d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) + ' ' + d.getHours() + 'h' : d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
       ctx.fillText(lab, Math.min(cw - 30 * dpr, Math.max(30 * dpr, (i - a + 0.5) * colW)), ch + 14 * dpr);
     }
 
@@ -473,12 +696,11 @@
     $('sShort').textContent = money(sr);
     $('sLs').textContent = s.ls[ph].toFixed(2) + ' : 1';
     const d = new Date(s.t[ph]);
-    $('clock').textContent = d.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) + `  ·  ${ph + 1}/${n}`;
+    $('clock').textContent = (TF[st.tf].ms >= 86400e3 ? d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : d.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })) + `  ·  ${ph + 1}/${n}`;
   }
 
-  fetch('data/index.json').then(r => r.json()).then(ix => { $('updated').textContent = new Date(ix.updated).toLocaleString(); }).catch(() => {});
   resize();
-  load(true);
+  load('latest');
 })();
 </script>
 </body>

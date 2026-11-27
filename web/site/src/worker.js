@@ -72,9 +72,41 @@ async function reportMail(request, env) {
   return json({ ok: true, sent: true })
 }
 
+// GET /api/okx/<path>  (used by /liqreplay): read-only passthrough to OKX's public market data,
+// because OKX's open-interest and ratio endpoints don't allow direct browser requests.
+// Only these public, no-auth endpoints are allowed; responses are cached at the edge.
+const OKX_PATHS = [
+  'market/candles', 'market/history-candles', 'market/ticker', 'public/instruments',
+  'rubik/stat/contracts/open-interest-history', 'rubik/stat/contracts/long-short-account-ratio-contract', 'rubik/stat/taker-volume-contract',
+]
+async function okx(request, url, ctx) {
+  const path = url.pathname.slice('/api/okx/'.length)
+  if (!OKX_PATHS.includes(path)) return json({ error: 'not allowed' }, 404)
+  const cache = caches.default
+  const key = new Request(url.toString(), { method: 'GET' })
+  const hit = await cache.match(key)
+  if (hit) return hit
+  const r = await fetch(`https://www.okx.com/api/v5/${path}${url.search}`, { headers: { 'User-Agent': 'iyiyi-liqreplay', Accept: 'application/json' } })
+  const body = await r.text()
+  const historical = url.searchParams.has('end') || url.searchParams.has('after')
+  const ttl = path === 'public/instruments' ? 3600 : path === 'market/ticker' ? 2 : historical ? 600 : 15
+  let ok = r.ok
+  try { ok = ok && JSON.parse(body).code === '0' } catch { ok = false }
+  const res = new Response(body, {
+    status: r.status,
+    headers: { 'Access-Control-Allow-Origin': '*', 'Content-Type': 'application/json', 'Cache-Control': `public, max-age=${ok ? ttl : 0}` },
+  })
+  if (ok) ctx.waitUntil(cache.put(key, res.clone()))
+  return res
+}
+
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     const url = new URL(request.url)
+    if (url.pathname.startsWith('/api/okx/')) {
+      if (request.method !== 'GET') return json({ error: 'GET only' }, 405)
+      return okx(request, url, ctx)
+    }
     if (url.pathname === '/api/report-mail') {
       if (request.method === 'OPTIONS') return new Response(null, { headers: CORS })
       if (request.method === 'POST') return reportMail(request, env)
