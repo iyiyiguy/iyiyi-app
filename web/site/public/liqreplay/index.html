@@ -1,0 +1,419 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>LiqReplay — Liquidation Heatmap You Can Play Back | iYiYi</title>
+<meta name="description" content="LiqReplay: an animated crypto liquidation heatmap. Play, pause and scrub through time to watch estimated long and short liquidation levels move with price for BTC, ETH, SOL, HYPE and SHIB." />
+<link rel="canonical" href="https://iyiyi.xyz/liqreplay/" />
+<meta property="og:title" content="LiqReplay — the liquidation heatmap that moves" />
+<meta property="og:description" content="Watch estimated liquidation levels build up and get swept, frame by frame." />
+<meta property="og:url" content="https://iyiyi.xyz/liqreplay/" />
+<link rel="icon" href="/favicon.png" />
+<style>
+  :root {
+    --ink: #07080f; --text: #f2f3fa; --muted: rgba(242,243,250,.68); --faint: rgba(242,243,250,.42);
+    --glass: rgba(255,255,255,.06); --edge: rgba(255,255,255,.14);
+    --pink: #ff4fa3; --violet: #8f5bff; --cyan: #3fd6ff; --lime: #a6ff4f; --radius: 18px;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--ink); color: var(--text); font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  body { background: radial-gradient(1200px 600px at 10% -10%, rgba(143,91,255,.18), transparent 60%), radial-gradient(900px 500px at 100% 0%, rgba(63,214,255,.12), transparent 60%), var(--ink); min-height: 100vh; }
+  a { color: var(--cyan); }
+  .wrap { max-width: 1280px; margin: 0 auto; padding: 20px 18px 60px; }
+  header { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
+  .brand { display: flex; align-items: baseline; gap: 10px; }
+  .brand h1 { margin: 0; font-size: 26px; letter-spacing: -.02em; }
+  .brand h1 span { background: linear-gradient(135deg, var(--cyan), var(--violet), var(--pink)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .brand small { color: var(--faint); font-size: 13px; }
+  .back { color: var(--muted); text-decoration: none; font-size: 14px; }
+  .panel { background: var(--glass); border: 1px solid var(--edge); border-radius: var(--radius); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); }
+  .bar { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; padding: 12px 14px; }
+  .seg { display: inline-flex; background: rgba(0,0,0,.25); border: 1px solid var(--edge); border-radius: 12px; padding: 3px; }
+  .seg button { background: none; border: 0; color: var(--muted); font: inherit; font-size: 14px; font-weight: 600; padding: 7px 12px; border-radius: 9px; cursor: pointer; }
+  .seg button.on { background: rgba(255,255,255,.14); color: var(--text); }
+  .lbl { color: var(--faint); font-size: 12px; text-transform: uppercase; letter-spacing: .08em; margin-right: 6px; }
+  .toggles { display: flex; flex-wrap: wrap; gap: 8px; }
+  .tg { display: inline-flex; align-items: center; gap: 7px; border: 1px solid var(--edge); border-radius: 999px; padding: 6px 12px; font-size: 13px; cursor: pointer; user-select: none; color: var(--muted); }
+  .tg i { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+  .tg.on { color: var(--text); background: rgba(255,255,255,.08); }
+  .tg:not(.on) i { opacity: .3; }
+  select { background: rgba(0,0,0,.35); color: var(--text); border: 1px solid var(--edge); border-radius: 10px; padding: 7px 10px; font: inherit; font-size: 14px; }
+  .stage { margin-top: 12px; padding: 10px; }
+  canvas { display: block; width: 100%; touch-action: none; cursor: ew-resize; border-radius: 12px; }
+  .player { display: flex; align-items: center; gap: 12px; padding: 10px 6px 2px; flex-wrap: wrap; }
+  .play { width: 44px; height: 44px; border-radius: 50%; border: 0; cursor: pointer; background: linear-gradient(135deg, var(--pink), var(--violet)); color: #fff; font-size: 18px; display: grid; place-items: center; flex: none; }
+  .step { background: rgba(255,255,255,.08); border: 1px solid var(--edge); color: var(--text); border-radius: 10px; width: 36px; height: 36px; cursor: pointer; font-size: 14px; flex: none; }
+  input[type=range] { flex: 1 1 300px; accent-color: var(--violet); height: 28px; }
+  .clock { font-variant-numeric: tabular-nums; color: var(--muted); font-size: 14px; min-width: 150px; }
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-top: 12px; }
+  .stat { padding: 12px 14px; }
+  .stat b { display: block; font-size: 18px; font-variant-numeric: tabular-nums; margin-top: 4px; }
+  .stat span { color: var(--faint); font-size: 12px; text-transform: uppercase; letter-spacing: .06em; }
+  .notes { margin-top: 16px; padding: 16px 18px; color: var(--muted); font-size: 14px; line-height: 1.6; }
+  .notes h2 { color: var(--text); font-size: 16px; margin: 0 0 6px; }
+  .notes p { margin: 6px 0; }
+  kbd { background: rgba(255,255,255,.1); border: 1px solid var(--edge); border-radius: 5px; padding: 1px 6px; font-size: 12px; }
+  .loading { position: absolute; inset: 0; display: grid; place-items: center; color: var(--muted); }
+  .rel { position: relative; }
+  @media (max-width: 640px) { .brand h1 { font-size: 22px; } .clock { min-width: 0; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="brand"><h1><span>LiqReplay</span></h1><small>the liquidation heatmap that moves</small></div>
+    <a class="back" href="/">by iYiYi</a>
+  </header>
+
+  <div class="panel bar">
+    <div><span class="lbl">Coin</span><span class="seg" id="coins"></span></div>
+    <div><span class="lbl">Frame</span><span class="seg" id="tfs"></span></div>
+    <div><span class="lbl">Window</span>
+      <select id="win"><option value="96">96 frames</option><option value="200" selected>200 frames</option><option value="500">500 frames</option><option value="0">Everything</option></select>
+    </div>
+    <div><span class="lbl">Bottom</span>
+      <select id="sub"><option value="oi">Open interest</option><option value="ls">Long/short account ratio</option><option value="tk">Taker buy − sell</option><option value="liq">Liquidations (est.)</option><option value="off">Off</option></select>
+    </div>
+  </div>
+
+  <div class="panel bar" style="margin-top:10px">
+    <span class="lbl">Show</span>
+    <div class="toggles" id="layers"></div>
+  </div>
+
+  <div class="panel stage">
+    <div class="rel"><canvas id="cv"></canvas><div class="loading" id="loading">Loading…</div></div>
+    <div class="player">
+      <button class="play" id="play" title="Play / pause (space)">▶</button>
+      <button class="step" id="prev" title="Back one frame (←)">◀</button>
+      <button class="step" id="next" title="Forward one frame (→)">▶</button>
+      <input type="range" id="slider" min="0" max="0" value="0" />
+      <select id="speed" title="Playback speed">
+        <option value="2">2 frames/s</option><option value="5">5 frames/s</option><option value="10" selected>10 frames/s</option><option value="20">20 frames/s</option><option value="40">40 frames/s</option>
+      </select>
+      <div class="clock" id="clock"></div>
+    </div>
+  </div>
+
+  <div class="stats">
+    <div class="panel stat"><span>Price</span><b id="sPrice">–</b></div>
+    <div class="panel stat"><span>Open interest</span><b id="sOi">–</b></div>
+    <div class="panel stat"><span>Longs at risk (−5%)</span><b id="sLong" style="color:var(--cyan)">–</b></div>
+    <div class="panel stat"><span>Shorts at risk (+5%)</span><b id="sShort" style="color:var(--pink)">–</b></div>
+    <div class="panel stat"><span>Long/short accounts</span><b id="sLs">–</b></div>
+  </div>
+
+  <div class="panel notes">
+    <h2>How to use it</h2>
+    <p>Press play to watch liquidation levels build up and get swept as price moves. Scroll your mouse wheel over the chart, drag across it, use the slider, or press <kbd>←</kbd> <kbd>→</kbd> to scrub (hold <kbd>Shift</kbd> to jump 10 frames). <kbd>Space</kbd> plays and pauses. Each frame is one 5-minute, 15-minute or 1-hour bar.</p>
+    <p><b style="color:var(--cyan)">Cyan</b> bands are prices where longs would be liquidated (they sit below price). <b style="color:var(--pink)">Pink</b> bands are where shorts would be liquidated (above price). The brighter the band, the more money is estimated there. The panel on the right shows the levels at the current frame.</p>
+    <h2>What this is (and isn't)</h2>
+    <p>Like every liquidation heatmap, this is an <b>estimate</b>. No exchange publishes where its traders' liquidation prices or stop losses are, so nobody has that data. LiqReplay estimates it the standard way: when open interest rises, new positions are assumed to open near that bar's price, split between longs and shorts using the long/short account ratio and taker buy/sell volume, spread across 5×–100× leverage. Levels are removed when price trades through them (liquidated) or when open interest falls (positions closed). The first part of each replay starts empty and fills in as positions are added.</p>
+    <p>Data: OKX USDT perpetuals (price, open interest, long/short account ratio, taker volume). Snapshot updated <span id="updated">–</span>. Not financial advice.</p>
+  </div>
+</div>
+
+<script src="model.js"></script>
+<script>
+(function () {
+  const COINS = ['BTC', 'ETH', 'SOL', 'HYPE', 'SHIB'];
+  const TFS = [['5m', '5 min'], ['15m', '15 min'], ['1h', '1 hour']];
+  const LAYERS = [
+    ['long', 'Long liquidation levels', '#3fd6ff', true],
+    ['short', 'Short liquidation levels', '#ff4fa3', true],
+    ['price', 'Price', '#ffffff', true],
+    ['events', 'Liquidation bursts', '#a6ff4f', true],
+    ['profile', 'Current-level profile', '#8f5bff', true],
+  ];
+  const st = { coin: 'BTC', tf: '15m', ph: 0, playing: false, fps: 10, win: 200, sub: 'oi', layers: {}, cache: {} };
+  LAYERS.forEach(l => st.layers[l[0]] = l[3]);
+  const $ = id => document.getElementById(id);
+  const cv = $('cv'), ctx = cv.getContext('2d');
+  let D = null; // current dataset {s, R, imgL, imgS, lmin, lspan}
+
+  // ---------- controls ----------
+  function seg(el, items, key, onPick) {
+    el.innerHTML = '';
+    items.forEach(([v, label]) => {
+      const b = document.createElement('button'); b.textContent = label; b.dataset.v = v;
+      if (st[key] === v) b.className = 'on';
+      b.onclick = () => { [...el.children].forEach(c => c.className = c.dataset.v === v ? 'on' : ''); onPick(v); };
+      el.appendChild(b);
+    });
+  }
+  seg($('coins'), COINS.map(c => [c, c]), 'coin', v => { st.coin = v; load(true); });
+  seg($('tfs'), TFS, 'tf', v => { st.tf = v; load(false); });
+  const lay = $('layers');
+  LAYERS.forEach(([k, label, col]) => {
+    const t = document.createElement('span'); t.className = 'tg' + (st.layers[k] ? ' on' : '');
+    t.innerHTML = `<i style="background:${col}"></i>${label}`;
+    t.onclick = () => { st.layers[k] = !st.layers[k]; t.classList.toggle('on'); draw(); };
+    lay.appendChild(t);
+  });
+  $('win').onchange = e => { st.win = +e.target.value; draw(); };
+  $('sub').onchange = e => { st.sub = e.target.value; resize(); };
+  $('speed').onchange = e => { st.fps = +e.target.value; };
+  $('slider').oninput = e => { setPh(+e.target.value); };
+  $('play').onclick = togglePlay;
+  $('prev').onclick = () => setPh(st.ph - 1);
+  $('next').onclick = () => setPh(st.ph + 1);
+  document.addEventListener('keydown', e => {
+    if (e.target.tagName === 'SELECT' || e.target.tagName === 'INPUT') return;
+    if (e.code === 'Space') { e.preventDefault(); togglePlay(); }
+    if (e.key === 'ArrowLeft') { e.preventDefault(); setPh(st.ph - (e.shiftKey ? 10 : 1)); }
+    if (e.key === 'ArrowRight') { e.preventDefault(); setPh(st.ph + (e.shiftKey ? 10 : 1)); }
+  });
+  cv.addEventListener('wheel', e => {
+    e.preventDefault();
+    const d = Math.sign(e.deltaY || e.deltaX) * (e.shiftKey ? 10 : Math.max(1, Math.round(Math.abs(e.deltaY) / 40)));
+    setPh(st.ph + d);
+  }, { passive: false });
+  let drag = null;
+  cv.addEventListener('pointerdown', e => { drag = { x: e.clientX, ph: st.ph }; cv.setPointerCapture(e.pointerId); if (st.playing) togglePlay(); });
+  cv.addEventListener('pointermove', e => {
+    if (!drag || !D) return;
+    const w = visibleCount(), chartW = layout().cw;
+    setPh(drag.ph + Math.round((e.clientX - drag.x) / (chartW / w) * devicePixelRatio));
+  });
+  cv.addEventListener('pointerup', () => drag = null);
+
+  function togglePlay() {
+    if (!D) return;
+    st.playing = !st.playing;
+    $('play').textContent = st.playing ? '❚❚' : '▶';
+    if (st.playing && st.ph >= D.s.c.length - 1) setPh(0);
+    if (st.playing) tick();
+  }
+  let last = 0;
+  function tick(ts) {
+    if (!st.playing) return;
+    if (ts && ts - last >= 1000 / st.fps) {
+      last = ts;
+      if (st.ph >= D.s.c.length - 1) { togglePlay(); return; }
+      setPh(st.ph + 1);
+    }
+    requestAnimationFrame(tick);
+  }
+  function setPh(v) {
+    if (!D) return;
+    st.ph = Math.max(0, Math.min(D.s.c.length - 1, v));
+    $('slider').value = st.ph;
+    draw();
+  }
+
+  // ---------- data ----------
+  async function load(keepTimeOnly) {
+    const key = st.coin + '_' + st.tf;
+    const prevT = D ? D.s.t[st.ph] : null;
+    $('loading').style.display = 'grid';
+    if (!st.cache[key]) {
+      const raw = await (await fetch(`data/${key}.json`)).json();
+      const s = { t: raw.t.map(x => raw.t0 + x * raw.step), o: raw.o, h: raw.h, l: raw.l, c: raw.c, oi: raw.oi, ls: raw.ls, buy: raw.buy, sell: raw.sell };
+      const R = LiqModel.run(s);
+      st.cache[key] = { s, R, ...images(R) };
+    }
+    D = st.cache[key];
+    D.lmin = Math.log(D.R.pmin); D.lspan = Math.log(D.R.pmax) - D.lmin;
+    $('slider').max = D.s.c.length - 1;
+    // keep the same moment in time when switching frame size; otherwise jump to the latest frame
+    let ph = D.s.c.length - 1;
+    if (prevT && !keepTimeOnly) { ph = 0; while (ph < D.s.t.length - 1 && D.s.t[ph + 1] <= prevT) ph++; }
+    $('loading').style.display = 'none';
+    setPh(ph);
+  }
+  function images(R) {
+    // one pixel per (frame, price bin); brightness = sqrt(amount / 99.5th percentile)
+    const vals = [];
+    for (let i = 0; i < R.n; i += Math.max(1, Math.floor(R.n / 200))) for (let b = 0; b < R.NB; b++) { const v = R.framesLong[i][b] + R.framesShort[i][b]; if (v > 0) vals.push(R.framesLong[i][b], R.framesShort[i][b]); }
+    vals.sort((a, b) => a - b);
+    const norm = vals[Math.floor(vals.length * 0.997)] || 1;
+    const mk = (frames, rgb) => {
+      const c = document.createElement('canvas'); c.width = R.n; c.height = R.NB;
+      const g = c.getContext('2d'), im = g.createImageData(R.n, R.NB);
+      for (let i = 0; i < R.n; i++) for (let b = 0; b < R.NB; b++) {
+        const v = Math.min(1, Math.pow(frames[i][b] / norm, 0.6));
+        if (v <= 0.04) continue;
+        const k = ((R.NB - 1 - b) * R.n + i) * 4;
+        im.data[k] = rgb[0]; im.data[k + 1] = rgb[1]; im.data[k + 2] = rgb[2]; im.data[k + 3] = Math.round(255 * Math.pow(v, 1.1));
+      }
+      g.putImageData(im, 0, 0); return c;
+    };
+    return { imgL: mk(R.framesLong, [63, 214, 255]), imgS: mk(R.framesShort, [255, 79, 163]), norm };
+  }
+
+  // ---------- drawing ----------
+  function layout() {
+    const W = cv.width, H = cv.height, dpr = devicePixelRatio;
+    const pw = st.layers.profile ? Math.round(Math.min(150, W * 0.16)) : 0;
+    const axis = Math.round(64 * dpr);
+    const sub = st.sub === 'off' ? 0 : Math.round(H * 0.2);
+    return { W, H, dpr, cw: W - pw - axis, ch: H - sub - Math.round(20 * dpr), pw, axis, sub, top: 0 };
+  }
+  function resize() {
+    const dpr = devicePixelRatio || 1, w = cv.clientWidth;
+    const h = Math.max(380, Math.min(640, Math.round(w * 0.56)));
+    cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr); cv.style.height = h + 'px';
+    draw();
+  }
+  window.addEventListener('resize', resize);
+  const visibleCount = () => st.win === 0 ? (D ? D.s.c.length : 1) : st.win;
+  const money = v => v >= 1e9 ? '$' + (v / 1e9).toFixed(2) + 'B' : v >= 1e6 ? '$' + (v / 1e6).toFixed(1) + 'M' : v >= 1e3 ? '$' + (v / 1e3).toFixed(0) + 'K' : '$' + v.toFixed(0);
+  const fmtP = p => p >= 1000 ? p.toLocaleString(undefined, { maximumFractionDigits: 0 }) : p >= 1 ? p.toFixed(p >= 100 ? 2 : 3) : p >= 0.01 ? p.toPrecision(4) : p.toExponential(3);
+
+  function draw() {
+    if (!D) return;
+    const { s, R } = D, L = layout(), { W, H, dpr, cw, ch, pw, axis } = L;
+    const n = s.c.length, ph = st.ph, vis = visibleCount();
+    const a = Math.max(0, ph - vis + 1);
+    const colW = cw / vis;
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.fillStyle = '#05060c'; ctx.fillRect(0, 0, W, H);
+
+    // vertical range: price range in view, padded so nearby clusters show
+    let lo = Infinity, hi = -Infinity;
+    for (let i = a; i <= ph; i++) { lo = Math.min(lo, s.l[i]); hi = Math.max(hi, s.h[i]); }
+    const pad = Math.max((hi - lo) * 0.35, (hi + lo) / 2 * 0.03);
+    lo = Math.max(R.pmin, lo - pad); hi = Math.min(R.pmax, hi + pad);
+    const b0 = R.binOf(lo), b1 = R.binOf(hi);
+    const yLo = D.lmin + b0 / R.NB * D.lspan, yHi = D.lmin + (b1 + 1) / R.NB * D.lspan;
+    const Y = p => ch * (1 - (Math.log(p) - yLo) / (yHi - yLo));
+
+    // heat columns up to the playhead only
+    ctx.save(); ctx.beginPath(); ctx.rect(0, 0, cw, ch); ctx.clip();
+    ctx.imageSmoothingEnabled = true; ctx.globalCompositeOperation = 'lighter';
+    const sx = a, sw = ph - a + 1, sy = R.NB - 1 - b1, sh = b1 - b0 + 1;
+    if (st.layers.long) ctx.drawImage(D.imgL, sx, sy, sw, sh, 0, 0, sw * colW, ch);
+    if (st.layers.short) ctx.drawImage(D.imgS, sx, sy, sw, sh, 0, 0, sw * colW, ch);
+    ctx.globalCompositeOperation = 'source-over';
+
+    // liquidation bursts (estimated): dots at the bar's low (longs) / high (shorts)
+    if (st.layers.events) {
+      let mx = 0; for (let i = a; i <= ph; i++) mx = Math.max(mx, R.liqLong[i], R.liqShort[i]);
+      for (let i = a; i <= ph; i++) {
+        const x = (i - a + 0.5) * colW;
+        for (const [v, p, col] of [[R.liqLong[i], s.l[i], 'rgba(63,214,255,.85)'], [R.liqShort[i], s.h[i], 'rgba(255,79,163,.85)']]) {
+          if (!mx || v < mx * 0.08) continue;
+          const r = Math.max(2, Math.sqrt(v / mx) * 11 * dpr);
+          ctx.beginPath(); ctx.arc(x, Y(p), r, 0, 7); ctx.fillStyle = col; ctx.fill();
+          ctx.lineWidth = dpr; ctx.strokeStyle = 'rgba(166,255,79,.9)'; ctx.stroke();
+        }
+      }
+    }
+    // price
+    if (st.layers.price) {
+      if (colW >= 4 * dpr) {
+        for (let i = a; i <= ph; i++) {
+          const x = (i - a + 0.5) * colW, up = s.c[i] >= s.o[i];
+          ctx.strokeStyle = ctx.fillStyle = up ? '#e9fff2' : '#9aa3c7';
+          ctx.lineWidth = Math.max(1, dpr); ctx.beginPath(); ctx.moveTo(x, Y(s.h[i])); ctx.lineTo(x, Y(s.l[i])); ctx.stroke();
+          const y1 = Y(Math.max(s.o[i], s.c[i])), y2 = Y(Math.min(s.o[i], s.c[i]));
+          ctx.fillRect(x - colW * 0.32, y1, colW * 0.64, Math.max(dpr, y2 - y1));
+        }
+      } else {
+        ctx.beginPath(); ctx.lineWidth = 1.6 * dpr; ctx.strokeStyle = '#ffffff';
+        for (let i = a; i <= ph; i++) { const x = (i - a + 0.5) * colW, y = Y(s.c[i]); i === a ? ctx.moveTo(x, y) : ctx.lineTo(x, y); }
+        ctx.stroke();
+      }
+      // current price line
+      const yc = Y(s.c[ph]);
+      ctx.setLineDash([4 * dpr, 4 * dpr]); ctx.strokeStyle = 'rgba(255,255,255,.5)'; ctx.lineWidth = dpr;
+      ctx.beginPath(); ctx.moveTo(0, yc); ctx.lineTo(cw + pw, yc); ctx.stroke(); ctx.setLineDash([]);
+    }
+    // playhead edge
+    const xe = (ph - a + 1) * colW;
+    ctx.fillStyle = 'rgba(143,91,255,.7)'; ctx.fillRect(xe - dpr, 0, 2 * dpr, ch);
+    ctx.restore();
+
+    // right-side profile of the current frame
+    if (st.layers.profile && pw) {
+      const x0 = cw, fl = R.framesLong[ph], fs = R.framesShort[ph];
+      let mx = 0; for (let b = b0; b <= b1; b++) mx = Math.max(mx, fl[b], fs[b]);
+      ctx.fillStyle = 'rgba(255,255,255,.03)'; ctx.fillRect(x0, 0, pw, ch);
+      const bh = ch / (b1 - b0 + 1);
+      const top = [];
+      for (let b = b0; b <= b1; b++) {
+        const y = ch - (b - b0 + 1) * bh;
+        if (fl[b] && st.layers.long) { ctx.fillStyle = 'rgba(63,214,255,.85)'; ctx.fillRect(x0, y, fl[b] / mx * (pw - 4), Math.max(1, bh - 0.5)); top.push([fl[b], b, 'L']); }
+        if (fs[b] && st.layers.short) { ctx.fillStyle = 'rgba(255,79,163,.85)'; ctx.fillRect(x0, y, fs[b] / mx * (pw - 4), Math.max(1, bh - 0.5)); top.push([fs[b], b, 'S']); }
+      }
+      top.sort((x, y) => y[0] - x[0]);
+      ctx.font = `${11 * dpr}px Inter, sans-serif`; ctx.fillStyle = '#fff'; ctx.textAlign = 'right';
+      const used = [];
+      top.forEach(([v, b]) => { if (used.length >= 4) return; const y = ch - (b - b0 + 0.5) * bh + 4 * dpr; if (used.some(u => Math.abs(u - y) < 14 * dpr)) return; used.push(y); ctx.fillText(money(v), x0 + pw - 4 * dpr, y); });
+    }
+
+    // price axis
+    ctx.fillStyle = 'rgba(242,243,250,.55)'; ctx.font = `${11 * dpr}px Inter, sans-serif`; ctx.textAlign = 'left';
+    for (let k = 0; k <= 6; k++) {
+      const p = Math.exp(yLo + (yHi - yLo) * k / 6), y = Y(p);
+      if (!(st.layers.price && Math.abs(y - Y(s.c[ph])) < 16 * dpr)) ctx.fillText(fmtP(p), cw + pw + 6 * dpr, Math.min(ch - 2, Math.max(10 * dpr, y + 4 * dpr)));
+      ctx.fillStyle = 'rgba(255,255,255,.05)'; ctx.fillRect(0, y, cw, 1); ctx.fillStyle = 'rgba(242,243,250,.55)';
+    }
+    if (st.layers.price) {
+      const yc = Y(s.c[ph]);
+      ctx.fillStyle = '#fff'; ctx.fillRect(cw + pw + 2 * dpr, yc - 9 * dpr, axis - 4 * dpr, 18 * dpr);
+      ctx.fillStyle = '#07080f'; ctx.fillText(fmtP(s.c[ph]), cw + pw + 6 * dpr, yc + 4 * dpr);
+    }
+
+    // time labels
+    ctx.fillStyle = 'rgba(242,243,250,.45)'; ctx.textAlign = 'center';
+    const span = Math.min(vis, ph - a + 1);
+    const ticks = Math.max(1, Math.min(Math.floor(cw / (130 * dpr)), Math.floor((span * colW) / (110 * dpr))));
+    for (let k = 0; k <= ticks; k++) {
+      const i = Math.round(a + (span - 1) * k / ticks);
+      if (i > ph) continue;
+      const d = new Date(s.t[i]);
+      const lab = st.tf === '1h' ? d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) + ' ' + d.getHours() + 'h' : d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+      ctx.fillText(lab, Math.min(cw - 30 * dpr, Math.max(30 * dpr, (i - a + 0.5) * colW)), ch + 14 * dpr);
+    }
+
+    // bottom panel
+    if (L.sub) {
+      const y0 = H - L.sub + 6 * dpr, hh = L.sub - 10 * dpr;
+      ctx.fillStyle = 'rgba(255,255,255,.03)'; ctx.fillRect(0, y0, cw, hh);
+      let series, label, color = '#8f5bff', bars = false;
+      if (st.sub === 'oi') { series = s.oi; label = 'Open interest ' + money(s.oi[ph]); }
+      else if (st.sub === 'ls') { series = s.ls; label = 'Long/short accounts ' + s.ls[ph].toFixed(2); color = '#a6ff4f'; }
+      else if (st.sub === 'tk') { series = s.buy.map((b, i) => b - s.sell[i]); label = 'Taker buy − sell ' + money(Math.abs(series[ph])) + (series[ph] >= 0 ? ' net buying' : ' net selling'); bars = true; }
+      else { series = R.liqLong.map((v, i) => v - R.liqShort[i]); label = 'Estimated liquidations: longs (down) / shorts (up)'; bars = true; }
+      let mn = Infinity, mx = -Infinity;
+      for (let i = a; i <= ph; i++) { mn = Math.min(mn, series[i]); mx = Math.max(mx, series[i]); }
+      if (bars) { const m = Math.max(Math.abs(mn), Math.abs(mx)) || 1; mn = -m; mx = m; }
+      const py = v => y0 + hh - (v - mn) / ((mx - mn) || 1) * hh;
+      if (bars) {
+        for (let i = a; i <= ph; i++) {
+          const v = series[i], x = (i - a) * colW;
+          const isLiq = st.sub === 'liq';
+          ctx.fillStyle = isLiq ? (v > 0 ? '#3fd6ff' : '#ff4fa3') : (v >= 0 ? '#a6ff4f' : '#ff4fa3');
+          const yv = isLiq ? py(-v) : py(v);
+          ctx.fillRect(x, Math.min(py(0), yv), Math.max(1, colW - 1), Math.abs(yv - py(0)));
+        }
+      } else {
+        ctx.beginPath(); ctx.strokeStyle = color; ctx.lineWidth = 1.6 * dpr;
+        for (let i = a; i <= ph; i++) { const x = (i - a + 0.5) * colW, y = py(series[i]); i === a ? ctx.moveTo(x, y) : ctx.lineTo(x, y); }
+        ctx.stroke();
+      }
+      ctx.fillStyle = 'rgba(242,243,250,.7)'; ctx.textAlign = 'left'; ctx.fillText(label, 8 * dpr, y0 + 14 * dpr);
+    }
+
+    // readouts
+    const fl = R.framesLong[ph], fs = R.framesShort[ph], c = s.c[ph];
+    let lr = 0, sr = 0;
+    for (let b = 0; b < R.NB; b++) { const p = R.priceOf(b); if (p < c && p >= c * 0.95) lr += fl[b]; if (p > c && p <= c * 1.05) sr += fs[b]; }
+    $('sPrice').textContent = '$' + fmtP(c);
+    $('sOi').textContent = money(s.oi[ph]);
+    $('sLong').textContent = money(lr);
+    $('sShort').textContent = money(sr);
+    $('sLs').textContent = s.ls[ph].toFixed(2) + ' : 1';
+    const d = new Date(s.t[ph]);
+    $('clock').textContent = d.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) + `  ·  ${ph + 1}/${n}`;
+  }
+
+  fetch('data/index.json').then(r => r.json()).then(ix => { $('updated').textContent = new Date(ix.updated).toLocaleString(); }).catch(() => {});
+  resize();
+  load(true);
+})();
+</script>
+</body>
+</html>
