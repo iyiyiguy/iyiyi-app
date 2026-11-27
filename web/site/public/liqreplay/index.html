@@ -57,57 +57,76 @@
   .loading { position: absolute; inset: 0; display: grid; place-items: center; color: var(--muted); }
   .rel { position: relative; }
   @media (max-width: 640px) { .brand h1 { font-size: 22px; } .clock { min-width: 0; } }
+  .wrap { max-width: 1600px; margin: 0 auto; padding: 10px 12px 40px; }
+  .top { gap: 8px 10px; padding: 8px 10px; position: relative; z-index: 30; }
+  .brand { display: flex; align-items: baseline; gap: 8px; margin-right: 6px; }
+  .brand h1 { margin: 0; font-size: 20px; letter-spacing: -.02em; }
+  .brand h1 span { background: linear-gradient(135deg, var(--cyan), var(--violet), var(--pink)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .back { color: var(--faint); text-decoration: none; font-size: 12px; }
+  .seg button { padding: 6px 10px; font-size: 13px; }
+  select { padding: 6px 8px; font-size: 13px; }
+  .pop { position: relative; }
+  .popbtn { background: rgba(0,0,0,.35); color: var(--text); border: 1px solid var(--edge); border-radius: 10px; padding: 6px 10px; font: inherit; font-size: 13px; cursor: pointer; }
+  .popmenu { display: none; position: absolute; top: calc(100% + 6px); left: 0; z-index: 20; background: rgba(14,15,26,.97); border: 1px solid var(--edge); border-radius: 14px; padding: 8px; min-width: 240px; box-shadow: 0 18px 40px rgba(0,0,0,.5); }
+  .popmenu.open { display: grid; gap: 6px; }
+  .help { margin-left: auto; width: 30px; height: 30px; border-radius: 50%; border: 1px solid var(--edge); display: grid; place-items: center; color: var(--muted); text-decoration: none; font-weight: 700; }
+  .stage { margin-top: 8px; padding: 8px; }
+  .hud { position: absolute; top: 8px; left: 8px; display: flex; flex-wrap: wrap; gap: 6px; pointer-events: none; max-width: calc(100% - 260px); }
+  .hud div { background: rgba(7,8,15,.72); border: 1px solid var(--edge); border-radius: 10px; padding: 4px 9px; backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
+  .hud span { display: block; color: var(--faint); font-size: 10px; text-transform: uppercase; letter-spacing: .06em; }
+  .hud b { font-size: 14px; font-variant-numeric: tabular-nums; transition: color .35s; }
+  .hud div { transition: border-color .35s, box-shadow .35s; }
+  .hud div.up { border-color: var(--pink); box-shadow: 0 0 14px rgba(255,79,163,.55); }
+  .hud div.dn { border-color: var(--cyan); box-shadow: 0 0 14px rgba(63,214,255,.55); }
+  .player { padding: 8px 4px 0; gap: 8px; }
+  .play { width: 38px; height: 38px; font-size: 15px; }
+  .step { width: 32px; height: 32px; }
+  @media (max-width: 700px) { .hud { max-width: calc(100% - 16px); } .hud div { padding: 3px 7px; } .hud b { font-size: 12px; } .help { margin-left: 0; } }
 </style>
 </head>
 <body>
 <div class="wrap">
-  <header>
-    <div class="brand"><h1><span>LiqReplay</span></h1><small>the liquidation heatmap that moves</small></div>
-    <a class="back" href="/">by iYiYi</a>
-  </header>
-
-  <div class="panel bar">
-    <div><span class="lbl">Coin</span><span class="seg" id="coins"></span></div>
-    <div><span class="lbl">Frame</span><span class="seg" id="tfs"></span></div>
-    <div><span class="lbl">Window</span>
-      <select id="win"><option value="96">96 frames</option><option value="200" selected>200 frames</option><option value="500">500 frames</option><option value="0">Everything</option></select>
+  <div class="panel bar top">
+    <div class="brand"><h1><span>LiqReplay</span></h1><a class="back" href="/">by iYiYi</a></div>
+    <span class="seg" id="coins"></span>
+    <span class="seg" id="tfs"></span>
+    <select id="win" title="How many frames to show"><option value="96">96 frames</option><option value="200" selected>200 frames</option><option value="500">500 frames</option><option value="0">Everything</option></select>
+    <select id="sub" title="Bottom panel"><option value="oi">Bottom: Open interest</option><option value="ls">Bottom: Long/short ratio</option><option value="tk">Bottom: Taker buy − sell</option><option value="liq">Bottom: Liquidations</option><option value="off">Bottom: Off</option></select>
+    <div class="pop">
+      <button class="popbtn" id="layersBtn">Layers ▾</button>
+      <div class="popmenu" id="layers"></div>
     </div>
-    <div><span class="lbl">Bottom</span>
-      <select id="sub"><option value="oi">Open interest</option><option value="ls">Long/short account ratio</option><option value="tk">Taker buy − sell</option><option value="liq">Liquidations (est.)</option><option value="off">Off</option></select>
-    </div>
-  </div>
-
-  <div class="panel bar" style="margin-top:10px">
-    <span class="lbl">Show</span>
-    <div class="toggles" id="layers"></div>
+    <a class="help" href="#notes" title="How it works">?</a>
   </div>
 
   <div class="panel stage">
-    <div class="rel"><canvas id="cv"></canvas><div class="loading" id="loading">Loading…</div></div>
+    <div class="rel">
+      <canvas id="cv"></canvas>
+      <div class="hud">
+        <div><span>Price</span><b id="sPrice">–</b></div>
+        <div><span>Open interest</span><b id="sOi">–</b></div>
+        <div><span>Shorts at risk +5%</span><b id="sShort" style="color:var(--pink)">–</b></div>
+        <div><span>Longs at risk −5%</span><b id="sLong" style="color:var(--cyan)">–</b></div>
+        <div><span>Long/short</span><b id="sLs">–</b></div>
+      </div>
+      <div class="loading" id="loading">Loading…</div>
+    </div>
     <div class="player">
       <button class="play" id="play" title="Play / pause (space)">▶</button>
       <button class="step" id="prev" title="Back one frame (←)">◀</button>
       <button class="step" id="next" title="Forward one frame (→)">▶</button>
       <input type="range" id="slider" min="0" max="0" value="0" />
       <select id="speed" title="Playback speed">
-        <option value="2">2 frames/s</option><option value="5">5 frames/s</option><option value="10" selected>10 frames/s</option><option value="20">20 frames/s</option><option value="40">40 frames/s</option>
+        <option value="2">2 fps</option><option value="5">5 fps</option><option value="10" selected>10 fps</option><option value="20">20 fps</option><option value="40">40 fps</option>
       </select>
       <div class="clock" id="clock"></div>
     </div>
   </div>
 
-  <div class="stats">
-    <div class="panel stat"><span>Price</span><b id="sPrice">–</b></div>
-    <div class="panel stat"><span>Open interest</span><b id="sOi">–</b></div>
-    <div class="panel stat"><span>Longs at risk (−5%)</span><b id="sLong" style="color:var(--cyan)">–</b></div>
-    <div class="panel stat"><span>Shorts at risk (+5%)</span><b id="sShort" style="color:var(--pink)">–</b></div>
-    <div class="panel stat"><span>Long/short accounts</span><b id="sLs">–</b></div>
-  </div>
-
-  <div class="panel notes">
+  <div class="panel notes" id="notes">
     <h2>How to use it</h2>
-    <p>Press play to watch liquidation levels build up and get swept as price moves. Scroll your mouse wheel over the chart, drag across it, use the slider, or press <kbd>←</kbd> <kbd>→</kbd> to scrub (hold <kbd>Shift</kbd> to jump 10 frames). <kbd>Space</kbd> plays and pauses. Each frame is one 5-minute, 15-minute or 1-hour bar.</p>
-    <p><b style="color:var(--cyan)">Cyan</b> bands are prices where longs would be liquidated (they sit below price). <b style="color:var(--pink)">Pink</b> bands are where shorts would be liquidated (above price). The brighter the band, the more money is estimated there. The panel on the right shows the levels at the current frame.</p>
+    <p>Press play to watch liquidation levels build up and get swept as price moves. Scroll your mouse wheel over the chart, drag across it, use the slider, or press <kbd>←</kbd> <kbd>→</kbd> to scrub (hold <kbd>Shift</kbd> to jump 10 frames). <kbd>Space</kbd> plays and pauses. Each frame is one 5-minute, 15-minute or 1-hour bar. Turn layers on and off from the <b>Layers</b> menu.</p>
+    <p><b style="color:var(--cyan)">Cyan</b> bands are prices where longs would be liquidated (they sit below price). <b style="color:var(--pink)">Pink</b> bands are where shorts would be liquidated (above price). The brighter the band, the more money is estimated there. The bars on the right show the levels at the current frame.</p>
     <h2>What this is (and isn't)</h2>
     <p>Like every liquidation heatmap, this is an <b>estimate</b>. No exchange publishes where its traders' liquidation prices or stop losses are, so nobody has that data. LiqReplay estimates it the standard way: when open interest rises, new positions are assumed to open near that bar's price, split between longs and shorts using the long/short account ratio and taker buy/sell volume, spread across 5×–100× leverage. Levels are removed when price trades through them (liquidated) or when open interest falls (positions closed). The first part of each replay starts empty and fills in as positions are added.</p>
     <p>Data: OKX USDT perpetuals (price, open interest, long/short account ratio, taker volume). Snapshot updated <span id="updated">–</span>. Not financial advice.</p>
@@ -126,7 +145,7 @@
     ['events', 'Liquidation bursts', '#a6ff4f', true],
     ['profile', 'Current-level profile', '#8f5bff', true],
   ];
-  const st = { coin: 'BTC', tf: '15m', ph: 0, playing: false, fps: 10, win: 200, sub: 'oi', layers: {}, cache: {} };
+  const st = { flash: null, flashTimer: 0, coin: 'BTC', tf: '15m', ph: 0, playing: false, fps: 10, win: 200, sub: 'oi', layers: {}, cache: {} };
   LAYERS.forEach(l => st.layers[l[0]] = l[3]);
   const $ = id => document.getElementById(id);
   const cv = $('cv'), ctx = cv.getContext('2d');
@@ -148,9 +167,11 @@
   LAYERS.forEach(([k, label, col]) => {
     const t = document.createElement('span'); t.className = 'tg' + (st.layers[k] ? ' on' : '');
     t.innerHTML = `<i style="background:${col}"></i>${label}`;
-    t.onclick = () => { st.layers[k] = !st.layers[k]; t.classList.toggle('on'); draw(); };
+    t.onclick = e => { e.stopPropagation(); st.layers[k] = !st.layers[k]; t.classList.toggle('on'); draw(); };
     lay.appendChild(t);
   });
+  $('layersBtn').onclick = e => { e.stopPropagation(); lay.classList.toggle('open'); };
+  document.addEventListener('click', () => lay.classList.remove('open'));
   $('win').onchange = e => { st.win = +e.target.value; draw(); };
   $('sub').onchange = e => { st.sub = e.target.value; resize(); };
   $('speed').onchange = e => { st.fps = +e.target.value; };
@@ -185,6 +206,8 @@
     if (st.playing && st.ph >= D.s.c.length - 1) setPh(0);
     if (st.playing) tick();
   }
+  const FLASH_MS = 550;
+  function fade() { if (st.flash && performance.now() - st.flash.t0 < FLASH_MS + 30) { draw(); requestAnimationFrame(fade); } }
   let last = 0;
   function tick(ts) {
     if (!st.playing) return;
@@ -197,7 +220,16 @@
   }
   function setPh(v) {
     if (!D) return;
+    const prev = st.ph;
     st.ph = Math.max(0, Math.min(D.s.c.length - 1, v));
+    if (st.ph !== prev && prev < D.s.c.length) {
+      const ch = D.s.c[st.ph] / D.s.c[prev] - 1;
+      st.flash = { dir: ch > 0 ? 1 : ch < 0 ? -1 : 0, pct: ch, t0: performance.now() };
+      const box = $('sPrice').parentNode;
+      box.classList.remove('up', 'dn'); if (st.flash.dir) box.classList.add(st.flash.dir > 0 ? 'up' : 'dn');
+      clearTimeout(st.flashTimer); st.flashTimer = setTimeout(() => box.classList.remove('up', 'dn'), 450);
+      requestAnimationFrame(fade);
+    }
     $('slider').value = st.ph;
     draw();
   }
@@ -252,7 +284,10 @@
   }
   function resize() {
     const dpr = devicePixelRatio || 1, w = cv.clientWidth;
-    const h = Math.max(380, Math.min(640, Math.round(w * 0.56)));
+    // fit the chart so the toolbar, chart and player all fit on one screen
+    const top = cv.getBoundingClientRect().top + window.scrollY;
+    const playerH = document.querySelector('.player').offsetHeight + 24;
+    const h = Math.max(300, Math.min(Math.round(w * 0.7), window.innerHeight - top - playerH));
     cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr); cv.style.height = h + 'px';
     draw();
   }
@@ -322,6 +357,19 @@
     }
     // playhead edge
     const xe = (ph - a + 1) * colW;
+    if (st.flash && st.flash.dir) {
+      const age = performance.now() - st.flash.t0;
+      if (age < FLASH_MS) {
+        const k = 1 - age / FLASH_MS, yc = Y(s.c[ph]), up = st.flash.dir > 0;
+        const rgb = up ? '255,79,163' : '63,214,255', len = ch * 0.22;
+        const g = ctx.createLinearGradient(0, yc, 0, up ? yc - len : yc + len);
+        g.addColorStop(0, `rgba(${rgb},${0.55 * k})`); g.addColorStop(1, `rgba(${rgb},0)`);
+        ctx.fillStyle = g;
+        const x0 = Math.max(0, xe - 90 * dpr);
+        ctx.fillRect(x0, up ? yc - len : yc, xe - x0, len);
+        ctx.fillStyle = `rgba(${rgb},${0.25 * k})`; ctx.fillRect(0, yc - 1.5 * dpr, xe, 3 * dpr);
+      }
+    }
     ctx.fillStyle = 'rgba(143,91,255,.7)'; ctx.fillRect(xe - dpr, 0, 2 * dpr, ch);
     ctx.restore();
 
@@ -341,6 +389,24 @@
       ctx.font = `${11 * dpr}px Inter, sans-serif`; ctx.fillStyle = '#fff'; ctx.textAlign = 'right';
       const used = [];
       top.forEach(([v, b]) => { if (used.length >= 4) return; const y = ch - (b - b0 + 0.5) * bh + 4 * dpr; if (used.some(u => Math.abs(u - y) < 14 * dpr)) return; used.push(y); ctx.fillText(money(v), x0 + pw - 4 * dpr, y); });
+    }
+
+    // direction arrow beside the current price; stays visible, glows on each move
+    if (st.layers.price && ph > 0) {
+      const dirNow = st.flash && st.flash.dir ? st.flash.dir : Math.sign(s.c[ph] - s.c[ph - 1]);
+      if (dirNow) {
+        const age = st.flash ? performance.now() - st.flash.t0 : 1e9, k = age < FLASH_MS ? 1 - age / FLASH_MS : 0;
+        const yc = Y(s.c[ph]), up = dirNow > 0, col = up ? '#ff4fa3' : '#3fd6ff', x = cw + 10 * dpr, sz = (7 + 4 * k) * dpr;
+        ctx.save(); ctx.shadowColor = col; ctx.shadowBlur = 16 * k * dpr; ctx.fillStyle = col;
+        ctx.beginPath();
+        if (up) { ctx.moveTo(x, yc - 4 * dpr - sz); ctx.lineTo(x - sz * 0.8, yc - 4 * dpr); ctx.lineTo(x + sz * 0.8, yc - 4 * dpr); }
+        else { ctx.moveTo(x, yc + 4 * dpr + sz); ctx.lineTo(x - sz * 0.8, yc + 4 * dpr); ctx.lineTo(x + sz * 0.8, yc + 4 * dpr); }
+        ctx.fill(); ctx.restore();
+        if (st.flash && k > 0) {
+          ctx.font = `600 ${11 * dpr}px Inter, sans-serif`; ctx.textAlign = 'left'; ctx.fillStyle = col;
+          ctx.fillText((st.flash.pct >= 0 ? '+' : '') + (st.flash.pct * 100).toFixed(2) + '%', x + 10 * dpr, up ? yc - 8 * dpr : yc + 16 * dpr);
+        }
+      }
     }
 
     // price axis
